@@ -978,6 +978,26 @@ namespace VoxelEngine.Persistence
                 entry.autoCraftJson = autoCrafter.CaptureQueueJson();
             }
 
+            // Importer/Exporter item filter (14.44.0): the filter list and
+            // mode finally persist and replicate. The exporter adds its
+            // keep-stocked target. A block carries at most one of the two.
+            var filterImporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageImporter>(true);
+            if (filterImporter != null)
+            {
+                entry.hasItemFilter = true;
+                entry.itemFilterMode = (int)filterImporter.filterMode;
+                entry.itemFilterIds = new List<string>(filterImporter.filterItemIds);
+            }
+            var filterExporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageExporter>(true);
+            if (filterExporter != null)
+            {
+                entry.hasItemFilter = true;
+                entry.itemFilterMode = (int)filterExporter.filterMode;
+                entry.itemFilterIds = new List<string>(filterExporter.filterItemIds);
+                entry.hasExporterStock = true;
+                entry.exporterStockTarget = filterExporter.stockTarget;
+            }
+
             // Battery charge and gas contents live in the RUNTIME seam
             // (14.34.0): the save path always carried them, but MachineSync
             // rides this capture - without these two blocks a client loaded
@@ -3657,6 +3677,31 @@ namespace VoxelEngine.Persistence
                 if (autoCrafter != null) autoCrafter.RestoreQueueJson(saved.autoCraftJson);
             }
 
+            // Importer/Exporter filter + keep-stocked target (14.44.0) -
+            // twins of the capture above, applied to whichever device the
+            // block carries.
+            if (saved.hasItemFilter)
+            {
+                var filterImporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageImporter>(true);
+                if (filterImporter != null)
+                {
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Storage.FilterMode), saved.itemFilterMode))
+                        filterImporter.filterMode = (VoxelEngine.Storage.FilterMode)saved.itemFilterMode;
+                    filterImporter.filterItemIds = saved.itemFilterIds != null
+                        ? new List<string>(saved.itemFilterIds) : new List<string>();
+                }
+                var filterExporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageExporter>(true);
+                if (filterExporter != null)
+                {
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Storage.FilterMode), saved.itemFilterMode))
+                        filterExporter.filterMode = (VoxelEngine.Storage.FilterMode)saved.itemFilterMode;
+                    filterExporter.filterItemIds = saved.itemFilterIds != null
+                        ? new List<string>(saved.itemFilterIds) : new List<string>();
+                    if (saved.hasExporterStock)
+                        filterExporter.stockTarget = Mathf.Clamp(saved.exporterStockTarget, 0, 10000);
+                }
+            }
+
             // Runtime-seam twins of the capture above (14.34.0): these are
             // what a client applies when the host's MachineSync converges it.
             if (saved.hasBatteryCharge)
@@ -5033,6 +5078,14 @@ namespace VoxelEngine.Persistence
             // Legacy saves omit the flag and start with an empty queue.
             public bool hasAutoCraftState;
             public string autoCraftJson = "";
+            // 14.44.0 additive: importer/exporter item filter (mode + ids)
+            // and the exporter's keep-stocked target. Legacy saves omit the
+            // flags and keep their in-prefab defaults.
+            public bool hasItemFilter;
+            public int itemFilterMode;
+            public List<string> itemFilterIds = new();
+            public bool hasExporterStock;
+            public int exporterStockTarget;
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";

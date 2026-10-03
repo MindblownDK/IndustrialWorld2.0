@@ -215,8 +215,37 @@ namespace VoxelEngine.Storage
             {
                 var allItems = rack.GetAllItems();
 
+                // 14.44.0: pattern-backed items are craft-requestable right
+                // here. Filed patterns whose output is OUT of stock still get
+                // a cell, so the shelf shows what the network could make.
+                var crafter = rack.GetComponent<AutoCrafter>();
+                var craftable = new Dictionary<string, VoxelEngine.Crafting.RecipeDefinition>();
+                if (crafter != null)
+                {
+                    var patternBuf = new List<AutoCrafter.PatternEntry>();
+                    crafter.GetPatterns(patternBuf);
+                    foreach (var pe in patternBuf)
+                        if (pe.active && pe.recipe != null && pe.recipe.outputItem != null)
+                            craftable[pe.recipe.outputItem.itemId] = pe.recipe;
+                    foreach (var kv in craftable)
+                    {
+                        bool present = false;
+                        foreach (var e in allItems)
+                            if (e.itemId == kv.Key) { present = true; break; }
+                        if (!present)
+                            allItems.Add(new StoredItemEntry
+                            {
+                                itemId = kv.Key,
+                                displayName = kv.Value.outputItem.displayName,
+                                count = 0,
+                                massPerUnit = kv.Value.outputItem.massPerUnit
+                            });
+                    }
+                }
+
                 var fp = new System.Text.StringBuilder();
                 foreach (var e in allItems) { fp.Append(e.itemId); fp.Append(':'); fp.Append(e.count); fp.Append('|'); }
+                foreach (var key in craftable.Keys) { fp.Append('~'); fp.Append(key); }
                 fp.Append(filterQ); fp.Append('#'); fp.Append(sortMode);
                 string fingerprint = fp.ToString();
                 if (!force && fingerprint == lastFingerprint) return;
@@ -264,12 +293,15 @@ namespace VoxelEngine.Storage
                     cell.style.borderLeftColor = cell.style.borderRightColor = bezelBorder;
                     cellWrap.Add(cell);
 
+                    bool isCraftable = craftable.ContainsKey(entry.itemId);
+
                     if (def != null && def.icon != null)
                     {
                         var img = new Image { sprite = def.icon };
                         img.scaleMode = ScaleMode.ScaleToFit;
                         img.style.width = 42; img.style.height = 42;
                         img.pickingMode = PickingMode.Ignore;
+                        if (entry.count == 0) img.style.opacity = 0.45f; // craft-only cell
                         cell.Add(img);
                     }
                     else
@@ -279,14 +311,32 @@ namespace VoxelEngine.Storage
                         box.style.backgroundColor = new StyleColor(def != null ? def.iconTint : UITheme.AccentCyan);
                         UITheme.Radius(box, 2);
                         box.pickingMode = PickingMode.Ignore;
+                        if (entry.count == 0) box.style.opacity = 0.45f;
                         cell.Add(box);
+                    }
+
+                    // 14.44.0: stocked craftables wear a small C chip; a
+                    // craft-only cell says CRAFT where the count would sit.
+                    if (isCraftable && entry.count > 0)
+                    {
+                        var craftChip = new Label("C");
+                        craftChip.style.position = Position.Absolute;
+                        craftChip.style.top = 2; craftChip.style.right = 4;
+                        craftChip.style.fontSize = 8;
+                        craftChip.style.unityFontStyleAndWeight = FontStyle.Bold;
+                        craftChip.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                        craftChip.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+                        craftChip.style.paddingLeft = 3; craftChip.style.paddingRight = 3;
+                        T.Radius(craftChip, 1f);
+                        craftChip.pickingMode = PickingMode.Ignore;
+                        cell.Add(craftChip);
                     }
 
                     // Count in the BOTTOM-LEFT corner of the icon (14.42.1,
                     // user request) with the exact same chip styling the
                     // inventory's LCD slots use, so the terminal reads like
                     // every other container in the game.
-                    var countLbl = new Label(FormatCount(entry.count));
+                    var countLbl = new Label(entry.count > 0 ? FormatCount(entry.count) : "CRAFT");
                     countLbl.style.position = Position.Absolute;
                     countLbl.style.bottom = 2; countLbl.style.left = 4;
                     countLbl.style.fontSize = 10;
@@ -297,6 +347,7 @@ namespace VoxelEngine.Storage
                     countLbl.style.paddingTop = 0; countLbl.style.paddingBottom = 0;
                     T.Radius(countLbl, 1f);
                     countLbl.pickingMode = PickingMode.Ignore;
+                    if (entry.count == 0) countLbl.style.color = new StyleColor(UITheme.AccentAmber);
                     cell.Add(countLbl);
 
                     // Name under the slot.
@@ -320,6 +371,12 @@ namespace VoxelEngine.Storage
                     cell.RegisterCallback<ClickEvent>(evt =>
                     {
                         if (playerInv == null) return;
+                        if (capturedCount == 0 && isCraftable)
+                        {
+                            BuildFeedbackHud.Show(capturedName, "Right-click to craft",
+                                capturedIcon, UITheme.AccentAmber);
+                            return;
+                        }
                         bool shift = IsShiftHeld();
                         int amount = shift ? maxExtract : 1;
                         int got = rack.NetworkExtract(capturedId, amount);
@@ -334,6 +391,30 @@ namespace VoxelEngine.Storage
                         }
                     });
 
+                    // 14.44.0: right-click queues a craft on any pattern-
+                    // backed item - 1 batch, SHIFT for 10. The Crafting
+                    // Terminal stays the bulk order desk.
+                    if (isCraftable && crafter != null)
+                    {
+                        var capturedRecipe = craftable[entry.itemId];
+                        cell.RegisterCallback<PointerDownEvent>(evt =>
+                        {
+                            if (evt.button != 1) return;
+                            evt.StopPropagation();
+                            int runs = IsShiftHeld() ? 10 : 1;
+                            if (crafter.TryQueueCraft(capturedRecipe, runs, out string reason))
+                            {
+                                BuildFeedbackHud.Show($"Craft Queued ×{runs}", capturedName,
+                                    capturedIcon, UITheme.AccentCyan);
+                                MarkDirtyForSync(rack);
+                            }
+                            else
+                            {
+                                BuildFeedbackHud.Show("Cannot Queue", reason, null, UITheme.AccentRed);
+                            }
+                        });
+                    }
+
                     // 1-second hover tooltip: item card + data size + weight.
                     IVisualElementScheduledItem hoverTip = null;
                     cell.RegisterCallback<MouseEnterEvent>(_ =>
@@ -346,7 +427,8 @@ namespace VoxelEngine.Storage
                             var synthetic = new ItemStack { item = capturedDef, count = capturedCount };
                             string extra =
                                 $"Data Size:  {StorageUnits.Format(capturedMass)} / unit\n" +
-                                $"Stored:     {StorageUnits.Format(capturedMass * capturedCount)} in network";
+                                $"Stored:     {StorageUnits.Format(capturedMass * capturedCount)} in network" +
+                                (isCraftable ? "\nAuto-Craft: RIGHT-CLICK (SHIFT = 10 batches)" : "");
                             VoxelEngine.UI.Tooltip.ShowStackAt(
                                 synthetic,
                                 new Vector2(cell.worldBound.xMax + 6f, cell.worldBound.yMin),
@@ -395,7 +477,7 @@ namespace VoxelEngine.Storage
             }).Every(1000);
 
             // ── Hint bar ─────────────────────────────────────────
-            var hint = new Label("CLICK TAKE 1 · SHIFT+CLICK TAKE STACK · SHIFT+CLICK INVENTORY ITEM = STORE");
+            var hint = new Label("CLICK TAKE 1 · SHIFT+CLICK TAKE STACK · SHIFT+CLICK INVENTORY = STORE · RMB = CRAFT");
             hint.style.color = new StyleColor(LcdHudTheme.Caption);
             hint.style.fontSize = 8;
             hint.style.letterSpacing = 0.8f;
@@ -981,29 +1063,11 @@ namespace VoxelEngine.Storage
             p.Add(upgradeGrid);
             p.Add(T.Spacer(8));
 
-            // Filter list toggle.
-            p.Add(T.Subtitle("Item Filter"));
-            if (importer.filterItemIds.Count == 0)
-            {
-                p.Add(T.Muted("No filter — imports everything from adjacent chests."));
-            }
-            else
-            {
-                foreach (var id in importer.filterItemIds)
-                {
-                    var row = new VisualElement();
-                    row.style.flexDirection = FlexDirection.Row;
-                    row.style.alignItems    = Align.Center;
-                    row.style.marginBottom  = 2;
-
-                    var lbl = new Label(id);
-                    lbl.style.color    = new StyleColor(T.TextSecondary);
-                    lbl.style.fontSize = 11;
-                    lbl.style.flexGrow = 1;
-                    row.Add(lbl);
-                    p.Add(row);
-                }
-            }
+            // Filter editor (14.44.0): the list is finally player-editable
+            // and persists with the block.
+            p.Add(FilterEditor(importer,
+                () => importer.filterMode, m => importer.filterMode = m,
+                importer.filterItemIds));
 
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Place adjacent to a chest. Imports items into the storage network automatically."));
@@ -1185,39 +1249,47 @@ namespace VoxelEngine.Storage
 
             p.Add(T.StatRow("⏱", "Interval",   $"{exporter.CurrentInterval:0.00}s",  T.TextSecondary));
             p.Add(T.StatRow("📦", "Stack Size",  $"{exporter.CurrentStackSize}",       T.AccentCyan));
-            p.Add(T.StatRow("🔍", "Filter Mode",
-                exporter.filterMode == FilterMode.Whitelist ? "Whitelist" : "Blacklist",
-                T.AccentGold));
+
+            // Crafting Card (14.44.0): read straight off the slots so the
+            // row is honest even while the exporter is offline.
+            bool cardInstalled = false;
+            for (int i = 0; i < exporter.upgradeSlots.Size; i++)
+            {
+                var s = exporter.upgradeSlots.GetSlot(i);
+                if (!s.IsEmpty && s.item.itemId == StorageExporter.CraftingCardItemId)
+                { cardInstalled = true; break; }
+            }
+            p.Add(T.StatRow("🛠", "Crafting Card",
+                cardInstalled ? "INSTALLED" : "NOT INSTALLED",
+                cardInstalled ? T.AccentPurple : T.TextMuted));
             p.Add(T.Divider());
 
             // Upgrade slots.
-            p.Add(T.Subtitle("Upgrade Slots"));
+            p.Add(T.Subtitle("Upgrade Slots (Speed · Stack · Crafting Card)"));
             var upgradeGrid = T.SlotGrid();
             for (int i = 0; i < exporter.upgradeSlots.Size; i++)
                 upgradeGrid.Add(slotBuilder(exporter.upgradeSlots, i,
                     exporter.upgradeSlots.GetSlot(i), false, true));
             p.Add(upgradeGrid);
-            p.Add(T.Spacer(8));
+            p.Add(T.Spacer(6));
 
-            // Filter list.
-            p.Add(T.Subtitle("Item Filter (Whitelist = only these items)"));
-            if (exporter.filterItemIds.Count == 0)
-            {
-                p.Add(T.Muted("No filter set — won't export anything in Whitelist mode."));
-            }
-            else
-            {
-                foreach (var id in exporter.filterItemIds)
-                {
-                    var lbl = new Label("· " + id);
-                    lbl.style.color    = new StyleColor(T.TextSecondary);
-                    lbl.style.fontSize = 11;
-                    p.Add(lbl);
-                }
-            }
+            // Keep-stocked target (14.44.0).
+            p.Add(StepperRow("Keep Stocked (0 = no cap)",
+                () => exporter.stockTarget,
+                v => { exporter.stockTarget = Mathf.Clamp(v, 0, 10000); MarkDirtyForSync(exporter); },
+                8, 64,
+                "Fill each adjacent container up to this many of every whitelisted item, then idle. 0 = fill forever."));
+            p.Add(T.Spacer(4));
+
+            // Filter editor (14.44.0): the list is finally player-editable.
+            p.Add(FilterEditor(exporter,
+                () => exporter.filterMode, m => exporter.filterMode = m,
+                exporter.filterItemIds));
 
             p.Add(T.Spacer(6));
-            p.Add(T.Muted("Place adjacent to a chest. Exports items from the storage network."));
+            p.Add(T.Muted(cardInstalled
+                ? "Exports from the network to adjacent chests. The Crafting Card orders any whitelist shortfall from the auto-crafter (filed pattern required)."
+                : "Place adjacent to a chest. Exports items from the storage network."));
             HighTechTheme.Frame(p, online ? T.AccentOrange : T.AccentRed);
             return p;
         }
@@ -1806,6 +1878,208 @@ namespace VoxelEngine.Storage
             row.Add(Step("+10", +10));
             row.tooltip = "Higher priority shelves are filled and drained first.";
             return row;
+        }
+
+        /// <summary>14.44.0: PriorityRow's generic sibling - a labelled
+        /// integer stepper with configurable step sizes.</summary>
+        private static VisualElement StepperRow(
+            string label, System.Func<int> get, System.Action<int> set,
+            int small, int big, string tip)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 4; row.style.marginBottom = 2;
+
+            var lbl = new Label(label);
+            lbl.style.flexGrow = 1;
+            lbl.style.fontSize = 10;
+            lbl.style.color = new StyleColor(T.TextSecondary);
+            row.Add(lbl);
+
+            var valueLbl = new Label(get().ToString());
+            valueLbl.style.minWidth = 44;
+            valueLbl.style.fontSize = 11;
+            valueLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            valueLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+            valueLbl.style.color = new StyleColor(T.AccentCyan);
+
+            Button Step(string txt, int delta)
+            {
+                var b = new Button(() =>
+                {
+                    set(get() + delta);
+                    valueLbl.text = get().ToString();
+                }) { text = txt };
+                b.style.minWidth = 32; b.style.minHeight = 22;
+                b.style.fontSize = 9;
+                b.style.unityFontStyleAndWeight = FontStyle.Bold;
+                b.style.color = Color.white;
+                b.style.backgroundColor = new StyleColor(T.BgSlot);
+                T.Radius(b, 4f);
+                T.Border(b, 1, T.BorderDim);
+                return b;
+            }
+
+            row.Add(Step("-" + big, -big));
+            row.Add(Step("-" + small, -small));
+            row.Add(valueLbl);
+            row.Add(Step("+" + small, +small));
+            row.Add(Step("+" + big, +big));
+            row.tooltip = tip;
+            return row;
+        }
+
+        /// <summary>14.44.0: shared filter editor for the importer and
+        /// exporter panels - mode toggle, removable item chips, and a
+        /// catalog search to add items. Before this the filter list was
+        /// read-only and the feature was effectively dead.</summary>
+        private static VisualElement FilterEditor(
+            Component device,
+            System.Func<FilterMode> getMode, System.Action<FilterMode> setMode,
+            List<string> filterIds)
+        {
+            var box = new VisualElement();
+
+            // Mode toggle.
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.alignItems = Align.Center;
+            var modeLbl = new Label("Item Filter");
+            modeLbl.style.flexGrow = 1;
+            modeLbl.style.fontSize = 10;
+            modeLbl.style.color = new StyleColor(T.TextSecondary);
+            modeRow.Add(modeLbl);
+            var modeBtn = T.SmallButton(
+                getMode() == FilterMode.Whitelist ? "WHITELIST" : "BLACKLIST", null, T.AccentGold);
+            modeBtn.clicked += () =>
+            {
+                setMode(getMode() == FilterMode.Whitelist ? FilterMode.Blacklist : FilterMode.Whitelist);
+                MarkDirtyForSync(device);
+                GameUIController.Instance?.RefreshCurrentPanel();
+            };
+            modeRow.Add(modeBtn);
+            box.Add(modeRow);
+
+            // Current entries as removable chips.
+            var chips = new VisualElement();
+            chips.style.flexDirection = FlexDirection.Row;
+            chips.style.flexWrap = Wrap.Wrap;
+            chips.style.marginTop = 3;
+            if (filterIds.Count == 0)
+            {
+                box.Add(T.Muted(getMode() == FilterMode.Whitelist
+                    ? "Empty whitelist - nothing moves. Add items below."
+                    : "Empty blacklist - everything moves."));
+            }
+            foreach (var id in filterIds)
+            {
+                var localId = id;
+                var def = FindItemDef(localId);
+
+                var chip = new VisualElement();
+                chip.style.flexDirection = FlexDirection.Row;
+                chip.style.alignItems = Align.Center;
+                chip.style.backgroundColor = new StyleColor(T.BgSlot);
+                chip.style.paddingLeft = 5; chip.style.paddingRight = 2;
+                chip.style.paddingTop = 2; chip.style.paddingBottom = 2;
+                chip.style.marginRight = 4; chip.style.marginBottom = 3;
+                T.Radius(chip, 3);
+
+                if (def != null && def.icon != null)
+                {
+                    var ic = new Image { sprite = def.icon };
+                    ic.scaleMode = ScaleMode.ScaleToFit;
+                    ic.style.width = 14; ic.style.height = 14;
+                    ic.style.marginRight = 3;
+                    chip.Add(ic);
+                }
+                var nm = new Label(def != null ? def.displayName : localId);
+                nm.style.fontSize = 9;
+                nm.style.color = new StyleColor(T.TextSecondary);
+                chip.Add(nm);
+
+                var rm = T.SmallButton("✕", () =>
+                {
+                    filterIds.Remove(localId);
+                    MarkDirtyForSync(device);
+                    GameUIController.Instance?.RefreshCurrentPanel();
+                }, T.AccentRed);
+                rm.style.marginLeft = 3;
+                chip.Add(rm);
+                chips.Add(chip);
+            }
+            box.Add(chips);
+
+            // Catalog search to add entries.
+            var addField = new TextField();
+            addField.style.marginTop = 3;
+            box.Add(addField);
+            var results = new VisualElement();
+            box.Add(results);
+
+            addField.RegisterValueChangedCallback(e =>
+            {
+                results.Clear();
+                string q = (e.newValue ?? "").Trim();
+                if (q.Length < 2) return;
+
+                var matches = new List<ItemDefinition>();
+                var seen = new HashSet<string>();
+                foreach (var it in Resources.FindObjectsOfTypeAll<ItemDefinition>())
+                {
+                    if (it == null || string.IsNullOrEmpty(it.itemId) ||
+                        string.IsNullOrEmpty(it.displayName)) continue;
+                    // Runtime clones (encoded patterns, packed drawers) are
+                    // not real catalog entries.
+                    if (it.itemId.Contains("_enc_") || it.itemId.Contains("_packed_")) continue;
+                    if (filterIds.Contains(it.itemId) || !seen.Add(it.itemId)) continue;
+                    if (it.displayName.IndexOf(q, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    matches.Add(it);
+                }
+                matches.Sort((a, b) => string.Compare(
+                    a.displayName, b.displayName, System.StringComparison.OrdinalIgnoreCase));
+
+                int shown = 0;
+                foreach (var it in matches)
+                {
+                    if (shown++ >= 8) break;
+                    var localDef = it;
+                    var row = new VisualElement();
+                    row.style.flexDirection = FlexDirection.Row;
+                    row.style.alignItems = Align.Center;
+                    row.style.marginTop = 2;
+                    row.style.paddingLeft = 4; row.style.paddingRight = 4;
+                    row.style.backgroundColor = new StyleColor(T.BgSlot);
+                    T.Radius(row, 3);
+
+                    if (localDef.icon != null)
+                    {
+                        var ic = new Image { sprite = localDef.icon };
+                        ic.scaleMode = ScaleMode.ScaleToFit;
+                        ic.style.width = 16; ic.style.height = 16;
+                        ic.style.marginRight = 4;
+                        row.Add(ic);
+                    }
+                    var nm = new Label(localDef.displayName);
+                    nm.style.fontSize = 10;
+                    nm.style.flexGrow = 1;
+                    nm.style.color = new StyleColor(T.TextSecondary);
+                    row.Add(nm);
+
+                    row.Add(T.SmallButton("ADD", () =>
+                    {
+                        if (!filterIds.Contains(localDef.itemId))
+                            filterIds.Add(localDef.itemId);
+                        MarkDirtyForSync(device);
+                        GameUIController.Instance?.RefreshCurrentPanel();
+                    }, T.AccentTeal));
+                    results.Add(row);
+                }
+                if (shown == 0) results.Add(T.Muted("No match."));
+            });
+
+            return box;
         }
 
         /// <summary>Flag the block's container state as locally touched so

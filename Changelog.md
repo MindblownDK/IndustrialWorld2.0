@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.43.0-dev`
+**Current Version:** `14.44.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.44.0-dev] Shelves That Order Their Own Refills
+
+**Type:** MINOR - the finale of the storage arc: auto-crafting becomes ambient. The Storage Exporter learns a KEEP STOCKED target and takes the new Crafting Card, which orders whitelist shortfalls straight from the pattern bank; the importer/exporter item filter finally gets an editor and finally persists; and the fullscreen Storage Terminal shows every pattern-backed item as craftable - right-click queues the craft from where you browse. Save format: additive runtime fields plus one additive upgrade-slot resize; old saves load clean.
+
+**The shelf that refills itself.** The Storage Exporter gains a third upgrade slot for the new Crafting Card (one Blank Pattern, a circuit and copper wire at the Assembler - setup step 112). With the card in, any whitelisted item the exporter wants to move but the network cannot supply is ordered from the Server Controller's auto-crafter: the shortfall becomes a normal queue job, the full-chain planner takes it from there, and the freshly crafted goods flow back out through the same exporter. The ordering is merge-guarded - an exporter ticking every second never inflates an existing order, it only places a new one once the last finished - and capped at four orders per pass, so a mis-filtered exporter cannot flood the queue. No card, no change: the exporter stays a dumb pipe.
+
+**KEEP STOCKED makes it a quartermaster.** A new target dial on the exporter panel (steps of 8 and 64, zero means fill-forever like always) caps how many of each whitelisted item the adjacent container should hold: the exporter fills the shelf up to the target, idles while it stays there, and tops it back up when stock is taken. Target plus card is the whole loop - a turret magazine, a fuel box or a kitchen chest that quietly reorders its own refills from raw materials. Delivery itself got honest on the way: items are extracted from the network first and anything the destination refuses goes straight back, so neither side can ever be double-counted.
+
+**The filter is finally a feature.** Until now the importer's and exporter's whitelist/blacklist could not be edited anywhere in the game and silently reset on every reload - a dead end the keep-stocked loop could not live with. Both panels now carry a real filter editor: a whitelist/blacklist toggle, the current entries as removable chips with their item icons, and a catalog search that adds any item in two clicks. Mode and list ride the factory-runtime seam - additive fields, one capture for the save file and MachineSync - so a filter built once survives reloads and reaches every client, like every other machine setting.
+
+**Craft it from where you see it.** The fullscreen Storage Terminal (and the wireless handheld - same screen) now reads the pattern bank: stocked items with a filed pattern wear a small C chip, and patterns whose output is out of stock still get a cell - dimmed icon, amber CRAFT where the count would sit - so the shelf shows what the network could make, not just what it holds. Right-click any of them to queue one batch, SHIFT+right-click for ten; left-clicking an empty craftable tells you to right-click instead of silently doing nothing. The hover tooltip gains the auto-craft line, the hint bar teaches RMB = CRAFT, and the Crafting Terminal remains the bulk order desk with the live queue.
+
+**Authored by step 112.** The new setup step creates the Crafting Card item and recipe, registers the card in the persistence catalog, and rewrites the importer and exporter descriptions to teach the editable filter, the stock target and the card. Non-destructive as always - existing values survive, only missing pieces are created.
 
 ### [14.43.0-dev] The Network Learns to Craft
 

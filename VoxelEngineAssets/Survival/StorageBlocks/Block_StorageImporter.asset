@@ -14,8 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_storageimporter
   displayName: Storage Importer
-  description: "Pulls items OUT of an adjacent chest INTO the storage network. Accepts
-    Speed (\xD74) and Stack (\xD71) upgrades."
+  description: Pulls items from adjacent chests into the storage network. The filter
+    is edited right in its panel - blacklist mode imports everything except the listed
+    items, whitelist mode only the listed ones. Connect with Data Pipes or by touching
+    the system.
   icon: {fileID: 21300000, guid: 0d9d88eb3962c107c8ef5e615fa2e728, type: 3}
   iconTint: {r: 0.3, g: 0.85, b: 0.45, a: 1}
   maxStack: 50

@@ -262,6 +262,42 @@ namespace VoxelEngine.Storage
             jobs.RemoveAll(j => doomed.Contains(j.id));
         }
 
+        /// <summary>True when any queued job's recipe outputs itemId.</summary>
+        public bool HasJobProducing(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return false;
+            foreach (var j in jobs)
+            {
+                var r = ResolveRecipe(j.recipeId);
+                if (r != null && r.outputItem != null && r.outputItem.itemId == itemId)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Automation entry point (14.44.0, Crafting Card): order a
+        /// craft covering itemCount of itemId's RAM-backed pattern - UNLESS
+        /// production is already pending. Automation never tops up an
+        /// existing order - a per-tick caller would inflate the same job
+        /// forever; it only places a new one once the last completed.</summary>
+        public bool TryRequestAutomationCraft(string itemId, int itemCount)
+        {
+            if (_rack == null || !_rack.IsOnline || itemCount <= 0) return false;
+            if (HasJobProducing(itemId)) return false;
+            var recipe = ActivePatternProducing(itemId);
+            if (recipe == null) return false;
+            if (jobs.Count >= MAX_JOBS) return false;
+            int runs = Mathf.Clamp(
+                Mathf.CeilToInt(itemCount / (float)Mathf.Max(1, recipe.outputCount)), 1, 100);
+            jobs.Add(new CraftJob
+            {
+                id = _nextJobId++,
+                recipeId = recipe.name,
+                requested = runs
+            });
+            return true;
+        }
+
         public CraftJob FindJob(int id)
         {
             foreach (var j in jobs) if (j.id == id) return j;

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.43.0-dev`
-**Roadmap Version:** `14.43.0-dev`
+**Current Version:** `14.44.0-dev`
+**Roadmap Version:** `14.44.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.44.0-dev - Shelves That Order Their Own Refills
+Storage-arc finale: auto-crafting goes ambient. The exporter gains a third upgrade slot for the Crafting Card (whitelist shortfalls become merge-guarded auto-craft orders, max four per pass) and a KEEP STOCKED target (fill each adjacent container to N of every whitelisted item, 0 = legacy fill-forever); delivery now extracts-then-refunds so neither side double-counts. The importer/exporter filter is finally editable (mode toggle, icon chips, catalog search) and finally persists - mode + ids + stock target ride the factory-runtime seam additively. The fullscreen terminal (and wireless handheld) reads the pattern bank: C chips on stocked craftables, dimmed CRAFT cells for out-of-stock patterns, RMB queues one batch / SHIFT+RMB ten, tooltip and hint bar teach it. Setup step 112 authors the card, recipe, catalog entry and refreshed descriptions.
+
 ### 14.43.0-dev - The Network Learns to Craft
 Auto-crafting ships through the pattern system (closing the 14.40.0 deferral). Patterns are physical items: Blank Patterns (step 111) are encoded with any unlocked recipe at the Pattern Terminal and filed into the Server Controller's bank - capacity = installed RAM units (RAM 4 = 4, RAM 16 = 16, 64 ceiling), over-the-line patterns go inert instead of vanishing, eject to carry recipes between networks, and the encoded recipe rides the stack payload like a disk's ledger. The controller crafts one item at a time at CPU speed (+25 W while active), takes ingredients per craft with refund-on-cancel, and gates each recipe on its station tier being a network member - crafting stations now join by touch or Data Pipe like every other device. Full-chain recursion queues child jobs for missing intermediates that have filed patterns (tree-deep, cycle/depth guarded, pending production counted); both terminal panels are remade (encode bench with search, order desk with live queue, ETA, reasons and cancel); bank and queue ride the container and factory-runtime seams additively, so saves resume mid-batch and clients converge to the host's queue.
 
@@ -41,9 +44,6 @@ The storage network reaches the physical world and the Data Pipe becomes a real 
 
 ### 14.40.0-dev - Pipes, Shelves and a Single Brain
 The mass-storage overhaul. One connectivity rule replaces every radius search: storage blocks share a network when Data Pipes connect them or they physically touch, resolved deterministically on every machine by the new StorageNetwork resolver (no wire messages). The rack becomes the Server Controller (4 RAM + 1 CPU, exactly one per network - two conflict and the system goes dark); disks live in NAS shelves (8 bays, front-panel UI with per-bay fill bars green/yellow/red, per-shelf priority); PSUs live in Power Stations, the system's only grid input - the controller computes the real system draw and splits the bill across stations. Fullscreen LCD storage terminal (search, sort, live MB/GB/TB/PB readouts, 1 s hover tooltips with data size; all item tooltips now show weight). Wireless access requires the handheld Wireless Terminal item + transmitter range + Security Block wireless clearance (never global; owner always, team via a new owner-only checkbox) and gates building-from-storage, crafting and every remote panel. All storage hardware containers persist for the first time and replicate to clients; disk contents travel on the disk stack itself. Setup step 108 authors the Data Pipe, handheld terminal, rebrands and the RAM-8/CPU-16 stack balance. Auto-crafting stays deferred by design.
-
-### 14.39.0-dev - The Server Keeps Its Secrets
-The mass-storage Security Block: a placed block that guards the digital storage network and nothing else. While powered (40 W, constant) it protects every server rack and NAS within 10 m, and every terminal connected to a guarded rack - wired or wireless - refuses players the owner's access mode excludes: PRIVATE, TEAM (default for new placements) or GLOBAL, set in an owner-only panel. There is no hacking: raiders destroy the block or cut its power, and an unpowered or unowned guard fails open. Owner and mode ride the factory-runtime seam (save + MachineSync in one), the block snapshot carries them at placement, and legacy saves load clean. Setup step 107 authors the prefab, item and Assembler recipe.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
