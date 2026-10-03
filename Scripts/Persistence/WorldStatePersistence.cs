@@ -547,6 +547,17 @@ namespace VoxelEngine.Persistence
                 activeHotbarIndex = inv.activeHotbarIndex
             };
 
+            // The claimed bed/linked spawn is per-player state (14.38.0): it
+            // travels in this record so the HOST keeps it per player id and a
+            // returning guest wakes up owning the same bed. The local session
+            // mirror is the live truth every claim already writes.
+            var spawnSession = VoxelEngine.Menu.WorldSession.Instance;
+            if (spawnSession != null && spawnSession.hasBedSpawn)
+            {
+                result.hasBedSpawn = true;
+                result.bedSpawnPos = spawnSession.bedSpawnPoint;
+            }
+
             // 9.57.1-dev: the scene origin is re-anchored as the world runs (orbits, rebases,
             // frame switches), so a raw scene coordinate is only meaningful in the frame it
             // was captured in. For a player standing on or flying near a body, the position
@@ -605,6 +616,20 @@ namespace VoxelEngine.Persistence
                 var record = JsonUtility.FromJson<SavedPlayer>(json);
                 if (record == null) return false;
                 RestorePlayer(record, 0d);   // 0: never touch the host's cosmic clock
+
+                // The claimed bed travels IN the record (14.38.0): what the
+                // host kept for this player becomes the local linked spawn,
+                // exactly as if the claim had just been made on this machine.
+                // GUEST PATH ONLY - the host and single player keep reading
+                // their own spawn.json sidecar, so a legacy record (no bed
+                // fields) can never wipe a host's existing bed.
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session != null)
+                {
+                    session.hasBedSpawn = record.hasBedSpawn;
+                    session.bedSpawnPoint = record.hasBedSpawn ? record.bedSpawnPos : Vector3.zero;
+                }
+
                 return TryResolveSavedPlayerPosition(record, out restoredPosition, out _);
             }
             catch (Exception ex)
@@ -780,6 +805,13 @@ namespace VoxelEngine.Persistence
                 {
                     entry.hasBannerState = true;
                     entry.bannerTeamId = placedBanner.bannerTeamId ?? "";
+                }
+                // Bed ownership (14.38.0): whose bed this is.
+                var placedBed = pb.GetComponentInChildren<VoxelEngine.Building.Bed>(true);
+                if (placedBed != null)
+                {
+                    entry.hasBedState = true;
+                    entry.bedOwnerId = placedBed.ownerId ?? "";
                 }
                 var anchor = FindAnchoringBody(pb.transform.position);
                 if (anchor != null)
@@ -3121,6 +3153,13 @@ namespace VoxelEngine.Persistence
                 var restoredBanner = go.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
                 if (restoredBanner != null && sb.hasBannerState)
                     restoredBanner.SetTeam(sb.bannerTeamId ?? "");
+                // Bed ownership (14.38.0): ALWAYS explicit on restore. A legacy
+                // save has no bed state - that is an explicit "unowned", or the
+                // restoring machine's Awake guess would claim every old bed for
+                // whoever happens to load the world.
+                var restoredBed = go.GetComponentInChildren<VoxelEngine.Building.Bed>(true);
+                if (restoredBed != null)
+                    restoredBed.SetOwner(sb.hasBedState ? (sb.bedOwnerId ?? "") : "");
                 var windPart = go.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null && sb.windCondition > 0f)
                     windPart.condition = Mathf.Clamp(sb.windCondition, 0f, 100f);
@@ -4674,6 +4713,12 @@ namespace VoxelEngine.Persistence
             public SavedContainer armorSlots;
             public SavedContainer instrumentSlots;
             public int activeHotbarIndex;
+            // Additive 14.38.0: the player's claimed bed/linked spawn. Part of
+            // the per-player record so a guest's bed survives a rejoin - the
+            // unfinished half of milestone 8(c). Legacy records omit it (false)
+            // and change nothing.
+            public bool hasBedSpawn;
+            public Vector3 bedSpawnPos;
         }
         [Serializable] private class SavedPlacedBlock
         {
@@ -4698,6 +4743,12 @@ namespace VoxelEngine.Persistence
             public float beaconColorR = 1f;
             public float beaconColorG = 1f;
             public float beaconColorB = 1f;
+
+            // Additive 14.38.0: bed ownership (per-player bed spawns). Legacy
+            // saves omit the flag; their beds restore explicitly UNOWNED and
+            // stay claimable by anyone - an old save never locks anyone out.
+            public bool hasBedState;
+            public string bedOwnerId = "";
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";

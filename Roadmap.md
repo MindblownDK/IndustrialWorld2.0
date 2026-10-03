@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.37.2-dev`
-**Roadmap Version:** `14.37.2-dev`
+**Current Version:** `14.38.0-dev`
+**Roadmap Version:** `14.38.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.38.0-dev - A Bed of One's Own
+Per-player bed spawns, closing the 14.24.0 deferral: the claimed bed/linked spawn now travels inside the per-player SavedPlayer record (ten-second upload, players.json, join answer), so a guest's bed survives a rejoin - no new wire message, the record format is the save format. Beds become personal property: the placer's stable id is captured once at placement, rides the block snapshot and an additive save field, and only the owner and their teammates may claim or respawn at a bed (legacy beds restore unowned and stay open to all; cryobeds stay communal by design). The death screen stops offering demolished beds - a linked spawn with no structure left standing is healed on the spot.
+
 ### 14.37.0-dev - Colours Worth Dying Under
 One banner per team: 256x384 cloth plus three text lines, edited only in PAUSE > TEAMS by the owner and leaders (gallery from a Banners folder, in-game painting board gated by a world rule, default crusader emblem in code), host-authoritative with sidecar persistence (banners.json + per-team png) and join catch-up. Displayed by the new banner pole (placed block), ship banner (grid block), a TEAM BANNER grid-screen mode, and the new Crusader Shield - hold RMB to block 65% of damage for durability, raised pose replicated via a second motion flag. Setup step 106 authors the shield, both banner blocks and recipes.
 14.37.1 field polish: two cloths flank the pole (no more skewered flag) with mirrored backs so the image reads from both sides; the cloth is a vertex grid that flutters with wind, carrier motion and atmospheric density (dead still in vacuum); the painting board grows to a 300x450 canvas with a BLANK CLOTH wipe; the TEAMS page keeps its scroll position across live rebuilds; and zero-damage ticks no longer spam "Hit 0 dmg" toasts.
@@ -45,10 +48,6 @@ Real PvP: melee, ranged and explosion damage reach player avatars as server-vali
 Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by leaving last) plus appointed LEADERS (shield - invite and remove ordinary members); ownership passes to the earliest-joined leader, else member. Team names are unique per session, refused server-side. The pause-menu teams page is wider, wraps long names and keeps every button on screen; the TEAMS flag renders through the Lucide icon font instead of a missing-glyph square.
 14.33.0 play-round fixes: battery charge and gas contents moved into the runtime capture/restore seam so clients converge on them (additive hasGasState guard), and power cables save their variant and length (additive hasCableShape) so bends survive a reload.
 
-### 14.33.0-dev - A Banner To Rally Under
-Milestone 11 CLOSED. Teams: found and name one, invite, accept or decline (invites lapse after 90 s), leave, leader-only remove, leadership passes to the earliest-joined member when a leader goes, an emptied team dissolves; one team per player, joined only by own confirmation. The host owns the roster - clients send identity-free intents the server stamps and validates - and every accepted change rebroadcasts the whole roster, with a late joiner caught up in one message. Membership is keyed by stable player id (survives rename, reconnect, restart) and persists as a teams.json sidecar beside the world save; the host-editable limits (max members per team, max teams per session) persist with it and gate new intents only. Beacon TEAM share is live: the visibility rule resolves SameTeam through the registry, so markers, map contacts and warp rendezvous open to teammates at once.
-The TEAMS page in the pause menu shows it all with live refresh and roster-diff toasts; a guest that drops the session drops its roster mirror.
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -57,7 +56,7 @@ The TEAMS page in the pause menu shows it all with live refresh and roster-diff 
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
-2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon.)*
+2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
@@ -75,7 +74,6 @@ The TEAMS page in the pause menu shows it all with live refresh and roster-diff 
 
 ### Open Scope (named with the version that deferred it)
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
-- **Bed spawn is not per-player** (deferred 14.24.0): a guest's pose is restored from their record, but the bed/respawn point is still the world's single spawn sidecar rather than one bed per player id.
 - **Per-cell structure deltas and build prediction** (accepted 14.25.0 / 14.29.0): a changed hull is resent whole, and a guest's build is confirmed by the host's echo rather than predicted locally.
 - **Loot-bag race** (accepted 14.36.0): two players looting the SAME bag in the same instant - the whole-payload announces cross on the wire and one side's grab can be overwritten; same vanishingly small window the drops accepted in 14.11.0.
 - **Armor stays equipped through death** (decided 14.36.0): the loot bag carries the 40 carried slots; worn equipment is not part of the drop.

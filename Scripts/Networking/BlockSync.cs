@@ -39,6 +39,8 @@ namespace VoxelEngine.Networking
         public int CableLength;
         public string BannerTeamId; // null/empty = not a banner (or teamless placer's default emblem)
         public bool IsBanner;       // distinguishes "no banner" from "banner with default emblem"
+        public string BedOwnerId;   // 14.38.0 - who placed this bed (empty = unowned legacy bed)
+        public bool IsBed;          // distinguishes "no bed" from "bed with no owner"
     }
 
     public static class BlockSync
@@ -173,6 +175,12 @@ namespace VoxelEngine.Networking
                 snap.IsBanner = true;
                 snap.BannerTeamId = banner.bannerTeamId ?? "";
             }
+            var bed = block.GetComponentInChildren<VoxelEngine.Building.Bed>(true);
+            if (bed != null)
+            {
+                snap.IsBed = true;
+                snap.BedOwnerId = bed.ownerId ?? "";
+            }
             return snap;
         }
 
@@ -221,6 +229,13 @@ namespace VoxelEngine.Networking
                     // Always explicit - an empty id is the placer's "no team"
                     // answer, not an invitation for this machine to guess.
                     if (banner != null) banner.SetTeam(snap.BannerTeamId ?? "");
+                }
+                if (snap.IsBed)
+                {
+                    var bedRemote = go.GetComponentInChildren<VoxelEngine.Building.Bed>(true);
+                    // Same rule as the banner: the placer's identity travels
+                    // with the block, this machine never guesses an owner.
+                    if (bedRemote != null) bedRemote.SetOwner(snap.BedOwnerId ?? "");
                 }
                 if (item.placedMaterial != null || item.texture != null)
                 {

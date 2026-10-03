@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.37.2-dev`
+**Current Version:** `14.38.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.38.0-dev] A Bed of One's Own
+
+**Type:** MINOR - per-player bed spawns, closing the deferral named at 14.24.0: a guest's claimed bed now survives a rejoin because it lives in the host's per-player record, and beds themselves become personal property. Save format gains additive fields only; legacy saves and records load clean.
+
+**The claimed spawn is per-player state - so it rides the per-player record.** The roadmap said it from the start: inventory, hotbar, equipment, stats AND SPAWN POINT, keyed by player id, stored in the host's save. The first four landed in 14.24.0; the spawn point kept living in each machine's own spawn sidecar, which for a guest is a session cache that is thrown away on disconnect - so a guest's bed evaporated with it, and every rejoin woke them at the world spawn. The claimed bed/linked spawn now travels inside the SavedPlayer record itself: the guest's regular ten-second state upload carries it, the host keeps it per player id in players.json, and the join answer brings it back, where it is applied to the local session mirror exactly as if the claim had just been made. Every consumer of that mirror - the death screen, the spawner, offline survival, the cryobed huds - works unchanged, which is the point: no new wire message, no second source of truth, the record format IS the save format. The host and single player keep reading their own spawn.json exactly as before, so a legacy record can never wipe an existing bed.
+
+**Beds are personal now.** The death screen used to list EVERY bed in the world as a respawn choice - harmless alone in a single-player world, a teleport-into-the-enemy-base exploit the moment two teams share a planet. A bed now remembers who placed it: the stable player id is captured once at placement (the same single-capture rule banners use for their team), travels in the block snapshot to every machine, and persists as an additive save field. Only the owner and the owner's TEAMMATES may claim a bed or respawn at it; claiming someone else's bed is refused with a toast instead of silently rewriting your spawn. Ownership is explicit everywhere: a remote spawn and a save restore always assign the owner outright - a legacy save restores its beds as UNOWNED, usable by everyone, so an old world never locks anyone out. Cryobeds stay communal by design: they are crew equipment, like a helm or a seat, and any crew member may link one.
+
+**Dead beds stop haunting the death screen.** A linked spawn whose structure no longer exists - the bed demolished while you were offline, the cryobed ground to scrap, the ship long flown from where the pod was claimed - was still offered as a respawn choice and dropped you onto its ghost coordinates in open air. The death screen now verifies that a bed, cryobed or grid cryobed still stands at the linked point before offering it; a stale point is healed on the spot (cleared and saved) and the player falls back to the honest choices. Claiming a bed also finally answers with a proper toast, like the cryobeds always have.
+
+**Files:** edits to `Scripts/Building/Bed.cs` (ownership, claim rules, feedback), `Scripts/Persistence/WorldStatePersistence.cs` (SavedPlayer bed fields + capture + guest-side apply; SavedPlacedBlock bed owner + capture + explicit restore), `Scripts/Networking/BlockSync.cs` (bed owner in the block snapshot) and `Scripts/UI/DeathScreenHud.cs` (owner-filtered bed choices, linked-spawn existence healing). No prefabs, items or recipes: copy the scripts over, no setup re-run needed.
 
 ### [14.37.2-dev] No Text Through Stone
 

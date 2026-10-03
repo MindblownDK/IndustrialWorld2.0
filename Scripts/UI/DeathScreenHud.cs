@@ -204,6 +204,17 @@ namespace VoxelEngine.UI
                 isWorldSpawn = true
             });
 
+            // 14.38.0 - a linked spawn whose structure is GONE (bed demolished
+            // while the player was offline, cryobed ground to scrap) is healed
+            // here rather than offered: the stale point is cleared and the
+            // player falls back to the honest choices below.
+            if (session != null && session.hasBedSpawn && !LinkedSpawnStillExists(session.bedSpawnPoint))
+            {
+                session.hasBedSpawn = false;
+                session.SaveSpawnSidecar();
+                Debug.Log("[DeathScreen] Linked spawn structure no longer exists — cleared.");
+            }
+
             if (session != null && session.hasBedSpawn && !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint))
             {
                 // Resolve the actual name of the linked spawn instead of generic "Linked Spawn".
@@ -217,9 +228,13 @@ namespace VoxelEngine.UI
                 });
             }
 
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
             foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude))
             {
                 if (bed == null) continue;
+                // Beds are personal (14.38.0): only the owner and the owner's
+                // team respawn here. Unowned legacy beds welcome anyone.
+                if (!bed.UsableBy(me)) continue;
                 Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
                 AddUnique(list, new RespawnChoice
                 {
@@ -287,6 +302,24 @@ namespace VoxelEngine.UI
                     return string.IsNullOrWhiteSpace(cryo.blockName) ? "Grid Cryobed" : cryo.blockName;
             }
             return "Linked Spawn";
+        }
+
+        /// <summary>Does ANY spawn structure (bed, cryobed, grid cryobed) still
+        /// stand at the linked point? A demolished bed must not keep offering
+        /// its ghost as a respawn (14.38.0).</summary>
+        private static bool LinkedSpawnStillExists(Vector3 linkedPos)
+        {
+            const float tolSq = 2.5f;
+            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude))
+                if (bed != null && (bed.transform.position + Vector3.up * 1.2f - linkedPos).sqrMagnitude < tolSq)
+                    return true;
+            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude))
+                if (cryo != null && (cryo.SpawnPoint - linkedPos).sqrMagnitude < tolSq)
+                    return true;
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
+                if (cryo != null && (cryo.SpawnPoint - linkedPos).sqrMagnitude < tolSq)
+                    return true;
+            return false;
         }
 
         private static bool LinkedSpawnIsUnavailableCryobed(Vector3 linkedPos)
