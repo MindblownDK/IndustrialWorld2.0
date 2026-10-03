@@ -1,33 +1,32 @@
 // Assets/Scripts/VoxelEngine/Storage/SecurityBlock.cs
 //
-// 14.39.0 - Mass-storage Security Block.
+// 14.39.0 - Mass-storage Security Block. 14.40.0 - network membership.
 //
-// A placed block that guards the DIGITAL storage network and nothing else:
-// while it is powered (armed), every player access to the data it covers -
-// storage/crafting/pattern terminals (wired and wireless), the server rack
-// itself and NAS disk shelves - is checked against the owner's access mode:
+// A placed block that guards the DIGITAL storage network and nothing else.
+// Since 14.40.0 the guard is a NETWORK DEVICE like everything else: pipe it
+// in or place it touching the system, and it guards that whole network -
+// every terminal (wired or handheld-wireless), the Server Controller and
+// every NAS shelf on it. No radius, no ambiguity: one network, one lock.
 //
 //   PRIVATE - only the owner may open the storage.
 //   TEAM    - the owner's team (TeamRegistry) may open it. Default.
-//   GLOBAL  - everyone may open it (the block is effectively a status light).
+//   GLOBAL  - everyone may open it.
 //
-// The guard is spatial: a security block protects every rack and NAS within
-// guardRadius of itself. Terminals are checked against the position of the
-// RACK they are connected to, so a wireless terminal 50 m away is denied just
-// the same - the data is guarded, not the doorway.
+// Handheld WIRELESS access is stricter and never global: the owner always,
+// the owner's team only when the owner ticks the share box.
 //
-// Deliberate raid mechanic: there is no hacking. An unauthorized player gets
-// in by physically DESTROYING the security block, or by cutting its power -
-// an unpowered guard stands down. Both are loud, visible base-assault acts.
+// The guard draws its 40 W from the SYSTEM power budget (Power Stations).
+// Deliberate raid mechanic unchanged: there is no hacking - destroy the
+// block, or cut the system's power. Both are loud, visible base-assault
+// acts. An unpowered or unowned guard fails open.
 //
 // Ownership follows the Bed pattern (14.38.0): guessed once at Awake on the
-// placing machine, overridden explicitly by save restore and remote spawn
-// (BlockSync). Access mode and owner ride the factory-runtime seam, so
-// MachineSync replicates a mode change live and the save file carries it.
+// placing machine, overridden explicitly by save restore and remote spawn.
+// Owner, access mode and the wireless share flag ride the factory-runtime
+// seam, so MachineSync replicates changes live and the save carries them.
 
 using UnityEngine;
 using VoxelEngine.Building;
-using VoxelEngine.Power;
 
 namespace VoxelEngine.Storage
 {
@@ -49,45 +48,49 @@ namespace VoxelEngine.Storage
         [Tooltip("0 = Private, 1 = Team, 2 = Global. New blocks default to Team.")]
         public int accessMode = (int)StorageAccessMode.Team;
 
-        [Header("Guard")]
-        [Tooltip("Every ServerRack and NAS within this radius is protected while the block is powered.")]
-        public float guardRadius = 10f;
+        [Tooltip("Owner-set: may the owner's TEAM use handheld wireless access? Wireless is never global.")]
+        public bool wirelessTeamShare;
 
         [Header("Power")]
-        [Tooltip("Constant draw while placed. No power = guard stands down.")]
+        [Tooltip("System watts this guard adds to the network draw.")]
         public float wattsPerSecond = 40f;
 
         private bool _explicitOwner;
-        private PowerConsumer _power;
         private Renderer _statusLight;
         private MaterialPropertyBlock _mpb;
         private float _tick;
         private int _lastLightState = -1; // -1 unset, 0 dark, 1 armed
 
-        /// <summary>True while the guard is actually enforcing: it has power.</summary>
-        public bool IsArmed => _power != null && _power.IsPowered;
+        /// <summary>System watts this guard draws (read by the controller).</summary>
+        public float DrawWatts => wattsPerSecond;
+
+        /// <summary>The network this guard protects (null = not connected).</summary>
+        public ServerRack Controller => StorageNetwork.ControllerOf(this);
+
+        /// <summary>True while the guard is actually enforcing: it sits on a
+        /// network whose system power is up. Cut the Power Stations and the
+        /// guard stands down - that is the raid path.</summary>
+        public bool IsArmed
+        {
+            get
+            {
+                var c = Controller;
+                return c != null && c.IsOnline;
+            }
+        }
 
         public StorageAccessMode Mode =>
             (StorageAccessMode)Mathf.Clamp(accessMode, 0, 2);
 
         private void Awake()
         {
-            _power = GetComponent<PowerConsumer>();
-            if (_power == null)
-            {
-                _power = gameObject.AddComponent<PowerConsumer>();
-                _power.wattsPerSecond = wattsPerSecond;
-            }
-            else
-            {
-                // A prefab-authored consumer is the balance knob: a hand-tweaked
-                // draw survives (non-destructive rule), this field just mirrors it.
-                wattsPerSecond = _power.wattsPerSecond;
-            }
+            // Legacy prefabs carried a PowerConsumer (own grid draw, 14.39.0).
+            // The guard is system-powered now - neutralize it.
+            var legacyPower = GetComponent<VoxelEngine.Power.PowerConsumer>();
+            if (legacyPower != null) legacyPower.wattsPerSecond = 0f;
 
             // Owner guess at placement (Bed pattern 14.38.0): never on remote
-            // spawn, never after an explicit assignment. Save restore and
-            // BlockSync both call SetOwner right after instantiation.
+            // spawn, never after an explicit assignment.
             if (!_explicitOwner && string.IsNullOrEmpty(ownerId)
                 && !Networking.BlockSync.IsApplyingRemote)
             {
@@ -111,6 +114,11 @@ namespace VoxelEngine.Storage
             accessMode = Mathf.Clamp(mode, 0, 2);
         }
 
+        public void SetWirelessTeamShare(bool share)
+        {
+            wirelessTeamShare = share;
+        }
+
         /// <summary>May this player open storage guarded by this block?
         /// Unpowered or unowned (legacy) guards fail open.</summary>
         public bool Permits(string playerId)
@@ -127,6 +135,18 @@ namespace VoxelEngine.Storage
             }
         }
 
+        /// <summary>May this player use handheld WIRELESS access through this
+        /// guard's network? Stricter than Permits and never global: the owner
+        /// always, the team only when the owner ticked the share box.</summary>
+        public bool PermitsWireless(string playerId)
+        {
+            if (!IsArmed) return true;
+            if (string.IsNullOrEmpty(ownerId)) return true;
+            string id = playerId ?? "";
+            if (id == ownerId) return true;
+            return wirelessTeamShare && Networking.TeamRegistry.SameTeam(ownerId, id);
+        }
+
         public string ModeLabel()
         {
             switch (Mode)
@@ -139,29 +159,29 @@ namespace VoxelEngine.Storage
 
         // ─────────────────────── static access checks ───────────────────────
 
-        /// <summary>The armed security block that denies this player at a given
-        /// data position (rack or NAS), or null when access is allowed. When
-        /// several guards overlap, ALL of them must permit - the strictest wins.</summary>
-        public static SecurityBlock DenierAt(Vector3 dataPosition, string playerId)
-        {
-            var guards = FindObjectsByType<SecurityBlock>(FindObjectsSortMode.None);
-            foreach (var g in guards)
-            {
-                if (g == null || !g.isActiveAndEnabled) continue;
-                float r = Mathf.Max(0.5f, g.guardRadius);
-                if ((g.transform.position - dataPosition).sqrMagnitude > r * r) continue;
-                if (!g.Permits(playerId)) return g;
-            }
-            return null;
-        }
+        private static readonly System.Collections.Generic.List<SecurityBlock> _guardBuf = new();
 
-        /// <summary>Convenience for terminals: checks against the position of the
-        /// rack the terminal is connected to. A terminal with no network is never
-        /// denied - there is no data behind it to guard.</summary>
+        /// <summary>The armed security block on this controller's network that
+        /// denies the player, or null when access is allowed. When several
+        /// guards sit on one network, ALL must permit - the strictest wins.</summary>
         public static SecurityBlock DenierForRack(ServerRack rack, string playerId)
         {
             if (rack == null) return null;
-            return DenierAt(rack.transform.position, playerId);
+            StorageNetwork.MembersOf(rack, _guardBuf);
+            foreach (var g in _guardBuf)
+                if (g != null && !g.Permits(playerId)) return g;
+            return null;
+        }
+
+        /// <summary>Wireless twin of DenierForRack: the guard that refuses
+        /// handheld access, or null when wireless is allowed.</summary>
+        public static SecurityBlock WirelessDenierForRack(ServerRack rack, string playerId)
+        {
+            if (rack == null) return null;
+            StorageNetwork.MembersOf(rack, _guardBuf);
+            foreach (var g in _guardBuf)
+                if (g != null && !g.PermitsWireless(playerId)) return g;
+            return null;
         }
 
         /// <summary>Orange refusal toast, shared by every enforcement site.</summary>

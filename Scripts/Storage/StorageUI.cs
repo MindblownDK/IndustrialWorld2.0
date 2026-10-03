@@ -33,104 +33,158 @@ namespace VoxelEngine.Storage
             MachineUIs.SlotBuilder slotBuilder,
             Inventory playerInv)
         {
-            // Wider panel so the slot grid has room.
-            var p = T.MachinePanel();
-            p.style.width = 530;
+            // ── 14.40.0 full remake ───────────────────────────────
+            // The terminal is the player's window into the network, so it gets
+            // the whole right side of the screen (everything from the equipment
+            // console to the right edge) and the same LCD chassis/phosphor
+            // theme as the inventory itself. Count ON the icon, name under it,
+            // 1-second hover tooltip with data size and weight, and every
+            // readout self-refreshes - no more stale GB numbers.
+            var p = new VisualElement { name = "StorageTerminalPanel" };
+            p.style.position = Position.Absolute;
+            p.style.top = 12; p.style.bottom = 72; p.style.right = 12;
+            p.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
+            p.style.minWidth = 540;
+            p.style.paddingTop = 6; p.style.paddingBottom = 6;
+            p.style.paddingLeft = 6; p.style.paddingRight = 6;
+            p.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyChassis(p, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
 
-            var rack   = terminal.ConnectedRack;
+            var screen = new VisualElement { name = "StorageTerminalScreen" };
+            screen.style.flexGrow = 1;
+            screen.style.paddingTop = 10; screen.style.paddingBottom = 8;
+            screen.style.paddingLeft = 10; screen.style.paddingRight = 10;
+            LcdHudTheme.ApplyScreen(screen);
+            p.Add(screen);
+
+            var rack = terminal.ConnectedRack;
             bool online = rack != null && rack.IsOnline;
 
-            // Security Block gate (14.39.0): the deepest chokepoint - covers
-            // wired AND wireless terminals, and re-checks on every rebuild so
-            // a mid-session mode change locks an already-open panel out.
-            var secDenied = SecurityDeniedPanel(rack, p);
-            if (secDenied != null) return secDenied;
+            // Security Block gate (14.39.0, network-based 14.40.0): rechecked on
+            // every rebuild, so a mid-session mode change locks this panel out.
+            if (rack != null)
+            {
+                var denier = SecurityBlock.DenierForRack(
+                    rack, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
+                if (denier != null)
+                {
+                    BuildDeniedScreen(screen, denier);
+                    return p;
+                }
+            }
 
-            // ── Header ────────────────────────────────────────────
-            var (hdr, _, _, _) = T.HeaderRow(
-                terminal.isWireless ? "📡 Wireless Terminal" : "💾 Storage Terminal",
-                online ? "ONLINE" : "NO RACK",
-                online ? T.AccentGreen : T.AccentRed);
-            p.Add(hdr);
-            p.Add(HighTechTheme.ScanDivider(online ? T.AccentGreen : T.AccentRed));
+            // ── Header (inventory-style caption + title + pill) ──
+            var caption = LcdHudTheme.CaptionLabel(terminal.isWireless ? "REMOTE SYSTEMS" : "MASS STORAGE");
+            screen.Add(caption);
+
+            var titleRow = new VisualElement();
+            titleRow.style.flexDirection = FlexDirection.Row;
+            titleRow.style.alignItems = Align.Center;
+            titleRow.style.marginBottom = 6;
+            var title = new Label(terminal.isWireless ? "WIRELESS TERMINAL" : "STORAGE TERMINAL");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 16;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.6f;
+            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            titleRow.Add(title);
+
+            var pill = new Label(online ? "ONLINE" : "NO LINK");
+            pill.style.fontSize = 9;
+            pill.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pill.style.letterSpacing = 1.1f;
+            pill.style.color = new StyleColor(online ? LcdHudTheme.Phosphor : UITheme.AccentRed);
+            pill.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            pill.style.paddingLeft = 8; pill.style.paddingRight = 8;
+            pill.style.paddingTop = 3; pill.style.paddingBottom = 3;
+            UITheme.Radius(pill, 2);
+            titleRow.Add(pill);
+            screen.Add(titleRow);
 
             if (!online)
             {
-                p.Add(T.Body("No server rack connected or rack is offline."));
-                p.Add(T.Spacer(8));
-                p.Add(T.Muted("Place a Server Rack nearby with a PSU and connect power."));
-                HighTechTheme.Frame(p, online ? T.AccentGreen : T.AccentRed);
+                var why = rack == null
+                    ? "No Server Controller linked. Run a Data Pipe to this terminal or place it touching the system."
+                    : rack.HasConflict
+                        ? "Controller conflict on this network - remove the extra Server Controller."
+                        : "System power is down. Check the Power Stations and their PSUs.";
+                var msg = new Label(why);
+                msg.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+                msg.style.fontSize = 11;
+                msg.style.whiteSpace = WhiteSpace.Normal;
+                msg.style.marginTop = 8;
+                screen.Add(msg);
+                LcdHudTheme.AddScanlines(screen, 7, 40f, 60f);
                 return p;
             }
 
-            // ── Storage fill bar ──────────────────────────────────
-            p.Add(T.StatRow("💾", "Storage",
-                $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0} GB", T.AccentCyan));
-            // Animated phosphor segment track — the LCD "good feel" fill.
-            var segTrack = LcdHudTheme.CreateSegmentTrack(14, out var segs, height: 9f);
-            segTrack.style.marginTop = 2;
-            p.Add(segTrack);
-            LcdHudTheme.AnimateSegments(segs,
-                rack.TotalCapacity > 0 ? (float)rack.TotalStored / rack.TotalCapacity : 0f,
-                T.AccentCyan);
-            p.Add(T.Spacer(4));
-            p.Add(T.Muted("Matter conversion: each stored unit is encoded as stable matter data. Heavier items consume more GB."));
-            p.Add(T.Spacer(6));
+            // ── Data readout: live used / total with real prefixes ─
+            var dataRow = new VisualElement();
+            dataRow.style.flexDirection = FlexDirection.Row;
+            dataRow.style.alignItems = Align.Center;
+            dataRow.style.marginBottom = 3;
+            var dataCaption = LcdHudTheme.CaptionLabel("DATA STORED");
+            dataCaption.style.flexGrow = 1;
+            dataRow.Add(dataCaption);
+            var dataLabel = new Label(StorageUnits.FormatPair(rack.TotalStoredGb, rack.TotalCapacity));
+            dataLabel.style.fontSize = 11;
+            dataLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            dataLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            dataRow.Add(dataLabel);
+            screen.Add(dataRow);
+
+            var segTrack = LcdHudTheme.CreateSegmentTrack(22, out var segs, height: 8f);
+            segTrack.style.marginBottom = 6;
+            screen.Add(segTrack);
+
+            void RefreshStats()
+            {
+                if (rack == null) return;
+                dataLabel.text = StorageUnits.FormatPair(rack.TotalStoredGb, rack.TotalCapacity);
+                float f01 = rack.TotalCapacity > 0 ? rack.TotalStoredGb / rack.TotalCapacity : 0f;
+                LcdHudTheme.AnimateSegments(segs, f01, UITheme.AccentCyan);
+                pill.text = rack.IsOnline ? "ONLINE" : "NO LINK";
+                pill.style.color = new StyleColor(rack.IsOnline ? LcdHudTheme.Phosphor : UITheme.AccentRed);
+            }
+            RefreshStats();
 
             // ── Search + Sort ─────────────────────────────────────
             var searchRow = new VisualElement();
             searchRow.style.flexDirection = FlexDirection.Row;
-            searchRow.style.alignItems    = Align.Center;
-            searchRow.style.marginBottom  = 6;
-
-            var searchIco = new Label("⚲");
-            searchIco.style.fontSize    = 13;
-            searchIco.style.color       = new StyleColor(T.TextMuted);
-            searchIco.style.marginRight = 5;
-            searchIco.pickingMode = PickingMode.Ignore;
-            searchRow.Add(searchIco);
+            searchRow.style.alignItems = Align.Center;
+            searchRow.style.marginBottom = 6;
 
             var searchField = new TextField { value = "" };
-            searchField.style.flexGrow  = 1;
+            searchField.style.flexGrow = 1;
             searchField.style.minHeight = 26;
             LcdHudTheme.ApplySearchField(searchField);
             searchRow.Add(searchField);
 
-            // Sort selector — two modes × ascending/descending. Default = item
-            // count ascending (smallest stacks first) per the new QoL spec.
-            var sortBtn = new Button { text = "Count ↑" };
-            sortBtn.style.minHeight     = 26;
-            sortBtn.style.minWidth      = 90;
-            sortBtn.style.marginLeft    = 6;
-            sortBtn.style.fontSize      = 10;
-            sortBtn.style.color         = Color.white;
+            var sortBtn = new Button { text = "COUNT ↑" };
+            sortBtn.style.minHeight = 26;
+            sortBtn.style.minWidth = 92;
+            sortBtn.style.marginLeft = 6;
+            sortBtn.style.fontSize = 9;
+            sortBtn.style.letterSpacing = 0.8f;
             sortBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-            sortBtn.style.backgroundColor = new StyleColor(T.BgSlot);
-            T.Radius(sortBtn, 5f);
-            T.Border(sortBtn, 1, T.BorderDim);
-            LcdHudTheme.ApplyCommandButton(sortBtn, T.AccentCyan);
+            LcdHudTheme.ApplyCommandButton(sortBtn, LcdHudTheme.Phosphor);
             sortBtn.tooltip = "Click to cycle sort:\n• Count ↑ (default)\n• Count ↓\n• Name A→Z\n• Name Z→A";
             searchRow.Add(sortBtn);
-            p.Add(searchRow);
+            screen.Add(searchRow);
 
-            // ── Slot grid (scrollable) ────────────────────────────
+            // ── Slot grid (fills the screen) ──────────────────────
             var scroll = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
-            scroll.style.flexGrow  = 1;
-            scroll.style.maxHeight = 340;
-            p.Add(scroll);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);
+            scroll.style.flexGrow = 1;
+            screen.Add(scroll);
 
-            // Grid holds the item slots.
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
-            grid.style.flexWrap      = Wrap.Wrap;
-            grid.style.paddingTop    = 4;
+            grid.style.flexWrap = Wrap.Wrap;
+            grid.style.paddingTop = 4;
             grid.style.paddingBottom = 4;
-            grid.style.paddingLeft   = 2;
-            grid.style.paddingRight  = 2;
             scroll.Add(grid);
 
-            // Read input system shift state (supports both new & old Input).
             static bool IsShiftHeld()
             {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
@@ -141,40 +195,41 @@ namespace VoxelEngine.Storage
 #endif
             }
 
-            // Sort mode state — persists for the lifetime of this panel instance.
-            // 0 = Count ascending (default), 1 = Count descending,
-            // 2 = Name A→Z, 3 = Name Z→A.
             int sortMode = 0;
-
             void ApplySortLabel()
             {
                 sortBtn.text = sortMode switch
                 {
-                    0 => "Count ↑",
-                    1 => "Count ↓",
-                    2 => "Name A→Z",
-                    3 => "Name Z→A",
-                    _ => "Count ↑"
+                    0 => "COUNT ↑", 1 => "COUNT ↓",
+                    2 => "NAME A→Z", 3 => "NAME Z→A",
+                    _ => "COUNT ↑"
                 };
             }
 
-            void RebuildGrid(string filterQ)
-            {
-                grid.Clear();
+            // Fingerprint of the last grid build, so the 1 s auto-refresh only
+            // rebuilds when the network contents actually changed (keeps hover
+            // and tooltips stable while idle).
+            string lastFingerprint = null;
 
+            void RebuildGrid(string filterQ, bool force)
+            {
                 var allItems = rack.GetAllItems();
 
-                // Sort BEFORE filtering so the order is stable as the user types.
+                var fp = new System.Text.StringBuilder();
+                foreach (var e in allItems) { fp.Append(e.itemId); fp.Append(':'); fp.Append(e.count); fp.Append('|'); }
+                fp.Append(filterQ); fp.Append('#'); fp.Append(sortMode);
+                string fingerprint = fp.ToString();
+                if (!force && fingerprint == lastFingerprint) return;
+                lastFingerprint = fingerprint;
+
+                grid.Clear();
+
                 switch (sortMode)
                 {
                     case 0: allItems.Sort((a, b) => a.count.CompareTo(b.count)); break;
                     case 1: allItems.Sort((a, b) => b.count.CompareTo(a.count)); break;
-                    case 2: allItems.Sort((a, b) => string.Compare(
-                                a.displayName, b.displayName,
-                                System.StringComparison.OrdinalIgnoreCase)); break;
-                    case 3: allItems.Sort((a, b) => string.Compare(
-                                b.displayName, a.displayName,
-                                System.StringComparison.OrdinalIgnoreCase)); break;
+                    case 2: allItems.Sort((a, b) => string.Compare(a.displayName, b.displayName, System.StringComparison.OrdinalIgnoreCase)); break;
+                    case 3: allItems.Sort((a, b) => string.Compare(b.displayName, a.displayName, System.StringComparison.OrdinalIgnoreCase)); break;
                 }
 
                 string q = filterQ.Trim().ToLowerInvariant();
@@ -188,141 +243,160 @@ namespace VoxelEngine.Storage
                     var def = FindItemDef(entry.itemId);
                     int maxExtract = def != null ? ItemStack.MaxItemsPerStack(def) : ItemContainer.DefaultMaxItemsPerStack;
 
-                    // ── Slot cell ────────────────────────────────
-                    var cell = new VisualElement();
-                    cell.style.width           = 68;
-                    cell.style.height          = 72;
-                    cell.style.marginRight     = 4;
-                    cell.style.marginBottom    = 4;
-                    cell.style.paddingTop      = 4;
-                    cell.style.paddingBottom   = 2;
-                    cell.style.paddingLeft     = 3;
-                    cell.style.paddingRight    = 3;
-                    cell.style.backgroundColor = new StyleColor(T.BgCard);
-                    cell.style.alignItems      = Align.Center;
-                    cell.style.justifyContent  = Justify.SpaceBetween;
-                    T.Radius(cell, 6f);
-                    T.Border(cell, 1, T.BorderDim);
-                    // cursor is not needed — default pointer is fine
+                    // ── Cell: LCD slot + name underneath ─────────
+                    var cellWrap = new VisualElement();
+                    cellWrap.style.width = 56;
+                    cellWrap.style.marginRight = 5;
+                    cellWrap.style.marginBottom = 6;
+                    cellWrap.style.alignItems = Align.Center;
 
-                    // Icon area (48×48 or coloured box fallback).
-                    var iconWrap = new VisualElement();
-                    iconWrap.style.width           = 44;
-                    iconWrap.style.height          = 44;
-                    iconWrap.style.alignItems      = Align.Center;
-                    iconWrap.style.justifyContent  = Justify.Center;
-                    iconWrap.pickingMode           = PickingMode.Ignore;
+                    var cell = new VisualElement();
+                    cell.style.width = 54; cell.style.height = 54;
+                    cell.style.flexShrink = 0;
+                    cell.style.alignItems = Align.Center;
+                    cell.style.justifyContent = Justify.Center;
+                    cell.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+                    UITheme.Radius(cell, 1);
+                    cell.style.borderTopWidth = cell.style.borderBottomWidth =
+                    cell.style.borderLeftWidth = cell.style.borderRightWidth = 1;
+                    var bezelBorder = new StyleColor(new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f));
+                    cell.style.borderTopColor = cell.style.borderBottomColor =
+                    cell.style.borderLeftColor = cell.style.borderRightColor = bezelBorder;
+                    cellWrap.Add(cell);
 
                     if (def != null && def.icon != null)
                     {
                         var img = new Image { sprite = def.icon };
-                        img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
-                        img.style.width  = 40;
-                        img.style.height = 40;
-                        img.pickingMode  = PickingMode.Ignore;
-                        iconWrap.Add(img);
+                        img.scaleMode = ScaleMode.ScaleToFit;
+                        img.style.width = 42; img.style.height = 42;
+                        img.pickingMode = PickingMode.Ignore;
+                        cell.Add(img);
                     }
                     else
                     {
-                        // Coloured box placeholder.
                         var box = new VisualElement();
-                        box.style.width           = 36;
-                        box.style.height          = 36;
-                        box.style.backgroundColor = new StyleColor(
-                            def != null ? def.iconTint : T.AccentCyan);
-                        T.Radius(box, 4f);
+                        box.style.width = 34; box.style.height = 34;
+                        box.style.backgroundColor = new StyleColor(def != null ? def.iconTint : UITheme.AccentCyan);
+                        UITheme.Radius(box, 2);
                         box.pickingMode = PickingMode.Ignore;
-                        iconWrap.Add(box);
+                        cell.Add(box);
                     }
-                    cell.Add(iconWrap);
 
-                    // Stack count label.
+                    // Count ON TOP of the icon - same spot as the inventory slots.
                     var countLbl = new Label(FormatCount(entry.count));
-                    countLbl.style.color                   = new StyleColor(T.AccentCyan);
-                    countLbl.style.fontSize                = 10;
+                    countLbl.style.position = Position.Absolute;
+                    countLbl.style.top = 1; countLbl.style.right = 3;
+                    countLbl.style.fontSize = 10;
                     countLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    countLbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
-                    countLbl.style.minWidth                = 62;
-                    countLbl.pickingMode                   = PickingMode.Ignore;
+                    countLbl.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                    countLbl.pickingMode = PickingMode.Ignore;
                     cell.Add(countLbl);
 
-                    // Name label (truncated).
+                    // Name under the slot.
                     var nameLbl = new Label(entry.displayName);
-                    nameLbl.style.color         = new StyleColor(T.TextSecondary);
-                    nameLbl.style.fontSize       = 8;
+                    nameLbl.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+                    nameLbl.style.fontSize = 8;
                     nameLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
-                    nameLbl.style.overflow       = Overflow.Hidden;
-                    nameLbl.style.maxWidth       = 62;
-                    nameLbl.style.whiteSpace     = WhiteSpace.NoWrap;
-                    nameLbl.pickingMode          = PickingMode.Ignore;
-                    cell.Add(nameLbl);
+                    nameLbl.style.overflow = Overflow.Hidden;
+                    nameLbl.style.maxWidth = 56;
+                    nameLbl.style.whiteSpace = WhiteSpace.NoWrap;
+                    nameLbl.pickingMode = PickingMode.Ignore;
+                    cellWrap.Add(nameLbl);
 
-                    // ── Click handler ────────────────────────────
-                    // Capture loop variable values.
-                    string capturedId    = entry.itemId;
-                    string capturedName  = entry.displayName;
+                    string capturedId = entry.itemId;
+                    string capturedName = entry.displayName;
+                    int capturedCount = entry.count;
+                    float capturedMass = entry.massPerUnit <= 0f ? 1f : entry.massPerUnit;
                     UnityEngine.Sprite capturedIcon = def?.icon;
+                    var capturedDef = def;
 
                     cell.RegisterCallback<ClickEvent>(evt =>
                     {
                         if (playerInv == null) return;
-                        bool shift  = IsShiftHeld();
-                        int  amount = shift ? maxExtract : 1;
-                        int  got    = rack.NetworkExtract(capturedId, amount);
+                        bool shift = IsShiftHeld();
+                        int amount = shift ? maxExtract : 1;
+                        int got = rack.NetworkExtract(capturedId, amount);
                         if (got > 0)
                         {
                             var itemDef = FindItemDef(capturedId);
                             if (itemDef != null)
                                 playerInv.Add(itemDef, got);
-                            BuildFeedbackHud.Show(
-                                capturedName,
-                                $"+{got}",
-                                capturedIcon,
-                                T.AccentCyan);
-                            // Rebuild grid in-place (no full UI refresh needed).
-                            RebuildGrid(searchField.value);
+                            BuildFeedbackHud.Show(capturedName, $"+{got}", capturedIcon, UITheme.AccentCyan);
+                            RebuildGrid(searchField.value, force: true);
+                            RefreshStats();
                         }
                     });
 
-                    // Hover highlight.
+                    // 1-second hover tooltip: item card + data size + weight.
+                    IVisualElementScheduledItem hoverTip = null;
                     cell.RegisterCallback<MouseEnterEvent>(_ =>
                     {
-                        cell.style.backgroundColor = new StyleColor(T.BgHover);
-                        T.Border(cell, 1, T.BorderBright);
+                        cell.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
+                        hoverTip?.Pause();
+                        hoverTip = cell.schedule.Execute(() =>
+                        {
+                            if (capturedDef == null) return;
+                            var synthetic = new ItemStack { item = capturedDef, count = capturedCount };
+                            string extra =
+                                $"Data Size:  {StorageUnits.Format(capturedMass)} / unit\n" +
+                                $"Stored:     {StorageUnits.Format(capturedMass * capturedCount)} in network";
+                            VoxelEngine.UI.Tooltip.ShowStackAt(
+                                synthetic,
+                                new Vector2(cell.worldBound.xMax + 6f, cell.worldBound.yMin),
+                                extra);
+                        });
+                        hoverTip.ExecuteLater(1000);
                     });
                     cell.RegisterCallback<MouseLeaveEvent>(_ =>
                     {
-                        cell.style.backgroundColor = new StyleColor(T.BgCard);
-                        T.Border(cell, 1, T.BorderDim);
+                        cell.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+                        hoverTip?.Pause();
+                        VoxelEngine.UI.Tooltip.HideSticky();
                     });
 
-                    grid.Add(cell);
+                    grid.Add(cellWrap);
                 }
 
                 if (grid.childCount == 0)
-                    grid.Add(T.Muted(string.IsNullOrEmpty(q)
-                        ? "Storage is empty."
-                        : "No items match the search."));
+                {
+                    var empty = new Label(string.IsNullOrEmpty(q) ? "STORAGE EMPTY" : "NO MATCH");
+                    empty.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+                    empty.style.fontSize = 10;
+                    empty.style.letterSpacing = 1.2f;
+                    empty.style.marginTop = 10;
+                    grid.Add(empty);
+                }
             }
 
             sortBtn.clicked += () =>
             {
                 sortMode = (sortMode + 1) % 4;
                 ApplySortLabel();
-                RebuildGrid(searchField.value);
+                RebuildGrid(searchField.value, force: true);
             };
-
-            searchField.RegisterValueChangedCallback(e => RebuildGrid(e.newValue));
+            searchField.RegisterValueChangedCallback(e => RebuildGrid(e.newValue, force: true));
             ApplySortLabel();
-            RebuildGrid("");
+            RebuildGrid("", force: true);
+
+            // Self-refresh: stats every second, grid only when contents changed.
+            // This is what keeps the GB readout live while importers run.
+            screen.schedule.Execute(() =>
+            {
+                if (rack == null) return;
+                RefreshStats();
+                RebuildGrid(searchField.value, force: false);
+            }).Every(1000);
 
             // ── Hint bar ─────────────────────────────────────────
-            p.Add(T.Spacer(4));
-            var hint = T.Muted("Click = take 1  ·  Shift+Click = take stack  ·  Shift+Click inventory item = store");
+            var hint = new Label("CLICK TAKE 1 · SHIFT+CLICK TAKE STACK · SHIFT+CLICK INVENTORY ITEM = STORE");
+            hint.style.color = new StyleColor(LcdHudTheme.Caption);
+            hint.style.fontSize = 8;
+            hint.style.letterSpacing = 0.8f;
             hint.style.unityTextAlign = TextAnchor.MiddleCenter;
-            p.Add(hint);
+            hint.style.marginTop = 6;
+            screen.Add(hint);
 
-            HighTechTheme.Frame(p, online ? T.AccentGreen : T.AccentRed);
+            LcdHudTheme.AddScanlines(screen, 9, 44f, 55f);
             return p;
         }
 
@@ -842,50 +916,152 @@ namespace VoxelEngine.Storage
 
         // ════════════════════════════════════════════════════════════
         //                      NAS BLOCK
+        //  14.40.0: real NAS front-panel look - 8 vertical drive bays,
+        //  each with its disk slot, activity LED, tier label and a fill
+        //  bar (green 0-70% · yellow 71-90% · red 91-100%), plus the
+        //  per-shelf network priority stepper.
         // ════════════════════════════════════════════════════════════
         public static VisualElement BuildNASPanel(
             NASBlock nas,
             MachineUIs.SlotBuilder slotBuilder)
         {
-            if (nas.diskSlots == null)
-                nas.diskSlots = new ItemContainer("NAS Disks", 10);
-
+            nas.EnsureContainers();
             var p = T.MachinePanel();
+            p.style.width = 460;
 
-            // Security Block gate (14.39.0): NAS shelves hold disks themselves.
-            var secDenied = SecurityDeniedPanelAt(nas.transform.position, p);
+            // Security Block gate: the NAS shelves hold the network's disks.
+            var secDenied = SecurityDeniedPanelFor(nas, p);
             if (secDenied != null) return secDenied;
 
-            var (hdr, _, _, _) = T.HeaderRow("🗄 NAS Block",
-                nas.TotalCapacity > 0 ? "CONNECTED" : "EMPTY",
-                nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted);
-            p.Add(hdr);
-            p.Add(HighTechTheme.ScanDivider(nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted));
+            var controller = StorageNetwork.ControllerOf(nas);
+            bool linked = controller != null;
+            bool online = linked && controller.IsOnline;
 
-            p.Add(T.StatRow("💾", "Storage",
-                $"{nas.TotalStored:N0} / {nas.TotalCapacity:N0} GB", T.AccentCyan));
-            var (bar, _) = T.ProgressBar(
-                nas.TotalCapacity > 0 ? (float)nas.TotalStored / nas.TotalCapacity : 0,
-                T.AccentCyan, 8, true);
-            p.Add(bar);
+            string status = online ? "ONLINE" : linked ? "STANDBY" : "NO CONTROLLER";
+            Color statusCol = online ? T.AccentGreen : linked ? T.AccentOrange : T.TextMuted;
+
+            var (hdr, _, _, _) = T.HeaderRow("🗄 NAS", status, statusCol);
+            p.Add(hdr);
+            p.Add(HighTechTheme.ScanDivider(statusCol));
+
+            // Totals.
+            p.Add(T.StatRow("💾", "Shelf Data",
+                StorageUnits.FormatPair(nas.TotalStoredGb, nas.TotalCapacity), T.AccentCyan));
+            p.Add(T.StatRow("⚡", "Draw", $"{nas.DrawWatts:0} W", T.AccentGold));
+
+            // Priority stepper - higher priority shelves fill first.
+            p.Add(PriorityRow("Network Priority", () => nas.priority, v =>
+            {
+                nas.SetPriority(v);
+                MarkDirtyForSync(nas);
+            }));
             p.Add(T.Divider());
 
-            p.Add(T.Subtitle("Disk Slots (10)"));
-            var diskGrid = T.SlotGrid();
-            for (int i = 0; i < nas.diskSlots.Size; i++)
-                diskGrid.Add(slotBuilder(nas.diskSlots, i,
-                    nas.diskSlots.GetSlot(i), false, true));
-            p.Add(diskGrid);
+            // ── Drive bays (the NAS front) ────────────────────────
+            for (int i = 0; i < NASBlock.BAYS; i++)
+            {
+                int bay = i;
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginBottom = 3;
+                row.style.paddingTop = 2; row.style.paddingBottom = 2;
+                row.style.paddingLeft = 4; row.style.paddingRight = 6;
+                row.style.backgroundColor = new StyleColor(T.BgCard);
+                T.Radius(row, 5f);
+                T.Border(row, 1, T.BorderDim);
 
-            p.Add(T.Spacer(8));
-            p.Add(T.Muted("Connect to a Server Rack via data cables to expand network storage. " +
-                          "Each disk remembers its contents."));
-            HighTechTheme.Frame(p, nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted);
+                // Disk slot (insert/remove disks directly in the bay).
+                row.Add(slotBuilder(nas.diskSlots, bay, nas.diskSlots.GetSlot(bay), false, true));
+
+                float fill = nas.BayFill01(bay);
+                bool hasDisk = fill >= 0f;
+
+                // Activity LED.
+                var led = new VisualElement();
+                led.style.width = 7; led.style.height = 7;
+                led.style.marginLeft = 6; led.style.marginRight = 7;
+                led.style.flexShrink = 0;
+                T.Radius(led, 4f);
+                led.style.backgroundColor = new StyleColor(
+                    !hasDisk ? new Color(0.18f, 0.20f, 0.22f, 1f) :
+                    online   ? T.AccentGreen : T.AccentOrange);
+                row.Add(led);
+
+                // Bay label: tier + used/capacity.
+                var info = new VisualElement();
+                info.style.flexGrow = 1;
+                info.style.minWidth = 0;
+                var slotStack = nas.diskSlots.GetSlot(bay);
+                string tierTxt = "EMPTY BAY";
+                string capTxt = "—";
+                if (hasDisk && slotStack.item is StorageDisk sd)
+                {
+                    var data = bay < nas.activeDisks.Count ? nas.activeDisks[bay] : null;
+                    tierTxt = sd.displayName;
+                    capTxt = data != null
+                        ? StorageUnits.FormatPair(data.UsedGigabytes, data.Capacity)
+                        : StorageUnits.Format(sd.MaxGigabytes);
+                }
+                var tierLbl = new Label($"BAY {bay + 1}  ·  {tierTxt}");
+                tierLbl.style.fontSize = 9;
+                tierLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                tierLbl.style.color = new StyleColor(hasDisk ? T.TextSecondary : T.TextMuted);
+                tierLbl.style.overflow = Overflow.Hidden;
+                tierLbl.style.whiteSpace = WhiteSpace.NoWrap;
+                info.Add(tierLbl);
+
+                // Fill bar - the NAS "good feel" part.
+                var track = new VisualElement();
+                track.style.height = 7;
+                track.style.marginTop = 3;
+                track.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.09f, 1f));
+                T.Radius(track, 3f);
+                info.Add(track);
+
+                if (hasDisk)
+                {
+                    Color barCol = fill > 0.90f ? T.AccentRed :
+                                   fill > 0.70f ? T.AccentOrange : T.AccentGreen;
+                    var barFill = new VisualElement();
+                    barFill.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
+                    barFill.style.width = new StyleLength(new Length(Mathf.Clamp01(fill) * 100f, LengthUnit.Percent));
+                    barFill.style.backgroundColor = new StyleColor(barCol);
+                    T.Radius(barFill, 3f);
+                    track.Add(barFill);
+                }
+                row.Add(info);
+
+                // Percent label.
+                var pct = new Label(hasDisk ? $"{fill * 100f:0}%" : "");
+                pct.style.width = 34;
+                pct.style.fontSize = 9;
+                pct.style.unityFontStyleAndWeight = FontStyle.Bold;
+                pct.style.unityTextAlign = TextAnchor.MiddleRight;
+                pct.style.color = new StyleColor(
+                    !hasDisk ? T.TextMuted :
+                    fill > 0.90f ? T.AccentRed :
+                    fill > 0.70f ? T.AccentOrange : T.AccentGreen);
+                row.Add(pct);
+
+                // Capacity readout under the tier name is too cramped; show it
+                // as a tooltip on the whole bay row instead.
+                row.tooltip = hasDisk ? capTxt : "Insert a Storage Disk";
+
+                p.Add(row);
+            }
+
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("Link to a Server Controller with Data Pipes or by touching blocks. " +
+                          "Higher-priority shelves fill first. Disks remember their contents."));
+            HighTechTheme.Frame(p, statusCol);
             return p;
         }
 
         // ════════════════════════════════════════════════════════════
-        //                     SERVER RACK
+        //                   SERVER CONTROLLER
+        //  14.40.0: the rack is now the network's brain - RAM + CPU
+        //  only. Disks live in NAS shelves, PSUs in Power Stations.
         // ════════════════════════════════════════════════════════════
         public static VisualElement BuildServerPanel(
             ServerRack rack,
@@ -893,62 +1069,72 @@ namespace VoxelEngine.Storage
         {
             rack.EnsureContainers();
             var p = T.MachinePanel();
-            p.style.width = 520;
+            p.style.width = 480;
 
-            // Security Block gate (14.39.0): the rack holds the disks.
-            var secDenied = SecurityDeniedPanelAt(rack.transform.position, p);
+            // Security Block gate.
+            var secDenied = SecurityDeniedPanelFor(rack, p);
             if (secDenied != null) return secDenied;
 
-            // Status: overloaded / online / offline.
-            string status    = rack.IsPsuOverloaded ? "PSU OVERLOADED" :
-                               rack.IsOnline        ? "ONLINE"         : "OFFLINE";
-            Color  statusCol = rack.IsPsuOverloaded ? T.AccentRed :
-                               rack.IsOnline        ? T.AccentGreen : T.TextMuted;
+            string status = rack.HasConflict   ? "CONTROLLER CONFLICT" :
+                            rack.IsPowerShort  ? "POWER SHORT" :
+                            rack.IsOnline      ? "ONLINE" : "NO POWER STATION";
+            Color statusCol = rack.HasConflict  ? T.AccentRed :
+                              rack.IsPowerShort ? T.AccentRed :
+                              rack.IsOnline     ? T.AccentGreen : T.TextMuted;
 
-            var (hdr, _, _, _) = T.HeaderRow("🖥 Server Rack", status, statusCol);
+            var (hdr, _, _, _) = T.HeaderRow("🖥 Server Controller", status, statusCol);
             p.Add(hdr);
+            p.Add(HighTechTheme.ScanDivider(statusCol));
 
-            // Power bar — tight fill with correct math.
-            float powerUsed = 0;
-            var pc = rack.GetComponent<VoxelEngine.Power.PowerConsumer>();
-            if (pc != null) powerUsed = pc.wattsPerSecond;
-            float powerMax  = rack.MaxPowerWatts;
-            float powerFill = powerMax > 0 ? Mathf.Clamp01(powerUsed / powerMax) : 0f;
-
-            Color pwrColor = rack.IsPsuOverloaded ? T.AccentRed :
-                             powerFill > 0.85f     ? T.AccentOrange : T.AccentGold;
-            p.Add(T.StatRow("⚡", "Power",
-                $"{powerUsed:0} W / {powerMax:0} W", pwrColor));
-            var (pwrBar, _) = T.ProgressBar(powerFill, pwrColor, 8, false);
-            p.Add(pwrBar);
-
-            if (rack.IsPsuOverloaded)
+            if (rack.HasConflict)
             {
-                var warn = T.StatLabel("⚠ PSU Overloaded — add a PSU or Powerstation!", T.AccentRed);
-                warn.style.marginTop = 4;
+                var warn = T.StatLabel("⚠ Two Server Controllers share this network. Remove one.", T.AccentRed);
+                warn.style.marginBottom = 4;
                 p.Add(warn);
             }
 
-            p.Add(HighTechTheme.ScanDivider(statusCol));
+            // ── Power budget ──────────────────────────────────────
+            float draw = rack.SystemDrawWatts;
+            float delivered = rack.DeliveredWatts;
+            float rating = rack.StationRatingWatts;
+            float powerFill = rating > 0 ? Mathf.Clamp01(draw / rating) : (draw > 0 ? 1f : 0f);
+            Color pwrColor = rack.IsPowerShort ? T.AccentRed :
+                             powerFill > 0.85f ? T.AccentOrange : T.AccentGold;
 
-            // Stats.
-            p.Add(T.StatRow("💾", "Storage",     $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0} GB", T.AccentCyan));
-            p.Add(T.StatRow("🧠", "Patterns",    $"{rack.PatternSlots} slots",       T.TextSecondary));
-            p.Add(T.StatRow("⚡", "Craft Speed",  $"{rack.CraftSpeedMultiplier:0.0}x", T.AccentGold));
+            p.Add(T.StatRow("⚡", "System Draw", $"{draw:0} W", pwrColor));
+            p.Add(T.StatRow("🔌", "Delivered", $"{delivered:0} W of {rating:0} W PSU rating", pwrColor));
+            var (pwrBar, _) = T.ProgressBar(powerFill, pwrColor, 8, false);
+            p.Add(pwrBar);
+
+            if (rack.IsPowerShort)
+            {
+                var warn = T.StatLabel("⚠ Power short - add PSUs to a Power Station or feed the stations more grid power.", T.AccentRed);
+                warn.style.marginTop = 4;
+                p.Add(warn);
+            }
+            else if (rack.StationCount == 0)
+            {
+                var warn = T.StatLabel("⚠ No Power Station on this network - the system is dark.", T.AccentOrange);
+                warn.style.marginTop = 4;
+                p.Add(warn);
+            }
             p.Add(T.Divider());
 
-            // Disk slots.
-            p.Add(T.Subtitle("Storage Disks (6)"));
-            var diskGrid = T.SlotGrid();
-            for (int i = 0; i < rack.diskSlots.Size; i++)
-                diskGrid.Add(slotBuilder(rack.diskSlots, i, rack.diskSlots.GetSlot(i), false, true));
-            p.Add(diskGrid);
-            p.Add(T.Spacer(6));
+            // ── Data + crafting stats ─────────────────────────────
+            p.Add(T.StatRow("💾", "Network Data",
+                StorageUnits.FormatPair(rack.TotalStoredGb, rack.TotalCapacity), T.AccentCyan));
+            var (bar, _) = T.ProgressBar(
+                rack.TotalCapacity > 0 ? rack.TotalStoredGb / rack.TotalCapacity : 0f,
+                T.AccentCyan, 8, true);
+            p.Add(bar);
+            p.Add(T.StatRow("🧠", "Patterns", $"{rack.PatternSlots} slots", T.TextSecondary));
+            p.Add(T.StatRow("⚙", "Craft Speed", $"{rack.CraftSpeedMultiplier:0.0}x", T.AccentGold));
+            p.Add(T.Divider());
 
-            // Hardware row — validated slots.
+            // ── Hardware: RAM ×4 + CPU ────────────────────────────
             p.Add(T.Subtitle("Hardware"));
             var hwRow = new VisualElement();
-            hwRow.style.flexDirection  = FlexDirection.Row;
+            hwRow.style.flexDirection = FlexDirection.Row;
             hwRow.style.justifyContent = Justify.Center;
 
             var ramGrid = T.SlotGrid();
@@ -960,32 +1146,22 @@ namespace VoxelEngine.Storage
             var cpuGrid = T.SlotGrid();
             cpuGrid.Add(slotBuilder(rack.cpuSlot, 0, rack.cpuSlot.GetSlot(0), false, true));
             hwRow.Add(T.SlotCard("CPU", cpuGrid));
-            hwRow.Add(T.Spacer(6));
-
-            var psuGrid = T.SlotGrid();
-            psuGrid.Add(slotBuilder(rack.psuSlot, 0, rack.psuSlot.GetSlot(0), false, true));
-            hwRow.Add(T.SlotCard("PSU", psuGrid));
             p.Add(hwRow);
             p.Add(T.Divider());
 
-            // Connected devices summary.
-            p.Add(T.Subtitle("Network Connections"));
-            int nasCnt = rack.connectedNAS?.Count ?? 0;
-            if (nasCnt > 0)
-            {
-                int nasS = 0, nasCap = 0;
-                foreach (var nas in rack.connectedNAS)
-                    if (nas != null) { nasS += nas.TotalStored; nasCap += nas.TotalCapacity; }
-                p.Add(T.StatRow("🗄", "NAS Blocks",
-                    $"{nasCnt}x  ({nasS:N0}/{nasCap:N0} GB)", T.AccentCyan));
-            }
-            else
-            {
-                p.Add(T.Muted("No NAS blocks connected. Use data cables + wrench."));
-            }
+            // ── Network members ───────────────────────────────────
+            p.Add(T.Subtitle("Network"));
+            p.Add(T.StatRow("🗄", "NAS Shelves", rack.NasCount.ToString(), rack.NasCount > 0 ? T.AccentCyan : T.TextMuted));
+            p.Add(T.StatRow("🔌", "Power Stations", rack.StationCount.ToString(), rack.StationCount > 0 ? T.AccentGold : T.AccentRed));
+            p.Add(T.StatRow("🖥", "Terminals", rack.TerminalCount.ToString(), T.TextSecondary));
+            p.Add(T.StatRow("▤", "Drawer Controllers", rack.DrawerCtrlCount.ToString(), T.TextSecondary));
+            p.Add(T.StatRow("📡", "Wireless Transmitters", rack.TransmitterCount.ToString(), T.TextSecondary));
+            p.Add(T.StatRow("🔒", "Security Blocks", rack.SecurityCount.ToString(),
+                rack.SecurityCount > 0 ? T.AccentRed : T.TextMuted));
 
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("CPU accepts only CPU modules. RAM accepts only RAM. PSU accepts only PSU."));
+            p.Add(T.Muted("Blocks join the network through Data Pipes or by touching each other. " +
+                          "RAM slots accept only RAM, the CPU slot only CPUs. Disks go in NAS shelves, PSUs in Power Stations."));
             HighTechTheme.Frame(p, statusCol);
             return p;
         }
@@ -1040,9 +1216,14 @@ namespace VoxelEngine.Storage
                 online ? T.AccentGreen : T.AccentRed);
             p.Add(hdr);
             p.Add(HighTechTheme.ScanDivider(online ? T.AccentGreen : T.AccentRed));
-            p.Add(T.StatRow("🖥", "Server Rack", controller.ConnectedRack != null ? controller.ConnectedRack.name : "None", online ? T.AccentGreen : T.TextMuted));
+            p.Add(T.StatRow("🖥", "Server Controller", controller.ConnectedRack != null ? "Linked" : "None", online ? T.AccentGreen : T.TextMuted));
             p.Add(T.StatRow("▣", "Drawers", controller.Drawers.Count.ToString(), T.AccentCyan));
             p.Add(T.StatRow("📡", "Drawer Radius", $"{controller.drawerRadius:0} m", T.TextSecondary));
+            p.Add(PriorityRow("Network Priority", () => controller.priority, v =>
+            {
+                controller.priority = Mathf.Clamp(v, -99, 999);
+                MarkDirtyForSync(controller);
+            }));
             p.Add(T.Divider());
             p.Add(T.Subtitle("Controller Item Storage"));
             var summary = controller.BuildItemSummary();
@@ -1160,33 +1341,129 @@ namespace VoxelEngine.Storage
         //  the check, so a live mode change locks open panels out too.
         // ════════════════════════════════════════════════════════════
 
-        /// <summary>Gate for terminal panels: checks against the connected
-        /// rack's position. No rack = nothing to guard.</summary>
+        // ════════════════════════════════════════════════════════════
+        //          SHARED: priority stepper + multiplayer dirty mark
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>[-10][-1] value [+1][+10] stepper row for per-block
+        /// network priority (higher = filled/drained first).</summary>
+        private static VisualElement PriorityRow(
+            string label, System.Func<int> get, System.Action<int> set)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 4; row.style.marginBottom = 2;
+
+            var lbl = new Label(label);
+            lbl.style.flexGrow = 1;
+            lbl.style.fontSize = 10;
+            lbl.style.color = new StyleColor(T.TextSecondary);
+            row.Add(lbl);
+
+            var valueLbl = new Label(get().ToString());
+            valueLbl.style.minWidth = 36;
+            valueLbl.style.fontSize = 11;
+            valueLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            valueLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+            valueLbl.style.color = new StyleColor(T.AccentCyan);
+
+            Button Step(string txt, int delta)
+            {
+                var b = new Button(() =>
+                {
+                    set(get() + delta);
+                    valueLbl.text = get().ToString();
+                }) { text = txt };
+                b.style.minWidth = 30; b.style.minHeight = 22;
+                b.style.fontSize = 9;
+                b.style.unityFontStyleAndWeight = FontStyle.Bold;
+                b.style.color = Color.white;
+                b.style.backgroundColor = new StyleColor(T.BgSlot);
+                T.Radius(b, 4f);
+                T.Border(b, 1, T.BorderDim);
+                return b;
+            }
+
+            row.Add(Step("-10", -10));
+            row.Add(Step("-1", -1));
+            row.Add(valueLbl);
+            row.Add(Step("+1", +1));
+            row.Add(Step("+10", +10));
+            row.tooltip = "Higher priority shelves are filled and drained first.";
+            return row;
+        }
+
+        /// <summary>Flag the block's container state as locally touched so
+        /// ContainerSync uploads it to the host (multiplayer).</summary>
+        private static void MarkDirtyForSync(Component device)
+        {
+            if (device == null) return;
+            var pb = device.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+            if (pb != null)
+                VoxelEngine.Networking.ContainerSync.NotifyLocalInteraction(pb);
+        }
+
+        /// <summary>Gate for terminal panels: checks the connected network's
+        /// Security Blocks. No controller = nothing to guard.</summary>
         private static VisualElement SecurityDeniedPanel(ServerRack rack, VisualElement p)
         {
             if (rack == null) return null;
-            return SecurityDeniedPanelAt(rack.transform.position, p);
+            var denier = SecurityBlock.DenierForRack(
+                rack, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
+            if (denier == null) return null;
+            return FillDeniedPanel(p, denier);
         }
 
-        /// <summary>Gate for data hardware panels (rack, NAS): checks the
-        /// hardware's own position against every armed security block.</summary>
-        private static VisualElement SecurityDeniedPanelAt(Vector3 dataPosition, VisualElement p)
+        /// <summary>Gate for data hardware panels (controller, NAS, station):
+        /// resolves the device's own network and checks its Security Blocks.
+        /// (14.40.0: replaced the old radius check with network membership.)</summary>
+        private static VisualElement SecurityDeniedPanelFor(Component device, VisualElement p)
         {
-            var denier = SecurityBlock.DenierAt(
-                dataPosition, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
-            if (denier == null) return null;
+            if (device == null) return null;
+            var rack = device as ServerRack ?? StorageNetwork.ControllerOf(device);
+            return SecurityDeniedPanel(rack, p);
+        }
 
+        private static VisualElement FillDeniedPanel(VisualElement p, SecurityBlock denier)
+        {
             var (hdr, _, _, _) = T.HeaderRow("🔒 Access Denied", denier.ModeLabel(), T.AccentRed);
             p.Add(hdr);
             p.Add(HighTechTheme.ScanDivider(T.AccentRed));
-            p.Add(T.Body("A security block guards this storage network."));
+            p.Add(T.Body("A Security Block guards this storage network."));
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Access is restricted to " +
                 (denier.Mode == StorageAccessMode.Private ? "the owner." : "the owner's team.")));
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("There is no hacking: destroy the security block or cut its power to get in."));
+            p.Add(T.Muted("There is no hacking: destroy the Security Block or cut its power to get in."));
             HighTechTheme.Frame(p, T.AccentRed);
             return p;
+        }
+
+        /// <summary>LCD-styled denial content for the fullscreen terminal.</summary>
+        private static void BuildDeniedScreen(VisualElement screen, SecurityBlock denier)
+        {
+            screen.Add(LcdHudTheme.CaptionLabel("SECURITY"));
+
+            var title = new Label("ACCESS DENIED");
+            title.style.fontSize = 16;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.6f;
+            title.style.color = new StyleColor(T.AccentRed);
+            title.style.marginBottom = 8;
+            screen.Add(title);
+
+            var body = new Label(
+                "A Security Block guards this storage network.\n\n" +
+                "Access is restricted to " +
+                (denier.Mode == StorageAccessMode.Private ? "the owner." : "the owner's team.") +
+                "\n\nThere is no hacking: destroy the Security Block or cut its power to get in.");
+            body.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+            body.style.fontSize = 11;
+            body.style.whiteSpace = WhiteSpace.Normal;
+            screen.Add(body);
+
+            LcdHudTheme.AddScanlines(screen, 7, 40f, 60f);
         }
     }
 }

@@ -1,8 +1,10 @@
 // Assets/Scripts/VoxelEngine/Storage/StorageTerminal.cs
 //
 // The player interacts with this to access the storage network.
-// Shows all items across all connected ServerRacks, with search,
-// insert/extract, and crafting grid.
+// 14.40.0: connectivity is NETWORK membership - the terminal must be
+// piped (Data Pipe) or physically touching the system; radius search is
+// gone. The handheld Wireless Terminal uses a hidden proxy instance with
+// an explicitly bound controller (OverrideRack) instead.
 
 using UnityEngine;
 using VoxelEngine.Building;
@@ -12,40 +14,34 @@ namespace VoxelEngine.Storage
     [RequireComponent(typeof(PlacedBlock))]
     public class StorageTerminal : MonoBehaviour
     {
-        [Header("Connection")]
-        [Tooltip("Max distance to find a ServerRack.")]
-        public float searchRadius = 10f;
-        [Tooltip("If true, this is a wireless terminal (longer range).")]
+        [Tooltip("True on the hidden handheld-wireless proxy only.")]
         public bool isWireless;
-        [Tooltip("Wireless range.")]
-        public float wirelessRange = 50f;
 
-        /// <summary>The connected server rack (cached).</summary>
-        public ServerRack ConnectedRack { get; private set; }
+        // 14.40.0: legacy radius fields kept for prefab/setup compatibility -
+        // connectivity is network membership (Data Pipes / touching) now.
+        [HideInInspector] public float searchRadius = 10f;
+        [HideInInspector] public float wirelessRange = 60f;
 
-        private float _searchTimer;
+        /// <summary>Explicit controller binding used by the handheld wireless
+        /// proxy - set by the UI, bypasses network resolution.</summary>
+        public ServerRack OverrideRack { get; set; }
 
-        private void Update()
+        /// <summary>The connected Server Controller (network-resolved).</summary>
+        public ServerRack ConnectedRack
         {
-            _searchTimer += Time.deltaTime;
-            if (_searchTimer < 2f) return;
-            _searchTimer = 0;
-            FindRack();
-        }
-
-        private void FindRack()
-        {
-            float range = isWireless ? wirelessRange : searchRadius;
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
-            ServerRack best = null;
-            float bestDist = range * range;
-            foreach (var r in racks)
+            get
             {
-                if (!r.IsOnline) continue;
-                float d = (r.transform.position - transform.position).sqrMagnitude;
-                if (d < bestDist) { bestDist = d; best = r; }
+                if (OverrideRack != null) return OverrideRack;
+                if (Time.time - _resolveTime > 1f)
+                {
+                    _resolved = StorageNetwork.ControllerOf(this);
+                    _resolveTime = Time.time;
+                }
+                return _resolved;
             }
-            ConnectedRack = best;
         }
+
+        private ServerRack _resolved;
+        private float _resolveTime = -999f;
     }
 }

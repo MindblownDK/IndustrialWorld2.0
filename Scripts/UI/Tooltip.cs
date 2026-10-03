@@ -27,6 +27,11 @@ namespace VoxelEngine.UI
         private static float         _hoverStart;
         private const  float         HOVER_DELAY = 0.25f;
 
+        // Sticky mode (14.40.0): a panel (e.g. the storage terminal grid) can
+        // pin the tooltip itself. While pinned, the per-frame Tick does not
+        // hide it just because no inventory slot sits under the cursor.
+        private static bool _sticky;
+
         // ── Mount ──────────────────────────────────────────────────
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -154,9 +159,11 @@ namespace VoxelEngine.UI
             ItemStack stack = slotProbe?.Invoke(panelPos);
             if (stack == null || stack.IsEmpty)
             {
+                if (_sticky) return;   // a panel pinned the tooltip - leave it
                 Hide();
                 return;
             }
+            _sticky = false;           // a real slot hover takes over again
 
             // Hover timer — only show after HOVER_DELAY.
             if (walked != _lastHovered)
@@ -189,6 +196,43 @@ namespace VoxelEngine.UI
         public static void Hide()
         {
             _lastHovered = null;
+            _sticky      = false;
+            if (_panel != null) _panel.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>
+        /// 14.40.0: show the tooltip pinned at a fixed panel position for a
+        /// synthetic stack (used by the storage terminal grid, whose cells are
+        /// not real inventory slots). Optional extra lines are appended to the
+        /// stats card. Stays visible until <see cref="HideSticky"/> or a real
+        /// slot hover takes over.
+        /// </summary>
+        public static void ShowStackAt(ItemStack stack, Vector2 panelPos, string extraStats = null)
+        {
+            if (_panel == null || _root == null) return;
+            if (stack == null || stack.IsEmpty || stack.item == null) return;
+
+            FillFor(stack, extraStats);
+
+            float tx   = panelPos.x;
+            float ty   = panelPos.y;
+            float maxX = _root.layout.width  - 310f;
+            float maxY = _root.layout.height - 240f;
+            if (maxX > 0) tx = Mathf.Min(tx, maxX);
+            if (maxY > 0) ty = Mathf.Min(ty, maxY);
+
+            _panel.style.left    = tx;
+            _panel.style.top     = ty;
+            _panel.style.display = DisplayStyle.Flex;
+            _panel.BringToFront();
+            _sticky = true;
+        }
+
+        /// <summary>Hide a tooltip that was pinned via <see cref="ShowStackAt"/>.</summary>
+        public static void HideSticky()
+        {
+            if (!_sticky) return;
+            _sticky = false;
             if (_panel != null) _panel.style.display = DisplayStyle.None;
         }
 
@@ -196,7 +240,7 @@ namespace VoxelEngine.UI
         public static void Bind(VisualElement slot, ItemStack stack) { }
 
         // ── Private Fill ───────────────────────────────────────────
-        private static void FillFor(ItemStack stack)
+        private static void FillFor(ItemStack stack, string extraStats = null)
         {
             var item = stack.item;
 
@@ -227,7 +271,19 @@ namespace VoxelEngine.UI
 
             // Stats card.
             string statsText = BuildStats(item, stack);
-            bool   hasStats  = !string.IsNullOrEmpty(statsText);
+
+            // 14.40.0: every item tooltip shows its weight. Heavier items also
+            // cost more network storage (1 kg = 1 GB of matter data).
+            float unitMass = item.massPerUnit <= 0f ? 1f : item.massPerUnit;
+            string weightLine = stack.count > 1
+                ? $"Weight:     {MassFormat.Format(unitMass)} / unit  ({MassFormat.Format(unitMass * stack.count)} total)"
+                : $"Weight:     {MassFormat.Format(unitMass)}";
+            statsText = string.IsNullOrEmpty(statsText) ? weightLine : statsText + "\n" + weightLine;
+
+            if (!string.IsNullOrEmpty(extraStats))
+                statsText = string.IsNullOrEmpty(statsText) ? extraStats : statsText + "\n" + extraStats;
+
+            bool hasStats = !string.IsNullOrEmpty(statsText);
             _statsCard.style.display = hasStats ? DisplayStyle.Flex : DisplayStyle.None;
             _stats.text              = statsText;
         }

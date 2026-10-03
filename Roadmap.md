@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.39.0-dev`
-**Roadmap Version:** `14.39.0-dev`
+**Current Version:** `14.40.0-dev`
+**Roadmap Version:** `14.40.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.40.0-dev - Pipes, Shelves and a Single Brain
+The mass-storage overhaul. One connectivity rule replaces every radius search: storage blocks share a network when Data Pipes connect them or they physically touch, resolved deterministically on every machine by the new StorageNetwork resolver (no wire messages). The rack becomes the Server Controller (4 RAM + 1 CPU, exactly one per network - two conflict and the system goes dark); disks live in NAS shelves (8 bays, front-panel UI with per-bay fill bars green/yellow/red, per-shelf priority); PSUs live in Power Stations, the system's only grid input - the controller computes the real system draw and splits the bill across stations. Fullscreen LCD storage terminal (search, sort, live MB/GB/TB/PB readouts, 1 s hover tooltips with data size; all item tooltips now show weight). Wireless access requires the handheld Wireless Terminal item + transmitter range + Security Block wireless clearance (never global; owner always, team via a new owner-only checkbox) and gates building-from-storage, crafting and every remote panel. All storage hardware containers persist for the first time and replicate to clients; disk contents travel on the disk stack itself. Setup step 108 authors the Data Pipe, handheld terminal, rebrands and the RAM-8/CPU-16 stack balance. Auto-crafting stays deferred by design.
+
 ### 14.39.0-dev - The Server Keeps Its Secrets
 The mass-storage Security Block: a placed block that guards the digital storage network and nothing else. While powered (40 W, constant) it protects every server rack and NAS within 10 m, and every terminal connected to a guarded rack - wired or wireless - refuses players the owner's access mode excludes: PRIVATE, TEAM (default for new placements) or GLOBAL, set in an owner-only panel. There is no hacking: raiders destroy the block or cut its power, and an unpowered or unowned guard fails open. Owner and mode ride the factory-runtime seam (save + MachineSync in one), the block snapshot carries them at placement, and legacy saves load clean. Setup step 107 authors the prefab, item and Assembler recipe.
 
@@ -51,6 +54,8 @@ Everything the player holds is a weapon: one melee profile (weapons authored, to
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
 - **Authority:** the server is authoritative over EVERYTHING that matters: world edits, building placement/damage/decay, machine simulation, fluids, power, inventories, combat, code locks. Clients send intents, never outcomes.
 - **Shared build costs: NEVER (locked 14.39.0).** The placer always pays alone. Team sharing happens through the mass-storage network, gated by the Security Block (PRIVATE/TEAM/GLOBAL) - never through build costs.
+- **Wireless storage access: never global (locked 14.40.0).** The network owner always has it; teammates only when the owner shares it on the Security Block; everyone needs the handheld Wireless Terminal inside a powered transmitter's range. There is no world-open wireless mode.
+- **Storage connectivity: pipes or touch (locked 14.40.0).** Storage blocks join a network only through Data Pipes or physical contact - no radius-based linking anywhere in the storage system, ever again.
 - **Save compatibility:** the game is unreleased - networking refactors may freely break save formats until release. Do not spend effort on migration shims for multiplayer changes.
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
@@ -72,6 +77,8 @@ Everything the player holds is a weapon: one melee profile (weapons authored, to
 12. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 
 ### Open Scope (named with the version that deferred it)
+- **Auto-crafting through the pattern system** (deferred 14.40.0): the Server Controller carries pattern slots and craft speed, and the AutoCrafter seam exists, but automated pattern crafting ships in its own round - the network had to become trustworthy (connectivity, power, persistence, sync) first.
+- **Storage security enforcement is client-side** (accepted 14.39.0, restated 14.40.0): the Security Block gates run on each machine; a modified client could ignore them. Server-side enforcement lands with the dedicated-server hardening pass.
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
 - **Per-cell structure deltas and build prediction** (accepted 14.25.0 / 14.29.0): a changed hull is resent whole, and a guest's build is confirmed by the host's echo rather than predicted locally.
 - **Loot-bag race** (accepted 14.36.0): two players looting the SAME bag in the same instant - the whole-payload announces cross on the wire and one side's grab can be overwritten; same vanishingly small window the drops accepted in 14.11.0.

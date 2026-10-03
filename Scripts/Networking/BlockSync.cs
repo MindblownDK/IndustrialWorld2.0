@@ -44,6 +44,7 @@ namespace VoxelEngine.Networking
         public string SecurityOwnerId; // 14.39.0 - who placed this security block
         public int SecurityMode;       // 0 Private, 1 Team, 2 Global
         public bool IsSecurity;        // distinguishes "no guard" from "unowned guard"
+        public bool SecurityWirelessShare; // 14.40.0 - owner shares wireless access with team
     }
 
     public static class BlockSync
@@ -190,6 +191,7 @@ namespace VoxelEngine.Networking
                 snap.IsSecurity = true;
                 snap.SecurityOwnerId = guard.ownerId ?? "";
                 snap.SecurityMode = guard.accessMode;
+                snap.SecurityWirelessShare = guard.wirelessTeamShare;
             }
             return snap;
         }
@@ -256,6 +258,7 @@ namespace VoxelEngine.Networking
                     {
                         guardRemote.SetOwner(snap.SecurityOwnerId ?? "");
                         guardRemote.SetMode(snap.SecurityMode);
+                        guardRemote.SetWirelessTeamShare(snap.SecurityWirelessShare);
                     }
                 }
                 if (item.placedMaterial != null || item.texture != null)

@@ -1508,7 +1508,7 @@ namespace VoxelEngine.Player
                 var serverRack = hit.collider.GetComponentInParent<VoxelEngine.Storage.ServerRack>();
                 if (serverRack != null)
                 {
-                    if (StorageAccessDeniedAt(serverRack.transform.position)) return;
+                    if (StorageAccessDeniedFor(serverRack)) return;
                     UI.GameUIController.Instance?.OpenMachine(serverRack); return;
                 }
                 var patternTerm = hit.collider.GetComponentInParent<VoxelEngine.Storage.PatternTerminal>();
@@ -1532,9 +1532,8 @@ namespace VoxelEngine.Player
                 var nasBlock = hit.collider.GetComponentInParent<VoxelEngine.Storage.NASBlock>();
                 if (nasBlock != null)
                 {
-                    // NAS shelves hold disks themselves - guard them by their
-                    // own position, not a rack's.
-                    if (StorageAccessDeniedAt(nasBlock.transform.position)) return;
+                    // NAS shelves hold the disks - guarded via their network.
+                    if (StorageAccessDeniedFor(nasBlock)) return;
                     UI.GameUIController.Instance?.OpenMachine(nasBlock); return;
                 }
                 var powerstation = hit.collider.GetComponentInParent<VoxelEngine.Storage.Powerstation>();
@@ -1702,24 +1701,25 @@ namespace VoxelEngine.Player
             return Vector3.Dot(hit.normal.normalized, blockTransform.forward) > 0.55f;
         }
 
-        /// <summary>Security Block gate (14.39.0) for terminals: checks the rack
-        /// the terminal is connected to. No network = nothing to guard.</summary>
+        /// <summary>Security Block gate (14.39.0, network-based since 14.40.0)
+        /// for terminals: checks the controller the terminal is connected to.
+        /// No network = nothing to guard.</summary>
         private static bool StorageAccessDenied(VoxelEngine.Storage.ServerRack rack)
         {
-            if (rack == null) return false;
-            return StorageAccessDeniedAt(rack.transform.position);
-        }
-
-        /// <summary>Security Block gate (14.39.0) for data hardware (racks, NAS):
-        /// denied when any armed guard in range excludes the local player.
-        /// Shows the shared refusal toast on denial.</summary>
-        private static bool StorageAccessDeniedAt(Vector3 dataPosition)
-        {
-            var denier = VoxelEngine.Storage.SecurityBlock.DenierAt(
-                dataPosition, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
+            var denier = VoxelEngine.Storage.SecurityBlock.DenierForRack(
+                rack, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
             if (denier == null) return false;
             VoxelEngine.Storage.SecurityBlock.ShowDeniedToast(denier);
             return true;
+        }
+
+        /// <summary>Security Block gate for data hardware (controller, NAS):
+        /// resolves the device's own network and checks its guards.</summary>
+        private static bool StorageAccessDeniedFor(Component storageDevice)
+        {
+            if (storageDevice == null) return false;
+            var controller = VoxelEngine.Storage.StorageNetwork.ControllerOf(storageDevice);
+            return StorageAccessDenied(controller);
         }
 
         private static void OperateDrawbridge(BridgeSpan span, Sprite icon)

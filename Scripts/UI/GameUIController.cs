@@ -654,8 +654,24 @@ namespace VoxelEngine.UI
 
         public VoxelEngine.Storage.WirelessTransmitter GetActiveWirelessTransmitter()
         {
+            // 14.40.0 wireless gate — ALL wireless storage access funnels
+            // through here: the player must CARRY a handheld Wireless
+            // Terminal, stand inside a transmitter's range, and pass the
+            // network's Security Block wireless rules (owner always; team
+            // only when the owner shared it; never global).
+            if (inventory == null) return null;
+            if (!VoxelEngine.Storage.WirelessStorageAccess.HasHandheldTerminal(inventory.container))
+                return null;
+
             var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
             if (all == null || all.Length == 0) return null;
+
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
+            Vector3 origin = inventory.transform.position;
+
+            bool Usable(VoxelEngine.Storage.WirelessTransmitter t) =>
+                t != null && t.ConnectedRack != null && t.InPlayerRange(origin) &&
+                VoxelEngine.Storage.SecurityBlock.WirelessDenierForRack(t.ConnectedRack, me) == null;
 
             if (_selectedTransmitterName == null)
                 _selectedTransmitterName = PlayerPrefs.GetString(_wirelessTxPrefKey, "");
@@ -664,18 +680,17 @@ namespace VoxelEngine.UI
             if (!string.IsNullOrEmpty(_selectedTransmitterName))
             {
                 foreach (var t in all)
-                    if (t != null && t.transmitterName == _selectedTransmitterName && t.ConnectedRack != null)
+                    if (t != null && t.transmitterName == _selectedTransmitterName && Usable(t))
                         return t;
-                // Selected one went offline → silently fall through to Auto.
+                // Selected one went offline / out of range → fall through to Auto.
             }
 
-            // Auto: pick the closest online transmitter that has a rack.
+            // Auto: pick the closest usable transmitter.
             VoxelEngine.Storage.WirelessTransmitter best = null;
             float bestSqr = float.MaxValue;
-            Vector3 origin = inventory != null ? inventory.transform.position : Vector3.zero;
             foreach (var t in all)
             {
-                if (t == null || t.ConnectedRack == null) continue;
+                if (!Usable(t)) continue;
                 float d = (t.transform.position - origin).sqrMagnitude;
                 if (d < bestSqr) { bestSqr = d; best = t; }
             }
@@ -714,10 +729,10 @@ namespace VoxelEngine.UI
                 _wirelessTerminalProxy = go.AddComponent<VoxelEngine.Storage.StorageTerminal>();
                 _wirelessTerminalProxy.isWireless = true;
             }
-            // Force-set the connected rack via reflection-free path: the proxy's
-            // own Update() would re-search by distance; instead we drop it next
-            // to the transmitter so its built-in search picks the right rack.
-            _wirelessTerminalProxy.transform.position = best.transform.position;
+            // 14.40.0: bind the proxy to the transmitter's controller directly.
+            // (The old trick of moving the proxy next to the transmitter died
+            // with radius search - network membership is pipe/touch now.)
+            _wirelessTerminalProxy.OverrideRack = best.ConnectedRack;
             return _wirelessTerminalProxy;
         }
         public void OpenContainer(IItemContainer c) => OpenContainer(c, null);
@@ -1028,8 +1043,10 @@ namespace VoxelEngine.UI
                     _openPortalController = portal; break;
                 case VoxelEngine.Storage.ServerRack sr:
                     _openServerRack = sr; sr.EnsureContainers();
-                    WatchContainer(sr.diskSlots); WatchContainer(sr.ramSlots);
-                    WatchContainer(sr.cpuSlot); WatchContainer(sr.psuSlot); break;
+                    // 14.40.0: the Server Controller holds RAM + CPU only -
+                    // disks live in NAS shelves, PSUs in Power Stations.
+                    WatchContainer(sr.ramSlots);
+                    WatchContainer(sr.cpuSlot); break;
             }
             UnlockCursor();
             Refresh();
@@ -3098,6 +3115,26 @@ namespace VoxelEngine.UI
             recipesButton.style.flexGrow = 1;
             recipesButton.style.minWidth = 104;
             commands.Add(recipesButton);
+
+            // 14.40.0: wireless storage toggle - only offered when the player
+            // can actually reach a network (handheld terminal + transmitter
+            // range + Security Block wireless clearance).
+            if (GetActiveWirelessTransmitter() != null)
+            {
+                bool linkOpen = _openStorageTerminal != null && _openStorageTerminal == _wirelessTerminalProxy;
+                var linkButton = LcdHudTheme.CommandButton(linkOpen ? "STORAGE / CLOSE" : "STORAGE LINK", () =>
+                {
+                    if (_openStorageTerminal == _wirelessTerminalProxy && _openStorageTerminal != null)
+                        _openStorageTerminal = null;
+                    else
+                        _openStorageTerminal = ResolveWirelessTerminal();
+                    Refresh();
+                }, LcdHudTheme.Phosphor, linkOpen);
+                linkButton.style.flexGrow = 1;
+                linkButton.style.minWidth = 104;
+                linkButton.style.marginTop = 3;
+                commands.Add(linkButton);
+            }
             return bay;
         }
 
@@ -3105,6 +3142,10 @@ namespace VoxelEngine.UI
         {
             var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
             if (transmitters == null || transmitters.Length == 0) return;
+
+            // 14.40.0: no handheld Wireless Terminal (or no usable transmitter)
+            // = no remote view of anyone's storage.
+            if (GetActiveWirelessTransmitter() == null) return;
 
             var module = new VisualElement { name = "InventoryWirelessReadout" };
             module.style.marginTop = 8;
@@ -3131,9 +3172,15 @@ namespace VoxelEngine.UI
 
             if (!_showWirelessStorage) return;
 
+            string meWireless = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
+            Vector3 originWireless = inventory != null ? inventory.transform.position : Vector3.zero;
             foreach (var transmitter in transmitters)
             {
                 if (transmitter == null || transmitter.ConnectedRack == null) continue;
+                // Only list networks THIS player may reach from HERE: in range
+                // and cleared by the network's Security Block wireless rules.
+                if (!transmitter.InPlayerRange(originWireless)) continue;
+                if (VoxelEngine.Storage.SecurityBlock.WirelessDenierForRack(transmitter.ConnectedRack, meWireless) != null) continue;
                 var rack = transmitter.ConnectedRack;
                 var title = new Label(string.IsNullOrEmpty(transmitter.transmitterName)
                     ? "NETWORK NODE"
@@ -3361,6 +3408,10 @@ namespace VoxelEngine.UI
             var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
             if (all == null || all.Length == 0) return;
 
+            // 14.40.0: the routing UI only appears when the player can actually
+            // use wireless storage (handheld terminal + range + security).
+            if (GetActiveWirelessTransmitter() == null) return;
+
             parent.Add(Spacer(8));
             var row = new VisualElement { name = "InventoryNetworkRoute" };
             row.style.flexDirection = FlexDirection.Row;
@@ -3409,7 +3460,7 @@ namespace VoxelEngine.UI
             // Status hint — shows which rack the active transmitter is pointed at.
             var rack = GetActiveWirelessRack();
             var statusTxt = rack != null && rack.IsOnline
-                ? $"  \u2713 online ({rack.TotalStored:N0}/{rack.TotalCapacity:N0} GB)"
+                ? $"  \u2713 online ({VoxelEngine.Storage.StorageUnits.FormatPair(rack.TotalStoredGb, rack.TotalCapacity)})"
                 : "  \u26A0 offline";
             var status = new Label(statusTxt);
             status.style.color = new StyleColor(rack != null && rack.IsOnline ? LcdHudTheme.Phosphor : UITheme.AccentRed);
@@ -6277,21 +6328,20 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 }
                 if (_openItemDisplay != null) return _openItemDisplay.FilterSlot;
 
-                // Server Rack: hardware items go to their dedicated slots — never wrong-typed.
+                // Server Controller (14.40.0): RAM + CPU only. Disks belong in
+                // NAS shelves and PSUs in Power Stations, so those are refused
+                // here instead of silently landing in a wrong slot.
                 if (_openServerRack != null)
                 {
-                    if (item is VoxelEngine.Storage.StorageDisk) return _openServerRack.diskSlots;
                     if (item is VoxelEngine.Storage.ServerComponent sc)
                     {
                         switch (sc.componentType)
                         {
                             case VoxelEngine.Storage.ComponentType.CPU: return _openServerRack.cpuSlot;
                             case VoxelEngine.Storage.ComponentType.RAM: return _openServerRack.ramSlots;
-                            case VoxelEngine.Storage.ComponentType.PSU: return _openServerRack.psuSlot;
                         }
                     }
-                    // Any other item type is not a valid rack component — refuse the transfer
-                    // so the player doesn't accidentally lose a coal stack in the disk slots.
+                    // Disks, PSUs and anything else are not controller hardware.
                     return null;
                 }
                 return null;
@@ -6592,22 +6642,47 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             var p = MakePanel();
             DockRightPanel(p, 484);
 
-            var (hdr, _, _, _) = UITheme.HeaderRow("🔌 Powerstation",
-                ps.TotalWatts > 0 ? "ACTIVE" : "EMPTY",
-                ps.TotalWatts > 0 ? UITheme.AccentGold : UITheme.TextMuted);
+            // 14.40.0: the Power Station is THE grid input of a storage system.
+            // PSUs set the rating; the Server Controller assigns each station a
+            // share of the real system draw, paid from the normal power grid.
+            var controller = ps.Controller;
+            bool linked = controller != null;
+            bool powered = ps.IsGridPowered;
+            bool active = linked && powered && ps.RatingWatts > 0f;
+
+            string status = !linked            ? "NO CONTROLLER" :
+                            ps.RatingWatts <= 0 ? "NO PSU" :
+                            !powered           ? "NO GRID POWER" : "FEEDING SYSTEM";
+            Color statusCol = active ? UITheme.AccentGold :
+                              linked && ps.RatingWatts > 0 ? UITheme.AccentRed : UITheme.TextMuted;
+
+            var (hdr, _, _, _) = UITheme.HeaderRow("🔌 Power Station", status, statusCol);
             p.Add(hdr);
             p.Add(IndustrialTheme.HazardDivider());
-            p.Add(IndustrialTheme.Lamps(ps.TotalWatts > 0 ? 2 : 1));
-            p.Add(UITheme.StatRow("⚡", "Total Output", $"{ps.TotalWatts:0} W", UITheme.AccentGold));
+            p.Add(IndustrialTheme.Lamps(active ? 2 : 1));
+
+            p.Add(UITheme.StatRow("⚡", "PSU Rating", $"{ps.RatingWatts:0} W", UITheme.AccentGold));
+            p.Add(UITheme.StatRow("🖥", "Assigned Load",
+                linked ? $"{ps.AssignedLoadWatts:0} W of system draw" : "—",
+                linked ? UITheme.AccentCyan : UITheme.TextMuted));
+            p.Add(UITheme.StatRow("🔌", "Grid Feed",
+                powered ? "POWERED" : "NOT POWERED",
+                powered ? UITheme.AccentGreen : UITheme.AccentRed));
+            var (loadBar, _) = UITheme.ProgressBar(
+                ps.RatingWatts > 0 ? Mathf.Clamp01(ps.AssignedLoadWatts / ps.RatingWatts) : 0f,
+                active ? UITheme.AccentGold : UITheme.AccentRed, 8, false);
+            p.Add(loadBar);
             p.Add(UITheme.Divider());
+
             p.Add(UITheme.Subtitle("PSU Slots (4)"));
             var grid = UITheme.SlotGrid();
             for (int i = 0; i < ps.psuSlots.Size; i++)
                 grid.Add(BuildSlot(ps.psuSlots, i, ps.psuSlots.GetSlot(i), false, true));
             p.Add(grid);
             p.Add(UITheme.Spacer(8));
-            p.Add(UITheme.Muted("Each PSU module adds to the power capacity of the nearest Server Rack. " +
-                                "Only PSU items may be inserted."));
+            p.Add(UITheme.Muted("PSUs set how many watts this station can feed into its storage system. " +
+                                "Connect the station to the Server Controller with Data Pipes or touching blocks, " +
+                                "and wire it to your power grid like any machine. Only PSU items fit these slots."));
             IndustrialTheme.Frame(p);
             return p;
         }

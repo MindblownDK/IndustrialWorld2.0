@@ -93,37 +93,29 @@ namespace VoxelEngine.UI
             return Networking.TeamRegistry.SameTeam(_block.ownerId, me) ? "A teammate" : "Another player";
         }
 
-        private static int CoveredRackCount()
-        {
-            if (_block == null) return 0;
-            int n = 0;
-            float r = Mathf.Max(0.5f, _block.guardRadius);
-            var racks = Object.FindObjectsByType<ServerRack>(FindObjectsSortMode.None);
-            foreach (var rack in racks)
-                if (rack != null && (rack.transform.position - _block.transform.position).sqrMagnitude <= r * r)
-                    n++;
-            return n;
-        }
-
         private static void RefreshLiveStats()
         {
             if (_block == null) return;
             bool armed = _block.IsArmed;
             if (_statusPill != null)
             {
-                _statusPill.text = armed ? "ARMED" : "NO POWER";
+                _statusPill.text = armed ? "ARMED" : "NO NETWORK";
                 _statusPill.style.color = armed ? T.AccentGreen : T.AccentAmber;
             }
             if (_powerLabel != null)
                 _powerLabel.text = armed
-                    ? $"{_block.wattsPerSecond:0} W - guard active"
-                    : $"{_block.wattsPerSecond:0} W required - guard is DOWN until powered";
+                    ? $"{_block.wattsPerSecond:0} W drawn from the system budget - guard active"
+                    : $"adds {_block.wattsPerSecond:0} W to the system once linked - guard is DOWN";
             if (_coverageLabel != null)
             {
-                int racks = CoveredRackCount();
-                _coverageLabel.text = racks == 1
-                    ? $"1 server rack within {_block.guardRadius:0} m"
-                    : $"{racks} server racks within {_block.guardRadius:0} m";
+                // 14.40.0: coverage is network membership, not a radius.
+                var controller = _block.Controller;
+                if (controller == null)
+                    _coverageLabel.text = "Not linked to any Server Controller - connect with Data Pipes or touching blocks";
+                else if (!controller.IsOnline)
+                    _coverageLabel.text = "Linked to a Server Controller (system offline - the guard stands down)";
+                else
+                    _coverageLabel.text = $"Guarding this network: {controller.NasCount} NAS, {controller.TerminalCount} terminals, {controller.TransmitterCount} wireless";
             }
         }
 
@@ -220,12 +212,52 @@ namespace VoxelEngine.UI
                 panel.Add(notice);
             }
 
+            // ── Wireless sharing (14.40.0) ───────────────────────────
+            // Wireless access is NEVER global: the owner always has it, and
+            // this checkbox optionally extends it to the owner's team.
+            var wirelessHeader = new Label("WIRELESS ACCESS");
+            wirelessHeader.style.fontSize = 11;
+            wirelessHeader.style.unityFontStyleAndWeight = FontStyle.Bold;
+            wirelessHeader.style.letterSpacing = 1.1f;
+            wirelessHeader.style.color = T.TextSecondary;
+            wirelessHeader.style.marginBottom = 6;
+            panel.Add(wirelessHeader);
+
+            var shareToggle = new Toggle("Share wireless access with my team")
+            {
+                value = _block.wirelessTeamShare
+            };
+            shareToggle.style.fontSize = 11;
+            shareToggle.style.color = Color.white;
+            shareToggle.style.marginBottom = 4;
+            shareToggle.SetEnabled(owner);
+            shareToggle.RegisterValueChangedCallback(evt =>
+            {
+                if (_block == null || !LocalIsOwner()) { shareToggle.SetValueWithoutNotify(_block != null && _block.wirelessTeamShare); return; }
+                _block.SetWirelessTeamShare(evt.newValue);
+                var pbw = _block.GetComponent<PlacedBlock>();
+                if (pbw != null) Networking.ContainerSync.NotifyLocalInteraction(pbw);
+                BuildFeedbackHud.Show("Security Updated",
+                    evt.newValue ? "Teammates may now use wireless terminals on this network."
+                                 : "Wireless access is now owner-only.",
+                    null, T.AccentGreen);
+            });
+            panel.Add(shareToggle);
+
+            var wirelessNote = new Label("Wireless access is never global. The owner always has it; " +
+                                         "this setting only extends it to teammates with a handheld Wireless Terminal.");
+            wirelessNote.style.fontSize = 10;
+            wirelessNote.style.color = T.TextSecondary;
+            wirelessNote.style.whiteSpace = WhiteSpace.Normal;
+            wirelessNote.style.marginBottom = 10;
+            panel.Add(wirelessNote);
+
             panel.Add(T.Spacer(6));
 
             // ── Raid rule footnote ───────────────────────────────────
-            var hint = new Label("While armed, this block guards every server rack in range: " +
-                                 "terminals, racks and NAS shelves on that network refuse anyone the mode excludes. " +
-                                 "There is no hacking - raiders must destroy the block or cut its power.");
+            var hint = new Label("While armed, this block guards its whole storage network: " +
+                                 "terminals, the controller and NAS shelves refuse anyone the mode excludes. " +
+                                 "There is no hacking - raiders must destroy the block or cut the system's power.");
             hint.style.fontSize = 10;
             hint.style.color = T.TextSecondary;
             hint.style.whiteSpace = WhiteSpace.Normal;

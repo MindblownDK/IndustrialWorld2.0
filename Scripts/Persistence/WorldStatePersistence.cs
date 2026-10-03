@@ -927,6 +927,25 @@ namespace VoxelEngine.Persistence
                 entry.hasSecurityState = true;
                 entry.securityOwnerId = securityGuard.ownerId ?? "";
                 entry.securityMode = securityGuard.accessMode;
+                // 14.40.0: the owner's wireless team-share checkbox rides the
+                // same seam, so it saves AND replicates like the mode does.
+                entry.securityWirelessShare = securityGuard.wirelessTeamShare;
+            }
+
+            // Storage network priority (14.40.0): NAS shelves and drawer
+            // controllers carry a player-set fill priority. Same seam rule:
+            // one capture serves the save file and MachineSync.
+            var priorityNas = go.GetComponentInChildren<VoxelEngine.Storage.NASBlock>(true);
+            if (priorityNas != null)
+            {
+                entry.hasStoragePriority = true;
+                entry.storagePriority = priorityNas.priority;
+            }
+            var priorityDrawerCtrl = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawerController>(true);
+            if (priorityDrawerCtrl != null)
+            {
+                entry.hasStoragePriority = true;
+                entry.storagePriority = priorityDrawerCtrl.priority;
             }
 
             // Battery charge and gas contents live in the RUNTIME seam
@@ -1491,6 +1510,52 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            // ── 14.40.0 mass-storage hardware ─────────────────────────────
+            // Each of these must terminate the lookup: their slot contents
+            // (and the disks' DiskData payloads) ride the normal container
+            // path, so the network survives save/load and MachineSync.
+            var serverRack = go.GetComponentInChildren<VoxelEngine.Storage.ServerRack>(true);
+            if (serverRack != null)
+            {
+                serverRack.EnsureContainers();
+                return SerializeMulti(serverRack.ramSlots, serverRack.cpuSlot);
+            }
+
+            var nasBlock = go.GetComponentInChildren<VoxelEngine.Storage.NASBlock>(true);
+            if (nasBlock != null)
+            {
+                nasBlock.EnsureContainers();
+                return SerializeMulti(nasBlock.diskSlots);
+            }
+
+            var powerStation = go.GetComponentInChildren<VoxelEngine.Storage.Powerstation>(true);
+            if (powerStation != null)
+            {
+                powerStation.EnsureContainers();
+                return SerializeMulti(powerStation.psuSlots);
+            }
+
+            var diskManipulator = go.GetComponentInChildren<VoxelEngine.Storage.DiskManipulator>(true);
+            if (diskManipulator != null)
+            {
+                diskManipulator.EnsureContainers();
+                return SerializeMulti(diskManipulator.sourceSlot, diskManipulator.destSlot);
+            }
+
+            var storageImporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageImporter>(true);
+            if (storageImporter != null)
+            {
+                storageImporter.EnsureContainers();
+                return SerializeMulti(storageImporter.upgradeSlots);
+            }
+
+            var storageExporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageExporter>(true);
+            if (storageExporter != null)
+            {
+                storageExporter.EnsureContainers();
+                return SerializeMulti(storageExporter.upgradeSlots);
+            }
+
             var armorUpgradeStation = go.GetComponentInChildren<VoxelEngine.Combat.ArmorUpgradeStation>(true);
             if (armorUpgradeStation != null)
                 return SerializeMulti(
@@ -1774,6 +1839,12 @@ namespace VoxelEngine.Persistence
             {
                 saved.hasLiquidPayload = true;
                 saved.liquidPayloadType = (int)liquidPayload;
+            }
+            // 14.40.0: a storage disk's contents ride the stack itself.
+            if (s != null && s.payload is VoxelEngine.Storage.DiskData diskData)
+            {
+                saved.hasDiskPayload = true;
+                saved.diskDataJson = JsonUtility.ToJson(diskData);
             }
             if (s != null && s.payload is VoxelEngine.Storage.StorageDrawer.DrawerItemPayload payload)
             {
@@ -3494,7 +3565,17 @@ namespace VoxelEngine.Persistence
                 {
                     securityGuard.SetOwner(saved.securityOwnerId ?? "");
                     securityGuard.SetMode(saved.securityMode);
+                    securityGuard.SetWirelessTeamShare(saved.securityWirelessShare);
                 }
+            }
+
+            // Storage network priority (14.40.0) - twin of the capture above.
+            if (saved.hasStoragePriority)
+            {
+                var priorityNas = go.GetComponentInChildren<VoxelEngine.Storage.NASBlock>(true);
+                if (priorityNas != null) priorityNas.SetPriority(saved.storagePriority);
+                var priorityDrawerCtrl = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawerController>(true);
+                if (priorityDrawerCtrl != null) priorityDrawerCtrl.priority = Mathf.Clamp(saved.storagePriority, -99, 999);
             }
 
             // Runtime-seam twins of the capture above (14.34.0): these are
@@ -4043,6 +4124,55 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            // ── 14.40.0 mass-storage hardware (mirrors TryFindContainer) ──
+            var serverRack = go.GetComponentInChildren<VoxelEngine.Storage.ServerRack>(true);
+            if (serverRack != null)
+            {
+                serverRack.EnsureContainers();
+                DeserializeMulti(sc, serverRack.ramSlots, serverRack.cpuSlot);
+                return;
+            }
+
+            var nasBlock = go.GetComponentInChildren<VoxelEngine.Storage.NASBlock>(true);
+            if (nasBlock != null)
+            {
+                nasBlock.EnsureContainers();
+                DeserializeMulti(sc, nasBlock.diskSlots);
+                return;
+            }
+
+            var powerStation = go.GetComponentInChildren<VoxelEngine.Storage.Powerstation>(true);
+            if (powerStation != null)
+            {
+                powerStation.EnsureContainers();
+                DeserializeMulti(sc, powerStation.psuSlots);
+                return;
+            }
+
+            var diskManipulator = go.GetComponentInChildren<VoxelEngine.Storage.DiskManipulator>(true);
+            if (diskManipulator != null)
+            {
+                diskManipulator.EnsureContainers();
+                DeserializeMulti(sc, diskManipulator.sourceSlot, diskManipulator.destSlot);
+                return;
+            }
+
+            var storageImporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageImporter>(true);
+            if (storageImporter != null)
+            {
+                storageImporter.EnsureContainers();
+                DeserializeMulti(sc, storageImporter.upgradeSlots);
+                return;
+            }
+
+            var storageExporter = go.GetComponentInChildren<VoxelEngine.Storage.StorageExporter>(true);
+            if (storageExporter != null)
+            {
+                storageExporter.EnsureContainers();
+                DeserializeMulti(sc, storageExporter.upgradeSlots);
+                return;
+            }
+
             var gasTank = go.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
             if (gasTank != null)
             {
@@ -4362,6 +4492,13 @@ namespace VoxelEngine.Persistence
             var stack = new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
             if (e.hasLiquidPayload && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), e.liquidPayloadType))
                 stack.payload = (VoxelEngine.Items.LiquidType)e.liquidPayloadType;
+
+            // 14.40.0: rebuild a storage disk's item ledger from its JSON.
+            if (e.hasDiskPayload && !string.IsNullOrEmpty(e.diskDataJson))
+            {
+                try { stack.payload = JsonUtility.FromJson<VoxelEngine.Storage.DiskData>(e.diskDataJson); }
+                catch { /* corrupt payload: the disk comes back empty, never crashes the load */ }
+            }
             return stack;
         }
 
@@ -4781,6 +4918,11 @@ namespace VoxelEngine.Persistence
             public bool hasSecurityState;
             public string securityOwnerId = "";
             public int securityMode = 1; // 0 Private, 1 Team (default), 2 Global
+            // 14.40.0 additive: wireless team-share checkbox (legacy saves → false)
+            public bool securityWirelessShare;
+            // 14.40.0 additive: NAS / drawer-controller network fill priority.
+            public bool hasStoragePriority;
+            public int storagePriority;
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";
@@ -5070,6 +5212,11 @@ namespace VoxelEngine.Persistence
             // carries water or crude oil across save/load.
             public bool hasLiquidPayload;
             public int liquidPayloadType;
+            // 14.40.0: storage disks carry their whole DiskData (stored item
+            // ledger) as a JSON payload, so a disk pulled out of a NAS keeps
+            // its contents through save/load and chest transport.
+            public bool hasDiskPayload;
+            public string diskDataJson = "";
             public bool isPackedDrawer;
             public string packedOriginalItemId;
             public string drawerInstanceId;

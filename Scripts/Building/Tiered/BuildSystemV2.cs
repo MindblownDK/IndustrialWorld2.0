@@ -1057,14 +1057,30 @@ namespace VoxelEngine.Building.Tiered
         }
 
         // ---------- Resource handling ----------
+        // 14.40.0: building can draw materials from the mass-storage network
+        // when the player carries a handheld Wireless Terminal inside an
+        // authorized transmitter's range. Inventory is always spent FIRST;
+        // only the shortfall is pulled from the network.
+        private VoxelEngine.Storage.ServerRack BuildNetworkRack()
+        {
+            if (inventory == null) return null;
+            return VoxelEngine.Storage.WirelessStorageAccess.TryGetRack(
+                inventory.container,
+                transform.position,
+                VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
+        }
+
         private bool CanAfford(TierCost cost, int multiplier = 1)
         {
             multiplier = Mathf.Max(1, multiplier);
             if (cost == null || cost.items == null) return true;
+            var rack = BuildNetworkRack();
             foreach (var ing in cost.items)
             {
                 if (ing.item == null || ing.count <= 0) continue;
-                if (inventory.container.CountOf(ing.item) < ing.count * multiplier) return false;
+                int have = inventory.container.CountOf(ing.item);
+                if (rack != null) have += rack.NetworkCount(ing.item.itemId);
+                if (have < ing.count * multiplier) return false;
             }
             return true;
         }
@@ -1073,10 +1089,21 @@ namespace VoxelEngine.Building.Tiered
         {
             multiplier = Mathf.Max(1, multiplier);
             if (cost == null || cost.items == null) return;
+            var rack = BuildNetworkRack();
             foreach (var ing in cost.items)
             {
                 if (ing.item == null || ing.count <= 0) continue;
-                inventory.container.Remove(ing.item, ing.count * multiplier);
+                int need = ing.count * multiplier;
+                // Inventory first - the familiar cost path stays untouched.
+                int fromInv = Mathf.Min(need, inventory.container.CountOf(ing.item));
+                if (fromInv > 0)
+                {
+                    inventory.container.Remove(ing.item, fromInv);
+                    need -= fromInv;
+                }
+                // Shortfall comes out of the storage network.
+                if (need > 0 && rack != null)
+                    rack.NetworkExtract(ing.item.itemId, need);
             }
         }
 

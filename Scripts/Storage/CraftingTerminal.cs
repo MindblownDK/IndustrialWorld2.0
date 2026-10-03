@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/Storage/CraftingTerminal.cs
 //
 // Shows current auto-crafting queue with timers. Allows requesting new crafts.
+// 14.40.0: connects by Data Pipe or touch (network membership), never radius.
 
 using UnityEngine;
 using VoxelEngine.Building;
@@ -10,32 +11,27 @@ namespace VoxelEngine.Storage
     [RequireComponent(typeof(PlacedBlock))]
     public class CraftingTerminal : MonoBehaviour
     {
-        public float searchRadius = 10f;
-        public ServerRack ConnectedRack { get; private set; }
-        public AutoCrafter ConnectedCrafter { get; private set; }
+        // 14.40.0: legacy radius kept for prefab/setup compatibility -
+        // connectivity is network membership (Data Pipes / touching) now.
+        [HideInInspector] public float searchRadius = 10f;
 
-        private float _timer;
-
-        private void Update()
+        public ServerRack ConnectedRack
         {
-            _timer += Time.deltaTime;
-            if (_timer < 2f) return;
-            _timer = 0;
-            FindRack();
-        }
-
-        private void FindRack()
-        {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
-            ServerRack best = null; float bestD = searchRadius * searchRadius;
-            foreach (var r in racks)
+            get
             {
-                if (!r.IsOnline) continue;
-                float d = (r.transform.position - transform.position).sqrMagnitude;
-                if (d < bestD) { bestD = d; best = r; }
+                if (Time.time - _resolveTime > 1f)
+                {
+                    _resolved = StorageNetwork.ControllerOf(this);
+                    _resolveTime = Time.time;
+                }
+                return _resolved;
             }
-            ConnectedRack = best;
-            ConnectedCrafter = best?.GetComponent<AutoCrafter>();
         }
+
+        public AutoCrafter ConnectedCrafter => ConnectedRack != null
+            ? ConnectedRack.GetComponent<AutoCrafter>() : null;
+
+        private ServerRack _resolved;
+        private float _resolveTime = -999f;
     }
 }

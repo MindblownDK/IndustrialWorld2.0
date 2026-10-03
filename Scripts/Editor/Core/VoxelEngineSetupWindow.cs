@@ -970,6 +970,8 @@ namespace VoxelEngine.EditorTools
                 () => VoxelEngine.EditorTools.BannerSetup.RunStep106(), 56);
             AddWizardButton(scroll, "107. Mass-storage Security Block\n(Guard block + item + recipe - Non-Destructive)",
                 () => VoxelEngine.EditorTools.SecurityBlockSetup.RunStep107(), 56);
+            AddWizardButton(scroll, "108. Mass-storage Overhaul\n(Data Pipe + handheld Wireless Terminal + rebrands - Non-Destructive)",
+                () => VoxelEngine.EditorTools.StorageOverhaulSetup.RunStep108(), 56);
 
             AddSpacer(scroll, 20);
         }

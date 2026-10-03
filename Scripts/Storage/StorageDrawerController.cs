@@ -15,7 +15,9 @@ namespace VoxelEngine.Storage
     public class StorageDrawerController : MonoBehaviour, IExternalStorageSource, IItemPortHost, IDirectItemPortEndpoint
     {
         public float drawerRadius = 12f;
-        public float rackRadius = 16f;
+        // 14.40.0: legacy radius kept for prefab/setup compatibility; the
+        // controller now links to the Server Controller via the data network.
+        [HideInInspector] public float rackRadius = 16f;
         public float refreshInterval = 1f;
         public int priority = 100;
 
@@ -96,19 +98,10 @@ namespace VoxelEngine.Storage
 
         private void FindRack()
         {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
-            ServerRack best = null;
-            float bestD = rackRadius * rackRadius;
-            foreach (var rack in racks)
-            {
-                if (rack == null) continue;
-                float d = (rack.transform.position - transform.position).sqrMagnitude;
-                if (d < bestD) { bestD = d; best = rack; }
-            }
-
-            if (ConnectedRack != null && ConnectedRack != best)
-                ConnectedRack.UnregisterExternalStorage(this);
-            ConnectedRack = best;
+            // 14.40.0: the controller is piped or touching - network membership,
+            // never radius. The Server Controller discovers this source itself
+            // through the same membership, so no registration call is needed.
+            ConnectedRack = StorageNetwork.ControllerOf(this);
         }
 
         private void FindDrawers()

@@ -12,7 +12,9 @@ namespace VoxelEngine.Storage
     public class StorageItemDisplayBlock : MonoBehaviour
     {
         [Header("Connection")]
-        public float rackRadius = 16f;
+        // 14.40.0: legacy radius kept for prefab compatibility; the display
+        // now joins the network via Data Pipes or touching blocks.
+        [HideInInspector] public float rackRadius = 16f;
         public float refreshInterval = 0.5f;
 
         [Header("Filter")]
@@ -53,16 +55,9 @@ namespace VoxelEngine.Storage
 
         private void FindRack()
         {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
-            ServerRack best = null;
-            float bestD = rackRadius * rackRadius;
-            foreach (var rack in racks)
-            {
-                if (rack == null || !rack.IsOnline) continue;
-                float d = (rack.transform.position - transform.position).sqrMagnitude;
-                if (d < bestD) { bestD = d; best = rack; }
-            }
-            ConnectedRack = best;
+            // 14.40.0: network membership (Data Pipes / touching), not radius.
+            var controller = StorageNetwork.ControllerOf(this);
+            ConnectedRack = controller != null && controller.IsOnline ? controller : null;
         }
 
         public int CurrentCount => ConnectedRack != null && filterItem != null ? ConnectedRack.NetworkCount(filterItem.itemId) : 0;

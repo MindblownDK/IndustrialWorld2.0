@@ -114,15 +114,8 @@ namespace VoxelEngine.Storage
 
         private void FindRack()
         {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
-            ServerRack best = null; float bestD = 100f;
-            foreach (var r in racks)
-            {
-                if (!r.IsOnline) continue;
-                float d = (r.transform.position - transform.position).sqrMagnitude;
-                if (d < bestD) { bestD = d; best = r; }
-            }
-            ConnectedRack = best;
+            // 14.40.0: piped or touching - network membership, never radius.
+            ConnectedRack = StorageNetwork.ControllerOf(this);
         }
 
         private static ItemDefinition FindItemDef(string id)

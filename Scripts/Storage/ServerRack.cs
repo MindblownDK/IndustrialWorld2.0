@@ -1,19 +1,28 @@
 // Assets/Scripts/VoxelEngine/Storage/ServerRack.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║                       SERVER RACK                               ║
-// ║  Holds 6 storage disks, RAM, CPU, PSU.                         ║
-// ║  • Slot validation: only correct component types accepted.      ║
-// ║  • Disk data persists when disk items are removed.              ║
-// ║  • Drops all installed items on destroy.                        ║
-// ║  • PSU overload shuts down rack and shows warning.             ║
+// ║                    SERVER CONTROLLER (14.40.0)                   ║
+// ║  The brain of the digital storage network. One per network.      ║
+// ║  • Holds RAM (pattern memory) and CPU (craft speed). No disks -  ║
+// ║    those live in NAS shelves. No PSU - power comes from Power    ║
+// ║    Stations piped into the network.                              ║
+// ║  • Computes the TOTAL system power draw of every device on the   ║
+// ║    network and distributes that load across the grid-connected   ║
+// ║    Power Stations. Delivered < draw = the whole system is down.  ║
+// ║  • Two controllers on one network: deterministic election, the   ║
+// ║    loser shows CONTROLLER CONFLICT and stands down.              ║
+// ║  • Insert/extract walk storage targets by PRIORITY: drawers and  ║
+// ║    NAS shelves each carry a player-set priority number.          ║
 // ╚══════════════════════════════════════════════════════════════════╝
+//
+// The class keeps its historical name (ServerRack) so prefabs, saves and
+// sync payloads stay stable; every player-facing string says Server
+// Controller.
 
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
-using VoxelEngine.Power;
 
 namespace VoxelEngine.Storage
 {
@@ -21,50 +30,81 @@ namespace VoxelEngine.Storage
     public class ServerRack : MonoBehaviour
     {
         [Header("Slots")]
-        public ItemContainer diskSlots;   // 6 storage disks
         public ItemContainer ramSlots;    // 4 RAM modules
         public ItemContainer cpuSlot;     // 1 CPU
-        public ItemContainer psuSlot;     // 1 PSU
 
         [Header("Runtime")]
-        public List<DiskData>  activeDisks   = new();
-        public List<NASBlock>  connectedNAS  = new();
+        public List<DiskData> activeDisks = new();
+        public List<NASBlock> connectedNAS = new();
 
         // ── Public Properties ──────────────────────────────────────
-        public int   TotalStored           { get; private set; }
-        public int   TotalCapacity         { get; private set; }
-        public int   PatternSlots          { get; private set; }
-        public float CraftSpeedMultiplier  { get; private set; } = 1f;
-        public float MaxPowerWatts         { get; private set; }
-        public bool  IsOnline              { get; private set; }
+        public int   TotalStored          { get; private set; }
+        public int   TotalCapacity        { get; private set; }
+        public float TotalStoredGb        { get; private set; }
+        public int   PatternSlots         { get; private set; }
+        public float CraftSpeedMultiplier { get; private set; } = 1f;
+        public bool  IsOnline             { get; private set; }
 
-        /// <summary>True when actual power draw exceeds PSU rating — rack shuts down.</summary>
-        public bool IsPsuOverloaded        { get; private set; }
+        /// <summary>Total watts the whole network wants right now.</summary>
+        public float SystemDrawWatts      { get; private set; }
+        /// <summary>Watts actually delivered by grid-powered Power Stations.</summary>
+        public float DeliveredWatts       { get; private set; }
+        /// <summary>Combined PSU rating of all stations on the network.</summary>
+        public float StationRatingWatts   { get; private set; }
+        /// <summary>True when stations cannot cover the system draw.</summary>
+        public bool  IsPowerShort         { get; private set; }
+        /// <summary>True when a second controller is piped into this network
+        /// and this one lost the deterministic election.</summary>
+        public bool  HasConflict          { get; private set; }
+        /// <summary>Legacy name kept for older callers: power trouble of any kind.</summary>
+        public bool  IsPsuOverloaded      => IsPowerShort;
 
-        // ── Disk-data persistence ────────────────────────────────────
-        // DiskData now lives on the ItemStack itself (via ItemStack.payload), so
-        // a partially-filled disk taken OUT of one rack keeps its contents and
-        // can be slotted back into a different rack — or into a Disk Manipulator
-        // — without losing items. The rack still keeps a per-slot reference in
-        // activeDisks so the Recalculate() pass can find storage targets quickly.
-        // The legacy in-rack registry was per-rack/per-slot which orphaned data
-        // the moment a disk left the slot; removed.
+        // Per-device base draws (watts). NAS and security carry their own.
+        public const float DRAW_CONTROLLER_BASE = 50f;
+        public const float DRAW_RAM_MODULE      = 15f;
+        public const float DRAW_CPU_PER_SPEED   = 10f;
+        public const float DRAW_TERMINAL        = 5f;
+        public const float DRAW_IMPORTER        = 5f;
+        public const float DRAW_EXPORTER        = 5f;
+        public const float DRAW_MANIPULATOR     = 5f;
+        public const float DRAW_DRAWER_CTRL     = 5f;
+        public const float DRAW_TRANSMITTER     = 10f;
 
-        private PowerConsumer _power;
-        private float         _tickTimer;
-        private readonly List<IExternalStorageSource> _externalStorageSources = new();
+        private float _tickTimer;
+
+        // Scratch member lists (reused every tick).
+        private readonly List<NASBlock>                _nasBuf        = new();
+        private readonly List<Powerstation>            _stationBuf    = new();
+        private readonly List<StorageTerminal>         _terminalBuf   = new();
+        private readonly List<CraftingTerminal>        _craftTermBuf  = new();
+        private readonly List<PatternTerminal>         _patTermBuf    = new();
+        private readonly List<StorageImporter>         _importerBuf   = new();
+        private readonly List<StorageExporter>         _exporterBuf   = new();
+        private readonly List<DiskManipulator>         _manipBuf      = new();
+        private readonly List<StorageDrawerController> _drawerBuf     = new();
+        private readonly List<WirelessTransmitter>     _transmitterBuf = new();
+        private readonly List<SecurityBlock>           _securityBuf   = new();
+
+        /// <summary>One prioritized storage target: either a NAS shelf (digital
+        /// disks) or an external physical source (drawer controller).</summary>
+        private struct StorageTarget
+        {
+            public int priority;
+            public NASBlock nas;
+            public IExternalStorageSource external;
+        }
+        private readonly List<StorageTarget> _targets = new();
 
         // ── Unity ──────────────────────────────────────────────────
         private void Awake()
         {
             EnsureContainers();
-            _power = GetComponent<PowerConsumer>();
-            if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
-
-            // Subscribe to slot changes for validation.
-            if (cpuSlot  != null) cpuSlot.OnChanged  += ValidateCpuSlot;
-            if (ramSlots != null) ramSlots.OnChanged  += ValidateRamSlots;
-            if (psuSlot  != null) psuSlot.OnChanged   += ValidatePsuSlot;
+            // 14.40.0: the controller no longer draws from the power grid
+            // itself - Power Stations pay the whole system bill. A legacy
+            // PowerConsumer on the prefab is neutralized, not destroyed
+            // (removing prefab components at runtime is unsafe).
+            var legacyPower = GetComponent<Power.PowerConsumer>();
+            if (legacyPower != null) legacyPower.wattsPerSecond = 0f;
         }
 
         private void OnDestroy() => DropAllItems();
@@ -80,15 +120,6 @@ namespace VoxelEngine.Storage
         // ── Container Setup ────────────────────────────────────────
         public void EnsureContainers()
         {
-            if (diskSlots == null)
-            {
-                diskSlots = new ItemContainer("Disks", 6);
-            }
-            else diskSlots.Resize(6);
-            // Always re-subscribe (remove first to avoid duplicates).
-            diskSlots.OnChanged -= PersistDiskData;
-            diskSlots.OnChanged += PersistDiskData;
-
             if (ramSlots == null) ramSlots = new ItemContainer("RAM", 4);
             else ramSlots.Resize(4);
             ramSlots.OnChanged -= ValidateRamSlots;
@@ -98,15 +129,10 @@ namespace VoxelEngine.Storage
             else cpuSlot.Resize(1);
             cpuSlot.OnChanged -= ValidateCpuSlot;
             cpuSlot.OnChanged += ValidateCpuSlot;
-
-            if (psuSlot == null) psuSlot = new ItemContainer("PSU", 1);
-            else psuSlot.Resize(1);
-            psuSlot.OnChanged -= ValidatePsuSlot;
-            psuSlot.OnChanged += ValidatePsuSlot;
         }
 
         // ── Slot Validation ────────────────────────────────────────
-        // Eject items that don't belong in a slot — keeps the rack type-safe.
+        // Eject items that don't belong - the controller is type-safe.
 
         private void ValidateCpuSlot()
         {
@@ -131,158 +157,135 @@ namespace VoxelEngine.Storage
             }
         }
 
-        private void ValidatePsuSlot()
-        {
-            var s = psuSlot.GetSlot(0);
-            if (!s.IsEmpty && !(s.item is ServerComponent sc && sc.componentType == ComponentType.PSU))
-            {
-                psuSlot.SetSlot(0, new ItemStack());
-                SpawnDropped(s);
-            }
-        }
-
-        // ── Disk Data Persistence ──────────────────────────────────
-        // When disk items are placed or removed, the DiskData is cached
-        // by asset GUID so the data survives the slot being emptied.
-
-        private void PersistDiskData()
-        {
-            // Mirror the disk slots into activeDisks for the simulation loop.
-            // The DiskData itself lives on ItemStack.payload — it's created on
-            // first insertion of a brand-new disk, and re-used on every subsequent
-            // insertion into this or any other rack/manipulator. That means a
-            // partially-filled disk pulled out, dropped, picked up, and slotted
-            // into a different rack still carries its full contents.
-            for (int i = 0; i < diskSlots.Size; i++)
-            {
-                var slot = diskSlots.GetSlot(i);
-                while (activeDisks.Count <= i) activeDisks.Add(null);
-
-                if (!slot.IsEmpty && slot.item is StorageDisk sd)
-                {
-                    var data = slot.payload as DiskData;
-                    if (data == null || data.tier != sd.tier)
-                    {
-                        data = new DiskData { tier = sd.tier };
-                        slot.payload = data;
-                        // Write the modified stack back so the container persists the payload reference.
-                        diskSlots.SetSlot(i, slot);
-                    }
-                    activeDisks[i] = data;
-                }
-                else
-                {
-                    activeDisks[i] = null;
-                }
-            }
-        }
+        // ── Network members (for UIs) ──────────────────────────────
+        public int NasCount         { get; private set; }
+        public int StationCount     { get; private set; }
+        public int TerminalCount    { get; private set; }
+        public int DrawerCtrlCount  { get; private set; }
+        public int TransmitterCount { get; private set; }
+        public int SecurityCount    { get; private set; }
 
         // ── Recalculation ──────────────────────────────────────────
         private void Recalculate()
         {
             EnsureContainers();
 
-            // ── PSU: determine max watts ───────────────────────────
-            float psuWatts = 0f;
-            var psu = psuSlot.GetSlot(0);
-            if (!psu.IsEmpty && psu.item is ServerComponent psuComp && psuComp.componentType == ComponentType.PSU)
-                psuWatts = psuComp.value;
-            MaxPowerWatts = psuWatts + _externalPsuWatts;
+            HasConflict = StorageNetwork.IsConflicting(this);
 
-            // ── Calculate draw ─────────────────────────────────────
-            float draw = CalculatePowerDraw();
-            if (_power != null) _power.wattsPerSecond = draw;
+            // Gather members (empty lists when conflicting - a stood-down
+            // controller claims nothing).
+            if (!HasConflict)
+            {
+                StorageNetwork.MembersOf(this, _nasBuf);
+                StorageNetwork.MembersOf(this, _stationBuf);
+                StorageNetwork.MembersOf(this, _terminalBuf);
+                StorageNetwork.MembersOf(this, _craftTermBuf);
+                StorageNetwork.MembersOf(this, _patTermBuf);
+                StorageNetwork.MembersOf(this, _importerBuf);
+                StorageNetwork.MembersOf(this, _exporterBuf);
+                StorageNetwork.MembersOf(this, _manipBuf);
+                StorageNetwork.MembersOf(this, _drawerBuf);
+                StorageNetwork.MembersOf(this, _transmitterBuf);
+                StorageNetwork.MembersOf(this, _securityBuf);
+            }
+            else
+            {
+                _nasBuf.Clear(); _stationBuf.Clear(); _terminalBuf.Clear();
+                _craftTermBuf.Clear(); _patTermBuf.Clear(); _importerBuf.Clear();
+                _exporterBuf.Clear(); _manipBuf.Clear(); _drawerBuf.Clear();
+                _transmitterBuf.Clear(); _securityBuf.Clear();
+            }
 
-            // ── PSU overload check ─────────────────────────────────
-            // Overloaded = draw exceeds PSU rating OR no PSU installed.
-            IsPsuOverloaded = (psuWatts <= 0f || draw > psuWatts + 0.5f);
-            IsOnline = (_power != null && _power.IsPowered) && !IsPsuOverloaded;
+            NasCount = _nasBuf.Count; StationCount = _stationBuf.Count;
+            TerminalCount = _terminalBuf.Count + _craftTermBuf.Count + _patTermBuf.Count;
+            DrawerCtrlCount = _drawerBuf.Count; TransmitterCount = _transmitterBuf.Count;
+            SecurityCount = _securityBuf.Count;
 
-            // ── CPU ───────────────────────────────────────────────
+            // ── CPU / RAM ──────────────────────────────────────────
             var cpu = cpuSlot.GetSlot(0);
-            CraftSpeedMultiplier = (!cpu.IsEmpty && cpu.item is ServerComponent cc
-                && cc.componentType == ComponentType.CPU)
-                ? cc.value : 1f;
+            float cpuSpeed = (!cpu.IsEmpty && cpu.item is ServerComponent cc
+                && cc.componentType == ComponentType.CPU) ? cc.value : 1f;
+            CraftSpeedMultiplier = cpuSpeed;
 
-            // ── RAM ───────────────────────────────────────────────
             PatternSlots = 0;
+            int ramModules = 0;
             for (int i = 0; i < ramSlots.Size; i++)
             {
                 var ram = ramSlots.GetSlot(i);
                 if (!ram.IsEmpty && ram.item is ServerComponent rc && rc.componentType == ComponentType.RAM)
-                    PatternSlots += Mathf.RoundToInt(rc.value);
+                {
+                    PatternSlots += Mathf.RoundToInt(rc.value) * ram.count;
+                    ramModules += ram.count;
+                }
             }
 
-            // ── Sync & total disks ─────────────────────────────────
-            SyncDisks();
-            float usedGb = 0f;
-            TotalStored = 0; TotalCapacity = 0;
-            foreach (var d in activeDisks)
+            // ── Total system power draw ────────────────────────────
+            float draw = DRAW_CONTROLLER_BASE
+                       + ramModules * DRAW_RAM_MODULE
+                       + (cpuSpeed > 1f ? cpuSpeed * DRAW_CPU_PER_SPEED : 0f);
+            foreach (var nas in _nasBuf) draw += nas.DrawWatts;
+            draw += _terminalBuf.Count * DRAW_TERMINAL;
+            draw += _craftTermBuf.Count * DRAW_TERMINAL;
+            draw += _patTermBuf.Count * DRAW_TERMINAL;
+            draw += _importerBuf.Count * DRAW_IMPORTER;
+            draw += _exporterBuf.Count * DRAW_EXPORTER;
+            draw += _manipBuf.Count * DRAW_MANIPULATOR;
+            draw += _drawerBuf.Count * DRAW_DRAWER_CTRL;
+            draw += _transmitterBuf.Count * DRAW_TRANSMITTER;
+            foreach (var sec in _securityBuf) draw += sec.DrawWatts;
+            SystemDrawWatts = draw;
+
+            // ── Distribute the load across grid-powered stations ───
+            StationRatingWatts = 0f;
+            DeliveredWatts = 0f;
+            foreach (var st in _stationBuf) StationRatingWatts += st.RatingWatts;
+            foreach (var st in _stationBuf)
             {
-                if (d == null) continue;
-                usedGb += d.UsedGigabytes;
-                TotalCapacity += d.Capacity;
+                float share = StationRatingWatts > 0f
+                    ? draw * (st.RatingWatts / StationRatingWatts)
+                    : 0f;
+                st.AssignLoad(Mathf.Min(share, st.RatingWatts));
+                if (st.IsGridPowered) DeliveredWatts += st.RatingWatts;
             }
+
+            IsPowerShort = DeliveredWatts + 0.5f < SystemDrawWatts;
+            IsOnline = !HasConflict && !IsPowerShort && _stationBuf.Count > 0;
+
+            // ── Gather disks from NAS shelves, priority order ──────
+            BuildTargets();
+
+            connectedNAS.Clear();
+            activeDisks.Clear();
+            float usedGb = 0f;
+            TotalCapacity = 0;
+            foreach (var t in _targets)
+            {
+                if (t.nas == null) continue;
+                connectedNAS.Add(t.nas);
+                foreach (var d in t.nas.GetActiveDisks())
+                {
+                    if (d == null) continue;
+                    activeDisks.Add(d);
+                    usedGb += d.UsedGigabytes;
+                    TotalCapacity += d.Capacity;
+                }
+            }
+            TotalStoredGb = usedGb;
             TotalStored = Mathf.CeilToInt(usedGb);
         }
 
-        private void SyncDisks()
+        /// <summary>Rebuild the prioritized target list: NAS shelves and drawer
+        /// controllers, highest priority first; position-stable within a tier.</summary>
+        private void BuildTargets()
         {
-            while (activeDisks.Count < diskSlots.Size) activeDisks.Add(null);
-
-            for (int i = 0; i < diskSlots.Size; i++)
-            {
-                var slot = diskSlots.GetSlot(i);
-                if (slot.IsEmpty || !(slot.item is StorageDisk sd))
-                { activeDisks[i] = null; continue; }
-
-                // Read DiskData from the stack's payload (mints a fresh one for
-                // brand-new disks). This is the same logic used by PersistDiskData;
-                // both paths converge on the stack-bound payload so contents follow
-                // the disk wherever it goes.
-                var data = slot.payload as DiskData;
-                if (data == null || data.tier != sd.tier)
-                {
-                    data = new DiskData { tier = sd.tier };
-                    slot.payload = data;
-                    diskSlots.SetSlot(i, slot);
-                }
-                activeDisks[i] = data;
-            }
-
-            // Include NAS disks connected via data cables.
-            connectedNAS.Clear();
-            foreach (var anchor in GetComponents<Networks.ConnectionAnchor>())
-            {
-                if (anchor.network == null) continue;
-                if (anchor.network is Networks.DataNetworkNew dn)
-                {
-                    foreach (var a in dn.anchors)
-                    {
-                        if (a == null || a.owner == null) continue;
-                        var nas = a.owner.GetComponent<NASBlock>();
-                        if (nas != null && !connectedNAS.Contains(nas))
-                        {
-                            connectedNAS.Add(nas);
-                            foreach (var d in nas.GetActiveDisks())
-                                if (d != null && !activeDisks.Contains(d)) activeDisks.Add(d);
-                        }
-                    }
-                }
-            }
-        }
-
-        private float CalculatePowerDraw()
-        {
-            float draw = 50f; // base draw
-            for (int i = 0; i < diskSlots.Size; i++)
-                if (!diskSlots.GetSlot(i).IsEmpty) draw += 20f;
-            var cpu = cpuSlot.GetSlot(0);
-            if (!cpu.IsEmpty && cpu.item is ServerComponent cc)
-                draw += cc.value * 10f;
-            for (int i = 0; i < ramSlots.Size; i++)
-                if (!ramSlots.GetSlot(i).IsEmpty) draw += 15f;
-            return draw;
+            _targets.Clear();
+            foreach (var nas in _nasBuf)
+                if (nas != null)
+                    _targets.Add(new StorageTarget { priority = nas.priority, nas = nas });
+            foreach (var dc in _drawerBuf)
+                if (dc != null && dc is IExternalStorageSource src && src.IsAvailable)
+                    _targets.Add(new StorageTarget { priority = src.Priority, external = src });
+            _targets.Sort((a, b) => b.priority.CompareTo(a.priority));
         }
 
         // ── Drop Items on Destroy ──────────────────────────────────
@@ -298,10 +301,8 @@ namespace VoxelEngine.Storage
                     if (!s.IsEmpty) SpawnDropped(s, pos);
                 }
             }
-            Drop(diskSlots);
             Drop(ramSlots);
             Drop(cpuSlot);
-            Drop(psuSlot);
         }
 
         private void SpawnDropped(ItemStack stack, Vector3? overridePos = null)
@@ -311,66 +312,26 @@ namespace VoxelEngine.Storage
             Items.DroppedItem.Spawn(stack.Clone(), p, Vector3.up);
         }
 
-        // ── External PSU (Powerstation) ────────────────────────────
-        // Powerstations call this each tick to contribute their wattage.
-        private readonly Dictionary<Powerstation, float> _externalPsus = new();
-        private float _externalPsuWatts = 0f;
-
-        /// <summary>Called by Powerstation every 0.5s to register its contribution.</summary>
-        public void RegisterExternalPsu(float watts, Powerstation source)
-        {
-            _externalPsus[source] = watts;
-            _externalPsuWatts = 0f;
-            foreach (var kv in _externalPsus) _externalPsuWatts += kv.Value;
-            MaxPowerWatts = GetBasePsuWatts() + _externalPsuWatts;
-        }
-
-        private float GetBasePsuWatts()
-        {
-            var psu = psuSlot?.GetSlot(0) ?? new ItemStack();
-            if (!psu.IsEmpty && psu.item is ServerComponent sc && sc.componentType == ComponentType.PSU)
-                return sc.value;
-            return 0f;
-        }
-
-        // ── External physical storage (drawer controllers) ─────────
-        public void RegisterExternalStorage(IExternalStorageSource source)
-        {
-            if (source == null || _externalStorageSources.Contains(source)) return;
-            _externalStorageSources.Add(source);
-            _externalStorageSources.Sort((a, b) => b.Priority.CompareTo(a.Priority));
-        }
-
-        public void UnregisterExternalStorage(IExternalStorageSource source)
-        {
-            if (source != null) _externalStorageSources.Remove(source);
-        }
-
-        private void PruneExternalStorage()
-        {
-            for (int i = _externalStorageSources.Count - 1; i >= 0; i--)
-            {
-                var s = _externalStorageSources[i];
-                if (s == null || !s.IsAvailable) _externalStorageSources.RemoveAt(i);
-            }
-        }
-
         // ── Storage API ────────────────────────────────────────────
         public int NetworkInsert(ItemDefinition item, int count)
         {
             if (!IsOnline || item == null || count <= 0) return count;
             int remaining = count;
-            PruneExternalStorage();
-            foreach (var source in _externalStorageSources)
+            foreach (var t in _targets)
             {
-                remaining = source.Insert(item, remaining);
-                if (remaining <= 0) return 0;
-            }
-            foreach (var d in activeDisks)
-            {
-                if (d == null) continue;
-                int accepted = d.Insert(item, remaining);
-                remaining -= accepted;
+                if (t.external != null)
+                {
+                    remaining = t.external.Insert(item, remaining);
+                }
+                else if (t.nas != null)
+                {
+                    foreach (var d in t.nas.GetActiveDisks())
+                    {
+                        if (d == null) continue;
+                        remaining -= d.Insert(item, remaining);
+                        if (remaining <= 0) return 0;
+                    }
+                }
                 if (remaining <= 0) return 0;
             }
             return remaining;
@@ -380,18 +341,21 @@ namespace VoxelEngine.Storage
         {
             if (!IsOnline || count <= 0) return 0;
             int extracted = 0;
-            PruneExternalStorage();
-            foreach (var source in _externalStorageSources)
+            foreach (var t in _targets)
             {
-                int got = source.Extract(itemId, count - extracted);
-                extracted += got;
-                if (extracted >= count) return extracted;
-            }
-            foreach (var d in activeDisks)
-            {
-                if (d == null) continue;
-                int got = d.Extract(itemId, count - extracted);
-                extracted += got;
+                if (t.external != null)
+                {
+                    extracted += t.external.Extract(itemId, count - extracted);
+                }
+                else if (t.nas != null)
+                {
+                    foreach (var d in t.nas.GetActiveDisks())
+                    {
+                        if (d == null) continue;
+                        extracted += d.Extract(itemId, count - extracted);
+                        if (extracted >= count) return extracted;
+                    }
+                }
                 if (extracted >= count) return extracted;
             }
             return extracted;
@@ -410,9 +374,8 @@ namespace VoxelEngine.Storage
                         { itemId = e.itemId, displayName = e.displayName, count = e.count, massPerUnit = e.massPerUnit <= 0f ? 1f : e.massPerUnit };
                 }
             }
-            PruneExternalStorage();
-            foreach (var source in _externalStorageSources)
-                source.AppendAllItems(merged);
+            foreach (var t in _targets)
+                t.external?.AppendAllItems(merged);
             var list = new List<StoredItemEntry>(merged.Values);
             list.Sort((a, b) => b.count.CompareTo(a.count));
             return list;
@@ -423,10 +386,14 @@ namespace VoxelEngine.Storage
             int total = 0;
             foreach (var d in activeDisks)
                 if (d != null) total += d.CountOf(itemId);
-            PruneExternalStorage();
-            foreach (var source in _externalStorageSources)
-                total += source.CountOf(itemId);
+            foreach (var t in _targets)
+                if (t.external != null) total += t.external.CountOf(itemId);
             return total;
         }
+
+        // ── Legacy registration API (kept as no-ops so older callers keep
+        //    compiling; membership is network-resolved now) ──────────
+        public void RegisterExternalStorage(IExternalStorageSource source) { }
+        public void UnregisterExternalStorage(IExternalStorageSource source) { }
     }
 }
