@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.41.0-dev`
+**Current Version:** `14.42.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.42.0-dev] The Plug Meets the Machine
+
+**Type:** MINOR - the field-test round on 14.41.0: the data pipe grows the energy pipe's auto-connect bridge arms so a plug visibly seats into the device it feeds, the handheld Wireless Terminal gets a real equipment slot in the renamed COMMS AND NAVIGATION card, drawer fronts accept placeable blocks on right-click, drawer item icons finally fit the drawer, and the Storage Drawer and Drawer Controller are rebuilt as framed steel furniture. Save format: one additive container resize, old saves load clean.
+
+**The data pipe reaches out and touches its device.** The energy pipe has always grown a visible arm into the machine it powers - now the data pipe does the identical thing. Every open plug head that sits against a storage device sprouts a cable arm from the trunk, flush into the device's face, ending in its own seated plug: pipe to importer, pipe to External Storage, pipe to controller, all visibly CONNECTED instead of hovering a hand-width apart. The arm obeys the same rules as the link itself - a plug already mated to another pipe never grows one, the arm only reaches forward through the probe the link scan uses, and ghost previews stay armless so nothing sticks to the preview as it moves. Armless pipes keep sharing their cached meshes; only bridged pipes carry a personal mesh, and they tidy it up behind themselves.
+
+**The Wireless Terminal earns its pocket.** The equipment console's ORBITAL SYSTEMS card becomes COMMS AND NAVIGATION: two device slots side by side - the Orbital Map and the handheld Wireless Terminal, either device in either slot - and the old INSTRUMENT BAY wording is gone. Each device gets its own readout line: the map shows its capability, range and the M-key reminder in one row; the terminal shows a live link verdict - LINKED TO STORAGE NETWORK when a powered transmitter is in range and the Security Block clears you, NO TRANSMITTER SIGNAL when not. Every wireless gate in the game - remote storage panels, shift-click storing, crafting from storage, building from the network - now honors the equipped terminal first and still accepts one carried loose in the backpack. Old saves load the one-slot bay into slot one of the two-slot card without losing the map.
+
+**Drawer fronts take anything now.** Right-clicking a Storage Drawer's front with a placeable block used to start a build attempt instead of an insert - placement owned RMB whenever a block was selected. The drawer and controller FRONTS are now carved out of that rule: the face is an insertion slot and takes the held stack whatever it is, blocks included, while the sides, top and back remain perfectly ordinary build surfaces. And the item icon on the face finally respects the furniture: sprites are normalized to a fixed face size regardless of the pixels-per-unit their icon was generated with, so a stone block no longer dwarfs the drawer that holds it. The Storage Item Display gets the same icon fix.
+
+**Drawers dress in steel.** Setup step 110 rebuilds both prefabs as proper industrial furniture in the Functional-Storage silhouette, metal instead of wood: brushed-steel body, gunmetal frame bars around the face, a recessed drawer front with a dark label plate behind the item icon, corner bolts, a teal handle bar on stand-offs, and the fill readout moved into an LED strip that runs dark to teal as the drawer fills. The Drawer Controller wears the same chassis with its own face: an emissive teal core diamond on a dark plate - the eye of the drawer bank - status LEDs, and a link port bezel where a data pipe's bridge arm lands. All non-destructive: display children are rebuilt and re-pointed, colliders and authored values survive, and the drawer description now teaches the front-face rules.
 
 ### [14.41.0-dev] Plugs, Bends and Borrowed Shelves
 

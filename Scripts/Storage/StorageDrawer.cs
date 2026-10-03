@@ -319,6 +319,7 @@ namespace VoxelEngine.Storage
                 itemIconRenderer.sprite = storedItem != null ? storedItem.icon : null;
                 itemIconRenderer.color = storedItem != null ? storedItem.iconTint : new Color(0.12f, 0.14f, 0.16f, 0.65f);
                 itemIconRenderer.enabled = storedItem != null || itemIconRenderer.sprite != null;
+                FitIconToFace(itemIconRenderer, 0.34f);
             }
             if (amountText != null)
             {
@@ -330,6 +331,19 @@ namespace VoxelEngine.Storage
                 float t = Capacity <= 0 ? 0f : Mathf.Clamp01(storedCount / (float)Capacity);
                 fillRenderer.material.color = Color.Lerp(new Color(0.08f,0.12f,0.14f), new Color(0.10f,0.78f,0.65f), t);
             }
+        }
+
+        /// <summary>Scales a SpriteRenderer so the sprite occupies a fixed world
+        /// size on the block face, whatever pixels-per-unit the icon was imported
+        /// with (14.42.0) - generated item icons vary wildly, and an unscaled
+        /// sprite can dwarf the whole drawer.</summary>
+        public static void FitIconToFace(SpriteRenderer renderer, float worldSize)
+        {
+            if (renderer == null || renderer.sprite == null) return;
+            var b = renderer.sprite.bounds.size;
+            float maxDim = Mathf.Max(b.x, b.y);
+            if (maxDim <= 0.0001f) return;
+            renderer.transform.localScale = Vector3.one * (worldSize / maxDim);
         }
 
         public static string FormatAmount(int count)

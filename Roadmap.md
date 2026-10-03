@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.41.0-dev`
-**Roadmap Version:** `14.41.0-dev`
+**Current Version:** `14.42.0-dev`
+**Roadmap Version:** `14.42.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.42.0-dev - The Plug Meets the Machine
+Field-test round on the storage network. The data pipe gains the energy pipe's auto-connect bridge arms: every open plug sitting against a storage device grows a visible cable arm flush into its face (mated plugs never do, ghosts stay armless, bridged pipes carry per-instance meshes and clean up after themselves). The equipment console's ORBITAL SYSTEMS card becomes COMMS AND NAVIGATION with two device slots - Orbital Map and handheld Wireless Terminal, either in either - each with its own readout (the terminal shows a live LINKED / NO SIGNAL verdict); every wireless gate honors the equipped terminal first and still accepts a carried one; the one-slot bay resizes additively on old saves. Drawer and controller FRONTS take right-click insertion even with placeable blocks held (sides/top/back stay build surfaces); drawer face icons are normalized to a fixed world size whatever their import PPU (Storage Item Display too). Setup step 110 rebuilds the Storage Drawer and Drawer Controller as framed steel furniture - gunmetal frames, recessed faces, label plates, bolts, handle, LED fill strip, and the controller's emissive core eye - non-destructively.
 
 ### 14.41.0-dev - Plugs, Bends and Borrowed Shelves
 The storage network reaches the physical world and the Data Pipe becomes a real cable. The new External Storage block bridges Chests and lone Storage Drawers into the network (wired or touching), with a three-way access mode (insert+extract / extract only / insert only) and a fill priority, drawing 6 W on the system bill; Drawer Controllers keep joining natively. The Data Pipe gains the energy pipe's nine-fitting radial wheel (shapes only - importer, exporter and the bridge stay separate snap-on blocks) with its own selection memory, V+scroll 1-5 m straights, plug-to-plug endpoint snapping and per-endpoint device probing, restyled as a braided data trunk with phosphor pulse rings and RJ45-style plug heads; legacy center-adjacency still links old-save pipes and shape/length ride the existing cable save fields and block snapshot. Importer, Exporter and the bridge get network-appliance bodies whose port sockets meet the pipe's plug heads. Fixes: RAM rail no longer overflows the controller panel, NAS fill bars update live, terminal count chips get an LCD backing, shift-click stores to the network while a terminal is open, STORAGE LINK button made discoverable. Setup step 109 authors it all non-destructively.

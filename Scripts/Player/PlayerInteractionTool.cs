@@ -1617,6 +1617,15 @@ namespace VoxelEngine.Player
             if (stack.item is VoxelEngine.GridSystem.GridBlockItem) return true;
             if (stack.item is not BlockItem block) return false;
 
+            // Storage drawer and controller FRONTS take RMB even when a placeable
+            // block is held (14.42.0): the face is an insertion slot, so blocks
+            // can be stored like any other item. Sides, top and back remain
+            // perfectly valid build surfaces.
+            var drawerFace = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawer>();
+            if (drawerFace != null && IsFrontHit(drawerFace.transform, hit)) return false;
+            var drawerCtrlFace = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawerController>();
+            if (drawerCtrlFace != null && IsFrontHit(drawerCtrlFace.transform, hit)) return false;
+
             string heldId = block.itemId ?? string.Empty;
             if (heldId == "hv_wire" || heldId.EndsWith("_lv_wire", System.StringComparison.OrdinalIgnoreCase))
                 return false; // HighVoltageWireTool owns its dedicated manual routing path.

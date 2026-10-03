@@ -52,6 +52,14 @@ namespace VoxelEngine.Networks
 
         /// <summary>Build the full two-submesh data cable mesh for a variant.</summary>
         public static Mesh BuildMesh(EnergyPipeVariant variant, int straightLength = 1)
+            => BuildMesh(variant, straightLength, null);
+
+        /// <summary>Build the cable mesh plus auto-connect bridge arms (14.42.0):
+        /// for each local-space device contact point, a cable arm grows from the
+        /// nearest open plug straight into the device face, ending in its own
+        /// plug head - the data twin of the energy pipe's machine bridges.</summary>
+        public static Mesh BuildMesh(EnergyPipeVariant variant, int straightLength,
+            List<Vector3> deviceTargetsLocal)
         {
             straightLength = Mathf.Clamp(straightLength, 1, 5);
             var md = new MeshData
@@ -72,6 +80,34 @@ namespace VoxelEngine.Networks
                 var eps = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
                 foreach (var ep in eps)
                     BuildPlugHead(md, ep.Position, ep.Normal, ep.Right, ep.Up);
+            }
+
+            // Auto-connect bridge arms into adjacent storage devices.
+            if (deviceTargetsLocal != null && deviceTargetsLocal.Count > 0)
+            {
+                var eps = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+                foreach (var target in deviceTargetsLocal)
+                {
+                    // Grow from the endpoint nearest the device contact.
+                    Vector3 start = Vector3.zero;
+                    float best = float.MaxValue;
+                    foreach (var ep in eps)
+                    {
+                        float d = (ep.Position - target).sqrMagnitude;
+                        if (d < best) { best = d; start = ep.Position; }
+                    }
+                    Vector3 delta = target - start;
+                    if (delta.magnitude < 0.03f) continue;
+                    Vector3 dir = delta.normalized;
+
+                    BuildTrunk(md, SamplePath(new List<Vector3> { start, target }));
+
+                    Vector3 up = Mathf.Abs(Vector3.Dot(dir, Vector3.up)) > 0.9f
+                        ? Vector3.forward : Vector3.up;
+                    Vector3 right = Vector3.Cross(up, dir).normalized;
+                    up = Vector3.Cross(dir, right).normalized;
+                    BuildPlugHead(md, target, dir, right, up);
+                }
             }
 
             var mesh = new Mesh { name = $"DataPipe_{variant}_{straightLength}" };

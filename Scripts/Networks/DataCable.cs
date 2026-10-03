@@ -58,6 +58,7 @@ namespace VoxelEngine.Networks
         // ── Runtime ──────────────────────────────────────────────
         public ConnectionAnchor anchor;          // exposed for inspectors / debugging
         private Transform _visualRoot;
+        private Mesh _instanceMesh;   // bridge-arm mesh (per instance, never cached)
         private MeshFilter _meshFilter;
         private MeshRenderer _meshRenderer;
         private float _scanTimer;
@@ -94,6 +95,16 @@ namespace VoxelEngine.Networks
             _connectionFaces.Clear();
             if (anchor != null) anchor.DisconnectAll();
             RefreshNearbyDataCables(transform.position, 6f);
+        }
+
+        private void OnDestroy()
+        {
+            if (_instanceMesh != null)
+            {
+                if (Application.isPlaying) Destroy(_instanceMesh);
+                else DestroyImmediate(_instanceMesh);
+                _instanceMesh = null;
+            }
         }
 
         private void Update()
@@ -311,13 +322,110 @@ namespace VoxelEngine.Networks
             EnsureVisualRoot();
             EnsureMaterials();
 
-            var mesh = GetSharedMesh(variant, straightLength);
+            // Auto-connect bridge arms (14.42.0): open plugs that sit against a
+            // storage device grow a cable arm flush into its face - the data
+            // twin of the energy pipe's machine bridges. Arms make the mesh
+            // instance-specific, so only armless pipes use the shared cache.
+            var bridgeTargets = CollectDeviceBridgeTargetsLocal();
+
+            if (_instanceMesh != null)
+            {
+                if (Application.isPlaying) Destroy(_instanceMesh);
+                else DestroyImmediate(_instanceMesh);
+                _instanceMesh = null;
+            }
+
+            Mesh mesh;
+            if (bridgeTargets == null || bridgeTargets.Count == 0)
+                mesh = GetSharedMesh(variant, straightLength);
+            else
+            {
+                _instanceMesh = DataPipeMeshBuilder.BuildMesh(variant, straightLength, bridgeTargets);
+                mesh = _instanceMesh;
+            }
             _meshFilter.sharedMesh = mesh;
             _meshRenderer.sharedMaterials = new[] { s_sheathMat, s_glowMat };
             _builtVariant = variant;
             _builtLength = straightLength;
 
             RebuildColliders();
+        }
+
+        /// <summary>Local-space device contact points for the visual bridge
+        /// arms: every endpoint that is NOT plug-linked to another data pipe
+        /// probes the same small sphere the link scan uses, and the closest
+        /// facing device collider donates its contact point.</summary>
+        private List<Vector3> CollectDeviceBridgeTargetsLocal()
+        {
+            // Ghost previews (disabled by StripGhost) never grow arms - the
+            // ghost only rebuilds on selection change, so an arm sampled at
+            // spawn position would stick to the preview as it moves.
+            if (!isActiveAndEnabled) return null;
+
+            List<Vector3> result = null;
+            var eps = LocalEndpoints;
+            for (int e = 0; e < eps.Count; e++)
+            {
+                Vector3 epWorld = EndpointWorld(eps[e]);
+                Vector3 epNormal = EndpointNormalWorld(eps[e]);
+                if (IsEndpointPlugLinked(epWorld)) continue;
+
+                Vector3 probeCenter = epWorld + epNormal * (DEVICE_PROBE_RADIUS * 0.5f);
+                int count = Physics.OverlapSphereNonAlloc(probeCenter, DEVICE_PROBE_RADIUS,
+                    s_overlapBuffer, ~0, QueryTriggerInteraction.Collide);
+
+                float bestSqr = float.MaxValue;
+                Vector3 bestContact = default;
+                for (int n = 0; n < count; n++)
+                {
+                    var h = s_overlapBuffer[n];
+                    s_overlapBuffer[n] = null;
+                    if (h == null || h.isTrigger || h.transform.IsChildOf(transform)) continue;
+                    if (h.GetComponentInParent<DataCable>() != null) continue;
+
+                    var rootGo = h.transform.root.gameObject;
+                    if (rootGo == gameObject) continue;
+                    var remoteAnchor = h.GetComponentInParent<ConnectionAnchor>();
+                    bool isDevice = (remoteAnchor != null && remoteAnchor.networkType == NetworkType.Data)
+                                    || IsDataDevice(rootGo);
+                    if (!isDevice) continue;
+
+                    Vector3 contact = h.ClosestPoint(epWorld);
+                    Vector3 toContact = contact - epWorld;
+                    float dSqr = toContact.sqrMagnitude;
+                    // The arm must leave the plug roughly forward, never backward.
+                    if (dSqr > 0.0004f && Vector3.Dot(toContact.normalized, epNormal) < -0.1f) continue;
+                    if (dSqr >= bestSqr) continue;
+                    bestSqr = dSqr;
+                    bestContact = contact;
+                }
+
+                if (bestSqr < float.MaxValue)
+                {
+                    // Sink the arm tip slightly into the device face so the
+                    // plug head reads as seated, not hovering.
+                    Vector3 tip = bestContact + epNormal * 0.02f;
+                    (result ??= new List<Vector3>()).Add(transform.InverseTransformPoint(tip));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>Is another data pipe's plug mated to this world-space endpoint?</summary>
+        private bool IsEndpointPlugLinked(Vector3 epWorld)
+        {
+            foreach (var other in _AllCables)
+            {
+                if (other == null || other == this || !other.isActiveAndEnabled) continue;
+                // Cheap reject: longest span is 5 m, link radius 0.6 m.
+                if ((other.transform.position - epWorld).sqrMagnitude > 36f) continue;
+                var otherEps = other.LocalEndpoints;
+                for (int j = 0; j < otherEps.Count; j++)
+                    if ((other.EndpointWorld(otherEps[j]) - epWorld).sqrMagnitude
+                        <= ENDPOINT_LINK_RADIUS * ENDPOINT_LINK_RADIUS)
+                        return true;
+            }
+            return false;
         }
 
         private void EnsureVisualRoot()

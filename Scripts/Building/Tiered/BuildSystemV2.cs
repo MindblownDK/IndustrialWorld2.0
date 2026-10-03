@@ -1065,7 +1065,7 @@ namespace VoxelEngine.Building.Tiered
         {
             if (inventory == null) return null;
             return VoxelEngine.Storage.WirelessStorageAccess.TryGetRack(
-                inventory.container,
+                inventory,
                 transform.position,
                 VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
         }

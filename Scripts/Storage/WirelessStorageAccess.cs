@@ -31,6 +31,17 @@ namespace VoxelEngine.Storage
             return false;
         }
 
+        /// <summary>The full player-side check (14.42.0): a terminal EQUIPPED in
+        /// the comms slot counts first, a terminal carried in the backpack still
+        /// works. Pass the player's Inventory component.</summary>
+        public static bool HasHandheldTerminal(VoxelEngine.Items.Inventory inventory)
+        {
+            if (inventory == null) return false;
+            var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            if (equipment != null && equipment.EquippedWirelessTerminal != null) return true;
+            return HasHandheldTerminal(inventory.container);
+        }
+
         /// <summary>The best transmitter this player can actually use from this
         /// position (closest permitted one), or null. Does NOT check the
         /// handheld item - pass the inventory to TryGetRack for the full gate.</summary>
@@ -53,6 +64,15 @@ namespace VoxelEngine.Storage
         /// <summary>The full gate: handheld item + transmitter in range +
         /// security clearance. Returns the reachable controller or null.</summary>
         public static ServerRack TryGetRack(IItemContainer inventory, Vector3 playerPos, string playerId)
+        {
+            if (!HasHandheldTerminal(inventory)) return null;
+            var tx = FindUsableTransmitter(playerPos, playerId);
+            return tx != null ? tx.ConnectedRack : null;
+        }
+
+        /// <summary>Full gate for the player (14.42.0): accepts the terminal
+        /// equipped in the comms slot OR carried in the backpack.</summary>
+        public static ServerRack TryGetRack(VoxelEngine.Items.Inventory inventory, Vector3 playerPos, string playerId)
         {
             if (!HasHandheldTerminal(inventory)) return null;
             var tx = FindUsableTransmitter(playerPos, playerId);

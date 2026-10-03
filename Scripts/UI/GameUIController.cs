@@ -656,12 +656,12 @@ namespace VoxelEngine.UI
         public VoxelEngine.Storage.WirelessTransmitter GetActiveWirelessTransmitter()
         {
             // 14.40.0 wireless gate — ALL wireless storage access funnels
-            // through here: the player must CARRY a handheld Wireless
-            // Terminal, stand inside a transmitter's range, and pass the
+            // through here: the player must EQUIP (comms slot) or carry a
+            // handheld Wireless Terminal, stand inside a transmitter's range, and pass the
             // network's Security Block wireless rules (owner always; team
             // only when the owner shared it; never global).
             if (inventory == null) return null;
-            if (!VoxelEngine.Storage.WirelessStorageAccess.HasHandheldTerminal(inventory.container))
+            if (!VoxelEngine.Storage.WirelessStorageAccess.HasHandheldTerminal(inventory))
                 return null;
 
             var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
@@ -2263,13 +2263,14 @@ namespace VoxelEngine.UI
         }
 
         /// <summary>
-        /// ORBITAL SYSTEMS: its own card below Life Support. The orbital map is an
-        /// instrument rather than survival gear, and giving it a dedicated box lets the
-        /// readout show the device's real capabilities instead of a single status line.
+        /// COMMS &amp; NAVIGATION (14.42.0, formerly ORBITAL SYSTEMS): the card below
+        /// Life Support that carries the player's two personal devices - the Orbital
+        /// Map (navigation) and the handheld Wireless Terminal (storage comms). Two
+        /// slots, either device in either; each device gets its own readout line.
         /// </summary>
-        private VisualElement BuildOrbitalSystemsPanel(VoxelEngine.Player.PlayerEquipment equipment)
+        private VisualElement BuildCommsNavPanel(VoxelEngine.Player.PlayerEquipment equipment)
         {
-            var box = new VisualElement { name = "OrbitalSystemsPanel" };
+            var box = new VisualElement { name = "CommsNavPanel" };
             box.style.marginTop = 7;
             box.style.paddingTop = 6;
             box.style.paddingBottom = 6;
@@ -2277,8 +2278,8 @@ namespace VoxelEngine.UI
             box.style.paddingRight = 6;
             LcdHudTheme.ApplyDataCard(box, LcdHudTheme.Phosphor);
 
-            var device = equipment.EquippedOrbitalMap;
-            bool online = device != null;
+            var map = equipment.EquippedOrbitalMap;
+            var terminal = equipment.EquippedWirelessTerminal;
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
@@ -2286,18 +2287,23 @@ namespace VoxelEngine.UI
             header.style.justifyContent = Justify.FlexStart;
             header.style.marginBottom = 6;
 
-            var title = new Label("ORBITAL SYSTEMS");
+            var title = new Label("COMMS & NAVIGATION");
             title.style.fontSize = 10;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
             title.style.color = LcdHudTheme.Phosphor;
             header.Add(title);
 
-            var status = new Label(online ? "TRACKING" : "NO DEVICE");
+            string chipText = map != null && terminal != null ? "NAV + LINK"
+                : map != null ? "NAV ONLY"
+                : terminal != null ? "LINK ONLY"
+                : "NO DEVICES";
+            bool anyOnline = map != null || terminal != null;
+            var status = new Label(chipText);
             status.style.marginLeft = 8;
             status.style.fontSize = 9;
             status.style.unityFontStyleAndWeight = FontStyle.Bold;
-            status.style.color = online
+            status.style.color = anyOnline
                 ? new Color(0.35f, 0.80f, 1.00f)
                 : new Color(0.95f, 0.62f, 0.18f);
             status.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
@@ -2314,16 +2320,24 @@ namespace VoxelEngine.UI
             body.style.flexDirection = FlexDirection.Row;
             body.style.alignItems = Align.FlexStart;
 
-            body.Add(BuildSlot(equipment.InstrumentSlots, 0, equipment.InstrumentSlots.GetSlot(0), false));
+            // Two device slots in a column: orbital map and wireless terminal,
+            // either device in either slot.
+            var slotColumn = new VisualElement();
+            slotColumn.Add(BuildSlot(equipment.InstrumentSlots, 0, equipment.InstrumentSlots.GetSlot(0), false));
+            var secondSlot = BuildSlot(equipment.InstrumentSlots, 1, equipment.InstrumentSlots.GetSlot(1), false);
+            secondSlot.style.marginTop = 4;
+            slotColumn.Add(secondSlot);
+            body.Add(slotColumn);
 
             var readout = new VisualElement();
             readout.style.flexGrow = 1;
             readout.style.marginLeft = 8;
             readout.style.justifyContent = Justify.Center;
 
-            if (online)
+            // ── NAV line: the orbital map ──
+            if (map != null)
             {
-                var deviceName = new Label(device.displayName.ToUpperInvariant());
+                var deviceName = new Label(map.displayName.ToUpperInvariant());
                 deviceName.style.fontSize = 9;
                 deviceName.style.unityFontStyleAndWeight = FontStyle.Bold;
                 deviceName.style.letterSpacing = 0.8f;
@@ -2331,35 +2345,57 @@ namespace VoxelEngine.UI
                 readout.Add(deviceName);
 
                 var caps = new Label(
-                    $"{device.CapabilityLabel}\nRANGE {VoxelEngine.Cosmos.OrbitalTrackingService.FormatKm(device.trackingRangeKm)}");
+                    $"{map.CapabilityLabel}  ·  RANGE {VoxelEngine.Cosmos.OrbitalTrackingService.FormatKm(map.trackingRangeKm)}  ·  PRESS M");
                 caps.style.fontSize = 8;
                 caps.style.whiteSpace = WhiteSpace.Normal;
-                caps.style.marginTop = 2;
+                caps.style.marginTop = 1;
                 caps.style.color = new StyleColor(new Color(0.58f, 0.66f, 0.76f));
                 readout.Add(caps);
-
-                var press = new Label("PRESS M TO OPEN MAP");
-                press.style.fontSize = 8;
-                press.style.letterSpacing = 0.9f;
-                press.style.marginTop = 3;
-                press.style.color = new StyleColor(new Color(0.40f, 0.85f, 0.55f));
-                readout.Add(press);
             }
             else
             {
-                var empty = new Label("INSTRUMENT BAY EMPTY");
-                empty.style.fontSize = 9;
-                empty.style.unityFontStyleAndWeight = FontStyle.Bold;
-                empty.style.letterSpacing = 0.8f;
-                empty.style.color = new StyleColor(UITheme.TextMuted);
-                readout.Add(empty);
+                var navHint = new Label("No Orbital Map - equip one to track constructs, planets and moons.");
+                navHint.style.fontSize = 8;
+                navHint.style.whiteSpace = WhiteSpace.Normal;
+                navHint.style.color = new StyleColor(UITheme.TextMuted);
+                readout.Add(navHint);
+            }
 
-                var hint = new Label("Equip an Orbital Map to track constructs, planets and moons.");
-                hint.style.fontSize = 8;
-                hint.style.whiteSpace = WhiteSpace.Normal;
-                hint.style.marginTop = 2;
-                hint.style.color = new StyleColor(UITheme.TextMuted);
-                readout.Add(hint);
+            // ── LINK line: the handheld wireless terminal ──
+            if (terminal != null)
+            {
+                var termName = new Label(terminal.displayName.ToUpperInvariant());
+                termName.style.fontSize = 9;
+                termName.style.unityFontStyleAndWeight = FontStyle.Bold;
+                termName.style.letterSpacing = 0.8f;
+                termName.style.marginTop = 5;
+                termName.style.color = new StyleColor(new Color(0.40f, 0.85f, 0.55f));
+                readout.Add(termName);
+
+                var rack = inventory != null
+                    ? VoxelEngine.Storage.WirelessStorageAccess.TryGetRack(
+                        inventory, inventory.transform.position,
+                        VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "")
+                    : null;
+                var linkState = new Label(rack != null
+                    ? "LINKED TO STORAGE NETWORK"
+                    : "NO TRANSMITTER SIGNAL");
+                linkState.style.fontSize = 8;
+                linkState.style.letterSpacing = 0.6f;
+                linkState.style.marginTop = 1;
+                linkState.style.color = new StyleColor(rack != null
+                    ? new Color(0.40f, 0.85f, 0.55f)
+                    : new Color(0.95f, 0.62f, 0.18f));
+                readout.Add(linkState);
+            }
+            else
+            {
+                var linkHint = new Label("No Wireless Terminal - equip one for remote storage access.");
+                linkHint.style.fontSize = 8;
+                linkHint.style.whiteSpace = WhiteSpace.Normal;
+                linkHint.style.marginTop = 4;
+                linkHint.style.color = new StyleColor(UITheme.TextMuted);
+                readout.Add(linkHint);
             }
 
             body.Add(readout);
@@ -2896,7 +2932,7 @@ namespace VoxelEngine.UI
                 content.Add(BuildArmorAddon(equipment));
                 content.Add(BuildJetpackSlotsPanel(equipment));
                 content.Add(BuildLifeSupportSlotsPanel(equipment));
-                content.Add(BuildOrbitalSystemsPanel(equipment));
+                content.Add(BuildCommsNavPanel(equipment));
             }
 
             LcdHudTheme.AddScanlines(screen, 8, 48f, 58f);
@@ -3189,8 +3225,8 @@ namespace VoxelEngine.UI
                     anyPermitted = true;
             }
             if (!anyInRange) return null;
-            if (!VoxelEngine.Storage.WirelessStorageAccess.HasHandheldTerminal(inventory.container))
-                return "Carry a Wireless Terminal to link";
+            if (!VoxelEngine.Storage.WirelessStorageAccess.HasHandheldTerminal(inventory))
+                return "Equip or carry a Wireless Terminal to link";
             if (!anyPermitted) return "Wireless access denied by Security Block";
             return null;
         }

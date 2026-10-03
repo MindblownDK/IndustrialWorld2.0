@@ -26,8 +26,9 @@ namespace VoxelEngine.Player
         public const int HelmetSlotCount = 1;
         public const int OxygenTankSlotCount = 1;
         public const int ArmorSlotCount      = 1;
-        /// <summary>Personal instrument bay: currently the orbital map. Lives under Life Support.</summary>
-        public const int InstrumentSlotCount = 1;
+        /// <summary>Personal comms &amp; navigation devices: the orbital map and the
+        /// handheld Wireless Terminal (14.42.0). Two slots, either device in either.</summary>
+        public const int InstrumentSlotCount = 2;
 
         /// <summary>Speed bonus while two identical usable packs are equipped.</summary>
         public const float TwinSpeedBonus = 1.35f;
@@ -106,7 +107,9 @@ namespace VoxelEngine.Player
 
             if (_instrumentSlots == null) _instrumentSlots = new ItemContainer("Instrument Slot", InstrumentSlotCount);
             else _instrumentSlots.Resize(InstrumentSlotCount);
-            _instrumentSlots.AcceptFilter = (item, wanted) => item is OrbitalMapItem ? Mathf.Min(1, wanted) : 0;
+            _instrumentSlots.AcceptFilter = (item, wanted) =>
+                (item is OrbitalMapItem || item is VoxelEngine.Storage.WirelessTerminalItem)
+                    ? Mathf.Min(1, wanted) : 0;
         }
 
         // ════════════════════════════════════════════════════════════
@@ -252,16 +255,40 @@ namespace VoxelEngine.Player
         //                      ORBITAL MAP DEVICE
         // ════════════════════════════════════════════════════════════
 
-        /// <summary>The equipped orbital map, or null. This is the single gate on the map UI.</summary>
+        /// <summary>The equipped orbital map, or null. This is the single gate on the map UI.
+        /// Scans every instrument slot - either device may sit in either slot.</summary>
         public OrbitalMapItem EquippedOrbitalMap
         {
             get
             {
                 var slots = InstrumentSlots;
                 if (slots == null) return null;
-                var stack = slots.GetSlot(0);
-                if (stack == null || stack.IsEmpty) return null;
-                return stack.item as OrbitalMapItem;
+                for (int i = 0; i < slots.Size; i++)
+                {
+                    var stack = slots.GetSlot(i);
+                    if (stack != null && !stack.IsEmpty && stack.item is OrbitalMapItem map)
+                        return map;
+                }
+                return null;
+            }
+        }
+
+        /// <summary>The equipped handheld Wireless Terminal, or null (14.42.0).
+        /// Carrying one in the backpack still works - equipping it is the tidy way.</summary>
+        public VoxelEngine.Storage.WirelessTerminalItem EquippedWirelessTerminal
+        {
+            get
+            {
+                var slots = InstrumentSlots;
+                if (slots == null) return null;
+                for (int i = 0; i < slots.Size; i++)
+                {
+                    var stack = slots.GetSlot(i);
+                    if (stack != null && !stack.IsEmpty
+                        && stack.item is VoxelEngine.Storage.WirelessTerminalItem term)
+                        return term;
+                }
+                return null;
             }
         }
 

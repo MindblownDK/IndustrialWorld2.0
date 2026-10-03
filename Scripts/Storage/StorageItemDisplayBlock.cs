@@ -69,6 +69,7 @@ namespace VoxelEngine.Storage
                 itemIconRenderer.sprite = filterItem != null ? filterItem.icon : null;
                 itemIconRenderer.color = filterItem != null ? filterItem.iconTint : new Color(0.12f,0.14f,0.16f,0.65f);
                 itemIconRenderer.enabled = filterItem != null || itemIconRenderer.sprite != null;
+                StorageDrawer.FitIconToFace(itemIconRenderer, 0.46f);
             }
             if (amountText != null)
                 amountText.text = filterItem == null ? "NO FILTER" : StorageDrawer.FormatAmount(CurrentCount);

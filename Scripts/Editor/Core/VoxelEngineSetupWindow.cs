@@ -976,6 +976,9 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "109. Storage Network Polish\n(External Storage block + importer/exporter visual overhaul - Non-Destructive)",
                 () => VoxelEngine.EditorTools.StorageNetworkPolishSetup.RunStep109(), 56);
 
+            AddWizardButton(scroll, "110. Drawer Facelift\n(Steel Storage Drawer + Drawer Controller fronts - Non-Destructive)",
+                () => VoxelEngine.EditorTools.DrawerFaceliftSetup.RunStep110(), 56);
+
             AddSpacer(scroll, 20);
         }
 
