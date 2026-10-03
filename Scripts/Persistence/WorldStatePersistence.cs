@@ -916,6 +916,19 @@ namespace VoxelEngine.Persistence
                     entry.beaconOn = radarBeacon.isOn;
             }
 
+            // Security Block (14.39.0): owner + access mode ride the runtime
+            // seam so one capture serves the save file AND MachineSync - a
+            // mode change in the owner's panel replicates like any machine
+            // toggle. Runs before the machine branches for the same reason
+            // the beacon block does.
+            var securityGuard = go.GetComponentInChildren<VoxelEngine.Storage.SecurityBlock>(true);
+            if (securityGuard != null)
+            {
+                entry.hasSecurityState = true;
+                entry.securityOwnerId = securityGuard.ownerId ?? "";
+                entry.securityMode = securityGuard.accessMode;
+            }
+
             // Battery charge and gas contents live in the RUNTIME seam
             // (14.34.0): the save path always carried them, but MachineSync
             // rides this capture - without these two blocks a client loaded
@@ -3471,6 +3484,19 @@ namespace VoxelEngine.Persistence
                 }
             }
 
+            // Security Block (14.39.0): ALWAYS an explicit assignment, never a
+            // local guess - same rule as bed ownership. This path also applies
+            // MachineSync runtime, which is how a mode change reaches clients.
+            if (saved.hasSecurityState)
+            {
+                var securityGuard = go.GetComponentInChildren<VoxelEngine.Storage.SecurityBlock>(true);
+                if (securityGuard != null)
+                {
+                    securityGuard.SetOwner(saved.securityOwnerId ?? "");
+                    securityGuard.SetMode(saved.securityMode);
+                }
+            }
+
             // Runtime-seam twins of the capture above (14.34.0): these are
             // what a client applies when the host's MachineSync converges it.
             if (saved.hasBatteryCharge)
@@ -4749,6 +4775,12 @@ namespace VoxelEngine.Persistence
             // stay claimable by anyone - an old save never locks anyone out.
             public bool hasBedState;
             public string bedOwnerId = "";
+            // Additive 14.39.0: mass-storage Security Block. Rides the factory-
+            // runtime seam, so MachineSync replicates a live mode change and the
+            // save carries owner + mode. Legacy saves cannot contain the block.
+            public bool hasSecurityState;
+            public string securityOwnerId = "";
+            public int securityMode = 1; // 0 Private, 1 Team (default), 2 Global
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";

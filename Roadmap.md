@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.38.0-dev`
-**Roadmap Version:** `14.38.0-dev`
+**Current Version:** `14.39.0-dev`
+**Roadmap Version:** `14.39.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.39.0-dev - The Server Keeps Its Secrets
+The mass-storage Security Block: a placed block that guards the digital storage network and nothing else. While powered (40 W, constant) it protects every server rack and NAS within 10 m, and every terminal connected to a guarded rack - wired or wireless - refuses players the owner's access mode excludes: PRIVATE, TEAM (default for new placements) or GLOBAL, set in an owner-only panel. There is no hacking: raiders destroy the block or cut its power, and an unpowered or unowned guard fails open. Owner and mode ride the factory-runtime seam (save + MachineSync in one), the block snapshot carries them at placement, and legacy saves load clean. Setup step 107 authors the prefab, item and Assembler recipe.
+
 ### 14.38.0-dev - A Bed of One's Own
 Per-player bed spawns, closing the 14.24.0 deferral: the claimed bed/linked spawn now travels inside the per-player SavedPlayer record (ten-second upload, players.json, join answer), so a guest's bed survives a rejoin - no new wire message, the record format is the save format. Beds become personal property: the placer's stable id is captured once at placement, rides the block snapshot and an additive save field, and only the owner and their teammates may claim or respawn at a bed (legacy beds restore unowned and stay open to all; cryobeds stay communal by design). The death screen stops offering demolished beds - a linked spawn with no structure left standing is healed on the spot.
 
@@ -43,21 +46,17 @@ Death is animated and death has stakes: the avatar plays the sword-and-shield de
 ### 14.35.0-dev - The World Answers to the Pick
 Everything the player holds is a weapon: one melee profile (weapons authored, tools at 30% working strength, objects as clubs, the bare fist weakest) feeds the 14.34.0 server-validated hit pipeline against players and the normal damage interface against creatures - including swings at open air, where avatars have no colliders for the physics ray. Voxel terrain (planets and asteroids) now yields to the pickaxe alone; trees, leveling, explosives, machines and block-breaking keep their own paths, and under-tier picks still dig slowly.
 
-### 14.34.0-dev - Steel Against Steel
-Real PvP: melee, ranged and explosion damage reach player avatars as server-validated intents - the attacker reports the attempt, the server checks it, the victim's own machine applies armor and damage, and a kill names the killer on the death screen. Friendly fire is a world rule (create/edit world, settings sidecar, default off), never a team choice; teammates' hits are refused server-side.
-Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by leaving last) plus appointed LEADERS (shield - invite and remove ordinary members); ownership passes to the earliest-joined leader, else member. Team names are unique per session, refused server-side. The pause-menu teams page is wider, wraps long names and keeps every button on screen; the TEAMS flag renders through the Lucide icon font instead of a missing-glyph square.
-14.33.0 play-round fixes: battery charge and gas contents moved into the runtime capture/restore seam so clients converge on them (additive hasGasState guard), and power cables save their variant and length (additive hasCableShape) so bends survive a reload.
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
 - **Authority:** the server is authoritative over EVERYTHING that matters: world edits, building placement/damage/decay, machine simulation, fluids, power, inventories, combat, code locks. Clients send intents, never outcomes.
+- **Shared build costs: NEVER (locked 14.39.0).** The placer always pays alone. Team sharing happens through the mass-storage network, gated by the Security Block (PRIVATE/TEAM/GLOBAL) - never through build costs.
 - **Save compatibility:** the game is unreleased - networking refactors may freely break save formats until release. Do not spend effort on migration shims for multiplayer changes.
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
-3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
+3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Shared build costs: CLOSED 14.39.0, permanently out of scope - the placer pays alone.)*
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
 6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(NEARLY DONE - 14.13.0 body, 14.14.0 display-only armor + tattoos, 14.15.0 rigged Player.fbx + skin tones, 14.16.0 back gear + replicated ghost + building pose, 14.17.0 locomotion animations, 14.18.0 sword stance + replicated attacks. Open: rifle/pistol stances - waiting on clips.)*
@@ -84,7 +83,6 @@ Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
 - **Mid-belt packet cosmetics** (accepted 14.12.0): conveyor packet visuals stay per-machine.
 - **Multi-planet join catch-up and fluid-sim state** (deferred 14.8.0): only the shared planet transfers on join.
-- **Shared build costs** (deferred 14.6.0): the placer pays for a piece alone.
 - **Rifle and pistol stances** (deferred 14.18.0): waiting on clips in `Resources/PlayerAnimations`.
 - **Per-player voice volume trim and whisper/shout ranges** (deferred 14.20.0): one 60 m radius serves both chat channels.
 - **WebGL voice support** (closed 14.21.0, NOT deferred): decided out of scope. This is not a browser game, so `VoiceChat` deliberately carries no `UNITY_WEBGL` guard and no `Application.RequestUserAuthorization` call. If that ever changes, both are mandatory before a WebGL build will capture anything.
@@ -128,7 +126,7 @@ Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by
 
 ### Teams, Beacons & Shared Ownership - Rules That Bind (milestones 10-11)
 
-- **Teams are the grouping everything else hangs off.** Shared build costs, friendly fire, team beacons, map markers and base permissions all resolve through team membership rather than each inventing their own list of players. *(Friendly fire shipped 14.34.0 exactly this way: a WORLD setting resolved through SameTeam, never a per-team choice.)*
+- **Teams are the grouping everything else hangs off.** Friendly fire, team beacons, map markers, storage security and base permissions all resolve through team membership rather than each inventing their own list of players. *(Friendly fire shipped 14.34.0 exactly this way: a WORLD setting resolved through SameTeam, never a per-team choice. Storage security shipped 14.39.0 the same way: the Security Block's TEAM mode resolves through SameTeam.)*
 - **Keyed by stable player id**, never by name or connection - a team survives a rename, a reconnect and a reload (MP-readiness checklist).
 - **Invite and accept, never auto-join.** A player is only ever added to a team by their own confirmation.
 - **The limits are host settings, not constants.** Max members per team and max teams per session live in the multiplayer / server settings, editable by the host.

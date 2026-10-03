@@ -40,6 +40,12 @@ namespace VoxelEngine.Storage
             var rack   = terminal.ConnectedRack;
             bool online = rack != null && rack.IsOnline;
 
+            // Security Block gate (14.39.0): the deepest chokepoint - covers
+            // wired AND wireless terminals, and re-checks on every rebuild so
+            // a mid-session mode change locks an already-open panel out.
+            var secDenied = SecurityDeniedPanel(rack, p);
+            if (secDenied != null) return secDenied;
+
             // ── Header ────────────────────────────────────────────
             var (hdr, _, _, _) = T.HeaderRow(
                 terminal.isWireless ? "📡 Wireless Terminal" : "💾 Storage Terminal",
@@ -374,6 +380,10 @@ namespace VoxelEngine.Storage
             bool online = rack != null && rack.IsOnline;
             var crafter = rack?.GetComponent<AutoCrafter>();
 
+            // Security Block gate (14.39.0).
+            var secDenied = SecurityDeniedPanel(rack, p);
+            if (secDenied != null) return secDenied;
+
             var (hdr, _, _, _) = T.HeaderRow("📋 Pattern Terminal",
                 online ? "ONLINE" : "NO RACK",
                 online ? T.AccentPurple : T.AccentRed);
@@ -510,6 +520,10 @@ namespace VoxelEngine.Storage
             var rack    = terminal.ConnectedRack;
             var crafter = terminal.ConnectedCrafter;
             bool online = rack != null && rack.IsOnline;
+
+            // Security Block gate (14.39.0).
+            var secDenied = SecurityDeniedPanel(rack, p);
+            if (secDenied != null) return secDenied;
 
             var (hdr, _, _, _) = T.HeaderRow("🔨 Crafting Terminal",
                 online ? "ONLINE" : "NO RACK",
@@ -838,6 +852,10 @@ namespace VoxelEngine.Storage
 
             var p = T.MachinePanel();
 
+            // Security Block gate (14.39.0): NAS shelves hold disks themselves.
+            var secDenied = SecurityDeniedPanelAt(nas.transform.position, p);
+            if (secDenied != null) return secDenied;
+
             var (hdr, _, _, _) = T.HeaderRow("🗄 NAS Block",
                 nas.TotalCapacity > 0 ? "CONNECTED" : "EMPTY",
                 nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted);
@@ -876,6 +894,10 @@ namespace VoxelEngine.Storage
             rack.EnsureContainers();
             var p = T.MachinePanel();
             p.style.width = 520;
+
+            // Security Block gate (14.39.0): the rack holds the disks.
+            var secDenied = SecurityDeniedPanelAt(rack.transform.position, p);
+            if (secDenied != null) return secDenied;
 
             // Status: overloaded / online / offline.
             string status    = rack.IsPsuOverloaded ? "PSU OVERLOADED" :
@@ -1128,6 +1150,43 @@ namespace VoxelEngine.Storage
             var all = Resources.FindObjectsOfTypeAll<ItemDefinition>();
             foreach (var it in all) if (it.itemId == id) return it;
             return null;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //              SECURITY BLOCK GATE (14.39.0)
+        //  Every panel that exposes the digital storage network calls
+        //  one of these first. Returning a non-null element replaces
+        //  the whole panel with an ACCESS DENIED card. Rebuilds re-run
+        //  the check, so a live mode change locks open panels out too.
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>Gate for terminal panels: checks against the connected
+        /// rack's position. No rack = nothing to guard.</summary>
+        private static VisualElement SecurityDeniedPanel(ServerRack rack, VisualElement p)
+        {
+            if (rack == null) return null;
+            return SecurityDeniedPanelAt(rack.transform.position, p);
+        }
+
+        /// <summary>Gate for data hardware panels (rack, NAS): checks the
+        /// hardware's own position against every armed security block.</summary>
+        private static VisualElement SecurityDeniedPanelAt(Vector3 dataPosition, VisualElement p)
+        {
+            var denier = SecurityBlock.DenierAt(
+                dataPosition, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
+            if (denier == null) return null;
+
+            var (hdr, _, _, _) = T.HeaderRow("🔒 Access Denied", denier.ModeLabel(), T.AccentRed);
+            p.Add(hdr);
+            p.Add(HighTechTheme.ScanDivider(T.AccentRed));
+            p.Add(T.Body("A security block guards this storage network."));
+            p.Add(T.Spacer(8));
+            p.Add(T.Muted("Access is restricted to " +
+                (denier.Mode == StorageAccessMode.Private ? "the owner." : "the owner's team.")));
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("There is no hacking: destroy the security block or cut its power to get in."));
+            HighTechTheme.Frame(p, T.AccentRed);
+            return p;
         }
     }
 }

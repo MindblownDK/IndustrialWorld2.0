@@ -1493,14 +1493,36 @@ namespace VoxelEngine.Player
                 if (storageDrawerController != null && IsFrontHit(storageDrawerController.transform, hit)) { UI.GameUIController.Instance?.OpenMachine(storageDrawerController); return; }
                 var itemDisplay = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageItemDisplayBlock>();
                 if (itemDisplay != null) { UI.GameUIController.Instance?.OpenMachine(itemDisplay); return; }
+                // Security Block (14.39.0): its own config panel opens for
+                // everyone (read-only for non-owners) - the GUARD checks below
+                // protect the data access points, not this panel.
+                var securityBlock = hit.collider.GetComponentInParent<VoxelEngine.Storage.SecurityBlock>();
+                if (securityBlock != null) { VoxelEngine.UI.SecurityBlockHud.Open(securityBlock); return; }
+
                 var storageTerminal = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageTerminal>();
-                if (storageTerminal != null) { UI.GameUIController.Instance?.OpenMachine(storageTerminal); return; }
+                if (storageTerminal != null)
+                {
+                    if (StorageAccessDenied(storageTerminal.ConnectedRack)) return;
+                    UI.GameUIController.Instance?.OpenMachine(storageTerminal); return;
+                }
                 var serverRack = hit.collider.GetComponentInParent<VoxelEngine.Storage.ServerRack>();
-                if (serverRack != null) { UI.GameUIController.Instance?.OpenMachine(serverRack); return; }
+                if (serverRack != null)
+                {
+                    if (StorageAccessDeniedAt(serverRack.transform.position)) return;
+                    UI.GameUIController.Instance?.OpenMachine(serverRack); return;
+                }
                 var patternTerm = hit.collider.GetComponentInParent<VoxelEngine.Storage.PatternTerminal>();
-                if (patternTerm != null) { UI.GameUIController.Instance?.OpenMachine(patternTerm); return; }
+                if (patternTerm != null)
+                {
+                    if (StorageAccessDenied(patternTerm.ConnectedRack)) return;
+                    UI.GameUIController.Instance?.OpenMachine(patternTerm); return;
+                }
                 var craftTerm = hit.collider.GetComponentInParent<VoxelEngine.Storage.CraftingTerminal>();
-                if (craftTerm != null) { UI.GameUIController.Instance?.OpenMachine(craftTerm); return; }
+                if (craftTerm != null)
+                {
+                    if (StorageAccessDenied(craftTerm.ConnectedRack)) return;
+                    UI.GameUIController.Instance?.OpenMachine(craftTerm); return;
+                }
                 var exporter = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageExporter>();
                 if (exporter != null) { UI.GameUIController.Instance?.OpenMachine(exporter); return; }
                 var importer = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageImporter>();
@@ -1508,7 +1530,13 @@ namespace VoxelEngine.Player
                 var diskManip = hit.collider.GetComponentInParent<VoxelEngine.Storage.DiskManipulator>();
                 if (diskManip != null) { UI.GameUIController.Instance?.OpenMachine(diskManip); return; }
                 var nasBlock = hit.collider.GetComponentInParent<VoxelEngine.Storage.NASBlock>();
-                if (nasBlock != null) { UI.GameUIController.Instance?.OpenMachine(nasBlock); return; }
+                if (nasBlock != null)
+                {
+                    // NAS shelves hold disks themselves - guard them by their
+                    // own position, not a rack's.
+                    if (StorageAccessDeniedAt(nasBlock.transform.position)) return;
+                    UI.GameUIController.Instance?.OpenMachine(nasBlock); return;
+                }
                 var powerstation = hit.collider.GetComponentInParent<VoxelEngine.Storage.Powerstation>();
                 if (powerstation != null) { UI.GameUIController.Instance?.OpenMachine(powerstation); return; }
 
@@ -1672,6 +1700,26 @@ namespace VoxelEngine.Player
         {
             if (blockTransform == null) return false;
             return Vector3.Dot(hit.normal.normalized, blockTransform.forward) > 0.55f;
+        }
+
+        /// <summary>Security Block gate (14.39.0) for terminals: checks the rack
+        /// the terminal is connected to. No network = nothing to guard.</summary>
+        private static bool StorageAccessDenied(VoxelEngine.Storage.ServerRack rack)
+        {
+            if (rack == null) return false;
+            return StorageAccessDeniedAt(rack.transform.position);
+        }
+
+        /// <summary>Security Block gate (14.39.0) for data hardware (racks, NAS):
+        /// denied when any armed guard in range excludes the local player.
+        /// Shows the shared refusal toast on denial.</summary>
+        private static bool StorageAccessDeniedAt(Vector3 dataPosition)
+        {
+            var denier = VoxelEngine.Storage.SecurityBlock.DenierAt(
+                dataPosition, VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
+            if (denier == null) return false;
+            VoxelEngine.Storage.SecurityBlock.ShowDeniedToast(denier);
+            return true;
         }
 
         private static void OperateDrawbridge(BridgeSpan span, Sprite icon)

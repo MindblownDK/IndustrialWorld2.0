@@ -348,6 +348,7 @@ namespace VoxelEngine.UI
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
             CryobedConfigHud.Tick();
+            SecurityBlockHud.Tick();
             InteractionHud.Tick();
             WorldInspectionHud.Tick();
             GridInspectorHud.Tick();
@@ -1338,6 +1339,7 @@ namespace VoxelEngine.UI
             RailCostHud.EnsureMounted(_hudLayer);
             DeathScreenHud.EnsureMounted(_hudLayer);
             CryobedConfigHud.EnsureMounted(_hudLayer);
+            SecurityBlockHud.EnsureMounted(_hudLayer);
             BombHud.EnsureMounted(_hudLayer);
             PaintHud.EnsureMounted(_hudLayer);
             GridInspectorHud.EnsureMounted(_hudLayer);

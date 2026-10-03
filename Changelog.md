@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.38.0-dev`
+**Current Version:** `14.39.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.39.0-dev] The Server Keeps Its Secrets
+
+**Type:** MINOR - the mass-storage Security Block: a new placed block that guards the digital storage network (server racks, NAS shelves and every terminal on them) behind an owner-set access mode. Save format gains additive fields only; legacy saves load clean and nothing changes for worlds without the block.
+
+**One block guards the data, not the doorway.** The Security Block protects the DIGITAL storage network and nothing else: while powered, every server rack and NAS shelf within 10 m of it is guarded, and so is every way in - the storage, crafting and pattern terminals connected to a guarded rack refuse excluded players whether they stand next to it or dial in over a wireless transmitter 50 m away, because the check runs against the position of the rack that holds the disks, not the terminal the player is touching. The rack and NAS panels themselves are gated the same way, so nobody lifts the disks out of the slots either. Physical storage - chests, drawers, crates - is deliberately untouched: this is the server room's lock, not a base shield.
+
+**The owner picks who gets in: PRIVATE, TEAM or GLOBAL.** Right-click the block for its panel: live armed/power status, how many racks it covers, and three access modes. PRIVATE admits only the owner, TEAM (the default for every new placement) admits the owner's team through the same SameTeam answer beacons and friendly fire already resolve through, GLOBAL admits everyone. Only the owner can change the mode - everyone else sees the panel read-only. Ownership follows the bed rule from 14.38.0: the placer's stable id is stamped once at placement, travels with the block snapshot, and every restore path assigns it explicitly so no machine ever guesses an owner.
+
+**There is no hacking - raiding is physical.** An excluded player gets into a guarded network exactly two ways: destroy the Security Block, or cut its power. The guard draws a constant 40 W and stands down the moment the watts stop flowing - an unpowered guard fails open, and so does an unowned legacy one. Both raid paths are loud, visible base-assault acts with a real cost, and the block's status light tells everyone the state at a glance: red means armed, dark means the guard is down. When several guards overlap one rack, the strictest answer wins.
+
+**One seam carries the setting everywhere.** Owner and mode ride the factory-runtime capture (14.12.0), so the same three fields serve the save file, the host's periodic machine convergence and the owner's live mode change - flipping TEAM to PRIVATE mid-session locks an already-open terminal panel out on its next rebuild, with no new wire message invented. The block snapshot carries owner and mode at placement so remote machines never run the Awake guess, and the denial itself is honest UI: an orange refusal toast at the block, and a full ACCESS DENIED card in place of any terminal panel that reaches a guarded rack.
+
+**Setup step 107 authors the hardware.** Tools -> Voxel Engine -> Voxel Engine Setup gains step 107: the Security Block prefab (server-cabinet silhouette with the runtime-tinted status light), the item and its Assembler recipe (6 steel plates, 4 circuits, 8 copper wire), all non-destructive - create if missing, reconnect if existing, authored balance values survive re-runs.
+
+Shared build costs are struck from the open scope this round by standing decision: team sharing flows through the mass-storage network gated by this block, never through who pays for a wall.
 
 ### [14.38.0-dev] A Bed of One's Own
 

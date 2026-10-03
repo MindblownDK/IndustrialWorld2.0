@@ -41,6 +41,9 @@ namespace VoxelEngine.Networking
         public bool IsBanner;       // distinguishes "no banner" from "banner with default emblem"
         public string BedOwnerId;   // 14.38.0 - who placed this bed (empty = unowned legacy bed)
         public bool IsBed;          // distinguishes "no bed" from "bed with no owner"
+        public string SecurityOwnerId; // 14.39.0 - who placed this security block
+        public int SecurityMode;       // 0 Private, 1 Team, 2 Global
+        public bool IsSecurity;        // distinguishes "no guard" from "unowned guard"
     }
 
     public static class BlockSync
@@ -181,6 +184,13 @@ namespace VoxelEngine.Networking
                 snap.IsBed = true;
                 snap.BedOwnerId = bed.ownerId ?? "";
             }
+            var guard = block.GetComponentInChildren<VoxelEngine.Storage.SecurityBlock>(true);
+            if (guard != null)
+            {
+                snap.IsSecurity = true;
+                snap.SecurityOwnerId = guard.ownerId ?? "";
+                snap.SecurityMode = guard.accessMode;
+            }
             return snap;
         }
 
@@ -236,6 +246,17 @@ namespace VoxelEngine.Networking
                     // Same rule as the banner: the placer's identity travels
                     // with the block, this machine never guesses an owner.
                     if (bedRemote != null) bedRemote.SetOwner(snap.BedOwnerId ?? "");
+                }
+                if (snap.IsSecurity)
+                {
+                    var guardRemote = go.GetComponentInChildren<VoxelEngine.Storage.SecurityBlock>(true);
+                    // Placer identity + mode travel with the block (14.39.0);
+                    // the Awake guess on this machine never wins.
+                    if (guardRemote != null)
+                    {
+                        guardRemote.SetOwner(snap.SecurityOwnerId ?? "");
+                        guardRemote.SetMode(snap.SecurityMode);
+                    }
                 }
                 if (item.placedMaterial != null || item.texture != null)
                 {

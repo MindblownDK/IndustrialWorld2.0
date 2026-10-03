@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Item_SecurityBlock
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: security_block
+  displayName: Security Block
+  description: 'Guards the digital storage network while powered: every server rack
+    and NAS within 10 m refuses players the owner''s access mode excludes - PRIVATE,
+    TEAM (default) or GLOBAL. Terminals on a guarded network are locked out too,
+    wired or wireless. There is no hacking: raiders must destroy the block or cut
+    its power.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.9, g: 0.25, b: 0.18, a: 1}
+  maxStack: 900
+  massPerUnit: 22
+  category: Storage
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  placedPrefab: {fileID: 7149892788278294748, guid: 7717e5d54c8c65347a8c686c47d9df12, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 1
+  blockHealth: 400
+  miningTier: 0
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

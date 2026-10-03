@@ -968,6 +968,8 @@ namespace VoxelEngine.EditorTools
             AddSpacer(scroll, 6);
             AddWizardButton(scroll, "106. Team Banners & Crusader Shield\n(Shield item + banner blocks + recipes - Non-Destructive)",
                 () => VoxelEngine.EditorTools.BannerSetup.RunStep106(), 56);
+            AddWizardButton(scroll, "107. Mass-storage Security Block\n(Guard block + item + recipe - Non-Destructive)",
+                () => VoxelEngine.EditorTools.SecurityBlockSetup.RunStep107(), 56);
 
             AddSpacer(scroll, 20);
         }
