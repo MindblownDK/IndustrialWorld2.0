@@ -53,6 +53,11 @@ namespace VoxelEngine.Weather
 
         private void OnEnable()
         {
+            // 14.46.0: a dedicated server has no screen, no speakers and no
+            // shaders (Dedicated Server Optimizations strips them) - running
+            // this rig headless produced NullReferenceExceptions and shader
+            // warnings every frame. The component retires itself instead.
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             _wm = GetComponent<WeatherManager>();
             if (_wm != null) _wm.OnThunder += HandleThunder;
         }

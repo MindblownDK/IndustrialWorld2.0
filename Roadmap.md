@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.45.0-dev`
-**Roadmap Version:** `14.45.0-dev`
+**Current Version:** `14.46.0-dev`
+**Roadmap Version:** `14.46.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.46.0-dev - Same Sky, Same Names
+Dedicated-session shakedown fixes. Root cause of the guest-to-guest failures (no hits, no invites, unnameable team members): avatar identity SyncVars are one-shot writes and the initial delivery proved lossy, leaving bodies without ids. Fix is a server-side identity announce broadcast (at spawn, on rename, per existing avatar to every joiner) keyed by network object id, with a client-side pending cache for announces that outrun their spawn; SyncVars stay the fast path and outrank the fallback. Weather is now host-authoritative: only the host rolls states, clients adopt them (join + change + 15s keepalive) and keep blend/intensity/thunder local; debug hotkeys refuse on clients. All weather visual rigs (particles, clouds, lighting, audio, sea state) retire themselves on a dedicated server - fixes the WeatherParticles NRE and shader-stripping spam. Remaining shakedown items queued: fauna sync, server administration, server browser (favorites + LAN), player customization, menu layout + keybind search.
+
 ### 14.45.0-dev - The Server Stands Alone
 Milestone 12, part 1: the headless dedicated-server boot path. One per-process answer (NetworkSession.IsDedicated) covers detection via the Dedicated Server build target, a -server launch flag, or the editor test hook (Tools -> Voxel Engine -> Dedicated Server). server_config.json next to the executable (template written on first run) plus command-line overrides picks world, port, player cap, autosave cadence and new-world seed. The menu never renders: an existing world loads like a click, a missing one is created like NEW WORLD, and the runner strips the client-side scene (local player asleep before its first Start, cameras/audio off) then opens a server-only FishNet connection with port and cap set on the transport. The save pipeline carries the local-player block forward verbatim when no player exists (additive localPlayerAbsent flag for worlds born dedicated), so saves move freely between singleplayer, listen-server and dedicated hosting. 60 fps headless cap and a one-minute heartbeat log. Part 2 (security hardening + intent-RPC conversions) is next.
 
@@ -41,9 +44,6 @@ Auto-crafting ships through the pattern system (closing the 14.40.0 deferral). P
 ### 14.42.0-dev - The Plug Meets the Machine
 Field-test round on the storage network. The data pipe gains the energy pipe's auto-connect bridge arms: every open plug sitting against a storage device grows a visible cable arm flush into its face (mated plugs never do, ghosts stay armless, bridged pipes carry per-instance meshes and clean up after themselves). The equipment console's ORBITAL SYSTEMS card becomes COMMS AND NAVIGATION with two device slots - Orbital Map and handheld Wireless Terminal, either in either - each with its own readout (the terminal shows a live LINKED / NO SIGNAL verdict); every wireless gate honors the equipped terminal first and still accepts a carried one; the one-slot bay resizes additively on old saves. Drawer and controller FRONTS take right-click insertion even with placeable blocks held (sides/top/back stay build surfaces); drawer face icons are normalized to a fixed world size whatever their import PPU (Storage Item Display too). Setup step 110 rebuilds the Storage Drawer and Drawer Controller as framed steel furniture - gunmetal frames, recessed faces, label plates, bolts, handle, LED fill strip, and the controller's emissive core eye - non-destructively.
 14.42.1 field polish: drawer face text and icon un-mirrored (quad displays turned to actually face the viewer, self-healing on every placed drawer at refresh time), amount text shrunk to label size, drawer/item-display text swapped onto the depth-tested WorldText material so digits stop shining through terrain and blocks, and the storage terminal's stack counts moved to the icon's bottom-left corner in the inventory's exact LCD chip style.
-
-### 14.41.0-dev - Plugs, Bends and Borrowed Shelves
-The storage network reaches the physical world and the Data Pipe becomes a real cable. The new External Storage block bridges Chests and lone Storage Drawers into the network (wired or touching), with a three-way access mode (insert+extract / extract only / insert only) and a fill priority, drawing 6 W on the system bill; Drawer Controllers keep joining natively. The Data Pipe gains the energy pipe's nine-fitting radial wheel (shapes only - importer, exporter and the bridge stay separate snap-on blocks) with its own selection memory, V+scroll 1-5 m straights, plug-to-plug endpoint snapping and per-endpoint device probing, restyled as a braided data trunk with phosphor pulse rings and RJ45-style plug heads; legacy center-adjacency still links old-save pipes and shape/length ride the existing cable save fields and block snapshot. Importer, Exporter and the bridge get network-appliance bodies whose port sockets meet the pipe's plug heads. Fixes: RAM rail no longer overflows the controller panel, NAS fill bars update live, terminal count chips get an LCD backing, shift-click stores to the network while a terminal is open, STORAGE LINK button made discoverable. Setup step 109 authors it all non-destructively.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -81,6 +81,8 @@ The storage network reaches the physical world and the Data Pipe becomes a real 
 - **Armor stays equipped through death** (decided 14.36.0): the loot bag carries the 40 carried slots; worn equipment is not part of the drop.
 - **Refund on a refused grid placement** (accepted 14.29.0): two players reaching for the same cell in the same instant - the loser's locally paid cost is not refunded; the echo removes the block.
 - **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
+- **Fauna/animal sync** (surfaced 14.46.0): creatures simulate per-machine and are not replicated between players; needs its own round (spawn/population authority + pose sync).
+- **Weather sampled at the host's frame** (accepted 14.46.0): the one true sky is rolled where the host stands (or at the world frame on a dedicated server); per-region weather is future work.
 - **Dedicated headless server** (milestone 12, part 1 shipped 14.45.0): boot path, config and save carry-forward are live; remaining are the security hardening pass and converting client requests to intents, plus hardening every system that still assumes a local player at runtime (surfaced by dedicated-session testing).
 - **Security hardening** (deferred 14.6.0): code-lock codes travel and rest in plain text; move validation server-side and audit every broadcast for data a client should not see.
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.

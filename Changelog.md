@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.45.0-dev`
+**Current Version:** `14.46.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.46.0-dev] Same Sky, Same Names
+
+**Type:** MINOR - the first dedicated-session shakedown, and the fixes it demanded. Players on a dedicated server could see each other's bodies but not their names - and that one symptom explained everything else reported: hits that never landed, team invites with nobody to invite, team members that could not be named. One root cause, one guarantee. Plus the feature the shakedown surfaced: weather was never synced on ANY server, so every player lived under a private sky. Now the host rolls the weather and everyone stands in the same rain.
+
+**The identity guarantee.** An avatar's pose replicates continuously, so a missed packet heals itself - but its identity (player id + name) was written exactly once, right after spawn, and when that single delivery went missing between guests the avatar stayed a nameless body forever. Nameless meant unhittable (the weapon sweep skips avatars without an id), unregistered (no presence, so no invite candidates) and unnameable in team rosters. The server now ANNOUNCES every avatar's identity over its own broadcast - at spawn to everyone, on rename to everyone, and per existing avatar to every joining client - keyed by the avatar's network object id. Announces that race ahead of their spawn wait in a cache and apply the moment the avatar exists. SyncVars remain the fast path and always outrank the fallback; the announce is the delivery that cannot be missed. PvP, invites and member lists need no changes of their own - they all keyed off the identity that now always arrives.
+
+**One sky per world.** Weather state was rolled independently by every machine since the day it shipped - storms on the host under clear skies on the guest, on listen servers and dedicated alike. The host's WeatherManager is now the only one that rolls: clients receive current and target state on join, on every change, and as a 15-second keepalive, then run the blend, intensity and surface-proximity math locally exactly as before. Thunder still schedules client-side - thunder is an effect of the state, not a state decision - and the weather debug hotkeys refuse to run on a client, where forcing the sky would only desync it until the next keepalive. The wire cost is two bytes when the sky changes and two bytes per 15 seconds when it does not.
+
+**A quiet server console.** The dedicated build strips shaders (Dedicated Server Optimizations), which the weather rigs discovered the hard way: a NullReferenceException from WeatherParticles every frame and a shader warning chorus. Every weather visual - particles, clouds, lighting, audio, sea state - now retires itself on a dedicated server before touching a single material. The WeatherManager itself keeps running headless: it is the world's weather authority now, and the server is exactly where it should live.
+
+**Still open from the shakedown (next rounds, in order):** animal/fauna sync between players; server administration (owner, kick/ban, whitelist, password, world settings editable in config and in-game); server browser with favorites and LAN discovery; player customization tab; menu layout and keybind search.
 
 ### [14.45.0-dev] The Server Stands Alone
 

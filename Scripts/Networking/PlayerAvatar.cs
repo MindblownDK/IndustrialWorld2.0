@@ -109,8 +109,46 @@ namespace VoxelEngine.Networking
             return _locomotion;
         }
 
-        public string PlayerId => _playerId.Value;
-        public string PlayerName => _playerName.Value;
+        public string PlayerId => !string.IsNullOrEmpty(_playerId.Value) ? _playerId.Value : _announcedId;
+        public string PlayerName => !string.IsNullOrEmpty(_playerName.Value) ? _playerName.Value : _announcedName;
+
+        // ── identity announce fallback (14.46.0) ─────────────────────────
+        //
+        // The identity SyncVars are written ONCE, right after Spawn. Pose
+        // SyncVars are written continuously, so a missed initial delivery
+        // heals itself - identity never did, which is how a dedicated
+        // session produced bodies without names: guests saw each other walk
+        // but PlayerId stayed empty, so hits were skipped, presences never
+        // registered and team members could not be named. The server now
+        // ANNOUNCES every avatar's identity over a broadcast (at spawn, on
+        // rename, and per-avatar to every joining client), keyed by
+        // NetworkObject id. SyncVars remain the fast path; the announce is
+        // the guarantee.
+
+        private string _announcedId;
+        private string _announcedName;
+
+        /// <summary>Announces that raced ahead of their avatar's spawn wait
+        /// here, keyed by object id, and are consumed in OnStartClient.</summary>
+        private static readonly Dictionary<int, (string id, string name)> _pendingAnnounce = new();
+
+        public static void CacheAnnounce(int objectId, string playerId, string playerName)
+        {
+            if (_pendingAnnounce.Count > 64) _pendingAnnounce.Clear();   // stale-proofing
+            _pendingAnnounce[objectId] = (playerId, playerName);
+        }
+
+        /// <summary>Client-side: apply an announced identity. Idempotent and
+        /// SyncVar-friendly - delivered SyncVars always win the properties.</summary>
+        public void ApplyAnnouncedIdentity(string playerId, string playerName)
+        {
+            if (string.IsNullOrEmpty(playerId)) return;
+            _announcedId = playerId;
+            if (!string.IsNullOrEmpty(playerName)) _announcedName = playerName;
+            TryRegister();
+            NetworkSession.UpdateDisplayName(PlayerId, PlayerName);
+            ApplyNameplate();
+        }
 
         // ── live avatar lookup (14.20.0) ──────────────────────────────────
         // Proximity voice needs "where does player X stand" every frame. A
@@ -220,6 +258,13 @@ namespace VoxelEngine.Networking
         public override void OnStartClient()
         {
             base.OnStartClient();
+            // An identity announce can land before the spawn it describes -
+            // consume the cached one now that the object id resolves.
+            if (_pendingAnnounce.TryGetValue(ObjectId, out var announced))
+            {
+                _pendingAnnounce.Remove(ObjectId);
+                ApplyAnnouncedIdentity(announced.id, announced.name);
+            }
             TryRegister();      // late joiners get identity in the spawn payload
             ApplyNameplate();
 
@@ -435,12 +480,12 @@ namespace VoxelEngine.Networking
         private void TryRegister()
         {
             if (_registeredId != null) return;
-            string id = _playerId.Value;
-            if (string.IsNullOrEmpty(id)) return;   // identity not delivered yet - OnIdChanged retries
+            string id = PlayerId;   // SyncVar when delivered, announce fallback otherwise
+            if (string.IsNullOrEmpty(id)) return;   // identity not delivered yet - OnIdChanged/announce retries
             _registeredId = id;
             _byPlayerId[id] = this;
-            NetworkSession.RegisterPlayer(id, _playerName.Value);
-            NetworkSession.UpdateDisplayName(id, _playerName.Value);
+            NetworkSession.RegisterPlayer(id, PlayerName);
+            NetworkSession.UpdateDisplayName(id, PlayerName);
         }
 
         private void Unregister()
@@ -466,7 +511,7 @@ namespace VoxelEngine.Networking
         private void ApplyNameplate()
         {
             if (nameplate == null) return;
-            string name = _playerName.Value;
+            string name = PlayerName;   // SyncVar or announce fallback
             nameplate.text = string.IsNullOrEmpty(name) ? "..." : name;
         }
 

@@ -50,6 +50,31 @@ namespace VoxelEngine.Weather
         public WeatherState CurrentState { get; private set; } = WeatherState.Clear;
         public WeatherState TargetState  { get; private set; } = WeatherState.Clear;
 
+        /// <summary>14.46.0 - weather is host-authoritative. On a client the
+        /// local RNG never rolls: states arrive from the host and only the
+        /// blend/intensity/proximity math runs here. Offline and hosting
+        /// machines roll exactly as before.</summary>
+        public bool RemoteDriven =>
+            VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client;
+
+        /// <summary>Client-side: adopt the host's sky. Values outside the
+        /// enum are ignored (a newer host than this build knows states we
+        /// cannot render). A fresh target restarts the blend; a repeat
+        /// keepalive changes nothing.</summary>
+        public void ApplyRemote(byte current, byte target)
+        {
+            if (!RemoteDriven) return;
+            if (!System.Enum.IsDefined(typeof(WeatherState), (int)current) ||
+                !System.Enum.IsDefined(typeof(WeatherState), (int)target)) return;
+            var newCurrent = (WeatherState)current;
+            var newTarget = (WeatherState)target;
+            if (newCurrent == CurrentState && newTarget == TargetState) return;
+            CurrentState = newCurrent;
+            TargetState = newTarget;
+            TransitionProgress = newCurrent == newTarget ? 1f : 0f;
+            Debug.Log($"[Weather] Host sky adopted: {CurrentState} -> {TargetState}.");
+        }
+
         /// <summary>0 = fully previous state, 1 = fully target state.</summary>
         public float TransitionProgress { get; private set; } = 1f;
 
@@ -283,22 +308,28 @@ namespace VoxelEngine.Weather
             UpdateWindMultiplier();
 
             // State timer — pick next weather (only when weather is actually active and the
-            // sky is not being held by hand for testing).
+            // sky is not being held by hand for testing). 14.46.0: on a
+            // CLIENT the roll never runs - states come from the host - but
+            // thunder keeps scheduling locally, because thunder is an FX of
+            // the state, not a state decision.
             if (IsWeatherActive && !_manualHold)
             {
-                _stateTimer += Time.deltaTime;
-                if (_stateTimer >= _nextStateChange)
+                if (!RemoteDriven)
                 {
-                    _stateTimer = 0f;
-                    _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
-                    PickNextState();
+                    _stateTimer += Time.deltaTime;
+                    if (_stateTimer >= _nextStateChange)
+                    {
+                        _stateTimer = 0f;
+                        _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
+                        PickNextState();
+                    }
                 }
 
                 ScheduleThunder();
             }
             else if (!IsWeatherActive && TargetState != WeatherState.Clear)
             {
-                ForceWeather(WeatherState.Clear);
+                if (!RemoteDriven) ForceWeather(WeatherState.Clear);
             }
             else if (IsWeatherActive && _manualHold)
             {
@@ -312,6 +343,9 @@ namespace VoxelEngine.Weather
         /// </summary>
         private void HandleDebugHotkeys()
         {
+            // 14.46.0: a client's sky belongs to the host - forcing it
+            // locally would just desync until the next keepalive.
+            if (RemoteDriven) return;
             var kb = Keyboard.current;
             if (kb == null) return;
             bool chord = (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed)

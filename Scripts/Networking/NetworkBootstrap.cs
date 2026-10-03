@@ -69,6 +69,29 @@ namespace VoxelEngine.Networking
         public ushort Sequence;
     }
 
+    /// <summary>Server -> client (14.46.0): one avatar's identity, keyed by
+    /// its NetworkObject id. The identity SyncVars are written once right
+    /// after Spawn and that single delivery proved lossy between guests -
+    /// bodies without names on dedicated servers. Sent at spawn, on rename,
+    /// and per existing avatar to every joining client; the client applies
+    /// it as a fallback the SyncVars always outrank.</summary>
+    public struct PlayerIdentityAnnounceBroadcast : IBroadcast
+    {
+        public int ObjectId;
+        public string PlayerId;
+        public string PlayerName;
+    }
+
+    /// <summary>Server -> client (14.46.0): the sky. Weather was never
+    /// synced - every machine rolled its own RNG. The host's WeatherManager
+    /// is now the only one that rolls; clients apply these states and run
+    /// the blend/intensity math locally.</summary>
+    public struct WeatherStateBroadcast : IBroadcast
+    {
+        public byte Current;
+        public byte Target;
+    }
+
     /// <summary>Server -> client on join: which world the host is running,
     /// so the client can warn when terrain will not line up.</summary>
     public struct WorldInfoBroadcast : IBroadcast
@@ -672,6 +695,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
+            _networkManager.ClientManager.RegisterBroadcast<PlayerIdentityAnnounceBroadcast>(OnClientIdentityAnnounce);
+            _networkManager.ClientManager.RegisterBroadcast<WeatherStateBroadcast>(OnClientWeather);
             _networkManager.ClientManager.RegisterBroadcast<ChatRelayBroadcast>(OnClientChat);
             _networkManager.ClientManager.RegisterBroadcast<VoiceRelayBroadcast>(OnClientVoice);
             _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
@@ -797,6 +822,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
+            _networkManager.ClientManager.UnregisterBroadcast<PlayerIdentityAnnounceBroadcast>(OnClientIdentityAnnounce);
+            _networkManager.ClientManager.UnregisterBroadcast<WeatherStateBroadcast>(OnClientWeather);
             _networkManager.ClientManager.UnregisterBroadcast<ChatRelayBroadcast>(OnClientChat);
             _networkManager.ClientManager.UnregisterBroadcast<VoiceRelayBroadcast>(OnClientVoice);
             _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
@@ -913,6 +940,8 @@ namespace VoxelEngine.Networking
 
         private void LateUpdate()
         {
+            PollWeatherBroadcast();   // server-side no-op costs one bool test
+
             // Guest -> host state upload. Offline and hosting both skip on the
             // first condition, so this costs one bool test a frame in the cases
             // that are not multiplayer at all.
@@ -1068,7 +1097,11 @@ namespace VoxelEngine.Networking
             if (_avatarsByConnection.TryGetValue(connection.ClientId, out var existing))
             {
                 var existingAvatar = existing != null ? existing.GetComponent<PlayerAvatar>() : null;
-                if (existingAvatar != null) existingAvatar.ServerSetName(msg.PlayerName);
+                if (existingAvatar != null)
+                {
+                    existingAvatar.ServerSetName(msg.PlayerName);
+                    AnnounceIdentity(existing, null);   // rename: re-announce to everyone
+                }
                 return;
             }
 
@@ -1108,6 +1141,17 @@ namespace VoxelEngine.Networking
             // the 14.1.0 missing-names bug.
             var avatar = nob.GetComponent<PlayerAvatar>();
             if (avatar != null) avatar.SetIdentity(playerId, msg.PlayerName);
+
+            // 14.46.0 - the identity guarantee. The SyncVar write above is
+            // the fast path; these announces are the delivery that cannot be
+            // missed: the newcomer's identity to everyone, and every avatar
+            // already standing here to the newcomer.
+            AnnounceIdentity(nob, null);
+            foreach (var pair in _avatarsByConnection)
+            {
+                if (pair.Key == connection.ClientId || pair.Value == null) continue;
+                AnnounceIdentity(pair.Value, connection);
+            }
 
             // Tell the newcomer which world this server runs, so their client
             // can warn when terrain will not line up (different seed).
@@ -2100,6 +2144,96 @@ namespace VoxelEngine.Networking
             if (!_serverStarted || conn.IsLocalClient) return;
             if (!msg.SeedMatches) return;
             StartSnapshotStream(conn);
+
+            // 14.46.0 - the sky this world is under right now. Sent once the
+            // world is agreed on; the keepalive in LateUpdate corrects any
+            // drift after that.
+            SendWeatherTo(conn);
+        }
+
+        // ── identity announce + weather sync (14.46.0) ────────────────────
+
+        /// <summary>Server: announce one avatar's identity - to everyone
+        /// when target is null, else to that connection alone.</summary>
+        private void AnnounceIdentity(NetworkObject nob, NetworkConnection target)
+        {
+            if (!_serverStarted || nob == null) return;
+            var avatar = nob.GetComponent<PlayerAvatar>();
+            if (avatar == null || string.IsNullOrEmpty(avatar.PlayerId)) return;
+            var announce = new PlayerIdentityAnnounceBroadcast
+            {
+                ObjectId = nob.ObjectId,
+                PlayerId = avatar.PlayerId,
+                PlayerName = avatar.PlayerName
+            };
+            if (target != null) _networkManager.ServerManager.Broadcast(target, announce, true);
+            else _networkManager.ServerManager.Broadcast(announce, true);
+        }
+
+        /// <summary>Client: an identity announce. Applied to the avatar when
+        /// its spawn already arrived, cached for OnStartClient otherwise.</summary>
+        private void OnClientIdentityAnnounce(PlayerIdentityAnnounceBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the server authored this truth
+            if (_networkManager.ClientManager.Objects.Spawned.TryGetValue(msg.ObjectId, out var nob)
+                && nob != null)
+            {
+                var avatar = nob.GetComponent<PlayerAvatar>();
+                if (avatar != null)
+                {
+                    avatar.ApplyAnnouncedIdentity(msg.PlayerId, msg.PlayerName);
+                    return;
+                }
+            }
+            PlayerAvatar.CacheAnnounce(msg.ObjectId, msg.PlayerId, msg.PlayerName);
+        }
+
+        private byte _lastWeatherCurrent = 255;
+        private byte _lastWeatherTarget = 255;
+        private float _nextWeatherKeepaliveAt;
+        private const float WeatherKeepaliveSeconds = 15f;
+
+        /// <summary>Server: current weather states to one connection.</summary>
+        private void SendWeatherTo(NetworkConnection conn)
+        {
+            var wm = VoxelEngine.Weather.WeatherManager.Instance;
+            if (wm == null || conn == null) return;
+            _networkManager.ServerManager.Broadcast(conn, new WeatherStateBroadcast
+            {
+                Current = (byte)wm.CurrentState,
+                Target = (byte)wm.TargetState
+            }, true);
+        }
+
+        /// <summary>Server: poll the weather each frame; broadcast on change
+        /// plus a slow keepalive so a missed packet can only mislead a client
+        /// for seconds. Costs two byte compares when nothing changed.</summary>
+        private void PollWeatherBroadcast()
+        {
+            if (!_serverStarted) return;
+            var wm = VoxelEngine.Weather.WeatherManager.Instance;
+            if (wm == null) return;
+            byte current = (byte)wm.CurrentState;
+            byte target = (byte)wm.TargetState;
+            bool changed = current != _lastWeatherCurrent || target != _lastWeatherTarget;
+            if (!changed && Time.unscaledTime < _nextWeatherKeepaliveAt) return;
+            _lastWeatherCurrent = current;
+            _lastWeatherTarget = target;
+            _nextWeatherKeepaliveAt = Time.unscaledTime + WeatherKeepaliveSeconds;
+            _networkManager.ServerManager.Broadcast(new WeatherStateBroadcast
+            {
+                Current = current,
+                Target = target
+            }, true);
+        }
+
+        /// <summary>Client: adopt the host's sky. The local WeatherManager
+        /// keeps doing the blend/intensity/proximity math - only the state
+        /// decisions come from the host.</summary>
+        private void OnClientWeather(WeatherStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;
+            VoxelEngine.Weather.WeatherManager.Instance?.ApplyRemote(msg.Current, msg.Target);
         }
 
         // ── staged join catch-up (14.21.1) ──────────────────────────────
