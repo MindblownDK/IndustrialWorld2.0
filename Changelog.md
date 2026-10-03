@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.42.0-dev`
+**Current Version:** `14.42.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.42.1-dev] Read It Off the Face
+
+**Type:** PATCH - display polish on the 14.42.0 drawer round: the drawer's amount text and item icon no longer render mirrored or oversized, the text stops shining through terrain and blocks, and the storage terminal's stack counts move to the bottom-left corner of the icon with the same chip styling the inventory slots wear.
+
+**The drawer face reads like a label, not a reflection.** TextMesh glyphs and sprite quads only read correctly from one side, and the drawer face points the other way - so EMPTY came out mirrored and the amount digits with it. Both the icon and the text now make the half turn, and the amount text drops to label size instead of covering half the furniture. The fix runs in the refresh path, so every already-placed drawer self-heals the moment it redraws - re-running setup is not required (step 110 authors the corrected values for fresh prefabs anyway). The Storage Item Display gets the identical treatment.
+
+**No more x-ray digits.** The stock font shader is a screen-GUI shader that draws on top of everything (ZTest Always), which is why drawer amounts floated through hills and walls. Drawer and Item Display text now rides the depth-tested WorldText material from 14.37.2 - the same fix banners, grid screens and rail displays already use - so the label behaves like paint on the metal: visible when the face is visible, hidden when the drawer is.
+
+**Terminal counts sit where every other container puts them.** The stack count chip in the fullscreen storage terminal moves from the icon's top edge to the bottom-left corner, restyled to the exact LCD chip the inventory slots use - phosphor digits on dark glass, same size, same radius - so scanning the terminal feels like scanning any other inventory in the game.
 
 ### [14.42.0-dev] The Plug Meets the Machine
 

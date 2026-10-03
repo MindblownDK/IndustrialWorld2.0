@@ -282,20 +282,20 @@ namespace VoxelEngine.Storage
                         cell.Add(box);
                     }
 
-                    // Count ON TOP of the icon - same spot as the inventory slots.
-                    // 14.41.0: readable over ANY icon - bigger type on a dark
-                    // chip instead of bare phosphor digits bleeding into bright
-                    // item art.
+                    // Count in the BOTTOM-LEFT corner of the icon (14.42.1,
+                    // user request) with the exact same chip styling the
+                    // inventory's LCD slots use, so the terminal reads like
+                    // every other container in the game.
                     var countLbl = new Label(FormatCount(entry.count));
                     countLbl.style.position = Position.Absolute;
-                    countLbl.style.top = 1; countLbl.style.right = 1;
-                    countLbl.style.fontSize = 11;
+                    countLbl.style.bottom = 2; countLbl.style.left = 4;
+                    countLbl.style.fontSize = 10;
                     countLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    countLbl.style.color = new StyleColor(new Color(0.92f, 1f, 0.90f, 1f));
-                    countLbl.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.78f));
+                    countLbl.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                    countLbl.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
                     countLbl.style.paddingLeft = 3; countLbl.style.paddingRight = 3;
                     countLbl.style.paddingTop = 0; countLbl.style.paddingBottom = 0;
-                    T.Radius(countLbl, 3f);
+                    T.Radius(countLbl, 1f);
                     countLbl.pickingMode = PickingMode.Ignore;
                     cell.Add(countLbl);
 

@@ -314,6 +314,7 @@ namespace VoxelEngine.Storage
 
         public void RefreshDisplay()
         {
+            NormalizeFaceDisplay(itemIconRenderer, amountText, 0.045f);
             if (itemIconRenderer != null)
             {
                 itemIconRenderer.sprite = storedItem != null ? storedItem.icon : null;
@@ -344,6 +345,25 @@ namespace VoxelEngine.Storage
             float maxDim = Mathf.Max(b.x, b.y);
             if (maxDim <= 0.0001f) return;
             renderer.transform.localScale = Vector3.one * (worldSize / maxDim);
+        }
+
+        /// <summary>Face-display hygiene (14.42.1), shared with the Item Display.
+        /// TextMesh glyph quads and sprite quads read correctly only from their
+        /// -Z side, and the face they sit on points +Z - without the half turn
+        /// every digit renders MIRRORED. The stock font shader is also a
+        /// screen-GUI shader (ZTest Always), so the amount text shone through
+        /// terrain and blocks; the depth-tested WorldText material stops that.
+        /// Runs from the refresh path so every already-placed block self-heals.</summary>
+        public static void NormalizeFaceDisplay(SpriteRenderer icon, TextMesh text, float characterSize)
+        {
+            if (icon != null)
+                icon.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            if (text != null)
+            {
+                text.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                text.characterSize = characterSize;
+                VoxelEngine.Rendering.WorldTextMaterial.Apply(text);
+            }
         }
 
         public static string FormatAmount(int count)

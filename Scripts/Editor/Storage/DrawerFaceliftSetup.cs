@@ -126,19 +126,24 @@ namespace VoxelEngine.EditorTools
                 Box(vis, "HandleStandR", new Vector3(0.17f, -0.395f, 0.525f), new Vector3(0.05f, 0.05f, 0.045f), frameMat);
                 Box(vis, "HandleBar", new Vector3(0f, -0.395f, 0.548f), new Vector3(0.44f, 0.055f, 0.045f), accentMat);
 
-                // Item icon + amount text, re-pointed on the component.
+                // Item icon + amount text, re-pointed on the component. Both are
+                // turned half around: quad text/sprites read correctly only from
+                // their -Z side and the face points +Z (the runtime normalizes
+                // this too, so already-placed drawers self-heal).
                 var iconGo = new GameObject("Generated_ItemIcon");
                 iconGo.transform.SetParent(root.transform, false);
                 iconGo.transform.localPosition = new Vector3(0f, 0.14f, 0.532f);
+                iconGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
                 drawer.itemIconRenderer = iconGo.AddComponent<SpriteRenderer>();
 
                 var txtGo = new GameObject("Generated_AmountText");
                 txtGo.transform.SetParent(root.transform, false);
                 txtGo.transform.localPosition = new Vector3(0f, -0.145f, 0.535f);
+                txtGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
                 var txt = txtGo.AddComponent<TextMesh>();
                 txt.anchor = TextAnchor.MiddleCenter;
                 txt.alignment = TextAlignment.Center;
-                txt.characterSize = 0.09f;
+                txt.characterSize = 0.045f;
                 txt.fontSize = 48;
                 txt.text = "EMPTY";
                 drawer.amountText = txt;

@@ -64,6 +64,7 @@ namespace VoxelEngine.Storage
 
         public void RefreshVisuals()
         {
+            StorageDrawer.NormalizeFaceDisplay(itemIconRenderer, amountText, 0.045f);
             if (itemIconRenderer != null)
             {
                 itemIconRenderer.sprite = filterItem != null ? filterItem.icon : null;
