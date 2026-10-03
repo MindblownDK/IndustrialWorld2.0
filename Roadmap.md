@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.36.0-dev`
-**Roadmap Version:** `14.36.0-dev`
+**Current Version:** `14.37.0-dev`
+**Roadmap Version:** `14.37.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.37.0-dev - Colours Worth Dying Under
+One banner per team: 256x384 cloth plus three text lines, edited only in PAUSE > TEAMS by the owner and leaders (gallery from a Banners folder, in-game painting board gated by a world rule, default crusader emblem in code), host-authoritative with sidecar persistence (banners.json + per-team png) and join catch-up. Displayed by the new banner pole (placed block), ship banner (grid block), a TEAM BANNER grid-screen mode, and the new Crusader Shield - hold RMB to block 65% of damage for durability, raised pose replicated via a second motion flag. Setup step 106 authors the shield, both banner blocks and recipes.
+
 ### 14.36.0-dev - What the Fallen Leave Behind
 Death is animated and death has stakes: the avatar plays the sword-and-shield death clip when the replicated health mirror hits zero (one-shot, frozen on the final frame until respawn), and the whole 40-slot inventory drops into a loot bag at the death position. The bag mirrors the inventory's slot layout, so TAKE ALL restores every stack to the exact slot it was lost from; anyone may loot a found bag, but only the owner sees the local-only recovery beacon (1 km). Bags never expire, persist with the world save (additive list), and ride the DropSync wire pattern with a join snapshot.
 
@@ -43,9 +46,6 @@ Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by
 ### 14.33.0-dev - A Banner To Rally Under
 Milestone 11 CLOSED. Teams: found and name one, invite, accept or decline (invites lapse after 90 s), leave, leader-only remove, leadership passes to the earliest-joined member when a leader goes, an emptied team dissolves; one team per player, joined only by own confirmation. The host owns the roster - clients send identity-free intents the server stamps and validates - and every accepted change rebroadcasts the whole roster, with a late joiner caught up in one message. Membership is keyed by stable player id (survives rename, reconnect, restart) and persists as a teams.json sidecar beside the world save; the host-editable limits (max members per team, max teams per session) persist with it and gate new intents only. Beacon TEAM share is live: the visibility rule resolves SameTeam through the registry, so markers, map contacts and warp rendezvous open to teammates at once.
 The TEAMS page in the pause menu shows it all with live refresh and roster-diff toasts; a guest that drops the session drops its roster mirror.
-
-### 14.32.1-dev - A Tower Pays Its Way
-The Stationary Radar Beacon was never wired into the power system at all: the switch was a bare toggle, the panel printed its 10 W unconditionally and BROADCASTING appeared whenever the switch was up. The regenerated prefab now carries a PowerConsumer (10 W, 4 m auto-connect), demand follows the switch, broadcasting follows the network's verdict, and an unpowered or switched-off tower goes dark on every screen at once - beam, HUD marker, orbital contact, warp rendezvous. The panel reports BROADCASTING / NO POWER / OFF honestly and names what to connect when the grid will not pay.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

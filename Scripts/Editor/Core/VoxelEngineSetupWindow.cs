@@ -965,6 +965,10 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "105. Wire Multiplayer Bootstrap\n(Avatar prefab + NetworkManager scene object - Non-Destructive)",
                 () => VoxelEngine.EditorTools.NetworkSetup.RunStep105(), 56);
 
+            AddSpacer(scroll, 6);
+            AddWizardButton(scroll, "106. Team Banners & Crusader Shield\n(Shield item + banner blocks + recipes - Non-Destructive)",
+                () => VoxelEngine.EditorTools.BannerSetup.RunStep106(), 56);
+
             AddSpacer(scroll, 20);
         }
 

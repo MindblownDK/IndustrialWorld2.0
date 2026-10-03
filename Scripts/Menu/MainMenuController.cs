@@ -46,6 +46,7 @@ namespace VoxelEngine.Menu
         private bool   _newShowDropVoidWarning = true;
         private bool   _newAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
         private bool   _newFriendlyFire = WorldSession.DefaultFriendlyFire;
+        private bool   _newAllowBannerPainting = true;
         private int    _newOrbitPace = WorldSession.OrbitPaceRealistic;
 
         // Edit-world form values. Only non-generation settings are editable here.
@@ -57,6 +58,7 @@ namespace VoxelEngine.Menu
         private bool   _editShowDropVoidWarning = true;
         private bool   _editAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
         private bool   _editFriendlyFire = WorldSession.DefaultFriendlyFire;
+        private bool   _editAllowBannerPainting = true;
         private string _menuStatus = string.Empty;
 
         // Multiplayer page: remembered between sessions so a friend's address
@@ -612,6 +614,16 @@ namespace VoxelEngine.Menu
             var friendlyFireHelp = T.Muted("A world rule, the same for every team - never a per-team choice.");
             friendlyFireHelp.style.marginTop = 2;
             scroll.Add(friendlyFireHelp);
+
+            var bannerPaintToggle = new Toggle("Banner Painting (teams may hand-paint their banner cloth)");
+            bannerPaintToggle.SetValueWithoutNotify(_newAllowBannerPainting);
+            bannerPaintToggle.style.marginTop = 8;
+            bannerPaintToggle.style.color = new StyleColor(T.TextSecondary);
+            bannerPaintToggle.RegisterValueChangedCallback(e => _newAllowBannerPainting = e.newValue);
+            scroll.Add(bannerPaintToggle);
+            var bannerPaintHelp = T.Muted("Off = teams still pick gallery images, texts and the default emblem.");
+            bannerPaintHelp.style.marginTop = 2;
+            scroll.Add(bannerPaintHelp);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -713,6 +725,16 @@ namespace VoxelEngine.Menu
             var friendlyFireHelpEdit = T.Muted("A world rule, the same for every team - never a per-team choice.");
             friendlyFireHelpEdit.style.marginTop = 2;
             panel.Add(friendlyFireHelpEdit);
+
+            var bannerPaintToggleEdit = new Toggle("Banner Painting (teams may hand-paint their banner cloth)");
+            bannerPaintToggleEdit.SetValueWithoutNotify(_editAllowBannerPainting);
+            bannerPaintToggleEdit.style.marginTop = 8;
+            bannerPaintToggleEdit.style.color = new StyleColor(T.TextSecondary);
+            bannerPaintToggleEdit.RegisterValueChangedCallback(e => _editAllowBannerPainting = e.newValue);
+            panel.Add(bannerPaintToggleEdit);
+            var bannerPaintHelpEdit = T.Muted("Off = teams still pick gallery images, texts and the default emblem.");
+            bannerPaintHelpEdit.style.marginTop = 2;
+            panel.Add(bannerPaintHelpEdit);
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -859,6 +881,7 @@ namespace VoxelEngine.Menu
             _editShowDropVoidWarning = world.showDropVoidWarning;
             _editAllowRuinLootRespawn = world.allowRuinLootRespawn;
             _editFriendlyFire = world.friendlyFire;
+            _editAllowBannerPainting = world.allowBannerPainting;
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -881,7 +904,7 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire, _editAllowBannerPainting))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
@@ -954,6 +977,7 @@ namespace VoxelEngine.Menu
             _session.showDropVoidWarning = _newShowDropVoidWarning;
             _session.allowRuinLootRespawn = _newAllowRuinLootRespawn;
             _session.friendlyFire = _newFriendlyFire;
+            _session.allowBannerPainting = _newAllowBannerPainting;
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

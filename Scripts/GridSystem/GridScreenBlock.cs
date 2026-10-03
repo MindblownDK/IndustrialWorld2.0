@@ -12,7 +12,9 @@ namespace VoxelEngine.GridSystem
 {
     public enum ScreenDataMode
     {
-        Summary, Power, Inventory, Speed, System, Bars, Custom, Camera
+        // TeamBanner (14.37.0) sits at the end: the mode persists as its
+        // enum NAME, so appending is save-compatible either way.
+        Summary, Power, Inventory, Speed, System, Bars, Custom, Camera, TeamBanner
     }
 
     public enum ScreenSize
@@ -27,6 +29,10 @@ namespace VoxelEngine.GridSystem
         public ScreenDataMode dataMode = ScreenDataMode.Summary;
         public Color textColor = new Color(0.18f, 0.72f, 0.88f);
         public string customText = "CUSTOM DISPLAY";
+        /// <summary>TeamBanner mode (14.37.0): whose banner the screen shows.
+        /// Set when the mode is chosen in the config panel - the banner itself
+        /// is edited in PAUSE > TEAMS, never here. "" = default emblem.</summary>
+        public string bannerTeamId = "";
         [Header("Appearance")]
         [Tooltip("Border style: 0=None, 1=Thin, 2=Thick, 3=Glow")]
         public int borderStyle = 1;
@@ -93,7 +99,7 @@ namespace VoxelEngine.GridSystem
         }
 
         public bool IsPowered => Enabled && Grid != null && Grid.HasPower;
-        public bool HasAnySource => ResolveAllProviders().Count > 0 || dataMode == ScreenDataMode.Custom;
+        public bool HasAnySource => ResolveAllProviders().Count > 0 || dataMode == ScreenDataMode.Custom || dataMode == ScreenDataMode.TeamBanner;
         public int SourceCount
         {
             get
@@ -116,6 +122,7 @@ namespace VoxelEngine.GridSystem
                 if (!IsPowered) return "OFFLINE";
                 if (dataMode == ScreenDataMode.Custom) return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
                 if (dataMode == ScreenDataMode.Camera) return CameraStatusDisplay();
+                if (dataMode == ScreenDataMode.TeamBanner) return BannerTextDisplay();
                 if (dataMode == ScreenDataMode.Power) return PowerDisplay();
 
                 var sources = ResolveAllProviders();
@@ -317,9 +324,14 @@ namespace VoxelEngine.GridSystem
 
             IGridCameraFeedProvider cameraProvider = dataMode == ScreenDataMode.Camera ? ResolveCameraProvider() : null;
             bool showCameraFeed = IsPowered && cameraProvider != null && cameraProvider.IsOnline;
-            ApplyCameraFeed(cameraProvider, showCameraFeed);
+            // Team banner (14.37.0): the cloth fills the surface through the
+            // same quad the camera feed uses; the three banner text lines ride
+            // the main TextMesh on top, dark so they read against the cloth.
+            bool showBanner = !showCameraFeed && dataMode == ScreenDataMode.TeamBanner && IsPowered;
+            if (showBanner) ApplyBannerTexture();
+            else ApplyCameraFeed(cameraProvider, showCameraFeed);
             SetMainTextVisible(!showCameraFeed);
-            ApplyLiveAppearance(showCameraFeed);
+            ApplyLiveAppearance(showCameraFeed || showBanner);
 
             string text = showCameraFeed ? string.Empty : FormattedDisplay;
             if (_screenText.text != text) _screenText.text = text;
@@ -354,6 +366,23 @@ namespace VoxelEngine.GridSystem
                 {
                     _statusText.text = "LIVE";
                     _statusText.color = new Color(live.r, live.g, live.b, 0.95f);
+                }
+            }
+            else if (showBanner)
+            {
+                Color ink = new Color(0.14f, 0.10f, 0.08f);
+                _screenText.color = ink;
+                Color gold = new Color(0.85f, 0.68f, 0.21f);
+                if (_titleText != null)
+                {
+                    var bannerTeam = VoxelEngine.Networking.TeamRegistry.TeamById(bannerTeamId);
+                    _titleText.text = bannerTeam != null ? bannerTeam.name.ToUpperInvariant() : "TEAM BANNER";
+                    _titleText.color = new Color(gold.r, gold.g, gold.b, 0.95f);
+                }
+                if (_statusText != null)
+                {
+                    _statusText.text = "LIVE";
+                    _statusText.color = new Color(gold.r, gold.g, gold.b, 0.9f);
                 }
             }
             else if (!HasAnySource)
@@ -541,6 +570,70 @@ namespace VoxelEngine.GridSystem
                 _titleText.fontStyle = safeFontStyle == 0 ? FontStyle.Bold : displayStyle;
             if (_statusText != null)
                 _statusText.fontStyle = safeFontStyle == 0 ? FontStyle.Normal : displayStyle;
+        }
+
+        /// <summary>The three banner text lines as the screen's text block.
+        /// Empty lines collapse; a fully untitled banner shows nothing - the
+        /// cloth is the message.</summary>
+        private string BannerTextDisplay()
+        {
+            VoxelEngine.Networking.TeamBannerRegistry.TextsOf(bannerTeamId,
+                out string top, out string middle, out string bottom);
+            var sb = new System.Text.StringBuilder();
+            if (!string.IsNullOrEmpty(top)) sb.Append(top);
+            if (!string.IsNullOrEmpty(middle)) { if (sb.Length > 0) sb.Append('\n'); sb.Append(middle); }
+            if (!string.IsNullOrEmpty(bottom)) { if (sb.Length > 0) sb.Append('\n'); sb.Append(bottom); }
+            return sb.ToString();
+        }
+
+        /// <summary>Paint the team's cloth across the display surface. Reuses
+        /// the camera feed's quad and runtime material - the two modes are
+        /// mutually exclusive, so the shared state never fights.</summary>
+        private void ApplyBannerTexture()
+        {
+            if (_screenSurfaceRenderer == null)
+            {
+                Transform surface = transform.Find("Generated_ScreenSurface");
+                if (surface != null)
+                    _screenSurfaceRenderer = surface.GetComponent<Renderer>();
+                if (_screenSurfaceRenderer != null && _screenSurfaceBaseMaterial == null)
+                    _screenSurfaceBaseMaterial = _screenSurfaceRenderer.sharedMaterial;
+            }
+            if (_screenSurfaceRenderer == null) return;
+
+            var cloth = VoxelEngine.Networking.TeamBannerRegistry.ClothTexture(bannerTeamId);
+            if (cloth == null) return;
+
+            if (_cameraFeedMaterial == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Unlit/Texture")
+                    ?? Shader.Find("Universal Render Pipeline/Lit")
+                    ?? Shader.Find("Standard");
+                _cameraFeedMaterial = new Material(shader) { name = "ScreenCameraFeed_Runtime" };
+                if (_cameraFeedMaterial.HasProperty("_Metallic")) _cameraFeedMaterial.SetFloat("_Metallic", 0f);
+                if (_cameraFeedMaterial.HasProperty("_Smoothness")) _cameraFeedMaterial.SetFloat("_Smoothness", 0.88f);
+                _cameraFeedMaterial.EnableKeyword("_EMISSION");
+            }
+
+            _cameraFeedMaterial.mainTexture = cloth;
+            if (_cameraFeedMaterial.HasProperty("_BaseMap")) _cameraFeedMaterial.SetTexture("_BaseMap", cloth);
+            if (_cameraFeedMaterial.HasProperty("_MainTex")) _cameraFeedMaterial.SetTexture("_MainTex", cloth);
+            if (_cameraFeedMaterial.HasProperty("_BaseColor")) _cameraFeedMaterial.SetColor("_BaseColor", Color.white);
+            if (_cameraFeedMaterial.HasProperty("_Color")) _cameraFeedMaterial.SetColor("_Color", Color.white);
+            if (_cameraFeedMaterial.HasProperty("_EmissionColor")) _cameraFeedMaterial.SetColor("_EmissionColor", Color.white * 0.18f);
+            if (_cameraFeedMaterial.HasProperty("_Cull")) _cameraFeedMaterial.SetFloat("_Cull", 0f);
+
+            if (_screenSurfaceRenderer.sharedMaterial != _cameraFeedMaterial)
+                _screenSurfaceRenderer.sharedMaterial = _cameraFeedMaterial;
+
+            EnsureCameraFeedQuad();
+            if (_cameraFeedQuadRenderer != null)
+            {
+                _cameraFeedQuadRenderer.enabled = true;
+                _cameraFeedQuadRenderer.sharedMaterial = _cameraFeedMaterial;
+            }
+            _cameraFeedVisible = true;
         }
 
         private void ApplyCameraFeed(IGridCameraFeedProvider cameraProvider, bool showFeed)

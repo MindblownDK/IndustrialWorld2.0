@@ -386,6 +386,7 @@ namespace VoxelEngine.Persistence
                 // (An empty roster IS a real state - the last team dissolving
                 // is saved as zero teams, not skipped.)
                 TeamRegistry.Save();
+                VoxelEngine.Networking.TeamBannerRegistry.Save();
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -773,6 +774,13 @@ namespace VoxelEngine.Persistence
                     entry.cableVariant = (int)placedCable.variant;
                     entry.cableLength = placedCable.straightLength;
                 }
+                // Team banner (14.37.0): which team's colours this pole flies.
+                var placedBanner = pb.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
+                if (placedBanner != null)
+                {
+                    entry.hasBannerState = true;
+                    entry.bannerTeamId = placedBanner.bannerTeamId ?? "";
+                }
                 var anchor = FindAnchoringBody(pb.transform.position);
                 if (anchor != null)
                 {
@@ -1027,6 +1035,7 @@ namespace VoxelEngine.Persistence
                 var scfg = new SavedScreenConfig();
                 scfg.dataMode = screenBlock.dataMode.ToString();
                 scfg.customText = screenBlock.customText ?? "";
+                scfg.bannerTeamId = screenBlock.bannerTeamId ?? "";
                 scfg.textColorR = screenBlock.textColor.r;
                 scfg.textColorG = screenBlock.textColor.g;
                 scfg.textColorB = screenBlock.textColor.b;
@@ -1797,6 +1806,9 @@ namespace VoxelEngine.Persistence
             // live before the first player could possibly open the panel.
             TeamRegistry.Load();
 
+            // 14.37.0 - and the banners those teams fly, same rule.
+            VoxelEngine.Networking.TeamBannerRegistry.Load();
+
             string path = WorldStatePath();
             if (!File.Exists(path)) { _loaded = true; return; }
 
@@ -2165,6 +2177,12 @@ namespace VoxelEngine.Persistence
                 savedBlock.wheelRestLength = hubBlock.restLength;
                 savedBlock.wheelTravel = hubBlock.suspensionLength;
                 savedBlock.wheelTread01 = hubBlock.Tire != null ? hubBlock.Tire.tread01 : 1f;
+            }
+
+            if (block is VoxelEngine.GridSystem.GridBannerBlock bannerBlock)
+            {
+                savedBlock.hasBannerState = true;
+                savedBlock.bannerTeamId = bannerBlock.bannerTeamId ?? "";
             }
 
             if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
@@ -2701,6 +2719,9 @@ namespace VoxelEngine.Persistence
                 // 13.0.0 wheel hub: tuning first, then refit the exact tire item that was
                 // bolted on. A legacy save has no flag and restores as a bare hub, which is
                 // the intended breaking change — the rig needs tires fitted before it drives.
+                if (block is VoxelEngine.GridSystem.GridBannerBlock restoredGridBanner && saved.hasBannerState)
+                    restoredGridBanner.SetTeam(saved.bannerTeamId ?? "");
+
                 if (block is VoxelEngine.GridSystem.GridWheel restoredHub && saved.hasWheelHubState)
                 {
                     if (System.Enum.IsDefined(typeof(VoxelEngine.GridSystem.WheelSizeClass), saved.wheelSizeClass))
@@ -3095,6 +3116,11 @@ namespace VoxelEngine.Persistence
                     restoredCable.RebuildVisuals();
                     VoxelEngine.Power.PowerCable.RefreshNearbyCables(go.transform.position, 6f);
                 }
+                // Team banner (14.37.0): the team was captured at placement;
+                // restoring is an explicit assignment, never a local guess.
+                var restoredBanner = go.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
+                if (restoredBanner != null && sb.hasBannerState)
+                    restoredBanner.SetTeam(sb.bannerTeamId ?? "");
                 var windPart = go.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null && sb.windCondition > 0f)
                     windPart.condition = Mathf.Clamp(sb.windCondition, 0f, 100f);
@@ -3587,6 +3613,7 @@ namespace VoxelEngine.Persistence
                     try { screenBlock.dataMode = (VoxelEngine.GridSystem.ScreenDataMode)System.Enum.Parse(typeof(VoxelEngine.GridSystem.ScreenDataMode), sc.dataMode); } catch { }
                 }
                 screenBlock.customText = sc.customText ?? "";
+                screenBlock.bannerTeamId = sc.bannerTeamId ?? "";
                 screenBlock.textColor = new Color(sc.textColorR, sc.textColorG, sc.textColorB);
                 screenBlock.borderStyle = sc.borderStyle;
                 screenBlock.fontStyle = sc.fontStyle;
@@ -4521,6 +4548,10 @@ namespace VoxelEngine.Persistence
             public int trainScheduleIndex;
             public bool hasRailTruckState;
             public bool truckAutoSnap = true;
+            // Additive 14.37.0: which team's banner a GridBannerBlock flies.
+            // Legacy saves omit the flag - and cannot contain banner blocks.
+            public bool hasBannerState;
+            public string bannerTeamId = "";
             // Additive 13.0.0: wheel hub tuning plus the tire bolted to its mount socket.
             // Legacy saves omit every field and restore a bare hub with authored defaults.
             public bool hasWheelHubState;
@@ -4736,6 +4767,10 @@ namespace VoxelEngine.Persistence
             public bool hasCableShape;
             public int cableVariant;
             public int cableLength;
+            // Team banner (14.37.0). Legacy saves leave hasBannerState false
+            // - which is fine, because no legacy save can contain a banner.
+            public bool hasBannerState;
+            public string bannerTeamId = "";
             // Additive native liquid persistence. Legacy saves leave the flags false and
             // keep prefab defaults, while new saves retain tank contents and pump buffers.
             public bool hasFluidTankState;
@@ -4855,6 +4890,8 @@ namespace VoxelEngine.Persistence
         {
             public string dataMode;
             public string customText;
+            // TeamBanner mode (14.37.0). Legacy saves omit it -> "".
+            public string bannerTeamId = "";
             public float textColorR;
             public float textColorG;
             public float textColorB;

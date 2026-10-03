@@ -37,6 +37,8 @@ namespace VoxelEngine.Networking
         public int ConveyorShape;   // -1 = not a conveyor
         public int CableVariant;    // -1 = not a cable
         public int CableLength;
+        public string BannerTeamId; // null/empty = not a banner (or teamless placer's default emblem)
+        public bool IsBanner;       // distinguishes "no banner" from "banner with default emblem"
     }
 
     public static class BlockSync
@@ -165,6 +167,12 @@ namespace VoxelEngine.Networking
                 snap.CableVariant = (int)cable.variant;
                 snap.CableLength = cable.straightLength;
             }
+            var banner = block.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
+            if (banner != null)
+            {
+                snap.IsBanner = true;
+                snap.BannerTeamId = banner.bannerTeamId ?? "";
+            }
             return snap;
         }
 
@@ -207,6 +215,13 @@ namespace VoxelEngine.Networking
                 }
                 var road = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
                 if (road != null) road.RefreshAfterPlacement();
+                if (snap.IsBanner)
+                {
+                    var banner = go.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
+                    // Always explicit - an empty id is the placer's "no team"
+                    // answer, not an invitation for this machine to guess.
+                    if (banner != null) banner.SetTeam(snap.BannerTeamId ?? "");
+                }
                 if (item.placedMaterial != null || item.texture != null)
                 {
                     var tex = go.AddComponent<BlockTexturizer>();

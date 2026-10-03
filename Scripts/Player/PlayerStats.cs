@@ -321,6 +321,11 @@ namespace VoxelEngine.Player
         {
             if (amount <= 0) return;
             if (!ignoreInfinite && (PlayerController.InfiniteHealth || VoxelEngine.Settings.GameSettings.InfiniteHealth)) return;
+            // Raised shield (14.37.0) eats its share first - and pays
+            // durability for the privilege - then armor mitigates the rest.
+            if (VoxelEngine.Combat.ShieldBlock.Active)
+                amount = VoxelEngine.Combat.ShieldBlock.AbsorbHit(amount);
+            if (amount <= 0) return;
             if (equippedArmor != null) amount *= (1f - equippedArmor.damageReduction);
             Health = Mathf.Max(0, Health - amount);
             OnStatsChanged?.Invoke();

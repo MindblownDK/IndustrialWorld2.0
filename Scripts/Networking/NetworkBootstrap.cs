@@ -126,6 +126,34 @@ namespace VoxelEngine.Networking
         public string Error;
     }
 
+    // ── Team banners (14.37.0). ──
+    //
+    // Client -> server: "set MY team's banner to this". Identity-free like
+    // every intent - the server stamps the requester from its connection
+    // table and checks owner/leader rank against the roster it owns.
+    public struct TeamBannerIntentBroadcast : IBroadcast
+    {
+        public string TextTop;
+        public string TextMiddle;
+        public string TextBottom;
+        public bool HasImage;
+        public byte[] Png;        // composited 256x384 cloth; empty = default emblem
+    }
+
+    /// <summary>Server -> client: one team's current banner. Sent to everyone
+    /// on change and replayed per-team to a joining connection, so every
+    /// display site everywhere repaints from the same state.</summary>
+    public struct TeamBannerStateBroadcast : IBroadcast
+    {
+        public string TeamId;
+        public int Version;
+        public string TextTop;
+        public string TextMiddle;
+        public string TextBottom;
+        public bool HasImage;
+        public byte[] Png;
+    }
+
     // ── Player combat (14.34.0). ──
     //
     // Client -> server: "my weapon hit THAT player". Identity-free like every
@@ -629,6 +657,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
             _networkManager.ServerManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
+            _networkManager.ServerManager.RegisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
             _networkManager.ServerManager.RegisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
@@ -663,6 +692,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
+            _networkManager.ClientManager.RegisterBroadcast<TeamBannerStateBroadcast>(OnClientBannerState);
             _networkManager.ClientManager.RegisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
@@ -752,6 +782,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
             _networkManager.ServerManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
+            _networkManager.ServerManager.UnregisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
             _networkManager.ServerManager.UnregisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
@@ -786,6 +817,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
+            _networkManager.ClientManager.UnregisterBroadcast<TeamBannerStateBroadcast>(OnClientBannerState);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
@@ -1100,6 +1132,11 @@ namespace VoxelEngine.Networking
                 // in it. Sent even when empty - "no teams exist" is a real
                 // answer, and the panel prefers it over yesterday's guess.
                 SendTeamRosterTo(connection);
+
+                // 14.37.0 - and every live team banner right behind the
+                // roster, so the joiner's banner blocks, shields and screens
+                // fly the right colours from the first frame.
+                SendTeamBannersTo(connection);
             }
         }
 
@@ -2477,6 +2514,93 @@ namespace VoxelEngine.Networking
         {
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(intent);
+        }
+
+        // ── Team banners (14.37.0) ────────────────────────────────────────
+        //
+        // Same shape as the roster: intents up, state down, a per-team replay
+        // for late joiners. The PNG rides the reliable channel; at the 300 KB
+        // cap that is a handful of packets, and a banner edit is rare.
+
+        /// <summary>Client: ask the host to set my team's banner.</summary>
+        public void SendBannerIntent(byte[] png, string textTop, string textMiddle, string textBottom)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new TeamBannerIntentBroadcast
+            {
+                TextTop = textTop ?? "",
+                TextMiddle = textMiddle ?? "",
+                TextBottom = textBottom ?? "",
+                HasImage = png != null && png.Length > 0,
+                Png = png ?? System.Array.Empty<byte>()
+            });
+        }
+
+        private void OnServerBannerIntent(NetworkConnection conn, TeamBannerIntentBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string requesterId)
+                || string.IsNullOrEmpty(requesterId)) return;
+
+            byte[] png = msg.HasImage && msg.Png != null && msg.Png.Length > 0 ? msg.Png : null;
+            string error = TeamBannerRegistry.HostApply(requesterId, png,
+                msg.TextTop, msg.TextMiddle, msg.TextBottom);
+            // Success already rebroadcast by the registry (it calls
+            // BroadcastBannerState). A refusal goes back to the asker alone,
+            // carried as a roster error line - the channel the panel reads.
+            if (!string.IsNullOrEmpty(error))
+            {
+                _networkManager.ServerManager.Broadcast(conn, new TeamRosterBroadcast
+                {
+                    Json = TeamRegistry.ToJson(),
+                    Error = error
+                }, true);
+            }
+        }
+
+        /// <summary>Server: one team's banner to every remote client.</summary>
+        public void BroadcastBannerState(TeamBannerState state)
+        {
+            if (!_serverStarted || state == null) return;
+            var msg = BannerMessageFor(state);
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                _networkManager.ServerManager.Broadcast(client, msg, true);
+            }
+        }
+
+        /// <summary>Server: replay every stored banner to a joining
+        /// connection, right after it received the roster.</summary>
+        private void SendTeamBannersTo(NetworkConnection conn)
+        {
+            if (!_serverStarted || conn == null || conn.IsLocalClient) return;
+            foreach (var state in TeamBannerRegistry.All)
+            {
+                if (state == null || string.IsNullOrEmpty(state.teamId)) continue;
+                _networkManager.ServerManager.Broadcast(conn, BannerMessageFor(state), true);
+            }
+        }
+
+        private static TeamBannerStateBroadcast BannerMessageFor(TeamBannerState state) => new()
+        {
+            TeamId = state.teamId,
+            Version = state.version,
+            TextTop = state.textTop ?? "",
+            TextMiddle = state.textMiddle ?? "",
+            TextBottom = state.textBottom ?? "",
+            HasImage = state.hasImage && state.png != null && state.png.Length > 0,
+            Png = state.hasImage && state.png != null ? state.png : System.Array.Empty<byte>()
+        };
+
+        /// <summary>Client: mirror one banner state from the host.</summary>
+        private void OnClientBannerState(TeamBannerStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host owns the truth already
+            TeamBannerRegistry.ApplyRemote(msg.TeamId, msg.Version,
+                msg.HasImage ? msg.Png : null, msg.HasImage,
+                msg.TextTop, msg.TextMiddle, msg.TextBottom);
         }
 
         // ── Player combat (14.34.0) ───────────────────────────────────────

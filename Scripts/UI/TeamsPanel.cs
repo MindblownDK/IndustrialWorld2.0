@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Networking;
@@ -33,6 +34,20 @@ namespace VoxelEngine.UI
         /// <summary>Draft rename, kept across rebuilds for the same reason.
         /// Null means "mirror the current team name on next build".</summary>
         private static string _draftRename;
+
+        // ── banner editor drafts (14.37.0) ────────────────────────────────
+        // The whole banner edit lives here as a session draft so a live
+        // roster refresh mid-painting cannot eat a half-finished cloth.
+        // Nothing reaches the team until SAVE & SHARE sends one intent.
+        private static string _bannerDraftTeamId;
+        private static Texture2D _bannerDraftCloth;
+        private static Color32[] _bannerDraftPixels;
+        private static bool _bannerDraftCustom;
+        private static string _bannerDraftTop, _bannerDraftMiddle, _bannerDraftBottom;
+        private static bool _bannerPainting;
+        private static Color32 _brushColor = new Color32(168, 24, 28, 255);
+        private static int _brushRadius = 8;
+        private static readonly Dictionary<string, Texture2D> _galleryCache = new();
 
         public static VisualElement Build(Action rebuild)
         {
@@ -214,6 +229,9 @@ namespace VoxelEngine.UI
 
                 content.Add(card);
                 content.Add(T.Spacer(10));
+
+                // ── team banner (14.37.0) ─────────────────────────────────
+                BuildBannerSection(content, myTeam, amLeader, rebuild);
             }
             else
             {
@@ -287,6 +305,371 @@ namespace VoxelEngine.UI
             }
 
             return scroll;
+        }
+
+        // ── team banner editor (14.37.0) ──────────────────────────────────
+
+        /// <summary>The banner card under YOUR TEAM. Every member sees the
+        /// live banner; the owner and leaders get the full editor - gallery,
+        /// painting board, three text lines - and one SAVE & SHARE that sends
+        /// the whole draft as a single intent.</summary>
+        private static void BuildBannerSection(VisualElement content, TeamData team, bool amLeader, Action rebuild)
+        {
+            content.Add(SectionLabel("TEAM BANNER"));
+            var card = Card(border: T.AccentAmber);
+            bool canEdit = amLeader;
+            var state = TeamBannerRegistry.Get(team.teamId);
+
+            if (canEdit) EnsureBannerDraft(team.teamId, state);
+
+            // ── preview (and painting board for editors) ─────────────────
+            var previewHolder = new VisualElement();
+            previewHolder.style.alignSelf = Align.Center;
+            previewHolder.style.width = 176;
+            previewHolder.style.height = 264;
+            previewHolder.style.marginTop = 4;
+            previewHolder.style.marginBottom = 6;
+
+            var preview = new Image { scaleMode = ScaleMode.StretchToFill };
+            preview.image = canEdit ? _bannerDraftCloth : TeamBannerRegistry.ClothTexture(team.teamId);
+            preview.style.width = 176;
+            preview.style.height = 264;
+            T.Border(preview, 2, new Color(0.85f, 0.68f, 0.21f, 0.8f));   // the gold frame, in UI form
+            previewHolder.Add(preview);
+
+            // The three text lines render as overlays - the cloth is image
+            // only, exactly how the 3D displays draw it.
+            previewHolder.Add(BannerOverlayLabel(0.10f, () => canEdit ? _bannerDraftTop : state?.textTop));
+            previewHolder.Add(BannerOverlayLabel(0.44f, () => canEdit ? _bannerDraftMiddle : state?.textMiddle));
+            previewHolder.Add(BannerOverlayLabel(0.64f, () => canEdit ? _bannerDraftBottom : state?.textBottom));
+            card.Add(previewHolder);
+
+            if (!canEdit)
+            {
+                // Members: live view only. Track edits while the page is open.
+                Action<string> onChanged = teamId =>
+                {
+                    if (!string.IsNullOrEmpty(teamId) && teamId != team.teamId) return;
+                    preview.image = TeamBannerRegistry.ClothTexture(team.teamId);
+                    preview.MarkDirtyRepaint();
+                };
+                preview.RegisterCallback<AttachToPanelEvent>(_ => TeamBannerRegistry.OnBannerChanged += onChanged);
+                preview.RegisterCallback<DetachFromPanelEvent>(_ => TeamBannerRegistry.OnBannerChanged -= onChanged);
+                card.Add(T.Muted("Your team's banner - every placed banner, shield and screen flies it. " +
+                                 "The owner and leaders edit it here."));
+                content.Add(card);
+                content.Add(T.Spacer(10));
+                return;
+            }
+
+            // ── editor: painting board hookup ─────────────────────────────
+            bool paintingAllowed = VoxelEngine.Menu.WorldSession.Instance == null
+                || VoxelEngine.Menu.WorldSession.Instance.allowBannerPainting;
+
+            preview.RegisterCallback<PointerDownEvent>(e =>
+            {
+                if (!_bannerPainting || !paintingAllowed) return;
+                preview.CapturePointer(e.pointerId);
+                PaintDraftAt(preview, e.localPosition);
+                e.StopPropagation();
+            });
+            preview.RegisterCallback<PointerMoveEvent>(e =>
+            {
+                if (!_bannerPainting || !paintingAllowed) return;
+                if (!preview.HasPointerCapture(e.pointerId)) return;
+                PaintDraftAt(preview, e.localPosition);
+            });
+            preview.RegisterCallback<PointerUpEvent>(e =>
+            {
+                if (preview.HasPointerCapture(e.pointerId)) preview.ReleasePointer(e.pointerId);
+            });
+
+            // ── text lines ────────────────────────────────────────────────
+            card.Add(T.Muted("TEXTS (top / middle / bottom - leave empty for none)"));
+            var topField = ThemedField(_bannerDraftTop);
+            topField.RegisterValueChangedCallback(evt => _bannerDraftTop = evt.newValue);
+            card.Add(topField);
+            var middleField = ThemedField(_bannerDraftMiddle);
+            middleField.RegisterValueChangedCallback(evt => _bannerDraftMiddle = evt.newValue);
+            card.Add(middleField);
+            var bottomField = ThemedField(_bannerDraftBottom);
+            bottomField.RegisterValueChangedCallback(evt => _bannerDraftBottom = evt.newValue);
+            card.Add(bottomField);
+
+            // ── cloth sources: default emblem + the Banners folder ────────
+            card.Add(T.Spacer(6));
+            card.Add(T.Muted("CLOTH"));
+            var sourceRow = Row();
+            sourceRow.Add(SmallBtn("DEFAULT", () =>
+            {
+                LoadDraftFrom(TeamBannerRegistry.DefaultCloth);
+                _bannerDraftCustom = false;
+                preview.MarkDirtyRepaint();
+            }, T.BgSlot));
+            sourceRow.Add(SmallBtn("OPEN FOLDER", () =>
+            {
+                string dir = BannersFolder();
+                Application.OpenURL("file:///" + dir.Replace('\\', '/'));
+            }, T.BgSlot));
+            sourceRow.Add(SmallBtn("RESCAN", () =>
+            {
+                foreach (var tex in _galleryCache.Values)
+                    if (tex != null) UnityEngine.Object.Destroy(tex);
+                _galleryCache.Clear();
+                rebuild?.Invoke();
+            }, T.BgSlot));
+            card.Add(sourceRow);
+            card.Add(T.Muted("Drop PNG or JPG images into the Banners folder and RESCAN - portrait works best."));
+
+            // ── gallery thumbnails ────────────────────────────────────────
+            var galleryRow = new VisualElement();
+            galleryRow.style.flexDirection = FlexDirection.Row;
+            galleryRow.style.flexWrap = Wrap.Wrap;
+            galleryRow.style.marginTop = 4;
+            int shown = 0;
+            foreach (var path in GalleryFiles())
+            {
+                if (shown >= 24) break;
+                var thumbTex = LoadGalleryTexture(path);
+                if (thumbTex == null) continue;
+                shown++;
+                var thumb = new Image { image = thumbTex, scaleMode = ScaleMode.StretchToFill };
+                thumb.style.width = 50;
+                thumb.style.height = 75;
+                thumb.style.marginRight = 4;
+                thumb.style.marginBottom = 4;
+                T.Border(thumb, 1, T.BorderDim);
+                var captured = thumbTex;
+                thumb.RegisterCallback<ClickEvent>(_ =>
+                {
+                    LoadDraftFrom(captured);
+                    _bannerDraftCustom = true;
+                    preview.MarkDirtyRepaint();
+                });
+                galleryRow.Add(thumb);
+            }
+            if (shown > 0) card.Add(galleryRow);
+            else card.Add(T.Muted("No images in the Banners folder yet."));
+
+            // ── painting board controls ───────────────────────────────────
+            card.Add(T.Spacer(6));
+            if (paintingAllowed)
+            {
+                card.Add(T.Muted("PAINTING BOARD"));
+                var paintRow = Row();
+                paintRow.Add(SmallBtn(_bannerPainting ? "PAINTING: ON" : "PAINTING: OFF", () =>
+                {
+                    _bannerPainting = !_bannerPainting;
+                    rebuild?.Invoke();
+                }, _bannerPainting ? T.AccentGreen : T.BgSlot));
+                card.Add(paintRow);
+
+                if (_bannerPainting)
+                {
+                    card.Add(T.Muted("Click and drag on the banner above to paint."));
+                    var swatchRow = Row();
+                    foreach (var swatch in BrushPalette())
+                    {
+                        var c = swatch;
+                        var b = new Button(() => { _brushColor = c; rebuild?.Invoke(); }) { text = "" };
+                        b.style.width = 24; b.style.height = 24; b.style.marginRight = 4;
+                        b.style.backgroundColor = new StyleColor((Color)c);
+                        T.Radius(b, 4);
+                        bool selected = c.r == _brushColor.r && c.g == _brushColor.g
+                            && c.b == _brushColor.b && c.a == _brushColor.a;
+                        T.Border(b, selected ? 2 : 1, selected ? Color.white : T.BorderDim);
+                        swatchRow.Add(b);
+                    }
+                    card.Add(swatchRow);
+                    var sizeRow = Row();
+                    sizeRow.Add(T.Muted("BRUSH "));
+                    foreach (var (label, radius) in new[] { ("S", 4), ("M", 8), ("L", 16) })
+                    {
+                        int r = radius;
+                        sizeRow.Add(SmallBtn(label, () => { _brushRadius = r; rebuild?.Invoke(); },
+                            _brushRadius == r ? T.AccentCyan : T.BgSlot));
+                    }
+                    card.Add(sizeRow);
+                }
+            }
+            else
+            {
+                card.Add(T.Muted("Banner painting is disabled in this world's settings - " +
+                                 "gallery images, texts and the default emblem still work."));
+            }
+
+            // ── save ──────────────────────────────────────────────────────
+            card.Add(T.Spacer(8));
+            card.Add(SmallBtn("SAVE + SHARE WITH TEAM", () =>
+            {
+                byte[] png = _bannerDraftCustom && _bannerDraftCloth != null
+                    ? _bannerDraftCloth.EncodeToPNG() : null;
+                TeamBannerRegistry.RequestSet(png, _bannerDraftTop, _bannerDraftMiddle, _bannerDraftBottom);
+                rebuild?.Invoke();
+            }, T.AccentGreen, LucideIcons.Flag));
+            card.Add(T.Muted("Shares the banner with the whole team - every placed banner, " +
+                             "shield and grid screen updates at once."));
+
+            content.Add(card);
+            content.Add(T.Spacer(10));
+        }
+
+        /// <summary>One overlaid banner text line at a relative height of the
+        /// preview. Reads through a getter so the label always shows the
+        /// value the preview is currently previewing.</summary>
+        private static Label BannerOverlayLabel(float top01, Func<string> text)
+        {
+            var label = new Label(text() ?? "") { pickingMode = PickingMode.Ignore };
+            label.style.position = Position.Absolute;
+            label.style.left = 6; label.style.right = 6;
+            label.style.top = Length.Percent(top01 * 100f);
+            label.style.unityTextAlign = TextAnchor.MiddleCenter;
+            label.style.color = new Color(0.14f, 0.10f, 0.08f);
+            label.style.fontSize = top01 > 0.3f && top01 < 0.5f ? 15 : 12;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.overflow = Overflow.Hidden;
+            label.schedule.Execute(() => label.text = text() ?? "").Every(250);
+            return label;
+        }
+
+        /// <summary>Make sure the draft matches MY team: on first open (or
+        /// after a team switch) seed it from the live banner state.</summary>
+        private static void EnsureBannerDraft(string teamId, TeamBannerState state)
+        {
+            if (_bannerDraftTeamId == teamId && _bannerDraftCloth != null) return;
+            _bannerDraftTeamId = teamId;
+            _bannerDraftTop = state?.textTop ?? "";
+            _bannerDraftMiddle = state?.textMiddle ?? "";
+            _bannerDraftBottom = state?.textBottom ?? "";
+            _bannerDraftCustom = state != null && state.hasImage;
+            if (_bannerDraftCloth == null)
+            {
+                _bannerDraftCloth = new Texture2D(TeamBannerRegistry.ClothWidth,
+                    TeamBannerRegistry.ClothHeight, TextureFormat.RGBA32, false)
+                { name = "BannerDraft", wrapMode = TextureWrapMode.Clamp };
+            }
+            LoadDraftFrom(TeamBannerRegistry.ClothTexture(teamId));
+        }
+
+        /// <summary>Copy any readable texture into the draft cloth, nearest-
+        /// neighbor resampled to the canonical 256x384.</summary>
+        private static void LoadDraftFrom(Texture2D source)
+        {
+            if (_bannerDraftCloth == null || source == null) return;
+            int w = _bannerDraftCloth.width, h = _bannerDraftCloth.height;
+            var src = source.GetPixels32();
+            int sw = source.width, sh = source.height;
+            _bannerDraftPixels = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                int sy = Mathf.Clamp(y * sh / h, 0, sh - 1);
+                for (int x = 0; x < w; x++)
+                {
+                    int sx = Mathf.Clamp(x * sw / w, 0, sw - 1);
+                    var px = src[sy * sw + sx];
+                    px.a = 255;   // the cloth is opaque - the swallow-tail is geometry
+                    _bannerDraftPixels[y * w + x] = px;
+                }
+            }
+            _bannerDraftCloth.SetPixels32(_bannerDraftPixels);
+            _bannerDraftCloth.Apply(false, false);
+        }
+
+        /// <summary>Stamp one brush circle where the pointer sits on the
+        /// preview image, in cloth pixel space.</summary>
+        private static void PaintDraftAt(Image preview, Vector2 local)
+        {
+            if (_bannerDraftCloth == null || _bannerDraftPixels == null) return;
+            float uiW = preview.resolvedStyle.width, uiH = preview.resolvedStyle.height;
+            if (uiW <= 1f || uiH <= 1f) return;
+            int w = _bannerDraftCloth.width, h = _bannerDraftCloth.height;
+            int cx = Mathf.RoundToInt(local.x / uiW * w);
+            int cy = Mathf.RoundToInt((1f - local.y / uiH) * h);
+            int r = Mathf.Max(1, _brushRadius);
+            int r2 = r * r;
+            for (int y = Mathf.Max(0, cy - r); y <= Mathf.Min(h - 1, cy + r); y++)
+            {
+                int dy = y - cy;
+                for (int x = Mathf.Max(0, cx - r); x <= Mathf.Min(w - 1, cx + r); x++)
+                {
+                    int dx = x - cx;
+                    if (dx * dx + dy * dy > r2) continue;
+                    _bannerDraftPixels[y * w + x] = _brushColor;
+                }
+            }
+            _bannerDraftCloth.SetPixels32(_bannerDraftPixels);
+            _bannerDraftCloth.Apply(false, false);
+            _bannerDraftCustom = true;
+            preview.MarkDirtyRepaint();
+        }
+
+        private static Color32[] BrushPalette() => new Color32[]
+        {
+            new(168, 24, 28, 255),    // crusader red
+            new(242, 238, 228, 255),  // cloth white
+            new(24, 24, 28, 255),     // black
+            new(217, 174, 54, 255),   // gold
+            new(32, 72, 148, 255),    // royal blue
+            new(28, 110, 52, 255),    // forest green
+            new(94, 58, 26, 255),     // oak brown
+            new(118, 32, 120, 255),   // imperial purple
+        };
+
+        private static string BannersFolder()
+        {
+            string dir = Path.Combine(Application.persistentDataPath, "Banners");
+            try { Directory.CreateDirectory(dir); } catch { }
+            return dir;
+        }
+
+        private static List<string> GalleryFiles()
+        {
+            var files = new List<string>();
+            try
+            {
+                string dir = BannersFolder();
+                foreach (var pattern in new[] { "*.png", "*.jpg", "*.jpeg" })
+                    files.AddRange(Directory.GetFiles(dir, pattern, SearchOption.TopDirectoryOnly));
+                files.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+            catch { }
+            return files;
+        }
+
+        /// <summary>Load one gallery file, resampled to cloth size and cached
+        /// for the session (RESCAN clears the cache).</summary>
+        private static Texture2D LoadGalleryTexture(string path)
+        {
+            if (_galleryCache.TryGetValue(path, out var cached) && cached != null) return cached;
+            try
+            {
+                var bytes = File.ReadAllBytes(path);
+                var raw = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!raw.LoadImage(bytes)) { UnityEngine.Object.Destroy(raw); return null; }
+                var tex = new Texture2D(TeamBannerRegistry.ClothWidth, TeamBannerRegistry.ClothHeight,
+                    TextureFormat.RGBA32, false)
+                { name = "BannerGallery_" + Path.GetFileName(path), wrapMode = TextureWrapMode.Clamp };
+                int w = tex.width, h = tex.height, sw = raw.width, sh = raw.height;
+                var src = raw.GetPixels32();
+                var dst = new Color32[w * h];
+                for (int y = 0; y < h; y++)
+                {
+                    int sy = Mathf.Clamp(y * sh / h, 0, sh - 1);
+                    for (int x = 0; x < w; x++)
+                    {
+                        int sx = Mathf.Clamp(x * sw / w, 0, sw - 1);
+                        var px = src[sy * sw + sx];
+                        px.a = 255;
+                        dst[y * w + x] = px;
+                    }
+                }
+                tex.SetPixels32(dst);
+                tex.Apply(false, false);
+                UnityEngine.Object.Destroy(raw);
+                _galleryCache[path] = tex;
+                return tex;
+            }
+            catch { return null; }
         }
 
         // ── small builders ────────────────────────────────────────────────

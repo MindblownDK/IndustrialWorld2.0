@@ -49,6 +49,12 @@ namespace VoxelEngine.Menu
         /// A SERVER/WORLD setting, never a team setting - fair ground for
         /// every player. The host enforces it on every hit intent.</summary>
         public bool friendlyFire = DefaultFriendlyFire;
+
+        /// <summary>World rule (14.37.0): may banner editors use the in-game
+        /// painting board? A WORLD setting so a host can keep a public server
+        /// to curated gallery images. Default ON; gallery, texts and the
+        /// default emblem are always available either way.</summary>
+        public bool allowBannerPainting = true;
         public float PlayerInventoryWeightLimitKg => DefaultPlayerInventoryWeightKg * Mathf.Clamp(inventoryWeightPercent, 25, 1000) / 100f;
         public float ContainerWeightLimitKg => DefaultContainerWeightKg * Mathf.Clamp(containerWeightPercent, 25, 1000) / 100f;
 
@@ -214,6 +220,8 @@ namespace VoxelEngine.Menu
             public bool allowRuinLootRespawn;
             public float fullVoxelRadiusKm;
             public bool friendlyFire;
+            // Class initializer = the answer a legacy host's card gives.
+            public bool allowBannerPainting = true;
         }
 
         /// <summary>Host side: describe this world for a joining client.</summary>
@@ -231,6 +239,7 @@ namespace VoxelEngine.Menu
                 allowRuinLootRespawn = allowRuinLootRespawn,
                 fullVoxelRadiusKm = fullVoxelRadiusKm,
                 friendlyFire = friendlyFire,
+                allowBannerPainting = allowBannerPainting,
             };
             try { return JsonUtility.ToJson(card); }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] ExportWorldCardJson: " + ex.Message); return ""; }
@@ -256,6 +265,7 @@ namespace VoxelEngine.Menu
             showDropVoidWarning = card.showDropVoidWarning;
             allowRuinLootRespawn = card.allowRuinLootRespawn;
             friendlyFire = card.friendlyFire;
+            allowBannerPainting = card.allowBannerPainting;
             if (card.fullVoxelRadiusKm > 0f) fullVoxelRadiusKm = card.fullVoxelRadiusKm;
 
             worldName = JoinedCacheFolderName(hostWorldDisplayName);
@@ -413,7 +423,8 @@ namespace VoxelEngine.Menu
                 bool savedShowDropVoidWarning = true;
                 bool savedAllowRuinLootRespawn = DefaultAllowRuinLootRespawn;
                 bool savedFriendlyFire = DefaultFriendlyFire;
-                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct, out var showDropVoidWarning, out var allowRuinLootRespawn, out var friendlyFireSetting))
+                bool savedAllowBannerPainting = true;
+                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct, out var showDropVoidWarning, out var allowRuinLootRespawn, out var friendlyFireSetting, out var bannerPaintingSetting))
                 {
                     savedMaxDrops = maxDrops;
                     savedInventoryWeightPercent = invWeightPct;
@@ -421,6 +432,7 @@ namespace VoxelEngine.Menu
                     savedShowDropVoidWarning = showDropVoidWarning;
                     savedAllowRuinLootRespawn = allowRuinLootRespawn;
                     savedFriendlyFire = friendlyFireSetting;
+                    savedAllowBannerPainting = bannerPaintingSetting;
                 }
                 result.Add(new WorldSummary
                 {
@@ -434,7 +446,8 @@ namespace VoxelEngine.Menu
                     containerWeightPercent = savedContainerWeightPercent,
                     showDropVoidWarning = savedShowDropVoidWarning,
                     allowRuinLootRespawn = savedAllowRuinLootRespawn,
-                    friendlyFire = savedFriendlyFire
+                    friendlyFire = savedFriendlyFire,
+                    allowBannerPainting = savedAllowBannerPainting
                 });
             }
             result.Sort((a, b) => b.lastWrite.CompareTo(a.lastWrite));
@@ -486,6 +499,8 @@ namespace VoxelEngine.Menu
             // Tri-state like its siblings: 1 on, -1 off, 0 = legacy file
             // without the key, which reads as the default (off).
             public int friendlyFire = 0;
+            // Tri-state; legacy 0 reads as the default (ON).
+            public int allowBannerPainting = 0;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -504,7 +519,8 @@ namespace VoxelEngine.Menu
                     showDropVoidWarning = this.showDropVoidWarning ? 1 : -1,
                     allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1,
                     fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f),
-                    friendlyFire = this.friendlyFire ? 1 : -1
+                    friendlyFire = this.friendlyFire ? 1 : -1,
+                    allowBannerPainting = this.allowBannerPainting ? 1 : -1
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -519,6 +535,7 @@ namespace VoxelEngine.Menu
             allowRuinLootRespawn = DefaultAllowRuinLootRespawn;
             fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
             friendlyFire = DefaultFriendlyFire;
+            allowBannerPainting = true;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
@@ -532,6 +549,7 @@ namespace VoxelEngine.Menu
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
                     fullVoxelRadiusKm = data.fullVoxelRadiusKm <= 0f ? DefaultFullVoxelRadiusKm : Mathf.Clamp(data.fullVoxelRadiusKm, 0f, 500f);
                     friendlyFire = data.friendlyFire == 1;
+                    allowBannerPainting = data.allowBannerPainting != -1;
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }
@@ -571,12 +589,24 @@ namespace VoxelEngine.Menu
             out bool savedShowDropVoidWarning, out bool savedAllowRuinLootRespawn,
             out bool savedFriendlyFire)
         {
+            return TryReadWorldSettings(name, out savedMaxDroppedItems,
+                out savedInventoryWeightPercent, out savedContainerWeightPercent,
+                out savedShowDropVoidWarning, out savedAllowRuinLootRespawn,
+                out savedFriendlyFire, out _);
+        }
+
+        public bool TryReadWorldSettings(string name, out int savedMaxDroppedItems,
+            out int savedInventoryWeightPercent, out int savedContainerWeightPercent,
+            out bool savedShowDropVoidWarning, out bool savedAllowRuinLootRespawn,
+            out bool savedFriendlyFire, out bool savedAllowBannerPainting)
+        {
             savedMaxDroppedItems = DefaultMaxDroppedItems;
             savedInventoryWeightPercent = DefaultInventoryWeightPercent;
             savedContainerWeightPercent = DefaultContainerWeightPercent;
             savedShowDropVoidWarning = true;
             savedAllowRuinLootRespawn = DefaultAllowRuinLootRespawn;
             savedFriendlyFire = DefaultFriendlyFire;
+            savedAllowBannerPainting = true;
             try
             {
                 string path = WorldSettingsPathFor(name);
@@ -589,6 +619,7 @@ namespace VoxelEngine.Menu
                 savedShowDropVoidWarning = data.showDropVoidWarning != -1;
                 savedAllowRuinLootRespawn = data.allowRuinLootRespawn != -1;
                 savedFriendlyFire = data.friendlyFire == 1;
+                savedAllowBannerPainting = data.allowBannerPainting != -1;
                 return true;
             }
             catch (Exception ex)
@@ -628,6 +659,16 @@ namespace VoxelEngine.Menu
 
         public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent, bool newShowDropVoidWarning, bool newAllowRuinLootRespawn, bool newFriendlyFire)
         {
+            // Callers that predate the banner-painting setting must not reset
+            // it: carry the value already on disk (or the default) forward.
+            TryReadWorldSettings(name, out _, out _, out _, out _, out _, out _, out bool keepBannerPainting);
+            return SaveWorldSettingsFor(name, newMaxDroppedItems, newInventoryWeightPercent,
+                newContainerWeightPercent, newShowDropVoidWarning, newAllowRuinLootRespawn,
+                newFriendlyFire, keepBannerPainting);
+        }
+
+        public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent, bool newShowDropVoidWarning, bool newAllowRuinLootRespawn, bool newFriendlyFire, bool newAllowBannerPainting)
+        {
             try
             {
                 string folder = WorldFolderPath(name);
@@ -656,7 +697,8 @@ namespace VoxelEngine.Menu
                     showDropVoidWarning = newShowDropVoidWarning ? 1 : -1,
                     allowRuinLootRespawn = newAllowRuinLootRespawn ? 1 : -1,
                     fullVoxelRadiusKm = keepFullVoxelRadiusKm,
-                    friendlyFire = newFriendlyFire ? 1 : -1
+                    friendlyFire = newFriendlyFire ? 1 : -1,
+                    allowBannerPainting = newAllowBannerPainting ? 1 : -1
                 };
                 File.WriteAllText(WorldSettingsPathFor(name), JsonUtility.ToJson(data, true));
                 if (SanitizeWorldFolderName(name) == SanitizeWorldFolderName(worldName))
@@ -667,6 +709,7 @@ namespace VoxelEngine.Menu
                     showDropVoidWarning = data.showDropVoidWarning != -1;
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
                     friendlyFire = data.friendlyFire == 1;
+                    allowBannerPainting = data.allowBannerPainting != -1;
                 }
                 return true;
             }
@@ -988,6 +1031,7 @@ namespace VoxelEngine.Menu
         public bool     showDropVoidWarning;
         public bool     allowRuinLootRespawn;
         public bool     friendlyFire;
+        public bool     allowBannerPainting;
     }
 
     public struct AutosaveSlotSummary

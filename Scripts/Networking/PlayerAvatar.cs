@@ -306,7 +306,9 @@ namespace VoxelEngine.Networking
             // own animation and must not also squash the model.
             bool sliding = _controller != null && _controller.IsSliding;
             bool crouched = _controller != null && _controller.IsCrouched && !sliding;
-            int motionFlags = sliding ? 1 : 0;
+            // bit 0 = sliding, bit 1 = shield raised (14.37.0)
+            int motionFlags = (sliding ? 1 : 0)
+                | (VoxelEngine.Combat.ShieldBlock.Active ? 2 : 0);
             var wornArmor = stats.equippedArmor;
             int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
             int skinTone = PlayerIdentity.LocalSkinTone;
@@ -362,7 +364,7 @@ namespace VoxelEngine.Networking
             _armorTier.Value = Mathf.Clamp(armorTier, 0, 6);
             _skinTone.Value = Mathf.Clamp(skinTone, 0, CrusaderModel.SkinToneCount - 1);
             _equipFlags.Value = equipFlags & 3;
-            _motionFlags.Value = motionFlags & 1;
+            _motionFlags.Value = motionFlags & 3;
         }
 
         [ServerRpc]
@@ -532,7 +534,9 @@ namespace VoxelEngine.Networking
         private void ApplyMotion(int flags)
         {
             var driver = Locomotion();
-            if (driver != null) driver.Sliding = (flags & 1) != 0;
+            if (driver == null) return;
+            driver.Sliding = (flags & 1) != 0;
+            driver.Blocking = (flags & 2) != 0;
         }
 
         private void OnAttackChanged(int previous, int next, bool asServer)

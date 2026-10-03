@@ -302,9 +302,19 @@ namespace VoxelEngine.GridSystem.UI
                 var mBtn = new Button(() =>
                 {
                     _target.dataMode = captured;
+                    // Team Banner (14.37.0): the screen mirrors the chooser's
+                    // OWN team banner. The banner itself is edited in
+                    // PAUSE > TEAMS - this screen is a display, not an editor.
+                    if (captured == ScreenDataMode.TeamBanner)
+                    {
+                        var myTeam = VoxelEngine.Networking.TeamRegistry.TeamOf(
+                            VoxelEngine.Networking.NetworkSession.LocalPlayerId);
+                        _target.bannerTeamId = myTeam != null ? myTeam.teamId : "";
+                    }
                     RefreshModeHighlights();
                     RefreshCustomTextField();
-                }) { text = captured == ScreenDataMode.Summary ? "Mixed" : mode.ToString() };
+                }) { text = captured == ScreenDataMode.Summary ? "Mixed"
+                        : captured == ScreenDataMode.TeamBanner ? "Team Banner" : mode.ToString() };
                 mBtn.style.minHeight = 22; mBtn.style.marginRight = 4; mBtn.style.marginBottom = 4;
                 mBtn.style.fontSize = 10; mBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
                 mBtn.style.paddingLeft = 8; mBtn.style.paddingRight = 8;

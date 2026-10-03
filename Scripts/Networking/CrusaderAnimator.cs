@@ -62,7 +62,10 @@ namespace VoxelEngine.Networking
         // Death (14.36.0): a one-shot that overrides everything and holds its
         // final frame until the player respawns.
         private const int DEATH = 13;
-        private const int CLIP_COUNT = 14;
+        // Shield block idle (14.37.0) - raised-shield stance while the owner
+        // holds right mouse with a shield in hand.
+        private const int BLOCK = 14;
+        private const int CLIP_COUNT = 15;
 
         /// <summary>Mirrored slide flag (set by PlayerAvatar).</summary>
         public bool Sliding;
@@ -78,6 +81,9 @@ namespace VoxelEngine.Networking
         /// <summary>Mirrored death flag (set by PlayerAvatar from the health
         /// mirror). Plays the death clip once and holds the final frame.</summary>
         public bool Dead;
+        /// <summary>Shield raised (14.37.0) - mirrored from the owner's
+        /// ShieldBlock state through the avatar's motion flags.</summary>
+        public bool Blocking;
 
         /// <summary>True when real crouch animation is available, so the avatar
         /// knows not to fall back to squashing the model.</summary>
@@ -145,6 +151,7 @@ namespace VoxelEngine.Networking
             clips[C_IDLE] = LoadClip("Crouch_idle", "Crouching_idle", "Crouch idle", "Crouching");
             clips[C_WALK] = LoadClip("Crouched_walking", "Crouch_walk", "Crouched walking", "Crouch_walking");
             clips[DEATH]  = LoadClip(sword + "death", sword + "death (2)");
+            clips[BLOCK]  = LoadClip(sword + "block idle", sword + "block");
 
             if (animator == null || clips[IDLE] == null)
             {
@@ -300,6 +307,9 @@ namespace VoxelEngine.Networking
             bool attacking = _attackTime > 0f && _hasClip[ATTACK];
 
             bool crouching = Crouched && _hasClip[C_IDLE] && !airborne && !Sliding && !attacking;
+            // Blocking yields to death/airborne/attack, and beats slide,
+            // crouch and locomotion - a walking block still reads as a block.
+            bool blocking = Blocking && _hasClip[BLOCK] && !airborne && !attacking;
 
             // Death overrides everything (14.36.0). The clip plays once from
             // the frame the mirror reports 0 health, then freezes on its last
@@ -317,6 +327,7 @@ namespace VoxelEngine.Networking
             if (dead) _targets[DEATH] = 1f;
             else if (airborne && _hasClip[jumpSlot]) _targets[jumpSlot] = 1f;
             else if (attacking) _targets[ATTACK] = 1f;
+            else if (blocking) _targets[BLOCK] = 1f;
             else if (Sliding && _hasClip[SLIDE]) _targets[SLIDE] = 1f;
             else if (crouching)
             {

@@ -289,6 +289,11 @@ namespace VoxelEngine.Player
                 case VoxelEngine.Combat.WeaponItem wpn:
                     BuildSword(root, tint);
                     break;
+                // The shield (14.37.0) is a ToolItem subclass - handle it
+                // before the generic tool cases or it falls into the fallback.
+                case VoxelEngine.Combat.ShieldItem _:
+                    BuildShield(root);
+                    break;
                 case ToolItem tool when tool.toolType == ToolType.Pickaxe:
                     BuildPickaxe(root, tint, tool.miningTier);
                     break;
@@ -431,6 +436,73 @@ namespace VoxelEngine.Player
             AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.34f, 0.012f), new Vector3(6, 0, 0), new Vector3(0.11f, 0.16f, 0.02f), tint);
             // Tapered tip (rotated square reads as a point)
             AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.43f, 0.022f), new Vector3(6, 0, 45), new Vector3(0.075f, 0.075f, 0.018f), tint);
+        }
+
+        /// <summary>The crusader shield (14.37.0): a wooden board with a gold
+        /// rim, faced with the holder's own TEAM BANNER cloth - the same
+        /// texture every banner display flies, straight from the registry.</summary>
+        private static void BuildShield(GameObject root)
+        {
+            Color wood = new Color(0.33f, 0.22f, 0.12f);
+            Color gold = new Color(0.85f, 0.68f, 0.21f);
+
+            // Board (slightly taller than wide) and a gold rim behind it.
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0f, 0.012f), Vector3.zero, new Vector3(0.30f, 0.42f, 0.03f), wood);
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0f, 0.030f), Vector3.zero, new Vector3(0.325f, 0.445f, 0.012f), gold);
+            // Boss (center sphere) peeking past the cloth.
+            AddPrimitive(root, PrimitiveType.Sphere, new Vector3(0, 0f, -0.012f), Vector3.zero, Vector3.one * 0.065f, gold);
+
+            // Cloth face: the holder's own team banner.
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "Shield_ClothFace";
+            quad.transform.SetParent(root.transform, false);
+            quad.transform.localPosition = new Vector3(0, 0f, -0.006f);
+            quad.transform.localRotation = Quaternion.Euler(0, 180, 0);   // face the player side away
+            quad.transform.localScale = new Vector3(0.28f, 0.40f, 1f);
+            var qcol = quad.GetComponent<Collider>();
+            if (qcol != null) { qcol.enabled = false; Object.Destroy(qcol); }
+
+            var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var mat = new Material(sh) { name = "ShieldCloth_Runtime" };
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.25f);
+            quad.GetComponent<Renderer>().sharedMaterial = mat;
+            // Keeps the cloth current: binds the holder's team on enable and
+            // repaints when the team's banner is edited mid-hold.
+            quad.AddComponent<ShieldClothFace>();
+        }
+
+        /// <summary>Paints the holder's OWN team banner onto the shield face
+        /// and keeps it live - the registry decides what the cloth shows.</summary>
+        private sealed class ShieldClothFace : MonoBehaviour
+        {
+            private Renderer _renderer;
+
+            private void OnEnable()
+            {
+                _renderer = GetComponent<Renderer>();
+                VoxelEngine.Networking.TeamBannerRegistry.OnBannerChanged += OnBannerChanged;
+                Apply();
+            }
+
+            private void OnDisable()
+            {
+                VoxelEngine.Networking.TeamBannerRegistry.OnBannerChanged -= OnBannerChanged;
+            }
+
+            private void OnBannerChanged(string teamId) => Apply();
+
+            private void Apply()
+            {
+                if (_renderer == null || _renderer.sharedMaterial == null) return;
+                var myTeam = VoxelEngine.Networking.TeamRegistry.TeamOf(
+                    VoxelEngine.Networking.NetworkSession.LocalPlayerId);
+                var cloth = VoxelEngine.Networking.TeamBannerRegistry.ClothTexture(
+                    myTeam != null ? myTeam.teamId : "");
+                var mat = _renderer.sharedMaterial;
+                mat.mainTexture = cloth;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", cloth);
+                if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", cloth);
+            }
         }
 
         private static void BuildSword(GameObject root, Color tint)

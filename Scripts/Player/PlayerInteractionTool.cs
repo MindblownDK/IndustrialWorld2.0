@@ -120,6 +120,10 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
+            // Shield blocking (14.37.0) resolves FIRST, before any early-out:
+            // whatever stops the tool this frame must also lower the shield,
+            // or a stale "blocking" would keep eating damage with a menu open.
+            TickShieldBlock();
             if (VoxelEngine.UI.UIState.WorldToolsBlocked) return;   // suppress mining/build while menus open
             // While piloting a ship, the cockpit owns left-click (drill/weapon) — don't
             // let the on-foot tool mine/break the world.
@@ -2874,6 +2878,34 @@ namespace VoxelEngine.Player
             VoxelEngine.UI.BuildFeedbackHud.Show("Cannot pave here", reason, null, Color.yellow);
         }
 
+
+        /// <summary>Shield blocking (14.37.0): holding a ShieldItem and the
+        /// Build button (right mouse) raises it. State lives in the static
+        /// ShieldBlock so PlayerStats and PlayerAvatar read one truth.</summary>
+        private void TickShieldBlock()
+        {
+            bool canBlock = !VoxelEngine.UI.UIState.WorldToolsBlocked
+                && !VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive
+                && VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit == null
+                && inventory != null;
+
+            if (!canBlock)
+            {
+                VoxelEngine.Combat.ShieldBlock.Clear();
+                return;
+            }
+
+            var stack = inventory.ActiveStack;
+            if (stack == null || stack.IsEmpty || stack.item is not VoxelEngine.Combat.ShieldItem shield)
+            {
+                VoxelEngine.Combat.ShieldBlock.Clear();
+                return;
+            }
+
+            bool raised = GameSettings.IsHeld(InputAction.Build);
+            VoxelEngine.Combat.ShieldBlock.Set(raised, shield.blockReduction,
+                stack, inventory, shield.durabilityPerBlockedHit);
+        }
 
         private void ConsumeDurability(ItemStack stack)
         {
