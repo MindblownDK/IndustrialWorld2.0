@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.40.0-dev`
+**Current Version:** `14.41.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.41.0-dev] Plugs, Bends and Borrowed Shelves
+
+**Type:** MINOR - the storage network learns to reach the physical world and the Data Pipe becomes a real cable: the new External Storage block bridges chests and lone drawers into the network with a three-way access mode and priority, the Data Pipe gains the energy pipe's nine-fitting radial wheel while being restyled as an actual data cable with plug heads and pulse rings, the Importer and Exporter get proper network-appliance bodies, and five terminal-round fixes land. Save format gains additive reuse of existing fields only.
+
+**The Data Pipe stops pretending to be a cube.** Hold the pipe and press the build-wheel key: the same nine fittings the energy pipe earned - straight runs (hold V and scroll for 1 to 5 m), two elbows, two S-curves, two compound bends, the 4-way cross and the 6-way hub - on the shared radial dial, with its own selection memory so swapping between pipe types forgets nothing. And the pipe finally looks like what it is: a slim braided data trunk in dark sheathing with phosphor-green pulse rings marching along it, RJ45-style plug heads on every open end, and a junction hub where the ways meet. Endpoints are the connection points now - plug snaps to plug when placing pipe against pipe (ghost previews stay inert, they never link into the live network), each open plug probes for storage devices in front of it, and the legacy center-adjacency rule stays alive underneath so every pipe from an older save still connects. Shape and length ride the same additive save fields and the same block snapshot the energy pipe uses, so clients see the host's exact runs. Old cube pipes reload as the straight one-metre trunk.
+
+**The network borrows your chests.** The new External Storage block (2 circuits, 2 steel plates, 4 copper wire at the Assembler) is the bridge the physical world was waiting for: place it flush against a Chest or a lone Storage Drawer - or run a data pipe to it - and those containers appear in every terminal on the network, counted, searched, sorted and crafted from like any disk. The block's panel shows its link status, what it bridges and how full those shelves are, plus the two dials that make it a policy, not just a hole in the wall: a three-way access mode (INSERT + EXTRACT, EXTRACT ONLY for vaults the network may spend from but never pollute, INSERT ONLY for dump targets) and a fill priority against the NAS shelves and drawer banks. It draws 6 W from the system bill like every other appliance, honors the Security Block like every other door, and Drawer Controllers still join the network natively - the bridge is for the containers that cannot.
+
+**The Importer and Exporter dress for the server room.** Both snap-on blocks (and the new External Storage) trade their flat-colour cubes for proper appliance bodies: graphite chassis with accent trim, an inset faceplate with an LED strip, an RJ45-style port socket on the back where the pipe plugs in, and an honest symbol on the face - chevrons pointing IN on the importer, OUT on the exporter, link brackets on the bridge. Their sockets sit exactly where a data pipe's plug head lands, so a pipe run ending at an importer looks connected because it is.
+
+**Five fixes from the terminal round.** The Server Controller's RAM row no longer overflows its panel box - four slots sit in one tidy non-wrapping rail. NAS bay fill percentages update live while the panel is open instead of freezing at open-time. The terminal's stack-count chips get a real LCD backing plate, readable on any icon. Shift-clicking an inventory item while the storage terminal is open now stores it into the network first - the hotbar swap only happens when no terminal is listening. And the STORAGE LINK button wears the accent treatment so remote access is a feature you find, not one you stumble on.
+
+**Setup step 109 authors the hardware.** Tools -> Voxel Engine -> Voxel Engine Setup gains step 109: the External Storage prefab, item and Assembler recipe, the importer/exporter/bridge visual overhaul (only Generated_ children are rebuilt - custom tweaks survive, the legacy cube mesh is hidden, never destroyed), and the Data Pipe's refreshed description teaching the wheel. Non-destructive as always: create if missing, reconnect if existing.
 
 ### [14.40.0-dev] Pipes, Shelves and a Single Brain
 

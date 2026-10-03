@@ -1,15 +1,23 @@
 // Assets/Scripts/VoxelEngine/Networks/DataCable.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║                    DATA CABLE — wired ItemNet                   ║
-// ║   Carries connectivity (no per-tick balancing) between Server   ║
-// ║   Racks, Storage Terminals, Importers and Exporters. Snaps      ║
-// ║   onto the 1 m build grid and auto-links to ±X/±Y/±Z adjacent   ║
-// ║   data devices with an unobstructed line of sight.              ║
+// ║                   DATA PIPE — wired ItemNet                      ║
+// ║  Carries connectivity (no per-tick balancing) between the       ║
+// ║  Server Controller, NAS shelves, Power Stations, terminals,     ║
+// ║  importers/exporters and External Storage bridges.              ║
+// ║                                                                  ║
+// ║  14.41.0: the pipe shares the energy pipe's NINE fitting        ║
+// ║  shapes (straight 1-5 m, elbows, risers, S-curves, compound     ║
+// ║  bends, 4/6-way hubs) picked on the same radial wheel - but     ║
+// ║  renders as an actual DATA CABLE: slim braided trunk, RJ45-     ║
+// ║  style plug heads, phosphor pulse rings. Links happen where     ║
+// ║  plug meets plug (or plug meets device), plus the storage       ║
+// ║  network's universal touching-blocks rule.                      ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Power;
 using VoxelEngine.Transport;
 
 namespace VoxelEngine.Networks
@@ -17,54 +25,65 @@ namespace VoxelEngine.Networks
     [DisallowMultipleComponent]
     public class DataCable : MonoBehaviour
     {
+        [Header("Shape Variant")]
+        public EnergyPipeVariant variant = EnergyPipeVariant.Straight;
+        [Range(1, 5)] public int straightLength = 1;
+
         [Header("Grid")]
-        [Tooltip("Build grid size used to detect direct cardinal neighbours.")]
+        [Tooltip("Build grid size used by the legacy cardinal-neighbour fallback.")]
         public float gridSize = 1f;
-        [Tooltip("Distance tolerance when looking for neighbours one grid step away.")]
+        [Tooltip("Distance tolerance for the legacy cardinal-neighbour fallback.")]
         public float positionTolerance = 0.15f;
-        [Tooltip("Layers tested with a linecast to detect solid blocks between two cables. " +
-                 "A hit on these layers (excluding the cables themselves) blocks the link.")]
+        [Tooltip("Layers tested with a linecast between two link points. A hit " +
+                 "(excluding the pipes themselves) blocks the link.")]
         public LayerMask losBlockingLayers = ~0;
 
         [Header("Visual")]
-        [Range(0.1f, 0.9f)] public float coreSize     = 0.35f;
-        [Range(0.05f, 0.6f)] public float armThickness = 0.28f;
-        public Color tint = new(0.30f, 0.85f, 0.40f, 1f);
-        public bool  showUnusedFaceCaps = false;
+        public Color sheathColor = new(0.13f, 0.15f, 0.17f, 1f);
+        public Color glowColor   = new(0.30f, 0.95f, 0.45f, 1f);
+
+        // Legacy fields kept so old prefabs/presets deserialize silently.
+        [HideInInspector] public float coreSize = 0.35f;
+        [HideInInspector] public float armThickness = 0.28f;
+        [HideInInspector] public Color tint = new(0.30f, 0.85f, 0.40f, 1f);
+        [HideInInspector] public bool showUnusedFaceCaps = false;
+
+        // ── Link tuning ──────────────────────────────────────────
+        /// <summary>Plug-to-plug mating distance between two pipe endpoints.</summary>
+        private const float ENDPOINT_LINK_RADIUS = 0.60f;
+        /// <summary>Probe radius for a plug head looking for a device face.</summary>
+        private const float DEVICE_PROBE_RADIUS = 0.45f;
+        private const float SCAN_INTERVAL = 0.5f;
 
         // ── Runtime ──────────────────────────────────────────────
         public ConnectionAnchor anchor;          // exposed for inspectors / debugging
         private Transform _visualRoot;
-        private Material  _material;
-        private readonly List<Vector3> _neighbourPositionsBuf = new(6);
+        private MeshFilter _meshFilter;
+        private MeshRenderer _meshRenderer;
         private float _scanTimer;
-        private const float SCAN_INTERVAL = 0.5f;   // re-evaluate twice/second
-
-        // Track which face each connection uses
+        private EnergyPipeVariant _builtVariant;
+        private int _builtLength = -1;
         private readonly Dictionary<ConnectionAnchor, CubeFace> _connectionFaces = new();
 
-        // Cached, shared registry — every DataCable adds itself so neighbour lookups
-        // are O(k) instead of FindObjectsOfType every frame.
         private static readonly HashSet<DataCable> _AllCables = new();
-
-        // Shared non-alloc physics buffers — every cable probes every 0.5 s and the
-        // allocating Overlap/Raycast variants were the cable-count GC spike source.
         private static readonly Collider[]   s_overlapBuffer = new Collider[128];
         private static readonly RaycastHit[] s_rayBuffer     = new RaycastHit[48];
+        private static readonly HashSet<DataCable> s_refreshCandidates = new();
+
+        // Shared materials/meshes - one per look, not one per pipe.
+        private static Material s_sheathMat;
+        private static Material s_glowMat;
+        private static readonly Dictionary<(EnergyPipeVariant, int), Mesh> s_meshCache = new();
 
         private void Awake()
         {
             EnsureAnchor();
-            EnsureVisualRoot();
-            EnsureMaterial();
-            // Default mask: hit everything EXCEPT Ignore-Raycast (Unity layer 2).
             if (losBlockingLayers == ~0) losBlockingLayers = ~(1 << 2);
         }
 
         private void OnEnable()
         {
             _AllCables.Add(this);
-            // Force one immediate scan so a freshly placed cable connects without delay.
             ScanAndLink();
             RebuildVisuals();
         }
@@ -73,15 +92,8 @@ namespace VoxelEngine.Networks
         {
             _AllCables.Remove(this);
             _connectionFaces.Clear();
-            // Notify neighbours so they drop their arms next rebuild.
             if (anchor != null) anchor.DisconnectAll();
-            // Adjacent cables need to know they just lost a neighbour.
-            foreach (var c in _AllCables)
-                if (c != null && IsStrictNeighbour(transform.position, c.transform.position))
-                    c.RebuildVisuals();
-            // Force a visual rebuild so this cable's own arms disappear immediately.
-            // When anchor has no connections, RebuildVisuals clears all arms.
-            RebuildVisuals();
+            RefreshNearbyDataCables(transform.position, 6f);
         }
 
         private void Update()
@@ -89,10 +101,30 @@ namespace VoxelEngine.Networks
             _scanTimer += Time.deltaTime;
             if (_scanTimer < SCAN_INTERVAL) return;
             _scanTimer = 0f;
-            if (ScanAndLink()) RebuildVisuals();
+            bool changed = ScanAndLink();
+            if (changed || _builtVariant != variant || _builtLength != straightLength)
+                RebuildVisuals();
         }
 
-        // ── Anchor / Visual setup ────────────────────────────────
+        /// <summary>Rescan + redraw every data pipe near a point - the data
+        /// twin of PowerCable.RefreshNearbyCables.</summary>
+        public static void RefreshNearbyDataCables(Vector3 center, float radius = 6f)
+        {
+            s_refreshCandidates.Clear();
+            foreach (var c in _AllCables)
+                if (c != null && c.isActiveAndEnabled
+                    && (c.transform.position - center).sqrMagnitude <= radius * radius)
+                    s_refreshCandidates.Add(c);
+            foreach (var c in s_refreshCandidates)
+                if (c != null && c.isActiveAndEnabled)
+                {
+                    c.ScanAndLink();
+                    c.RebuildVisuals();
+                }
+            s_refreshCandidates.Clear();
+        }
+
+        // ── Anchor ───────────────────────────────────────────────
         private void EnsureAnchor()
         {
             anchor = GetComponent<ConnectionAnchor>();
@@ -100,137 +132,108 @@ namespace VoxelEngine.Networks
             anchor.networkType = NetworkType.Data;
         }
 
-        private void EnsureVisualRoot()
-        {
-            if (_visualRoot != null) return;
-            // Hide any pre-existing prefab meshes so we render arms ourselves.
-            foreach (var r in GetComponentsInChildren<MeshRenderer>(true))
-                if (r.transform != transform) r.enabled = false;
+        // ── Endpoints (same shapes as the energy pipe) ───────────
+        public List<EnergyPipeMeshBuilder.EndpointInfo> LocalEndpoints
+            => EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
 
-            var go = new GameObject("CableVisuals");
-            _visualRoot = go.transform;
-            _visualRoot.SetParent(transform, worldPositionStays: false);
-        }
+        public Vector3 EndpointWorld(EnergyPipeMeshBuilder.EndpointInfo ep)
+            => transform.TransformPoint(ep.Position);
 
-        private void EnsureMaterial()
-        {
-            if (_material == null)
-                _material = GridCableVisuals.CreateTintedMaterial(tint, $"{name}_DataMat");
-        }
+        public Vector3 EndpointNormalWorld(EnergyPipeMeshBuilder.EndpointInfo ep)
+            => transform.TransformDirection(ep.Normal).normalized;
 
         // ── Neighbour scan + connect/disconnect ──────────────────
-        /// <summary>
-        /// Walks the registry of placed data cables (and ConnectionAnchors) for ±1 grid
-        /// step cardinal neighbours, performs an LOS check, and updates the anchor's
-        /// connection list. Returns true if anything changed (so the visual can rebuild).
-        /// </summary>
         private bool ScanAndLink()
         {
+            if (anchor == null) EnsureAnchor();
             if (anchor == null) return false;
             bool changed = false;
 
-            // 1) Build set of currently desired neighbour anchors.
             var desired = new HashSet<ConnectionAnchor>();
+            var myEps = LocalEndpoints;
 
-            // 1a) Other DataCables.
+            // 1a) Other data pipes: plug meets plug. A legacy cardinal-
+            //     adjacency fallback keeps pre-14.41 cube-pipe runs linked.
             foreach (var other in _AllCables)
             {
-                if (other == null || other == this) continue;
-                if (!IsStrictNeighbour(transform.position, other.transform.position)) continue;
-                if (!HasLineOfSight(transform.position, other.transform.position, other.anchor)) continue;
-                // Wrench blacklist — honour explicit player disconnects.
+                if (other == null || other == this || other.anchor == null) continue;
                 if (WrenchBlacklist.IsBlocked(this, other)) continue;
-                if (other.anchor != null) desired.Add(other.anchor);
+
+                bool mated = false;
+                var otherEps = other.LocalEndpoints;
+                for (int i = 0; i < myEps.Count && !mated; i++)
+                {
+                    Vector3 myWorld = EndpointWorld(myEps[i]);
+                    for (int j = 0; j < otherEps.Count; j++)
+                    {
+                        if ((other.EndpointWorld(otherEps[j]) - myWorld).sqrMagnitude
+                            > ENDPOINT_LINK_RADIUS * ENDPOINT_LINK_RADIUS) continue;
+                        mated = true;
+                        break;
+                    }
+                }
+                if (!mated && IsStrictNeighbour(transform.position, other.transform.position)
+                    && HasLineOfSight(transform.position, other.transform.position, other.anchor))
+                    mated = true;
+
+                if (mated) desired.Add(other.anchor);
             }
 
-            // 1b) Storage devices (Server Rack, Storage Terminal, Importer/Exporter,
-            //     NAS Block) — search a generous 2-grid radius and auto-spawn a
-            //     Data-typed ConnectionAnchor on the device if one doesn't exist.
-            //     This means storage blocks "just work" with cables without any
-            //     manual wrenching or asset wiring.
-            float gs = gridSize > 0 ? gridSize : 1f;
-            float probeRange = gs * 2.5f;
-            Vector3 self = transform.position;
-            int nearbyCount = Physics.OverlapBoxNonAlloc(self,
-                Vector3.one * probeRange, s_overlapBuffer, Quaternion.identity, ~0,
-                QueryTriggerInteraction.Collide);
-
-            for (int nIdx = 0; nIdx < nearbyCount; nIdx++)
+            // 1b) Storage devices: every plug head probes a small sphere just
+            //     past its face. Devices get a Data-typed ConnectionAnchor
+            //     synthesized on first contact, so storage blocks "just work"
+            //     with pipes - no manual wrenching or asset wiring.
+            for (int e = 0; e < myEps.Count; e++)
             {
-                var h = s_overlapBuffer[nIdx];
-                if (h == null) continue;
-                if (h.transform.IsChildOf(transform)) continue;  // ignore self
+                Vector3 epWorld = EndpointWorld(myEps[e]);
+                Vector3 epNormal = EndpointNormalWorld(myEps[e]);
+                Vector3 probeCenter = epWorld + epNormal * (DEVICE_PROBE_RADIUS * 0.5f);
 
-                // Already has a Data anchor → use it.
-                var existing = h.GetComponentInParent<ConnectionAnchor>();
-                if (existing != null && existing.networkType == NetworkType.Data
-                    && existing != anchor)
+                int count = Physics.OverlapSphereNonAlloc(probeCenter, DEVICE_PROBE_RADIUS,
+                    s_overlapBuffer, ~0, QueryTriggerInteraction.Collide);
+                for (int n = 0; n < count; n++)
                 {
-                    if (!HasLineOfSight(self, existing.transform.position, existing)) continue;
-                    // Anti-redundancy: if another cable is closer on the same axis, skip.
-                    if (IsConnectionShadowed(self, existing.transform.position)) continue;
-                    // Wrench blacklist — explicit player disconnect persists.
-                    if (WrenchBlacklist.IsBlocked(gameObject, existing.gameObject)) continue;
+                    var h = s_overlapBuffer[n];
+                    s_overlapBuffer[n] = null;
+                    if (h == null || h.transform.IsChildOf(transform)) continue;
+                    if (h.GetComponentInParent<DataCable>() != null) continue; // pipes handled above
 
-                    // Check PortConfig if the device has one
+                    var rootGo = h.transform.root.gameObject;
+                    if (rootGo == gameObject) continue;
+
+                    // Existing Data anchor on the device → reuse it.
+                    var existing = h.GetComponentInParent<ConnectionAnchor>();
+                    if (existing != null && existing.networkType != NetworkType.Data) existing = null;
+
+                    if (existing == null)
+                    {
+                        if (!IsDataDevice(rootGo)) continue;
+                        existing = rootGo.GetComponent<ConnectionAnchor>();
+                        if (existing == null || existing.networkType != NetworkType.Data)
+                        {
+                            existing = rootGo.AddComponent<ConnectionAnchor>();
+                            existing.networkType = NetworkType.Data;
+                        }
+                    }
+                    if (existing == anchor) continue;
+                    if (WrenchBlacklist.IsBlocked(gameObject, existing.gameObject)) continue;
+                    if (!HasLineOfSight(epWorld, existing.transform.position, existing)) continue;
+
+                    // Honour PortConfig face rules when the device has one.
                     var portConfig = existing.GetComponent<PortConfig>();
                     if (portConfig != null)
                     {
-                        var match = portConfig.GetMatchingFace(self, PortDirection.Input);
-                        if (!match.HasValue) match = portConfig.GetMatchingFace(self, PortDirection.Output);
+                        var match = portConfig.GetMatchingFace(epWorld, PortDirection.Input);
+                        if (!match.HasValue) match = portConfig.GetMatchingFace(epWorld, PortDirection.Output);
                         if (!match.HasValue) continue;
                         if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
-
-                        // Record which face this connection uses
                         _connectionFaces[existing] = match.Value.face;
                     }
-
                     desired.Add(existing);
-                    continue;
                 }
-
-                // Find a storage device on the root GameObject and synthesize an anchor.
-                var rootGo = h.transform.root.gameObject;
-                if (rootGo == gameObject) continue;
-                bool isDataDevice =
-                    rootGo.GetComponent<Storage.ServerRack>()       != null ||
-                    rootGo.GetComponent<Storage.StorageTerminal>()  != null ||
-                    rootGo.GetComponent<Storage.StorageImporter>()  != null ||
-                    rootGo.GetComponent<Storage.StorageExporter>()  != null ||
-                    rootGo.GetComponent<Storage.NASBlock>()         != null ||
-                    rootGo.GetComponent<Storage.DiskManipulator>()  != null ||
-                    rootGo.GetComponent<Storage.PatternTerminal>()  != null ||
-                    rootGo.GetComponent<Storage.CraftingTerminal>() != null;
-                if (!isDataDevice) continue;
-
-                var newAnchor = rootGo.AddComponent<ConnectionAnchor>();
-                newAnchor.networkType = NetworkType.Data;
-                if (!HasLineOfSight(self, newAnchor.transform.position, newAnchor)) continue;
-                // Anti-redundancy: if another cable is closer on the same axis, skip.
-                if (IsConnectionShadowed(self, newAnchor.transform.position)) continue;
-                // Wrench blacklist — honour explicit player disconnects.
-                if (WrenchBlacklist.IsBlocked(gameObject, newAnchor.gameObject)) continue;
-
-                // Check PortConfig if the device has one. Renamed from `portConfig`
-                // to avoid C# scope-collision with the identically-named local in the
-                // earlier `if (existing != null)` branch (the C# 9+ scope rules treat
-                // both branches as one enclosing scope inside the foreach body).
-                var newPortConfig = newAnchor.GetComponent<PortConfig>();
-                if (newPortConfig != null)
-                {
-                    var match = newPortConfig.GetMatchingFace(self, PortDirection.Input);
-                    if (!match.HasValue) match = newPortConfig.GetMatchingFace(self, PortDirection.Output);
-                    if (!match.HasValue) continue;
-                    if (!newPortConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
-
-                    // Record which face this connection uses
-                    _connectionFaces[newAnchor] = match.Value.face;
-                }
-
-                desired.Add(newAnchor);
             }
 
-            // 2) Drop connections that are no longer desired.
+            // 2) Drop stale connections.
             for (int i = anchor.connections.Count - 1; i >= 0; i--)
             {
                 var c = anchor.connections[i];
@@ -238,7 +241,7 @@ namespace VoxelEngine.Networks
                 if (!desired.Contains(c)) { anchor.Disconnect(c); changed = true; }
             }
 
-            // 3) Add new connections.
+            // 3) Add new ones.
             foreach (var d in desired)
                 if (!anchor.connections.Contains(d) && anchor.TryConnect(d))
                     changed = true;
@@ -246,44 +249,21 @@ namespace VoxelEngine.Networks
             return changed;
         }
 
-        /// <summary>
-        /// Checks if there's another DataCable closer to the same target on the same axis.
-        /// If so, this cable's connection to that target is "shadowed" and should be skipped.
-        /// </summary>
-        private bool IsConnectionShadowed(Vector3 myPos, Vector3 targetPos)
+        private static bool IsDataDevice(GameObject rootGo)
         {
-            Vector3 delta = targetPos - myPos;
-            Vector3 axisDir = NearestAxis(delta);
-            float myDist = delta.magnitude;
-
-            foreach (var other in _AllCables)
-            {
-                if (other == null || other == this) continue;
-
-                Vector3 otherPos = other.transform.position;
-                Vector3 otherDelta = targetPos - otherPos;
-
-                // Check if other is on the same axis direction toward target
-                if (Vector3.Dot(otherDelta, axisDir) <= 0) continue; // not toward target
-                if (Vector3.Dot(otherDelta, axisDir) >= Vector3.Dot(delta, axisDir)) continue; // not closer
-
-                // Check axis alignment
-                Vector3 otherAxis = NearestAxis(otherDelta);
-                if (otherAxis != axisDir) continue;
-
-                // Other is closer on the same axis — this connection is shadowed
-                return true;
-            }
-
-            return false;
-        }
-
-        private Vector3 NearestAxis(Vector3 v)
-        {
-            float ax = Mathf.Abs(v.x), ay = Mathf.Abs(v.y), az = Mathf.Abs(v.z);
-            if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(v.x), 0, 0);
-            if (ay >= ax && ay >= az) return new Vector3(0, Mathf.Sign(v.y), 0);
-            return new Vector3(0, 0, Mathf.Sign(v.z));
+            return rootGo.GetComponent<Storage.ServerRack>()              != null ||
+                   rootGo.GetComponent<Storage.StorageTerminal>()         != null ||
+                   rootGo.GetComponent<Storage.StorageImporter>()         != null ||
+                   rootGo.GetComponent<Storage.StorageExporter>()         != null ||
+                   rootGo.GetComponent<Storage.NASBlock>()                != null ||
+                   rootGo.GetComponent<Storage.DiskManipulator>()         != null ||
+                   rootGo.GetComponent<Storage.PatternTerminal>()         != null ||
+                   rootGo.GetComponent<Storage.CraftingTerminal>()        != null ||
+                   rootGo.GetComponent<Storage.Powerstation>()            != null ||
+                   rootGo.GetComponent<Storage.StorageDrawerController>() != null ||
+                   rootGo.GetComponent<Storage.WirelessTransmitter>()     != null ||
+                   rootGo.GetComponent<Storage.SecurityBlock>()           != null ||
+                   rootGo.GetComponent<Storage.ExternalStorageBlock>()    != null;
         }
 
         private bool IsStrictNeighbour(Vector3 a, Vector3 b)
@@ -317,12 +297,9 @@ namespace VoxelEngine.Networks
             {
                 var h = s_rayBuffer[i];
                 if (h.collider == null) continue;
-                // Ignore ourselves.
                 if (h.collider.transform.IsChildOf(transform)) continue;
-                // Ignore the remote endpoint (its own collider counts as "us" from its POV).
                 if (remoteAnchor != null && h.collider.transform.IsChildOf(remoteAnchor.transform))
                     continue;
-                // A solid object blocks the connection.
                 return false;
             }
             return true;
@@ -332,43 +309,118 @@ namespace VoxelEngine.Networks
         public void RebuildVisuals()
         {
             EnsureVisualRoot();
-            EnsureMaterial();
-            _neighbourPositionsBuf.Clear();
-            if (anchor != null)
+            EnsureMaterials();
+
+            var mesh = GetSharedMesh(variant, straightLength);
+            _meshFilter.sharedMesh = mesh;
+            _meshRenderer.sharedMaterials = new[] { s_sheathMat, s_glowMat };
+            _builtVariant = variant;
+            _builtLength = straightLength;
+
+            RebuildColliders();
+        }
+
+        private void EnsureVisualRoot()
+        {
+            if (_visualRoot == null)
             {
-                // Pass real neighbour positions; the helper snaps to the nearest
-                // face and grows arms to actually meet the device (works for
-                // big multi-voxel server racks placed beside the cable).
-                foreach (var c in anchor.connections)
+                var existing = transform.Find("CableVisuals");
+                if (existing != null) _visualRoot = existing;
+                else
                 {
-                    if (c == null) continue;
-
-                    // If we have a recorded face for this connection, use the face point
-                    if (_connectionFaces.TryGetValue(c, out var face))
-                    {
-                        var portConfig = c.GetComponent<PortConfig>();
-                        if (portConfig != null)
-                        {
-                            _neighbourPositionsBuf.Add(portConfig.FaceWorldPoint(face));
-                            continue;
-                        }
-                    }
-
-                    var otherCable = c.GetComponentInParent<DataCable>();
-                    _neighbourPositionsBuf.Add(otherCable != null && otherCable != this
-                        ? Vector3.Lerp(transform.position, otherCable.transform.position, 0.5f)
-                        : c.transform.position);
+                    var go = new GameObject("CableVisuals");
+                    _visualRoot = go.transform;
+                    _visualRoot.SetParent(transform, worldPositionStays: false);
                 }
             }
-            GridCableVisuals.Rebuild(
-                _visualRoot,
-                transform.position,
-                _neighbourPositionsBuf,
-                gridSize > 0 ? gridSize : 1f,
-                coreSize,
-                armThickness,
-                _material,
-                showUnusedFaceCaps);
+            // Hide any pre-baked prefab meshes (ghost core etc.) - the pipe
+            // draws itself.
+            foreach (var r in GetComponentsInChildren<MeshRenderer>(true))
+                if (r.transform != transform && !r.transform.IsChildOf(_visualRoot))
+                    r.enabled = false;
+
+            if (_meshFilter == null)
+            {
+                _meshFilter = _visualRoot.GetComponent<MeshFilter>();
+                if (_meshFilter == null) _meshFilter = _visualRoot.gameObject.AddComponent<MeshFilter>();
+            }
+            if (_meshRenderer == null)
+            {
+                _meshRenderer = _visualRoot.GetComponent<MeshRenderer>();
+                if (_meshRenderer == null) _meshRenderer = _visualRoot.gameObject.AddComponent<MeshRenderer>();
+            }
+        }
+
+        private void EnsureMaterials()
+        {
+            if (s_sheathMat == null)
+            {
+                s_sheathMat = GridCableVisuals.CreateTintedMaterial(sheathColor, "DataPipe_Sheath");
+                if (s_sheathMat.HasProperty("_Metallic")) s_sheathMat.SetFloat("_Metallic", 0.35f);
+                if (s_sheathMat.HasProperty("_Smoothness")) s_sheathMat.SetFloat("_Smoothness", 0.62f);
+            }
+            if (s_glowMat == null)
+            {
+                s_glowMat = GridCableVisuals.CreateTintedMaterial(glowColor, "DataPipe_Glow");
+                s_glowMat.EnableKeyword("_EMISSION");
+                if (s_glowMat.HasProperty("_EmissionColor"))
+                    s_glowMat.SetColor("_EmissionColor", glowColor * 2.2f);
+            }
+        }
+
+        private static Mesh GetSharedMesh(EnergyPipeVariant v, int len)
+        {
+            len = Mathf.Clamp(len, 1, 5);
+            var key = (v, len);
+            if (s_meshCache.TryGetValue(key, out var m) && m != null) return m;
+            m = DataPipeMeshBuilder.BuildMesh(v, len);
+            s_meshCache[key] = m;
+            return m;
+        }
+
+        /// <summary>Box colliders along every straight span of the centreline,
+        /// so long and bent pipes can be aimed at, wrenched and broken
+        /// anywhere - and so the storage network's touching-AABB rule sees
+        /// the pipe's real extent.</summary>
+        private void RebuildColliders()
+        {
+            // Clear previous generated colliders.
+            for (int i = _visualRoot.childCount - 1; i >= 0; i--)
+            {
+                var child = _visualRoot.GetChild(i);
+                if (child.name.StartsWith("Generated_PipeCol", System.StringComparison.Ordinal))
+                    DestroyImmediate(child.gameObject);
+            }
+
+            const float THICK = 0.18f;
+            var segs = DataPipeMeshBuilder.GetColliderSegments(variant, straightLength);
+            for (int i = 0; i < segs.Count; i++)
+            {
+                var (a, b) = segs[i];
+                Vector3 mid = (a + b) * 0.5f;
+                float len = (b - a).magnitude;
+                if (len < 0.05f) continue;
+                var go = new GameObject($"Generated_PipeCol_{i}");
+                go.layer = gameObject.layer;
+                go.transform.SetParent(_visualRoot, false);
+                go.transform.localPosition = mid;
+                go.transform.localRotation = Quaternion.LookRotation(
+                    (b - a).normalized, Mathf.Abs(Vector3.Dot((b - a).normalized, Vector3.up)) > 0.9f
+                        ? Vector3.forward : Vector3.up);
+                var col = go.AddComponent<BoxCollider>();
+                col.size = new Vector3(THICK, THICK, len + THICK * 0.5f);
+            }
+
+            // The prefab root's legacy 0.38 cube collider only matches the old
+            // cube pipe at the origin; shrink it to the hub/plug so it stops
+            // bulging out of slim straight runs. (Disabling it entirely would
+            // orphan older prefabs that rely on a root collider existing.)
+            var rootCol = GetComponent<BoxCollider>();
+            if (rootCol != null)
+            {
+                rootCol.center = Vector3.zero;
+                rootCol.size = Vector3.one * 0.22f;
+            }
         }
     }
 }

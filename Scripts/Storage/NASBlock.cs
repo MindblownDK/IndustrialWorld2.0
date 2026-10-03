@@ -49,8 +49,27 @@ namespace VoxelEngine.Storage
         {
             if (diskSlots == null) diskSlots = new ItemContainer("NAS Disks", BAYS);
             else diskSlots.Resize(BAYS);
-            diskSlots.OnChanged -= ValidateDiskSlots;
-            diskSlots.OnChanged += ValidateDiskSlots;
+            diskSlots.OnChanged -= OnBaysChanged;
+            diskSlots.OnChanged += OnBaysChanged;
+        }
+
+        /// <summary>14.41.0: a bay edit mounts/unmounts the disk IMMEDIATELY.
+        /// The 1 s Update cadence alone meant the UI rebuilt (container event)
+        /// before the disk was mounted - the panel showed EMPTY BAY until the
+        /// player closed and reopened the screen.</summary>
+        private bool _syncingBays;
+        private void OnBaysChanged()
+        {
+            // SyncDisks writes payloads back into the slots, which raises
+            // OnChanged again - without the guard this recurses forever.
+            if (_syncingBays) return;
+            _syncingBays = true;
+            try
+            {
+                ValidateDiskSlots();
+                SyncDisks();
+            }
+            finally { _syncingBays = false; }
         }
 
         private void Update()

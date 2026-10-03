@@ -608,6 +608,7 @@ namespace VoxelEngine.UI
             row.Add(lbl);
 
             var val = new Label(value);
+            val.name                          = "stat-value"; // live-update handle (14.41.0)
             val.style.color                   = new StyleColor(valueColor ?? TextPrimary);
             val.style.fontSize                = 11;
             val.style.unityFontStyleAndWeight = FontStyle.Bold;

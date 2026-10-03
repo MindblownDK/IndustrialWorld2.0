@@ -120,6 +120,8 @@ namespace VoxelEngine.Building
                 gameObject.AddComponent<VoxelEngine.Simulation.RoadSurfaceWheel>();
             if (GetComponent<VoxelEngine.UI.EnergyPipeShapeWheel>() == null)
                 gameObject.AddComponent<VoxelEngine.UI.EnergyPipeShapeWheel>();
+            if (GetComponent<VoxelEngine.UI.DataPipeShapeWheel>() == null)
+                gameObject.AddComponent<VoxelEngine.UI.DataPipeShapeWheel>();
 
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));
@@ -239,6 +241,21 @@ namespace VoxelEngine.Building
                     ghostCable.variant = VoxelEngine.Power.EnergyPipeSelection.Variant;
                     ghostCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
                     ghostCable.RebuildVisuals();
+                    StripGhost(_ghost, _appliedGhostMaterial ?? _ghostMaterialValid);
+                }
+            }
+
+            // Data Pipe ghost (14.41.0): same shape-preview contract as the
+            // energy pipe, driven by its own wheel selection.
+            var ghostDataPipe = _ghost != null ? _ghost.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) : null;
+            if (ghostDataPipe != null)
+            {
+                if (ghostDataPipe.variant != VoxelEngine.Networks.DataPipeSelection.Variant
+                    || ghostDataPipe.straightLength != VoxelEngine.Networks.DataPipeSelection.StraightLength)
+                {
+                    ghostDataPipe.variant = VoxelEngine.Networks.DataPipeSelection.Variant;
+                    ghostDataPipe.straightLength = VoxelEngine.Networks.DataPipeSelection.StraightLength;
+                    ghostDataPipe.RebuildVisuals();
                     StripGhost(_ghost, _appliedGhostMaterial ?? _ghostMaterialValid);
                 }
             }
@@ -1049,6 +1066,15 @@ namespace VoxelEngine.Building
                 VoxelEngine.Power.PowerCable.RefreshNearbyCables(pos, 6f);
             }
 
+            var placedDataPipe = go.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true);
+            if (placedDataPipe != null)
+            {
+                placedDataPipe.variant = VoxelEngine.Networks.DataPipeSelection.Variant;
+                placedDataPipe.straightLength = VoxelEngine.Networks.DataPipeSelection.StraightLength;
+                placedDataPipe.RebuildVisuals();
+                VoxelEngine.Networks.DataCable.RefreshNearbyDataCables(pos, 6f);
+            }
+
             var placedRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
             if (placedRoad != null) placedRoad.RefreshAfterPlacement();
 
@@ -1195,6 +1221,15 @@ namespace VoxelEngine.Building
                 placedCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
                 placedCable.RebuildVisuals();
                 VoxelEngine.Power.PowerCable.RefreshNearbyCables(block.transform.position, 6f);
+            }
+
+            var placedDataPipe = go.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true);
+            if (placedDataPipe != null)
+            {
+                placedDataPipe.variant = VoxelEngine.Networks.DataPipeSelection.Variant;
+                placedDataPipe.straightLength = VoxelEngine.Networks.DataPipeSelection.StraightLength;
+                placedDataPipe.RebuildVisuals();
+                VoxelEngine.Networks.DataCable.RefreshNearbyDataCables(block.transform.position, 6f);
             }
 
             // Grid-mounted pipes link on the Detail lattice step (carried over from
@@ -1384,6 +1419,11 @@ namespace VoxelEngine.Building
             if (held.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
                 && hit.collider.GetComponentInParent<VoxelEngine.Power.PowerCable>() != null)
                 return false;
+            // Same rule for data pipes (14.41.0): pipe-on-pipe goes through the
+            // endpoint snap in TryGetFactorySnapPose, never surface mounting.
+            if (held.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null
+                && hit.collider.GetComponentInParent<VoxelEngine.Networks.DataCable>() != null)
+                return false;
             host = hit.collider.GetComponentInParent<PlacedBlock>();
             if (host == null || host.GetComponentInParent<GridEntity>() != null)
             {
@@ -1414,7 +1454,8 @@ namespace VoxelEngine.Building
             axisV.Normalize();
             Vector3 axisU = Vector3.Cross(axisV, normal).normalized;
             axisV = Vector3.Cross(normal, axisU).normalized;
-            bool isEnergyPipe = held.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
+            bool isEnergyPipe = held.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
+                || held.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null;
             if (isEnergyPipe)
             {
                 // For Energy Pipes attaching to a machine face:
@@ -1864,8 +1905,9 @@ namespace VoxelEngine.Building
             bool placingChute = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null;
             bool placingFunnel = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true) != null;
             bool placingPowerPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
+            bool placingDataPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null;
             bool placingCompactPower = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null;
-            if (!placingBelt && !placingChute && !placingFunnel && !placingPowerPipe && !placingCompactPower) return false;
+            if (!placingBelt && !placingChute && !placingFunnel && !placingPowerPipe && !placingDataPipe && !placingCompactPower) return false;
             var selectedConveyorShape = placingBelt
                 ? ResolveConveyorBuildShape(placingBeltComponent, hit)
                 : VoxelEngine.Simulation.ConveyorShape.Straight;
@@ -2041,6 +2083,42 @@ namespace VoxelEngine.Building
                 Vector3 heldEntryLocal = heldEndpoints.Count > 0 ? heldEndpoints[0].Position : Vector3.zero;
 
                 pos = targetEpWorldPos - rot * heldEntryLocal;
+                return true;
+            }
+
+            // Data pipe → data pipe (14.41.0): identical endpoint snap, driven
+            // by the data pipe's own wheel selection. Plug meets plug.
+            var targetDataPipe = hit.collider.GetComponentInParent<VoxelEngine.Networks.DataCable>();
+            if (placingDataPipe && targetDataPipe != null)
+            {
+                var targetEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
+                    targetDataPipe.variant, targetDataPipe.straightLength);
+                VoxelEngine.Power.EnergyPipeMeshBuilder.EndpointInfo bestTargetEp = default;
+                float bestDist = float.MaxValue;
+                for (int i = 0; i < targetEndpoints.Count; i++)
+                {
+                    var ep = targetEndpoints[i];
+                    Vector3 epWorld = targetDataPipe.transform.TransformPoint(ep.Position);
+                    float d = (epWorld - hit.point).sqrMagnitude;
+                    if (d < bestDist)
+                    {
+                        bestDist = d;
+                        bestTargetEp = ep;
+                    }
+                }
+
+                Vector3 targetEpWorldPos = targetDataPipe.transform.TransformPoint(bestTargetEp.Position);
+                Vector3 targetEpWorldNormal = targetDataPipe.transform.TransformDirection(bestTargetEp.Normal).normalized;
+                Vector3 targetEpWorldUp = targetDataPipe.transform.TransformDirection(bestTargetEp.Up).normalized;
+
+                Quaternion alignRot = Quaternion.LookRotation(targetEpWorldNormal, targetEpWorldUp);
+                rot = alignRot * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+
+                var heldEps = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
+                    VoxelEngine.Networks.DataPipeSelection.Variant, VoxelEngine.Networks.DataPipeSelection.StraightLength);
+                Vector3 heldEntry = heldEps.Count > 0 ? heldEps[0].Position : Vector3.zero;
+
+                pos = targetEpWorldPos - rot * heldEntry;
                 return true;
             }
 
@@ -2462,6 +2540,24 @@ namespace VoxelEngine.Building
                 }
             }
 
+            // Same duplicate guard for Data Pipes (14.41.0).
+            if (isThin && block != null && block.placedPrefab != null && block.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null)
+            {
+                int count = Physics.OverlapSphereNonAlloc(pos, 0.25f, s_placementOverlapProbe, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
+                {
+                    var col = s_placementOverlapProbe[i];
+                    s_placementOverlapProbe[i] = null;
+                    if (col != null && !col.isTrigger)
+                    {
+                        var targetData = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
+                        if (targetData != null
+                            && (targetData.transform.position - pos).sqrMagnitude < 0.25f * 0.25f)
+                            return false;
+                    }
+                }
+            }
+
             return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay,
                 block, placementProfile != null && placementProfile.isSurfaceAttachment ? _surfaceAttachmentHost : null);
         }
@@ -2639,6 +2735,7 @@ namespace VoxelEngine.Building
                     mb is VoxelEngine.Simulation.IItemProvider ||
                     mb is VoxelEngine.Simulation.IMachine ||
                     mb is VoxelEngine.Transport.ItemPipe ||
+                    mb is VoxelEngine.Networks.DataCable ||
                     mb is VoxelEngine.Gas.GasPipe ||
                     mb is VoxelEngine.Fluids.FluidNode ||
                     mb is VoxelEngine.Networks.PipeVisualBuilder ||

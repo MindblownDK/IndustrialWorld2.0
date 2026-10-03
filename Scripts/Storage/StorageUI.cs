@@ -283,12 +283,19 @@ namespace VoxelEngine.Storage
                     }
 
                     // Count ON TOP of the icon - same spot as the inventory slots.
+                    // 14.41.0: readable over ANY icon - bigger type on a dark
+                    // chip instead of bare phosphor digits bleeding into bright
+                    // item art.
                     var countLbl = new Label(FormatCount(entry.count));
                     countLbl.style.position = Position.Absolute;
-                    countLbl.style.top = 1; countLbl.style.right = 3;
-                    countLbl.style.fontSize = 10;
+                    countLbl.style.top = 1; countLbl.style.right = 1;
+                    countLbl.style.fontSize = 11;
                     countLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    countLbl.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                    countLbl.style.color = new StyleColor(new Color(0.92f, 1f, 0.90f, 1f));
+                    countLbl.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.78f));
+                    countLbl.style.paddingLeft = 3; countLbl.style.paddingRight = 3;
+                    countLbl.style.paddingTop = 0; countLbl.style.paddingBottom = 0;
+                    T.Radius(countLbl, 3f);
                     countLbl.pickingMode = PickingMode.Ignore;
                     cell.Add(countLbl);
 
@@ -786,6 +793,161 @@ namespace VoxelEngine.Storage
         }
 
         // ════════════════════════════════════════════════════════════
+        //                EXTERNAL STORAGE (14.41.0)
+        //  Bridges physical chests and lone drawers into the network.
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement BuildExternalStoragePanel(ExternalStorageBlock ext)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 430;
+
+            // The bridge exposes the network's items - same security gate as
+            // the NAS shelves and terminals.
+            var secDenied = SecurityDeniedPanelFor(ext, p);
+            if (secDenied != null) return secDenied;
+
+            ext.RefreshLinks();
+            bool linked = ext.ConnectedRack != null;
+            bool online = linked && ext.ConnectedRack.IsOnline;
+            bool bridging = online && ext.Targets.Count > 0;
+
+            string status = !linked ? "NO CONTROLLER" :
+                            !online ? "STANDBY" :
+                            ext.Targets.Count == 0 ? "NO CONTAINER" : "BRIDGING";
+            Color statusCol = bridging ? T.AccentGreen :
+                              online   ? T.AccentOrange :
+                              linked   ? T.AccentOrange : T.TextMuted;
+
+            var (hdr, _, _, pillLbl) = T.HeaderRow("🔗 External Storage", status, statusCol);
+            p.Add(hdr);
+            p.Add(HighTechTheme.ScanDivider(statusCol));
+
+            // Mode toggle: what the NETWORK may do with the bridged containers.
+            p.Add(T.Subtitle("Network Access"));
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.marginBottom = 4;
+
+            var modeBtns = new List<Button>();
+            void StyleModeButtons()
+            {
+                var modes = new[] { ExternalStorageMode.InsertAndExtract,
+                                    ExternalStorageMode.ExtractOnly,
+                                    ExternalStorageMode.InsertOnly };
+                for (int i = 0; i < modeBtns.Count; i++)
+                {
+                    bool active = ext.mode == modes[i];
+                    modeBtns[i].style.backgroundColor = new StyleColor(active ? T.AccentCyan : T.BgSlot);
+                    modeBtns[i].style.color = active ? Color.black : (Color)T.TextSecondary;
+                }
+            }
+            Button ModeBtn(string txt, ExternalStorageMode m, string tip)
+            {
+                var b = new Button(() =>
+                {
+                    ext.SetMode(m);
+                    StyleModeButtons();
+                    MarkDirtyForSync(ext);
+                }) { text = txt, tooltip = tip };
+                b.style.flexGrow = 1;
+                b.style.minHeight = 24;
+                b.style.fontSize = 9;
+                b.style.unityFontStyleAndWeight = FontStyle.Bold;
+                T.Radius(b, 4f);
+                T.Border(b, 1, T.BorderDim);
+                modeBtns.Add(b);
+                return b;
+            }
+            modeRow.Add(ModeBtn("IN + OUT", ExternalStorageMode.InsertAndExtract,
+                "The network stores into AND pulls from the bridged containers."));
+            modeRow.Add(ModeBtn("EXTRACT", ExternalStorageMode.ExtractOnly,
+                "The network only pulls items out - it never stores here."));
+            modeRow.Add(ModeBtn("INSERT", ExternalStorageMode.InsertOnly,
+                "The network only stores items here - it never pulls them back."));
+            StyleModeButtons();
+            p.Add(modeRow);
+
+            // Priority stepper - ranks against NAS shelves and drawer banks.
+            p.Add(PriorityRow("Network Priority", () => ext.priority, v =>
+            {
+                ext.SetPriority(v);
+                MarkDirtyForSync(ext);
+            }));
+            p.Add(T.Divider());
+
+            // Bridged containers - live list (bridges re-probe every second).
+            p.Add(T.Subtitle("Bridged Containers"));
+            var listHost = new VisualElement();
+            p.Add(listHost);
+            var slotsRow = T.StatRow("▦", "Slots In Use", "", T.AccentCyan);
+            var slotsVal = slotsRow.Q<Label>("stat-value");
+            p.Add(slotsRow);
+
+            void RebuildList()
+            {
+                listHost.Clear();
+                if (ext.Targets.Count == 0)
+                {
+                    listHost.Add(T.Muted("No container touching this block. Place it flush " +
+                                         "against a Chest or a lone Storage Drawer."));
+                }
+                else
+                {
+                    for (int i = 0; i < ext.Targets.Count; i++)
+                    {
+                        var row = new VisualElement();
+                        row.style.flexDirection = FlexDirection.Row;
+                        row.style.alignItems = Align.Center;
+                        row.style.marginBottom = 2;
+                        row.style.paddingLeft = 4; row.style.paddingTop = 2;
+                        row.style.paddingBottom = 2;
+                        row.style.backgroundColor = new StyleColor(T.BgCard);
+                        T.Radius(row, 4f);
+
+                        var dot = new VisualElement();
+                        dot.style.width = 6; dot.style.height = 6;
+                        dot.style.marginRight = 6;
+                        T.Radius(dot, 3f);
+                        dot.style.backgroundColor = new StyleColor(bridging ? T.AccentGreen : T.AccentOrange);
+                        row.Add(dot);
+
+                        var nameLbl = new Label(i < ext.TargetNames.Count ? ext.TargetNames[i] : "Container");
+                        nameLbl.style.fontSize = 10;
+                        nameLbl.style.color = new StyleColor(T.TextSecondary);
+                        row.Add(nameLbl);
+                        listHost.Add(row);
+                    }
+                }
+                var (used, total) = ext.SlotStats();
+                if (slotsVal != null) slotsVal.text = total > 0 ? $"{used} / {total}" : "—";
+            }
+            RebuildList();
+
+            // Live repaint - containers appear/disappear as blocks are placed.
+            int lastCount = ext.Targets.Count;
+            p.schedule.Execute(() =>
+            {
+                if (ext == null) return;
+                bool liveOnline = ext.ConnectedRack != null && ext.ConnectedRack.IsOnline;
+                bool liveBridging = liveOnline && ext.Targets.Count > 0;
+                if (pillLbl != null)
+                    pillLbl.text = ext.ConnectedRack == null ? "NO CONTROLLER" :
+                                   !liveOnline ? "STANDBY" :
+                                   ext.Targets.Count == 0 ? "NO CONTAINER" : "BRIDGING";
+                if (ext.Targets.Count != lastCount) { lastCount = ext.Targets.Count; RebuildList(); }
+                else { var (used, total) = ext.SlotStats(); if (slotsVal != null) slotsVal.text = total > 0 ? $"{used} / {total}" : "—"; }
+            }).Every(700);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("Bridges physical containers into the network: terminals see and use " +
+                          "their items directly. Drawer Controllers don't need this block - they " +
+                          "join by Data Pipe or touch on their own. Draws " +
+                          $"{ExternalStorageBlock.DRAW_WATTS:0} W from the system."));
+            HighTechTheme.Frame(p, statusCol);
+            return p;
+        }
+
+        // ════════════════════════════════════════════════════════════
         //                   STORAGE EXPORTER
         // ════════════════════════════════════════════════════════════
         public static VisualElement BuildExporterPanel(
@@ -944,10 +1106,14 @@ namespace VoxelEngine.Storage
             p.Add(hdr);
             p.Add(HighTechTheme.ScanDivider(statusCol));
 
-            // Totals.
-            p.Add(T.StatRow("💾", "Shelf Data",
-                StorageUnits.FormatPair(nas.TotalStoredGb, nas.TotalCapacity), T.AccentCyan));
-            p.Add(T.StatRow("⚡", "Draw", $"{nas.DrawWatts:0} W", T.AccentGold));
+            // Totals - live-updated below while the panel is open (14.41.0).
+            var dataRow = T.StatRow("💾", "Shelf Data",
+                StorageUnits.FormatPair(nas.TotalStoredGb, nas.TotalCapacity), T.AccentCyan);
+            var dataVal = dataRow.Q<Label>("stat-value");
+            p.Add(dataRow);
+            var drawRow = T.StatRow("⚡", "Draw", $"{nas.DrawWatts:0} W", T.AccentGold);
+            var drawVal = drawRow.Q<Label>("stat-value");
+            p.Add(drawRow);
 
             // Priority stepper - higher priority shelves fill first.
             p.Add(PriorityRow("Network Priority", () => nas.priority, v =>
@@ -958,6 +1124,11 @@ namespace VoxelEngine.Storage
             p.Add(T.Divider());
 
             // ── Drive bays (the NAS front) ────────────────────────
+            // 14.41.0: every bay keeps live refs to its LED, label, fill bar and
+            // percent readout, and a scheduled updater repaints them twice a
+            // second - inserting a disk or watching items stream in no longer
+            // requires closing and reopening the screen.
+            var bayUpdaters = new List<System.Action>();
             for (int i = 0; i < NASBlock.BAYS; i++)
             {
                 int bay = i;
@@ -974,44 +1145,25 @@ namespace VoxelEngine.Storage
                 // Disk slot (insert/remove disks directly in the bay).
                 row.Add(slotBuilder(nas.diskSlots, bay, nas.diskSlots.GetSlot(bay), false, true));
 
-                float fill = nas.BayFill01(bay);
-                bool hasDisk = fill >= 0f;
-
                 // Activity LED.
                 var led = new VisualElement();
                 led.style.width = 7; led.style.height = 7;
                 led.style.marginLeft = 6; led.style.marginRight = 7;
                 led.style.flexShrink = 0;
                 T.Radius(led, 4f);
-                led.style.backgroundColor = new StyleColor(
-                    !hasDisk ? new Color(0.18f, 0.20f, 0.22f, 1f) :
-                    online   ? T.AccentGreen : T.AccentOrange);
                 row.Add(led);
 
-                // Bay label: tier + used/capacity.
+                // Bay label: tier + fill bar.
                 var info = new VisualElement();
                 info.style.flexGrow = 1;
                 info.style.minWidth = 0;
-                var slotStack = nas.diskSlots.GetSlot(bay);
-                string tierTxt = "EMPTY BAY";
-                string capTxt = "—";
-                if (hasDisk && slotStack.item is StorageDisk sd)
-                {
-                    var data = bay < nas.activeDisks.Count ? nas.activeDisks[bay] : null;
-                    tierTxt = sd.displayName;
-                    capTxt = data != null
-                        ? StorageUnits.FormatPair(data.UsedGigabytes, data.Capacity)
-                        : StorageUnits.Format(sd.MaxGigabytes);
-                }
-                var tierLbl = new Label($"BAY {bay + 1}  ·  {tierTxt}");
+                var tierLbl = new Label();
                 tierLbl.style.fontSize = 9;
                 tierLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-                tierLbl.style.color = new StyleColor(hasDisk ? T.TextSecondary : T.TextMuted);
                 tierLbl.style.overflow = Overflow.Hidden;
                 tierLbl.style.whiteSpace = WhiteSpace.NoWrap;
                 info.Add(tierLbl);
 
-                // Fill bar - the NAS "good feel" part.
                 var track = new VisualElement();
                 track.style.height = 7;
                 track.style.marginTop = 3;
@@ -1019,37 +1171,74 @@ namespace VoxelEngine.Storage
                 T.Radius(track, 3f);
                 info.Add(track);
 
-                if (hasDisk)
-                {
-                    Color barCol = fill > 0.90f ? T.AccentRed :
-                                   fill > 0.70f ? T.AccentOrange : T.AccentGreen;
-                    var barFill = new VisualElement();
-                    barFill.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
-                    barFill.style.width = new StyleLength(new Length(Mathf.Clamp01(fill) * 100f, LengthUnit.Percent));
-                    barFill.style.backgroundColor = new StyleColor(barCol);
-                    T.Radius(barFill, 3f);
-                    track.Add(barFill);
-                }
+                var barFill = new VisualElement();
+                barFill.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
+                barFill.style.width = new StyleLength(new Length(0f, LengthUnit.Percent));
+                T.Radius(barFill, 3f);
+                track.Add(barFill);
                 row.Add(info);
 
                 // Percent label.
-                var pct = new Label(hasDisk ? $"{fill * 100f:0}%" : "");
+                var pct = new Label();
                 pct.style.width = 34;
                 pct.style.fontSize = 9;
                 pct.style.unityFontStyleAndWeight = FontStyle.Bold;
                 pct.style.unityTextAlign = TextAnchor.MiddleRight;
-                pct.style.color = new StyleColor(
-                    !hasDisk ? T.TextMuted :
-                    fill > 0.90f ? T.AccentRed :
-                    fill > 0.70f ? T.AccentOrange : T.AccentGreen);
                 row.Add(pct);
 
-                // Capacity readout under the tier name is too cramped; show it
-                // as a tooltip on the whole bay row instead.
-                row.tooltip = hasDisk ? capTxt : "Insert a Storage Disk";
+                void UpdateBay()
+                {
+                    float fill = nas.BayFill01(bay);
+                    bool hasDisk = fill >= 0f;
+                    bool liveOnline = controller != null && controller.IsOnline;
+
+                    led.style.backgroundColor = new StyleColor(
+                        !hasDisk   ? new Color(0.18f, 0.20f, 0.22f, 1f) :
+                        liveOnline ? T.AccentGreen : T.AccentOrange);
+
+                    var slotStack = nas.diskSlots.GetSlot(bay);
+                    string tierTxt = "EMPTY BAY";
+                    string capTxt = "Insert a Storage Disk";
+                    if (hasDisk && slotStack.item is StorageDisk sd)
+                    {
+                        var data = bay < nas.activeDisks.Count ? nas.activeDisks[bay] : null;
+                        tierTxt = sd.displayName;
+                        capTxt = data != null
+                            ? StorageUnits.FormatPair(data.UsedGigabytes, data.Capacity)
+                            : StorageUnits.Format(sd.MaxGigabytes);
+                    }
+                    tierLbl.text = $"BAY {bay + 1}  ·  {tierTxt}";
+                    tierLbl.style.color = new StyleColor(hasDisk ? T.TextSecondary : T.TextMuted);
+
+                    Color barCol = fill > 0.90f ? T.AccentRed :
+                                   fill > 0.70f ? T.AccentOrange : T.AccentGreen;
+                    barFill.style.width = new StyleLength(
+                        new Length(hasDisk ? Mathf.Clamp01(fill) * 100f : 0f, LengthUnit.Percent));
+                    barFill.style.backgroundColor = new StyleColor(barCol);
+
+                    pct.text = hasDisk ? $"{fill * 100f:0}%" : "";
+                    pct.style.color = new StyleColor(!hasDisk ? T.TextMuted : barCol);
+
+                    // Capacity readout under the tier name is too cramped; show
+                    // it as a tooltip on the whole bay row instead.
+                    row.tooltip = capTxt;
+                }
+                UpdateBay();
+                bayUpdaters.Add(UpdateBay);
 
                 p.Add(row);
             }
+
+            // Live repaint: bays + totals, every 500 ms while the panel lives.
+            p.schedule.Execute(() =>
+            {
+                if (nas == null) return;
+                foreach (var u in bayUpdaters) u();
+                if (dataVal != null)
+                    dataVal.text = StorageUnits.FormatPair(nas.TotalStoredGb, nas.TotalCapacity);
+                if (drawVal != null)
+                    drawVal.text = $"{nas.DrawWatts:0} W";
+            }).Every(500);
 
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Link to a Server Controller with Data Pipes or by touching blocks. " +
@@ -1137,7 +1326,12 @@ namespace VoxelEngine.Storage
             hwRow.style.flexDirection = FlexDirection.Row;
             hwRow.style.justifyContent = Justify.Center;
 
+            // 14.41.0: the RAM grid must never wrap - 4 modules sit in ONE row
+            // inside their card (the wrap default pushed the 4th slot out of
+            // the box on narrower layouts).
             var ramGrid = T.SlotGrid();
+            ramGrid.style.flexWrap = Wrap.NoWrap;
+            ramGrid.style.flexShrink = 0;
             for (int i = 0; i < rack.ramSlots.Size; i++)
                 ramGrid.Add(slotBuilder(rack.ramSlots, i, rack.ramSlots.GetSlot(i), false, true));
             hwRow.Add(T.SlotCard("RAM", ramGrid));
@@ -1155,6 +1349,7 @@ namespace VoxelEngine.Storage
             p.Add(T.StatRow("🔌", "Power Stations", rack.StationCount.ToString(), rack.StationCount > 0 ? T.AccentGold : T.AccentRed));
             p.Add(T.StatRow("🖥", "Terminals", rack.TerminalCount.ToString(), T.TextSecondary));
             p.Add(T.StatRow("▤", "Drawer Controllers", rack.DrawerCtrlCount.ToString(), T.TextSecondary));
+            p.Add(T.StatRow("🔗", "External Storage", rack.ExternalCount.ToString(), T.TextSecondary));
             p.Add(T.StatRow("📡", "Wireless Transmitters", rack.TransmitterCount.ToString(), T.TextSecondary));
             p.Add(T.StatRow("🔒", "Security Blocks", rack.SecurityCount.ToString(),
                 rack.SecurityCount > 0 ? T.AccentRed : T.TextMuted));

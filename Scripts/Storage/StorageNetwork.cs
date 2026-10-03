@@ -131,6 +131,7 @@ namespace VoxelEngine.Storage
             Collect<StorageExporter>(_nodes);
             Collect<DiskManipulator>(_nodes);
             Collect<StorageDrawerController>(_nodes);
+            Collect<ExternalStorageBlock>(_nodes);
             Collect<WirelessTransmitter>(_nodes);
             Collect<SecurityBlock>(_nodes);
             Collect<Networks.DataCable>(_nodes);

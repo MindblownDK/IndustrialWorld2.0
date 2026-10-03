@@ -82,6 +82,7 @@ namespace VoxelEngine.Storage
         private readonly List<StorageExporter>         _exporterBuf   = new();
         private readonly List<DiskManipulator>         _manipBuf      = new();
         private readonly List<StorageDrawerController> _drawerBuf     = new();
+        private readonly List<ExternalStorageBlock>    _externalBuf   = new();
         private readonly List<WirelessTransmitter>     _transmitterBuf = new();
         private readonly List<SecurityBlock>           _securityBuf   = new();
 
@@ -164,6 +165,7 @@ namespace VoxelEngine.Storage
         public int DrawerCtrlCount  { get; private set; }
         public int TransmitterCount { get; private set; }
         public int SecurityCount    { get; private set; }
+        public int ExternalCount    { get; private set; }
 
         // ── Recalculation ──────────────────────────────────────────
         private void Recalculate()
@@ -185,6 +187,7 @@ namespace VoxelEngine.Storage
                 StorageNetwork.MembersOf(this, _exporterBuf);
                 StorageNetwork.MembersOf(this, _manipBuf);
                 StorageNetwork.MembersOf(this, _drawerBuf);
+                StorageNetwork.MembersOf(this, _externalBuf);
                 StorageNetwork.MembersOf(this, _transmitterBuf);
                 StorageNetwork.MembersOf(this, _securityBuf);
             }
@@ -193,13 +196,13 @@ namespace VoxelEngine.Storage
                 _nasBuf.Clear(); _stationBuf.Clear(); _terminalBuf.Clear();
                 _craftTermBuf.Clear(); _patTermBuf.Clear(); _importerBuf.Clear();
                 _exporterBuf.Clear(); _manipBuf.Clear(); _drawerBuf.Clear();
-                _transmitterBuf.Clear(); _securityBuf.Clear();
+                _externalBuf.Clear(); _transmitterBuf.Clear(); _securityBuf.Clear();
             }
 
             NasCount = _nasBuf.Count; StationCount = _stationBuf.Count;
             TerminalCount = _terminalBuf.Count + _craftTermBuf.Count + _patTermBuf.Count;
             DrawerCtrlCount = _drawerBuf.Count; TransmitterCount = _transmitterBuf.Count;
-            SecurityCount = _securityBuf.Count;
+            SecurityCount = _securityBuf.Count; ExternalCount = _externalBuf.Count;
 
             // ── CPU / RAM ──────────────────────────────────────────
             var cpu = cpuSlot.GetSlot(0);
@@ -231,6 +234,7 @@ namespace VoxelEngine.Storage
             draw += _exporterBuf.Count * DRAW_EXPORTER;
             draw += _manipBuf.Count * DRAW_MANIPULATOR;
             draw += _drawerBuf.Count * DRAW_DRAWER_CTRL;
+            draw += _externalBuf.Count * ExternalStorageBlock.DRAW_WATTS;
             draw += _transmitterBuf.Count * DRAW_TRANSMITTER;
             foreach (var sec in _securityBuf) draw += sec.DrawWatts;
             SystemDrawWatts = draw;
@@ -285,6 +289,11 @@ namespace VoxelEngine.Storage
             foreach (var dc in _drawerBuf)
                 if (dc != null && dc is IExternalStorageSource src && src.IsAvailable)
                     _targets.Add(new StorageTarget { priority = src.Priority, external = src });
+            // 14.41.0: External Storage bridges - chests and lone drawers made
+            // network-visible, ranked by the same priority number.
+            foreach (var ext in _externalBuf)
+                if (ext != null && ext.IsAvailable)
+                    _targets.Add(new StorageTarget { priority = ext.Priority, external = ext });
             _targets.Sort((a, b) => b.priority.CompareTo(a.priority));
         }
 

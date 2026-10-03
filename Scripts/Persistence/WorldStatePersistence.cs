@@ -799,6 +799,15 @@ namespace VoxelEngine.Persistence
                     entry.cableVariant = (int)placedCable.variant;
                     entry.cableLength = placedCable.straightLength;
                 }
+                // Data pipe shape (14.41.0): same seam - a block carries either
+                // a PowerCable or a DataCable, never both.
+                var placedDataPipe = pb.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true);
+                if (placedDataPipe != null)
+                {
+                    entry.hasCableShape = true;
+                    entry.cableVariant = (int)placedDataPipe.variant;
+                    entry.cableLength = placedDataPipe.straightLength;
+                }
                 // Team banner (14.37.0): which team's colours this pole flies.
                 var placedBanner = pb.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
                 if (placedBanner != null)
@@ -946,6 +955,17 @@ namespace VoxelEngine.Persistence
             {
                 entry.hasStoragePriority = true;
                 entry.storagePriority = priorityDrawerCtrl.priority;
+            }
+            // External Storage bridge (14.41.0): priority rides the shared
+            // seam; the access mode gets its own additive flag. One capture
+            // serves the save file AND MachineSync, like every runtime seam.
+            var externalBridge = go.GetComponentInChildren<VoxelEngine.Storage.ExternalStorageBlock>(true);
+            if (externalBridge != null)
+            {
+                entry.hasStoragePriority = true;
+                entry.storagePriority = externalBridge.priority;
+                entry.hasExternalStorageMode = true;
+                entry.externalStorageMode = (int)externalBridge.mode;
             }
 
             // Battery charge and gas contents live in the RUNTIME seam
@@ -3232,6 +3252,17 @@ namespace VoxelEngine.Persistence
                     restoredCable.RebuildVisuals();
                     VoxelEngine.Power.PowerCable.RefreshNearbyCables(go.transform.position, 6f);
                 }
+                // Data pipe shape (14.41.0): twin of the capture above. Legacy
+                // cube pipes (no flag) reload as the straight 1 m trunk.
+                var restoredDataPipe = go.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true);
+                if (restoredDataPipe != null && sb.hasCableShape
+                    && System.Enum.IsDefined(typeof(VoxelEngine.Power.EnergyPipeVariant), sb.cableVariant))
+                {
+                    restoredDataPipe.variant = (VoxelEngine.Power.EnergyPipeVariant)sb.cableVariant;
+                    restoredDataPipe.straightLength = Mathf.Clamp(sb.cableLength, 1, 5);
+                    restoredDataPipe.RebuildVisuals();
+                    VoxelEngine.Networks.DataCable.RefreshNearbyDataCables(go.transform.position, 6f);
+                }
                 // Team banner (14.37.0): the team was captured at placement;
                 // restoring is an explicit assignment, never a local guess.
                 var restoredBanner = go.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
@@ -3576,6 +3607,18 @@ namespace VoxelEngine.Persistence
                 if (priorityNas != null) priorityNas.SetPriority(saved.storagePriority);
                 var priorityDrawerCtrl = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawerController>(true);
                 if (priorityDrawerCtrl != null) priorityDrawerCtrl.priority = Mathf.Clamp(saved.storagePriority, -99, 999);
+                var priorityExternal = go.GetComponentInChildren<VoxelEngine.Storage.ExternalStorageBlock>(true);
+                if (priorityExternal != null) priorityExternal.SetPriority(saved.storagePriority);
+            }
+
+            // External Storage access mode (14.41.0) - explicit assignment,
+            // replicated to clients through the same MachineSync application.
+            if (saved.hasExternalStorageMode)
+            {
+                var modeExternal = go.GetComponentInChildren<VoxelEngine.Storage.ExternalStorageBlock>(true);
+                if (modeExternal != null && System.Enum.IsDefined(
+                        typeof(VoxelEngine.Storage.ExternalStorageMode), saved.externalStorageMode))
+                    modeExternal.SetMode((VoxelEngine.Storage.ExternalStorageMode)saved.externalStorageMode);
             }
 
             // Runtime-seam twins of the capture above (14.34.0): these are
@@ -4923,6 +4966,11 @@ namespace VoxelEngine.Persistence
             // 14.40.0 additive: NAS / drawer-controller network fill priority.
             public bool hasStoragePriority;
             public int storagePriority;
+            // 14.41.0 additive: External Storage bridge access mode
+            // (0 Insert+Extract, 1 Extract only, 2 Insert only). Priority rides
+            // the hasStoragePriority seam above; legacy saves omit both flags.
+            public bool hasExternalStorageMode;
+            public int externalStorageMode;
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";

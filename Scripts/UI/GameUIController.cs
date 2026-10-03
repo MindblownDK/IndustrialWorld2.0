@@ -121,6 +121,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Storage.StorageExporter    _openExporter;
         private VoxelEngine.Storage.DiskManipulator    _openDiskManipulator;
         private VoxelEngine.Storage.NASBlock           _openNAS;
+        private VoxelEngine.Storage.ExternalStorageBlock _openExternalStorage; // 14.41.0
         private VoxelEngine.Storage.Powerstation       _openPowerstation;
         private VoxelEngine.Weather.StaticSeasonMonitor _openStaticSeasonMonitor;
         private VoxelEngine.Transport.DronePort _openDronePort;
@@ -601,7 +602,7 @@ namespace VoxelEngine.UI
             _openServerRack      = null;
             _openPatternTerminal = null; _openCraftTerminal   = null;
             _openImporter        = null; _openExporter        = null;
-            _openDiskManipulator = null; _openNAS             = null;
+            _openDiskManipulator = null; _openExternalStorage = null; _openNAS             = null;
             _openPowerstation = null; _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
 
             // Normalize + auto-refuel equipped jetpacks BEFORE building the UI:
@@ -627,7 +628,7 @@ namespace VoxelEngine.UI
             _openElectrolyser = null; _openHydroEngine = null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null;
             _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             UnlockCursor();
             Refresh();
@@ -759,7 +760,7 @@ namespace VoxelEngine.UI
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
             _openStation    = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -799,7 +800,7 @@ namespace VoxelEngine.UI
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -824,7 +825,7 @@ namespace VoxelEngine.UI
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -848,7 +849,7 @@ namespace VoxelEngine.UI
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null; _openStation = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -868,7 +869,7 @@ namespace VoxelEngine.UI
             _openCoalGen    = null;
             _rightContainer = null; _openChest = null; _openStation = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -892,7 +893,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
-            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null; _openDronePort = null;
+            _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null; _openDronePort = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openPortalController = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openVoltageStation = null;
@@ -1024,6 +1025,8 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Storage.NASBlock nb:
                     _openNAS = nb;
                     WatchContainer(nb.diskSlots); break;
+                case VoxelEngine.Storage.ExternalStorageBlock ex:
+                    _openExternalStorage = ex; ex.RefreshLinks(); break;
                 case VoxelEngine.Storage.Powerstation ps:
                     _openPowerstation = ps; ps.EnsureContainers();
                     WatchContainer(ps.psuSlots); break;
@@ -1068,7 +1071,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
-            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -1115,7 +1118,7 @@ namespace VoxelEngine.UI
             _openGridTerminal = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null;
             _openCraftTerminal = null; _openImporter = null; _openExporter = null;
-            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null; _openPowerBattery = null; _openVoltageStation = null;
@@ -1143,7 +1146,7 @@ namespace VoxelEngine.UI
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
-            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
@@ -1178,7 +1181,7 @@ namespace VoxelEngine.UI
             _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter   = null; _openExporter     = null;
-            _openDiskManipulator = null; _openNAS     = null;
+            _openDiskManipulator = null; _openExternalStorage = null; _openNAS     = null;
             _openPowerstation= null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
@@ -1499,6 +1502,7 @@ namespace VoxelEngine.UI
                 else if (_openExporter         != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildExporterPanel(_openExporter, BuildSlot));
                 else if (_openDiskManipulator  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
                 else if (_openNAS              != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
+                else if (_openExternalStorage  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildExternalStoragePanel(_openExternalStorage));
                 else if (_openPowerstation     != null) _contentLayer.Add(BuildPowerstationPanel(_openPowerstation));
                 else if (_openStaticSeasonMonitor != null) _contentLayer.Add(VoxelEngine.Weather.SeasonMonitorUI.BuildPanel(_openStaticSeasonMonitor));
                 else if (_openDronePort != null) { _openDronePort.EnsureContainers(); _contentLayer.Add(VoxelEngine.Transport.DronePortUI.BuildPanel(_openDronePort, BuildSlot)); }
@@ -3116,9 +3120,14 @@ namespace VoxelEngine.UI
             recipesButton.style.minWidth = 104;
             commands.Add(recipesButton);
 
-            // 14.40.0: wireless storage toggle - only offered when the player
-            // can actually reach a network (handheld terminal + transmitter
-            // range + Security Block wireless clearance).
+            // 14.40.0: wireless storage toggle - usable when the player can
+            // actually reach a network (handheld terminal + transmitter range
+            // + Security Block wireless clearance).
+            // 14.41.0: the button no longer vanishes silently. When an online
+            // transmitter is in range but the gate fails, it shows DISABLED
+            // with the reason - players discover they need to craft and carry
+            // the handheld Wireless Terminal instead of hunting a hidden
+            // feature.
             if (GetActiveWirelessTransmitter() != null)
             {
                 bool linkOpen = _openStorageTerminal != null && _openStorageTerminal == _wirelessTerminalProxy;
@@ -3135,7 +3144,55 @@ namespace VoxelEngine.UI
                 linkButton.style.marginTop = 3;
                 commands.Add(linkButton);
             }
+            else
+            {
+                string reason = WirelessLinkUnavailableReason();
+                if (reason != null)
+                {
+                    var deadButton = LcdHudTheme.CommandButton("STORAGE LINK", () => { },
+                        new Color(0.45f, 0.50f, 0.47f, 1f), false);
+                    deadButton.style.flexGrow = 1;
+                    deadButton.style.minWidth = 104;
+                    deadButton.style.marginTop = 3;
+                    deadButton.style.opacity = 0.55f;
+                    deadButton.tooltip = reason;
+                    commands.Add(deadButton);
+
+                    var reasonLbl = LcdHudTheme.CaptionLabel(reason.ToUpperInvariant());
+                    reasonLbl.style.marginTop = 2;
+                    reasonLbl.style.color = new StyleColor(new Color(0.60f, 0.55f, 0.35f, 1f));
+                    bay.Add(reasonLbl);
+                }
+            }
             return bay;
+        }
+
+        /// <summary>Why STORAGE LINK is unavailable even though an online
+        /// Wireless Transmitter is within range - or null when no transmitter
+        /// is reachable at all (then no hint is shown; there is nothing to
+        /// link to from here). 14.41.0.</summary>
+        private string WirelessLinkUnavailableReason()
+        {
+            if (inventory == null) return null;
+            Vector3 origin = inventory.transform.position;
+            var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
+            if (all == null || all.Length == 0) return null;
+
+            bool anyInRange = false;
+            bool anyPermitted = false;
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
+            foreach (var t in all)
+            {
+                if (t == null || t.ConnectedRack == null || !t.InPlayerRange(origin)) continue;
+                anyInRange = true;
+                if (VoxelEngine.Storage.SecurityBlock.WirelessDenierForRack(t.ConnectedRack, me) == null)
+                    anyPermitted = true;
+            }
+            if (!anyInRange) return null;
+            if (!VoxelEngine.Storage.WirelessStorageAccess.HasHandheldTerminal(inventory.container))
+                return "Carry a Wireless Terminal to link";
+            if (!anyPermitted) return "Wireless access denied by Security Block";
+            return null;
         }
 
         private void BuildWirelessStorageReadout(VisualElement parent)
@@ -6183,32 +6240,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     // If the explicit destination refused (full, wrong type), fall through to
                     // network/inventory routing so the player isn't left holding a "stuck" stack.
                 }
-                // ── HOTBAR → BACKPACK quick-transfer ─────────────────────────
-                // When NO machine/network destination accepted the stack AND the
-                // click came from a HOTBAR slot, push the items into the first
-                // free BACKPACK slot. Inversely, a click on a BACKPACK slot with
-                // no machine open promotes the items down to the first free
-                // HOTBAR slot. This mirrors the quick-access inventory transfer
-                // convention: shift-click always sends items "to the other half"
-                // of the inventory when there's no external container.
-                if (sourceC is ItemContainer ic)
-                {
-                    bool fromHotbar = sourceIdx < Inventory.HOTBAR_SIZE;
-                    int destStart = fromHotbar ? Inventory.HOTBAR_SIZE : 0;
-                    int destCount = fromHotbar
-                        ? (Inventory.TOTAL_SIZE - Inventory.HOTBAR_SIZE)
-                        : Inventory.HOTBAR_SIZE;
-
-                    var clone2 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
-                    var leftover2 = ic.InsertRange(clone2, destStart, destCount);
-                    int moved2 = leftover2 == null ? srcStack.count : (srcStack.count - leftover2.count);
-                    if (moved2 > 0)
-                    {
-                        if (moved2 >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
-                        else                          { srcStack.count -= moved2; sourceC.SetSlot(sourceIdx, srcStack); }
-                        return;
-                    }
-                }
+                // 14.41.0: the HOTBAR ↔ BACKPACK quick-swap used to live HERE -
+                // which meant it always won over the storage-terminal and
+                // wireless routing below. With a terminal open, shift-clicking
+                // a backpack stack bounced it into the hotbar instead of into
+                // the network. The swap moved BELOW the network routing - it is
+                // the LAST resort now, not the first.
             }
 
             // 2) Inventory → storage terminal that the PLAYER explicitly opened.
@@ -6228,8 +6265,10 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     else { srcStack.count = netLeftover; sourceC.SetSlot(sourceIdx, srcStack); }
                     BuildFeedbackHud.Show($"Stored {srcStack.item.displayName}", $"+{netMoved}", srcStack.item.icon, UITheme.AccentCyan);
                     Refresh();
+                    return;
                 }
-                return;
+                // Network refused (offline / full) - fall through so the stack
+                // can still quick-swap between hotbar and backpack.
             }
 
             // 3) Plain inventory ↔ wireless transmitter (selected one) — shift-click stores
@@ -6237,7 +6276,13 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             //    transmitter online but is NOT looking at any machine.
             if (sourceC == inventory.container)
             {
-                var rack = GetActiveWirelessRack();
+                // The wireless route only claims the click while the remote
+                // terminal view is actually OPEN - a player just reorganising
+                // their inventory near a transmitter keeps the normal
+                // hotbar/backpack quick-swap (14.41.0).
+                bool wirelessViewOpen = _openStorageTerminal != null
+                    && _openStorageTerminal == _wirelessTerminalProxy;
+                var rack = wirelessViewOpen ? GetActiveWirelessRack() : null;
                 if (rack != null)
                 {
                     int netLeftover = rack.NetworkInsert(srcStack.item, srcStack.count);
@@ -6248,7 +6293,30 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         else { srcStack.count = netLeftover; sourceC.SetSlot(sourceIdx, srcStack); }
                         BuildFeedbackHud.Show($"Stored {srcStack.item.displayName}", $"+{netMoved}", srcStack.item.icon, UITheme.AccentCyan);
                         Refresh();
+                        return;
                     }
+                }
+            }
+
+            // 3.5) LAST resort for clicks inside the player inventory: the
+            // HOTBAR ↔ BACKPACK quick-swap. When no machine or network claimed
+            // the stack, shift-click still sends items "to the other half" of
+            // the inventory (hotbar → first free backpack slot and vice versa).
+            if (sourceC == inventory.container && sourceC is ItemContainer ic)
+            {
+                bool fromHotbar = sourceIdx < Inventory.HOTBAR_SIZE;
+                int destStart = fromHotbar ? Inventory.HOTBAR_SIZE : 0;
+                int destCount = fromHotbar
+                    ? (Inventory.TOTAL_SIZE - Inventory.HOTBAR_SIZE)
+                    : Inventory.HOTBAR_SIZE;
+
+                var clone2 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
+                var leftover2 = ic.InsertRange(clone2, destStart, destCount);
+                int moved2 = leftover2 == null ? srcStack.count : (srcStack.count - leftover2.count);
+                if (moved2 > 0)
+                {
+                    if (moved2 >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
+                    else                          { srcStack.count -= moved2; sourceC.SetSlot(sourceIdx, srcStack); }
                     return;
                 }
             }

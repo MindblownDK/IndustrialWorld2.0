@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Item_ExternalStorage
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: external_storage
+  displayName: External Storage
+  description: Bridges PHYSICAL containers into the mass-storage network. Place it
+    flush against a Chest or a lone Storage Drawer (or pipe it in) and terminals
+    see, count and use those items directly. Set the access mode (insert + extract,
+    extract only, insert only) and a fill priority on the block. Drawer Controllers
+    don't need it - they join the network on their own.
+  icon: {fileID: 0}
+  iconTint: {r: 0.35, g: 0.65, b: 0.95, a: 1}
+  maxStack: 10
+  massPerUnit: 12
+  category: Storage
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  placedPrefab: {fileID: 6790732341510176947, guid: d701f98bdae20a249a15c93ef5a7d1d1, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 1
+  blockHealth: 300
+  miningTier: 0
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

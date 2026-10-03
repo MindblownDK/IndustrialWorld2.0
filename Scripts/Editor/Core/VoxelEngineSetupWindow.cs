@@ -973,6 +973,9 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "108. Mass-storage Overhaul\n(Data Pipe + handheld Wireless Terminal + rebrands - Non-Destructive)",
                 () => VoxelEngine.EditorTools.StorageOverhaulSetup.RunStep108(), 56);
 
+            AddWizardButton(scroll, "109. Storage Network Polish\n(External Storage block + importer/exporter visual overhaul - Non-Destructive)",
+                () => VoxelEngine.EditorTools.StorageNetworkPolishSetup.RunStep109(), 56);
+
             AddSpacer(scroll, 20);
         }
 

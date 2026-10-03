@@ -173,6 +173,14 @@ namespace VoxelEngine.Networking
                 snap.CableVariant = (int)cable.variant;
                 snap.CableLength = cable.straightLength;
             }
+            // Data pipes (14.41.0) share the same shape seam - a block carries
+            // either a PowerCable or a DataCable, never both.
+            var dataPipe = block.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true);
+            if (dataPipe != null)
+            {
+                snap.CableVariant = (int)dataPipe.variant;
+                snap.CableLength = dataPipe.straightLength;
+            }
             var banner = block.GetComponentInChildren<VoxelEngine.Combat.BannerDisplay>(true);
             if (banner != null)
             {
@@ -232,6 +240,14 @@ namespace VoxelEngine.Networking
                     cable.straightLength = Mathf.Clamp(snap.CableLength, 1, 5);
                     cable.RebuildVisuals();
                     VoxelEngine.Power.PowerCable.RefreshNearbyCables(snap.Position, 6f);
+                }
+                var dataPipeRemote = go.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true);
+                if (dataPipeRemote != null && snap.CableVariant >= 0)
+                {
+                    dataPipeRemote.variant = (VoxelEngine.Power.EnergyPipeVariant)snap.CableVariant;
+                    dataPipeRemote.straightLength = Mathf.Clamp(snap.CableLength, 1, 5);
+                    dataPipeRemote.RebuildVisuals();
+                    VoxelEngine.Networks.DataCable.RefreshNearbyDataCables(snap.Position, 6f);
                 }
                 var road = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
                 if (road != null) road.RefreshAfterPlacement();

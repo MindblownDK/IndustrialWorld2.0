@@ -1538,6 +1538,14 @@ namespace VoxelEngine.Player
                 }
                 var powerstation = hit.collider.GetComponentInParent<VoxelEngine.Storage.Powerstation>();
                 if (powerstation != null) { UI.GameUIController.Instance?.OpenMachine(powerstation); return; }
+                // External Storage bridge (14.41.0): exposes network items, so
+                // it honours the same Security Block gate as NAS and terminals.
+                var externalStorage = hit.collider.GetComponentInParent<VoxelEngine.Storage.ExternalStorageBlock>();
+                if (externalStorage != null)
+                {
+                    if (StorageAccessDeniedFor(externalStorage)) return;
+                    UI.GameUIController.Instance?.OpenMachine(externalStorage); return;
+                }
 
                 // Grand static Season Monitor observatory.
                 var staticSeasonMonitor = hit.collider.GetComponentInParent<VoxelEngine.Weather.StaticSeasonMonitor>();

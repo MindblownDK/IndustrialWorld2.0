@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.40.0-dev`
-**Roadmap Version:** `14.40.0-dev`
+**Current Version:** `14.41.0-dev`
+**Roadmap Version:** `14.41.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.41.0-dev - Plugs, Bends and Borrowed Shelves
+The storage network reaches the physical world and the Data Pipe becomes a real cable. The new External Storage block bridges Chests and lone Storage Drawers into the network (wired or touching), with a three-way access mode (insert+extract / extract only / insert only) and a fill priority, drawing 6 W on the system bill; Drawer Controllers keep joining natively. The Data Pipe gains the energy pipe's nine-fitting radial wheel (shapes only - importer, exporter and the bridge stay separate snap-on blocks) with its own selection memory, V+scroll 1-5 m straights, plug-to-plug endpoint snapping and per-endpoint device probing, restyled as a braided data trunk with phosphor pulse rings and RJ45-style plug heads; legacy center-adjacency still links old-save pipes and shape/length ride the existing cable save fields and block snapshot. Importer, Exporter and the bridge get network-appliance bodies whose port sockets meet the pipe's plug heads. Fixes: RAM rail no longer overflows the controller panel, NAS fill bars update live, terminal count chips get an LCD backing, shift-click stores to the network while a terminal is open, STORAGE LINK button made discoverable. Setup step 109 authors it all non-destructively.
 
 ### 14.40.0-dev - Pipes, Shelves and a Single Brain
 The mass-storage overhaul. One connectivity rule replaces every radius search: storage blocks share a network when Data Pipes connect them or they physically touch, resolved deterministically on every machine by the new StorageNetwork resolver (no wire messages). The rack becomes the Server Controller (4 RAM + 1 CPU, exactly one per network - two conflict and the system goes dark); disks live in NAS shelves (8 bays, front-panel UI with per-bay fill bars green/yellow/red, per-shelf priority); PSUs live in Power Stations, the system's only grid input - the controller computes the real system draw and splits the bill across stations. Fullscreen LCD storage terminal (search, sort, live MB/GB/TB/PB readouts, 1 s hover tooltips with data size; all item tooltips now show weight). Wireless access requires the handheld Wireless Terminal item + transmitter range + Security Block wireless clearance (never global; owner always, team via a new owner-only checkbox) and gates building-from-storage, crafting and every remote panel. All storage hardware containers persist for the first time and replicate to clients; disk contents travel on the disk stack itself. Setup step 108 authors the Data Pipe, handheld terminal, rebrands and the RAM-8/CPU-16 stack balance. Auto-crafting stays deferred by design.
