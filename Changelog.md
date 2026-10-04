@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.56.0-dev`
+**Current Version:** `14.59.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.59.0-dev] No Planet Left Behind
+
+**Multi-planet terrain catch-up: a guest now receives a planet's edited terrain whenever they arrive on it - not just the planet the host happened to be standing on at join.**
+
+- New planet-arrival catch-up: whenever a guest's streamed body changes - initial spawn, rocket landing, warp, returning from deep space - the guest asks the host for that planet's edited chunks, and the host streams them over the same compressed chunk channel the join push has always used. Until now only the host's current planet transferred at join: a guest spawning at their bed on another planet, or traveling to one the host had mined before, stood on pristine worldgen where the host saw bases and quarries.
+- The host serves a requested planet from wherever it lives: the live world when the host is standing on it (live chunks beat stored ones, as at join), or straight from that body's settled chunk store on disk (VoxelWorlds/world/Bodies/...) without loading the planet. Planet stores are flushed and closed before every retarget, so the disk walk never races a writer.
+- Arrivals also heal mid-session divergence: live terrain ops have always been skipped by machines on other planets, so a guest who left a planet missed everything edited there while they were away. Re-arriving now refreshes the whole planet from the host's truth - the same overwrite rule as the join catch-up (server-approved chunks always win on a guest).
+- The join flow is unchanged and dedupe-guarded: the guest's arrival request and the host's join push can race for the same planet, so the host keeps a small per-connection ledger of what it served - whichever path runs first wins and the other skips, never sending a planet twice.
+- Hardened like everything else this arc: the requested body name is validated as a plain store-folder name (no path characters), and serves are throttled to one per planet per connection per 30 seconds, so a modified client cannot use requests to walk the host's disk or spam the expensive region-file reads.
+- Frame-budgeted on the host exactly like the join push: region files are read and deflated a few chunks per frame, so serving a big planet to an arriving guest never stalls the host's world.
+- Known edges, accepted: a host drifting in deep space has no world handle to serve other planets from - the guest's next arrival (or the host reaching any planet) recovers; live ops for planets a guest is not standing on are still skipped by design, with re-arrival as the convergence point; fluid-sim state remains the one deferred piece of milestone 4.
+- Wire format: one new request message; host and guests should both run 14.59.0.
+
+### [14.58.0-dev] One Simulation
+
+**The automatic item movers now run once per session - on the host. Guests render the replicated outcome instead of racing their own copy of the machinery.**
+
+- Importers, exporters, the auto-crafter and the disk manipulator no longer simulate on guest machines. Previously every peer ran its own copy of these sims against its own copy of the containers, and the host's announcements continually overwrote the guests' local results - a tug-of-war that could flicker counts, double-move stacks between polls, and in the worst case dupe or eat items at the moment two machines moved the same stack.
+- The host alone pulls items into the network (importer), pushes and orders them out (exporter, including Crafting Card requests), advances craft jobs (auto-crafter) and copies disks (disk manipulator). The results reach every guest through the existing container and machine state replication - the same channel chest edits already use.
+- Guests lose nothing visible: importers and exporters still scan for their rack and compute their upgrade stats, so connection status and tooltips stay live; the auto-crafter's queue, progress bars and job states converge from the host's live queue (the 14.43.0 seam); the disk manipulator's panel shows the transfer advancing on the replicated disks.
+- Guest interaction is untouched: queueing or canceling a craft, changing filters, slotting upgrades or inserting disks rides the player-interaction announce as before - the host picks the edit up and its one true simulation acts on it. On guarded networks those edits already pass the 14.57.0 Security Block gate.
+- Offline play and hosting are byte-for-byte unchanged; a guest in a mismatched world (who receives no state echoes) keeps simulating its own machines locally, as it must.
+- No wire format changes and no save changes. This closes the long-standing "machine sims run ungated on every peer" gap from the multiplayer accepted-gaps list.
+
+### [14.57.0-dev] Who Goes There
+
+**Security hardening, part two: the host now verifies WHO is acting - locked doors, lock intents and guarded storage networks no longer take a stranger's word for it.**
+
+- Verified sender identity: every lock intent (code set, keypad attempt, lock toggle, lock removal) is now cross-checked against the identity the host admitted for that connection at join. A modified client can no longer act as another player by writing someone else's id into a message - claimed identity and connection must match or the intent is dropped.
+- Locked doors are enforced host-side. A door, gate or hatch guarded by a coded, locked lock only obeys toggles from players on its authorized list; a denied toggle is dropped unrelayed and the host re-announces the true door state, so the forger's locally-predicted door swings shut again in front of them. Honest clients notice nothing - they were already gated by the keypad locally.
+- Storage networks are enforced host-side. A container overwrite targeting a block on a storage network guarded by an armed Security Block must come from a player that network permits (the same PRIVATE/TEAM/GLOBAL rules the terminal enforces on screen). A denied write is dropped unrelayed and the host fans its real contents back out, so the phantom edit converges away on the sender's machine. Plain chests and machines outside any network are untouched - they have no security concept, as before.
+- Join uploads respect the same two shields: when merging a rejoining guest's piece snapshot, a locked door keeps the host's remembered state (extending the 14.56.0 lock-secret shield), and container records targeting guarded networks the joiner cannot open are skipped.
+- No wire format changes this round - hosts and guests on 14.56.0 and 14.57.0 speak the same messages; the host just stopped believing all of them.
+- Accepted gaps after this round: breaking a security block, cutting its power or demolishing the door remains the intended physical counterplay, not a bug; machine simulation echoes (importer/exporter/AutoCrafter) stay client-trusted until the intent-RPC conversion pass; the client-side UI gates remain in place purely as UX.
 
 ### [14.56.0-dev] Nobody Knows the Code
 

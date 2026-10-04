@@ -87,6 +87,11 @@ namespace VoxelEngine.Storage
             CurrentStackSize = baseStackSize * (1 + stackUps * 63); // 1 stack = 64 items
             HasCraftingCard = card;
 
+            // 14.58.0 - item movement is host-simulated: guests keep the rack
+            // search and tooltip stats, the host alone moves (and orders) the
+            // items, and the outcome replicates back as container state.
+            if (Networking.NetworkSession.SimulationIsRemote) return;
+
             _timer += Time.deltaTime;
             if (_timer < CurrentInterval) return;
             _timer = 0;

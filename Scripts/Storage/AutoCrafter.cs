@@ -309,6 +309,16 @@ namespace VoxelEngine.Storage
         {
             if (_rack == null) return;
             EnsureContainers();
+
+            // 14.58.0 - crafting is host-simulated: the queue, progress and
+            // outputs replicate to guests through the shared capture seam
+            // (clients converge to the host's live queue, 14.43.0). Guests
+            // queueing a craft from the terminal still works - that edit
+            // rides the player-interaction announce, the host picks it up
+            // and crafts it. Running the planner here too would craft every
+            // job twice.
+            if (Networking.NetworkSession.SimulationIsRemote) return;
+
             bool online = _rack.IsOnline;
 
             // 1) Advance the in-flight craft.

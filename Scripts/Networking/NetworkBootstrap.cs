@@ -780,6 +780,15 @@ namespace VoxelEngine.Networking
         public byte[] Data;
     }
 
+    /// <summary>Client -> server (14.59.0): the guest's streamed body changed -
+    /// initial spawn, rocket landing, warp - and it asks for that planet's
+    /// edited chunks. The host answers with TerrainChunkBroadcasts, served from
+    /// its live world or straight from the per-body chunk store on disk.</summary>
+    public struct TerrainCatchupRequestBroadcast : IBroadcast
+    {
+        public string Body;
+    }
+
     /// <summary>Client -> server: reply to WorldInfoBroadcast. Only a matching
     /// seed invites the base snapshot exchange (14.5.0).</summary>
     public struct WorldAckBroadcast : IBroadcast
@@ -820,6 +829,17 @@ namespace VoxelEngine.Networking
         /// <summary>Server-side: the player id each connection was admitted
         /// under - the duplicate-identity guard reads this.</summary>
         private readonly Dictionary<int, string> _playerIdByConnection = new();
+
+        // 14.59.0 - which planet was last served to which connection (and when):
+        // dedupes the join push against the arrival request (whichever runs
+        // first wins) and throttles request spam to one serve per 30 s.
+        private readonly Dictionary<NetworkConnection, (string body, float time)> _terrainCatchupServed = new();
+        private const float TerrainServeCooldown = 30f;
+
+        // 14.59.0 - client side: the streamed body we last requested catch-up
+        // for, and the next poll tick of the cheap name compare.
+        private string _lastArrivedBody = "";
+        private float _nextBodyCatchupPollAt;
 
         public bool IsOnline => _serverStarted || _clientStarted;
 
@@ -939,6 +959,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
             _networkManager.ServerManager.RegisterBroadcast<BagSnapshotBroadcast>(OnServerBagSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
+            _networkManager.ServerManager.RegisterBroadcast<TerrainCatchupRequestBroadcast>(OnServerTerrainCatchup);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -1101,6 +1122,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<BagSnapshotBroadcast>(OnServerBagSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
+            _networkManager.ServerManager.UnregisterBroadcast<TerrainCatchupRequestBroadcast>(OnServerTerrainCatchup);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -1308,6 +1330,27 @@ namespace VoxelEngine.Networking
             // first condition, so this costs one bool test a frame in the cases
             // that are not multiplayer at all.
             if (!_clientStarted || _serverStarted) return;
+
+            // 14.59.0 - planet-arrival terrain catch-up: when this guest's
+            // streamed body changes (initial spawn, rocket landing, warp,
+            // returning from deep space to a new planet), ask the host for
+            // that planet's edited chunks. One cheap name compare per second.
+            if (Time.unscaledTime >= _nextBodyCatchupPollAt)
+            {
+                _nextBodyCatchupPollAt = Time.unscaledTime + 1f;
+                if (!WorldMismatch)
+                {
+                    string arrivedBody = TerrainSync.CurrentBodyName();
+                    if (!string.IsNullOrEmpty(arrivedBody) && arrivedBody != _lastArrivedBody)
+                    {
+                        _lastArrivedBody = arrivedBody;
+                        _networkManager.ClientManager.Broadcast(
+                            new TerrainCatchupRequestBroadcast { Body = arrivedBody });
+                        Debug.Log($"[NetworkBootstrap] Arrived on '{arrivedBody}' - requested terrain catch-up.");
+                    }
+                }
+            }
+
             if (Time.unscaledTime < _nextPlayerStateUploadAt) return;
             _nextPlayerStateUploadAt = Time.unscaledTime + PlayerStateUploadSeconds;
             UploadLocalPlayerState();
@@ -1380,6 +1423,7 @@ namespace VoxelEngine.Networking
                 _avatarsByConnection.Clear();
                 _playerIdByConnection.Clear();
                 _beaconSignatureByConnection.Clear();
+                _terrainCatchupServed.Clear();
                 if (!_clientStarted) GoOffline();
             }
         }
@@ -1398,6 +1442,7 @@ namespace VoxelEngine.Networking
             else if (args.ConnectionState == LocalConnectionState.Stopped)
             {
                 _clientStarted = false;
+                _lastArrivedBody = "";   // a reconnect must re-request its planet
                 if (_serverStarted) { _statusLine = "Hosting"; return; }
 
                 GoOffline();
@@ -1829,10 +1874,37 @@ namespace VoxelEngine.Networking
                 new Vector3Int(msg.CraterX, msg.CraterY, msg.CraterZ), msg.CraterRadius);
         }
 
+        // ─────────────── verified sender identity (14.57.0) ───────────────
+
+        /// <summary>The admitted player id behind a connection, or null when
+        /// the connection never announced one. This is the identity the HOST
+        /// verified at join - unlike a PlayerId field inside a message, it
+        /// cannot be spoofed by a modified client.</summary>
+        private string SenderPlayerId(NetworkConnection conn)
+            => conn != null && _playerIdByConnection.TryGetValue(conn.ClientId, out var id) ? id : null;
+
+        /// <summary>True when a message's claimed PlayerId matches the admitted
+        /// identity of the connection it arrived on. Every lock intent must
+        /// pass this - a guest can only act as itself.</summary>
+        private bool VerifiedSender(NetworkConnection conn, string claimedId)
+            => !string.IsNullOrEmpty(claimedId) && SenderPlayerId(conn) == claimedId;
+
         private void OnServerDoorState(NetworkConnection conn, DoorStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient) BuildingSync.ApplyDoorState(msg.Family, msg.Position, msg.Open, msg.Side);
+            if (!conn.IsLocalClient)
+            {
+                // 14.57.0 hardening: a door behind a coded, locked lock only
+                // obeys authorized players. A denied toggle is dropped
+                // unrelayed and the true state is re-announced so the
+                // sender's locally-predicted door swings back.
+                if (!BuildingSync.HostAcceptsDoorState(msg.Family, msg.Position, SenderPlayerId(conn)))
+                {
+                    BuildingSync.ReannounceDoorState(msg.Family, msg.Position);
+                    return;
+                }
+                BuildingSync.ApplyDoorState(msg.Family, msg.Position, msg.Open, msg.Side);
+            }
             RelayToOthers(conn, msg);
         }
 
@@ -1856,7 +1928,9 @@ namespace VoxelEngine.Networking
             if (!_serverStarted) return;
             if (!conn.IsLocalClient)
             {
-                // 14.56.0 hardening: only an authorized player strips a coded lock.
+                // 14.56.0 hardening: only an authorized player strips a coded
+                // lock. 14.57.0: the claimed identity must be the sender's own.
+                if (!VerifiedSender(conn, msg.PlayerId)) return;
                 if (!BuildingSync.HostAcceptsLockRemove(msg.Family, msg.Position, msg.PlayerId)) return;
                 BuildingSync.ApplyLockRemoved(msg.Family, msg.Position);
             }
@@ -1866,7 +1940,7 @@ namespace VoxelEngine.Networking
         private void OnServerLockSetCode(NetworkConnection conn, LockSetCodeBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient)
+            if (!conn.IsLocalClient && VerifiedSender(conn, msg.PlayerId))
                 BuildingSync.HostApplyLockSetCode(msg.Family, msg.Position, msg.Packed, msg.PlayerId);
             // No relay: the host's own AnnounceLockState fans the public form out.
         }
@@ -1874,14 +1948,14 @@ namespace VoxelEngine.Networking
         private void OnServerLockEnter(NetworkConnection conn, LockEnterBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient)
+            if (!conn.IsLocalClient && VerifiedSender(conn, msg.PlayerId))
                 BuildingSync.HostApplyLockEnter(msg.Family, msg.Position, msg.AttemptHash, msg.PlayerId);
         }
 
         private void OnServerLockToggle(NetworkConnection conn, LockToggleBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient)
+            if (!conn.IsLocalClient && VerifiedSender(conn, msg.PlayerId))
                 BuildingSync.HostApplyLockToggle(msg.Family, msg.Position, msg.Locked, msg.PlayerId);
         }
 
@@ -2982,7 +3056,20 @@ namespace VoxelEngine.Networking
         private void OnServerContainerState(NetworkConnection conn, ContainerStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient) ContainerSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+            if (!conn.IsLocalClient)
+            {
+                // 14.57.0 hardening: container overwrites into a storage
+                // network guarded by an armed Security Block must come from a
+                // player that network permits. A denied write is dropped
+                // unrelayed and the host's real contents are re-announced so
+                // the sender's phantom edit converges away.
+                if (!ContainerSync.HostAccepts(msg.ItemId, msg.Position, SenderPlayerId(conn)))
+                {
+                    ContainerSync.ReannounceTruth(msg.ItemId, msg.Position);
+                    return;
+                }
+                ContainerSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+            }
             RelayToOthers(conn, msg);
         }
 
@@ -2996,8 +3083,10 @@ namespace VoxelEngine.Networking
         {
             if (!_serverStarted || conn.IsLocalClient) return;
             // Joiner upload: only EMPTY host containers accept it, and only the
-            // accepted records are redistributed (14.8.1 rule) - never a blind relay.
-            ContainerSync.ApplyClientSnapshot(msg.Records);
+            // accepted records are redistributed (14.8.1 rule) - never a blind
+            // relay. 14.57.0: records on security-guarded networks the joiner
+            // cannot open are skipped as well.
+            ContainerSync.ApplyClientSnapshot(msg.Records, SenderPlayerId(conn));
         }
 
         private void OnClientContainerSnapshot(ContainerSnapshotBroadcast msg, Channel channel)
@@ -4136,6 +4225,62 @@ namespace VoxelEngine.Networking
                 msg.Data, respectLocalEdits: false);
         }
 
+        /// <summary>14.59.0 - a guest arrived on a planet and asks for its edited
+        /// chunks. Validated (the body names a store folder, never a path), then
+        /// throttled per connection, then served from the live world when the
+        /// host stands on that planet or from the per-body chunk store on disk
+        /// when it does not.</summary>
+        private void OnServerTerrainCatchup(NetworkConnection conn, TerrainCatchupRequestBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn.IsLocalClient) return;
+            string body = msg.Body;
+            if (string.IsNullOrEmpty(body) || body.Length > 64 || body.Contains("..")
+                || body.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0) return;
+            if (_terrainCatchupServed.TryGetValue(conn, out var served)
+                && served.body == body
+                && Time.unscaledTime - served.time < TerrainServeCooldown) return;
+            _terrainCatchupServed[conn] = (body, Time.unscaledTime);
+            if (_terrainCatchupServed.Count > 64) PruneTerrainServeLedger();
+            StartCoroutine(SendTerrainBodySnapshot(conn, body));
+        }
+
+        private void PruneTerrainServeLedger()
+        {
+            var stale = new List<NetworkConnection>();
+            foreach (var kv in _terrainCatchupServed)
+                if (Time.unscaledTime - kv.Value.time > 120f) stale.Add(kv.Key);
+            foreach (var c in stale) _terrainCatchupServed.Remove(c);
+        }
+
+        /// <summary>Stream one planet's edited chunks to one connection (14.59.0).
+        /// Same frame-budgeted walk as the join push, different source: the live
+        /// world for the host's own planet, the settled disk store for any other.</summary>
+        private IEnumerator SendTerrainBodySnapshot(NetworkConnection target, string body)
+        {
+            if (target == null) yield break;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+            int sent = 0;
+
+            var source = body == TerrainSync.CurrentBodyName()
+                ? TerrainSync.StreamWireChunks()
+                : TerrainSync.StreamStoredWireChunks(body);
+            foreach (var chunk in source)
+            {
+                var msg = new TerrainChunkBroadcast
+                {
+                    Body = body, X = chunk.Coord.x, Y = chunk.Coord.y, Z = chunk.Coord.z,
+                    Data = chunk.Compressed
+                };
+                _networkManager.ServerManager.Broadcast(target, msg, true);
+                sent++;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
+            if (sent == 0) yield break;
+            Debug.Log($"[NetworkBootstrap] Terrain catch-up: sent {sent} edited chunk(s) of '{body}' on arrival.");
+            LogCatchUpPhase("terrain-arrival", sent, clock, startFrame);
+        }
+
         /// <summary>Send every edited chunk of the current planet - to a joining
         /// connection when called as server, up to the server when target is null.</summary>
         private IEnumerator SendTerrainSnapshot(NetworkConnection target)
@@ -4144,6 +4289,21 @@ namespace VoxelEngine.Networking
             int startFrame = Time.frameCount;
             string body = TerrainSync.CurrentBodyName();
             int sent = 0;
+
+            // 14.59.0 - the arrival-request path may already have served this
+            // planet to this connection (the guest's body poll can beat the
+            // join sequence). Whichever path runs first wins; the other skips.
+            if (target != null)
+            {
+                if (_terrainCatchupServed.TryGetValue(target, out var served)
+                    && served.body == body
+                    && Time.unscaledTime - served.time < TerrainServeCooldown)
+                {
+                    Debug.Log("[NetworkBootstrap] Terrain catch-up: join push skipped (already served on arrival request).");
+                    yield break;
+                }
+                _terrainCatchupServed[target] = (body, Time.unscaledTime);
+            }
 
             // Capture and send interleaved: a compressed chunk is a wire message
             // on its own, so there is nothing to gain from holding them all in

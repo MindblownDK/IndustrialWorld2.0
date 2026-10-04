@@ -116,8 +116,9 @@ namespace VoxelEngine.Networking
 
         /// <summary>Join merge, server side: a joiner's upload only fills containers
         /// the host has EMPTY - the contents of freshly merged solo blocks - and only
-        /// the accepted records are redistributed to the other clients.</summary>
-        public static void ApplyClientSnapshot(List<ContainerRecord> records)
+        /// the accepted records are redistributed to the other clients. 14.57.0:
+        /// records that a security block denies the joiner are skipped too.</summary>
+        public static void ApplyClientSnapshot(List<ContainerRecord> records, string senderId)
         {
             if (records == null) return;
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
@@ -127,9 +128,40 @@ namespace VoxelEngine.Networking
                 var block = BlockSync.FindBlockAt(r.ItemId, r.Position);
                 if (block == null) continue;
                 if (persistence.ContainerHasItems(block.gameObject)) continue;   // host truth wins
+                if (!HostAccepts(r.ItemId, r.Position, senderId)) continue;      // guarded network
                 if (!ApplyState(r.ItemId, r.Position, r.Json)) continue;
                 NetworkBootstrap.Instance?.SendContainerState(r.ItemId, r.Position, r.Json);
             }
+        }
+
+        // ─────────────── host-side security gate (14.57.0) ───────────────
+
+        /// <summary>Host gate for a guest-authored container overwrite: when the
+        /// block sits on a storage network with an armed Security Block, the
+        /// sender must pass the same PRIVATE/TEAM/GLOBAL check the UI enforces
+        /// locally - a modified client can no longer write into a guarded
+        /// network it cannot open. Blocks outside any network (plain chests,
+        /// machines) pass through unchanged, as before.</summary>
+        public static bool HostAccepts(string itemId, Vector3 pos, string senderId)
+        {
+            var block = BlockSync.FindBlockAt(itemId, pos);
+            if (block == null) return true;   // nothing local to protect
+            var rack = VoxelEngine.Storage.StorageNetwork.ControllerOf(block);
+            if (rack == null) return true;    // not on a storage network
+            return VoxelEngine.Storage.SecurityBlock.DenierForRack(rack, senderId ?? "") == null;
+        }
+
+        /// <summary>After a denied overwrite, fan the host's real container
+        /// state back out so the denied machine's local prediction converges
+        /// instead of keeping a phantom edit.</summary>
+        public static void ReannounceTruth(string itemId, Vector3 pos)
+        {
+            var block = BlockSync.FindBlockAt(itemId, pos);
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            if (block == null || persistence == null) return;
+            var json = persistence.CaptureContainerJson(block.gameObject);
+            if (json != null)
+                NetworkBootstrap.Instance?.SendContainerState(itemId, pos, json);
         }
 
         /// <summary>Every standing block that carries a container, wire-ready.

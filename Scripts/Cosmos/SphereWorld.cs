@@ -422,6 +422,20 @@ namespace VoxelEngine.Cosmos
                     yield return VoxelEngine.Persistence.ChunkSaveData.FromChunk(chunk);
         }
 
+        /// <summary>14.59.0 - the on-disk chunk store folder of ANOTHER body in
+        /// this world's save (VoxelWorlds/world/Bodies/bodyKey), or null when it
+        /// cannot be derived. The multi-planet terrain catch-up uses this to
+        /// serve edited chunks of planets the host is not currently standing on,
+        /// without loading them.</summary>
+        public string StoreFolderOfBody(string bodyName)
+        {
+            if (_storage == null || string.IsNullOrEmpty(bodyName)) return null;
+            string bodiesDir = System.IO.Path.GetDirectoryName(_storage.WorldFolder);
+            if (string.IsNullOrEmpty(bodiesDir)
+                || System.IO.Path.GetFileName(bodiesDir) != "Bodies") return null;
+            return System.IO.Path.Combine(bodiesDir, bodyName.Replace(" ", ""));
+        }
+
         /// <summary>True when this machine has its own edit of the chunk (loaded or
         /// stored). Local edits win the join merge - identical anyway after a rejoin.</summary>
         public bool HasLocalEdit(Vector3Int chunkCoord)

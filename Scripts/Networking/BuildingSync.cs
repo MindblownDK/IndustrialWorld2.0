@@ -192,19 +192,19 @@ namespace VoxelEngine.Networking
                         piece, 1f - Mathf.Clamp01(piece.hp / (float)maxHp));
                 }
                 if (piece == null) continue;
-                ApplyDoorStateTo(piece, p.DoorOpen, p.DoorSide);
-                if (p.HasLock)
-                {
-                    // 14.56.0 - snapshots carry hash-stripped public forms. A
-                    // guest applying the host's snapshot takes them as-is, but
-                    // the HOST must never let a guest's rejoin upload replace
-                    // a coded lock's full hash (or its authorized list).
-                    var existingLock = piece.GetComponentInChildren<CodeLock>(true);
-                    bool hostKeepsOwn = NetworkSession.Mode != SessionMode.Client
-                        && existingLock != null && existingLock.HasCode;
-                    if (!hostKeepsOwn)
-                        ApplyLockStateTo(piece, p.LockCode, p.LockLocked, p.LockAuthorized);
-                }
+                // 14.56.0 - snapshots carry hash-stripped public forms. A
+                // guest applying the host's snapshot takes them as-is, but
+                // the HOST must never let a guest's rejoin upload replace a
+                // coded lock's full hash (or its authorized list). 14.57.0
+                // extends the same shield to the door state: a locked door
+                // stays the way the host remembers it.
+                var existingLock = piece.GetComponentInChildren<CodeLock>(true);
+                bool hostKeepsOwn = NetworkSession.Mode != SessionMode.Client
+                    && existingLock != null && existingLock.HasCode;
+                if (!(hostKeepsOwn && existingLock.isLocked))
+                    ApplyDoorStateTo(piece, p.DoorOpen, p.DoorSide);
+                if (p.HasLock && !hostKeepsOwn)
+                    ApplyLockStateTo(piece, p.LockCode, p.LockLocked, p.LockAuthorized);
             }
         }
 
@@ -323,6 +323,32 @@ namespace VoxelEngine.Networking
             var piece = FindPieceAt(family, pos);
             var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
             return codeLock == null || !codeLock.HasCode;   // never wipe a coded lock
+        }
+
+        /// <summary>Host gate for a guest-authored door toggle (14.57.0): a
+        /// door, gate or hatch guarded by a coded, LOCKED lock only obeys
+        /// players on its authorized list. Legit clients already enforce this
+        /// locally (AllowsUse) - this stops modified clients from toggling
+        /// other people's locked doors over the wire.</summary>
+        public static bool HostAcceptsDoorState(string family, Vector3 pos, string senderId)
+        {
+            var piece = FindPieceAt(family, pos);
+            if (piece == null) return true;   // nothing local to protect
+            var codeLock = piece.GetComponentInChildren<CodeLock>(true);
+            if (codeLock == null || !codeLock.HasCode || !codeLock.isLocked) return true;
+            return codeLock.IsAuthorized(senderId);
+        }
+
+        /// <summary>After a denied door toggle, the host re-announces the true
+        /// state so the denied machine's locally-predicted door swings back.</summary>
+        public static void ReannounceDoorState(string family, Vector3 pos)
+        {
+            var piece = FindPieceAt(family, pos);
+            if (piece == null) return;
+            if (piece.TryGetComponent<TieredDoor>(out var door))
+            { AnnounceDoorState(door, door.IsOpen, 0f); return; }
+            if (piece.TryGetComponent<TieredHatch>(out var hatch))
+                AnnounceDoorState(hatch, hatch.IsOpen, 0f);
         }
 
         /// <summary>Host gate for lock removal: only an authorized player may

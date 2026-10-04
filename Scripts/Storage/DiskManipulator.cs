@@ -76,6 +76,19 @@ namespace VoxelEngine.Storage
             if (_dstDisk.FreeSpace <= 0)
             { IsTransferring = false; StatusText = "Dest disk full!"; return; }
 
+            // 14.58.0 - the transfer itself is host-simulated; a guest's
+            // panel shows the state of the replicated disks while the host
+            // moves the items.
+            if (Networking.NetworkSession.SimulationIsRemote)
+            {
+                IsTransferring = true;
+                StatusText = "Transferring...";
+                Progress01 = _totalToTransfer > 0
+                    ? 1f - (float)_srcDisk.totalStored / _totalToTransfer : 0f;
+                if (_totalToTransfer == 0) _totalToTransfer = _srcDisk.totalStored;
+                return;
+            }
+
             // Transfer items one batch per tick.
             IsTransferring = true;
             _timer += Time.deltaTime;

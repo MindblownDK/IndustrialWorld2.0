@@ -62,6 +62,12 @@ namespace VoxelEngine.Storage
             CurrentInterval = baseInterval / (1 + speedUps);
             CurrentStackSize = baseStackSize * (1 + stackUps * 63);
 
+            // 14.58.0 - item movement is host-simulated: on a guest the rack
+            // search and tooltip stats above still run, but the actual pull
+            // happens once, on the host, and arrives here as replicated
+            // container state. No more two machines moving the same stack.
+            if (Networking.NetworkSession.SimulationIsRemote) return;
+
             _timer += Time.deltaTime;
             if (_timer < CurrentInterval) return;
             _timer = 0;

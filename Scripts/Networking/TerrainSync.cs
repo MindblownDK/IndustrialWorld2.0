@@ -131,6 +131,35 @@ namespace VoxelEngine.Networking
                 { Coord = data.coord, Compressed = Compress(data.uncompressedVoxelBytes) };
         }
 
+        /// <summary>14.59.0 - every edited chunk of a body the host is NOT standing
+        /// on, read straight from that body's settled chunk store on disk (SetBody
+        /// flushes and shuts a store before retargeting, so these files are never
+        /// mid-write). Serves planet-arrival catch-up requests; yields nothing when
+        /// the body has no store or the active world cannot derive the path (deep
+        /// space). Enumerate it once.</summary>
+        public static IEnumerable<TerrainChunkData> StreamStoredWireChunks(string body)
+        {
+            var world = ActiveWorld.Current as VoxelEngine.Cosmos.SphereWorld;
+            string folder = world != null ? world.StoreFolderOfBody(body) : null;
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) yield break;
+            var seen = new HashSet<Vector3Int>();
+            foreach (var file in Directory.GetFiles(folder, "r_*.dat"))
+            {
+                var parts = Path.GetFileNameWithoutExtension(file).Split('_');
+                if (parts.Length != 3
+                    || !int.TryParse(parts[1], out int rx)
+                    || !int.TryParse(parts[2], out int rz)) continue;
+                foreach (var kv in VoxelEngine.Persistence.RegionFile.ReadAll(folder, new Vector2Int(rx, rz)))
+                {
+                    var data = kv.Value;
+                    if (data.uncompressedVoxelBytes == null) continue;
+                    if (!seen.Add(data.coord)) continue;   // one send per coord
+                    yield return new TerrainChunkData
+                    { Coord = data.coord, Compressed = Compress(data.uncompressedVoxelBytes) };
+                }
+            }
+        }
+
         /// <summary>Adopt one edited chunk from the wire. Returns true when it was applied.
         ///
         /// respectLocalEdits carries the authority rule (fixed 14.8.1):

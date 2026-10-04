@@ -52,6 +52,19 @@ namespace VoxelEngine.Networking
         /// no local player - code that needs one must check this first.</summary>
         public static bool IsDedicated => DedicatedServer.IsActive;
 
+        /// <summary>True when a REMOTE machine owns world simulation and this
+        /// one must not run it (14.58.0): connected as a guest into the host's
+        /// world. Offline, hosting, and guesting into a mismatched world
+        /// (where we keep our own world and receive no state echoes) all
+        /// simulate locally. Automatic item movers - importers, exporters,
+        /// the auto-crafter, the disk manipulator - check this every tick, so
+        /// one copy of each machine runs per session and everyone else just
+        /// renders the replicated outcome.</summary>
+        public static bool SimulationIsRemote =>
+            Mode == SessionMode.Client
+            && NetworkBootstrap.Instance != null
+            && !NetworkBootstrap.Instance.WorldMismatch;
+
         public static string LocalPlayerId => PlayerIdentity.LocalId;
 
         public static event Action<PlayerPresence> PlayerJoined;
