@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.55.0-dev`
+**Current Version:** `14.55.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.55.1-dev] Husks, Hushes and Healers
+
+**Live-test fixes: script-stripped prefabs, the vanishing enemy spawner, and the silent world.**
+
+- Enemy setup steps now HEAL script-stripped prefabs: when a boss or enemy prefab exists but has lost its script (the Missing Script husk caused by uncommitted .meta GUID churn), re-running its step rebuilds the prefab in place over the same path - the asset GUID is preserved, so biome scatter and item references stay valid, and the full wiring (drops, materials, health bar) comes back. Previously an existing-but-broken prefab was preserved as-is and could never recover.
+- Banner setup step now strips dead Missing Script slots from TeamBannerPole and GridBannerBlock before re-adding its components, so a re-run fully heals the prefabs and silences the console warnings.
+- EnemySpawner now survives the main menu to game scene change (DontDestroyOnLoad, matching the animal spawner). It used to be created once in the first scene of the run and die with the menu - no ghoul spawns, and since 14.55.0 no hostile sync pump, when the game was entered from the menu.
+- World audio now arms itself when entering the game FROM the main menu. The audio bootstrap was created only if the first loaded scene already had a world, so menu-first launches got no machine ambience and no vacuum-duck ticks - which also left a stale vacuum fade muting every positional one-shot, hit sounds included. The bootstrap is now persistent: in the menu it idles with the vacuum duck pinned to neutral; the moment a world exists it attaches the ambience bed and sweeps machines as always.
+- Ambience teardown: removing the ambience bed (returning to the menu) now destroys its five loop sources instead of leaving them live on the persistent audio object, where re-arming would have stacked duplicates.
+- Reminder for team setups: the lasting cure for Missing Script husks is committing the .cs.meta files - the healers are the belt to that suspender.
 
 ### [14.55.0-dev] One Horde
 

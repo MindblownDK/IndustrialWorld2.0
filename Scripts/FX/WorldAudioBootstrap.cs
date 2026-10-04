@@ -30,23 +30,40 @@ namespace VoxelEngine.FX
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoSpawn()
         {
-            // Only run where there's an actual voxel world (the gameplay scene).
-            // The main menu has no VoxelWorld, so we skip it to stay silent there.
-            if (Core.ActiveWorld.Current == null)
-                return;
+            // 14.55.1 - this hook fires ONCE per app run, in whatever scene
+            // loads FIRST. The old world-check here meant launching into the
+            // main menu skipped creation forever: entering the game from the
+            // menu had no machine ambience and no VacuumAudio ticks (which
+            // also left stale vacuum silence muting every positional one-shot,
+            // hit sounds included). The bootstrap is now persistent and arms
+            // itself in Update whenever a world exists.
             if (_instance != null) return;
 
             var go = new GameObject("~WorldAudio");
             Object.DontDestroyOnLoad(go);
             _instance = go.AddComponent<WorldAudioBootstrap>();
-            go.AddComponent<AmbienceController>();
         }
 
+        private AmbienceController _ambience;
         private float _scanTimer;
         private const float SCAN_INTERVAL = 1.5f;   // re-sweep cadence for new machines
 
         private void Update()
         {
+            // No world (main menu): no ambience, no machine sweeps, and the
+            // vacuum duck is pinned to neutral so a previous session's vacuum
+            // can't leak silence into the next world's one-shots.
+            if (Core.ActiveWorld.Current == null)
+            {
+                if (_ambience != null) { Destroy(_ambience); _ambience = null; }
+                VacuumAudio.ResetToNeutral();
+                _scanTimer = 0f;
+                return;
+            }
+
+            // World present: arm the ambience bed once, then run as always.
+            if (_ambience == null) _ambience = gameObject.AddComponent<AmbienceController>();
+
             // Global vacuum ducking runs every frame (it throttles its own sampling).
             VacuumAudio.Tick();
             _scanTimer += Time.unscaledDeltaTime;

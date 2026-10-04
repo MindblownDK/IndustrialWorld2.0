@@ -12614,16 +12614,23 @@ root =>
             // recurring "API has changed" prompt that deleting/regenerating the prefab caused.
             const string ghoulPath = "Assets/Resources/Enemies/Ghoul.prefab";
             GameObject prefab;
-            if (AssetDatabase.LoadMainAssetAtPath(ghoulPath) != null)
+            var prefabExisting = AssetDatabase.LoadAssetAtPath<GameObject>(ghoulPath);
+            if (prefabExisting != null && prefabExisting.GetComponent<VoxelEngine.Combat.EnemyGhoul>() != null)
             {
-                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ghoulPath);
+                prefab = prefabExisting;
                 UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
-                Debug.Log("[Step 23] Ghoul.prefab already exists — preserving it (not overwritten).");
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, ghoulPath);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (prefabExisting != null)
+                    Debug.Log("[Setup] Ghoul.prefab had lost its EnemyGhoul script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Inject Ghoul into home-world biomes for ambient spawning. The ghoul DETACHES from
@@ -13116,15 +13123,23 @@ root =>
 
             const string manticorePath = "Assets/Resources/Enemies/Manticore.prefab";
             GameObject manticorePrefab;
-            if (AssetDatabase.LoadMainAssetAtPath(manticorePath) != null)
+            var manticoreExisting = AssetDatabase.LoadAssetAtPath<GameObject>(manticorePath);
+            if (manticoreExisting != null && manticoreExisting.GetComponent<VoxelEngine.Combat.EnemyManticore>() != null)
             {
-                manticorePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(manticorePath);
-                UnityEngine.Object.DestroyImmediate(root);
+                manticorePrefab = manticoreExisting;
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 manticorePrefab = PrefabUtility.SaveAsPrefabAsset(root, manticorePath);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (manticoreExisting != null)
+                    Debug.Log("[Setup] Manticore.prefab had lost its EnemyManticore script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Inject into desert/wasteland biome scatter (reliable spawn path; same as the Ghoul).
@@ -13264,15 +13279,23 @@ root =>
 
             const string griffinPath = "Assets/Resources/Enemies/Griffin.prefab";
             GameObject griffinPrefab;
-            if (AssetDatabase.LoadMainAssetAtPath(griffinPath) != null)
+            var griffinExisting = AssetDatabase.LoadAssetAtPath<GameObject>(griffinPath);
+            if (griffinExisting != null && griffinExisting.GetComponent<VoxelEngine.Combat.EnemyGriffin>() != null)
             {
-                griffinPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(griffinPath);
-                UnityEngine.Object.DestroyImmediate(root);
+                griffinPrefab = griffinExisting;
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 griffinPrefab = PrefabUtility.SaveAsPrefabAsset(root, griffinPath);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (griffinExisting != null)
+                    Debug.Log("[Setup] Griffin.prefab had lost its EnemyGriffin script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Inject into mountains/open-plains biome scatter (reliable spawn path; same as the Ghoul).
@@ -13403,15 +13426,23 @@ root =>
 
             const string path = "Assets/Resources/Enemies/Karkadann.prefab";
             GameObject prefab;
-            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            var prefabExisting = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefabExisting != null && prefabExisting.GetComponent<VoxelEngine.Combat.EnemyKarkadann>() != null)
             {
-                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                UnityEngine.Object.DestroyImmediate(root);
+                prefab = prefabExisting;
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (prefabExisting != null)
+                    Debug.Log("[Setup] Karkadann.prefab had lost its EnemyKarkadann script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Inject into open-ground biome scatter (reliable spawn path; same as the Ghoul).
@@ -13537,15 +13568,23 @@ root =>
 
             const string path = "Assets/Resources/Enemies/Ifrit.prefab";
             GameObject prefab;
-            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            var prefabExisting = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefabExisting != null && prefabExisting.GetComponent<VoxelEngine.Combat.EnemyIfrit>() != null)
             {
-                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                UnityEngine.Object.DestroyImmediate(root);
+                prefab = prefabExisting;
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (prefabExisting != null)
+                    Debug.Log("[Setup] Ifrit.prefab had lost its EnemyIfrit script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Inject into hot biome scatter (reliable spawn path; same as the Ghoul).
@@ -13672,15 +13711,23 @@ root =>
 
             const string path = "Assets/Resources/Enemies/Roc.prefab";
             GameObject prefab;
-            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            var prefabExisting = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefabExisting != null && prefabExisting.GetComponent<VoxelEngine.Combat.EnemyRoc>() != null)
             {
-                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                UnityEngine.Object.DestroyImmediate(root);
+                prefab = prefabExisting;
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (prefabExisting != null)
+                    Debug.Log("[Setup] Roc.prefab had lost its EnemyRoc script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Very rare mini-boss spawn (reliable scatter path; same as the Ghoul).
@@ -13809,15 +13856,23 @@ root =>
 
             const string path = "Assets/Resources/Enemies/Basilisk.prefab";
             GameObject prefab;
-            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            var prefabExisting = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefabExisting != null && prefabExisting.GetComponent<VoxelEngine.Combat.EnemyBasilisk>() != null)
             {
-                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                UnityEngine.Object.DestroyImmediate(root);
+                prefab = prefabExisting;
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
             }
             else
             {
+                // 14.55.1 - missing OR script-stripped (uncommitted .meta GUID churn
+                // leaves a Missing Script husk that scatters as a harmless statue):
+                // rebuild IN PLACE. SaveAsPrefabAsset over the same path keeps the
+                // asset GUID, so biome scatter and item references stay valid.
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
+                if (prefabExisting != null)
+                    Debug.Log("[Setup] Basilisk.prefab had lost its EnemyBasilisk script - rebuilt in place (same GUID). " +
+                              "Commit the script .meta files to stop this recurring.");
             }
 
             // Inject into forest/open-ground biome scatter (reliable spawn path; same as the Ghoul).

@@ -53,6 +53,25 @@ namespace VoxelEngine.FX
             _caveDrips  = Make(Sfx.AmbCaveDrips);
         }
 
+        private void OnDestroy()
+        {
+            // 14.55.1 - the bootstrap removes this component while in the
+            // main menu. The loop sources live on the SHARED persistent GO,
+            // so they must go with us or the menu keeps five silent-but-live
+            // loops (and the next arming would stack five more).
+            DestroySource(ref _wind);
+            DestroySource(ref _birds);
+            DestroySource(ref _crickets);
+            DestroySource(ref _caveRumble);
+            DestroySource(ref _caveDrips);
+        }
+
+        private static void DestroySource(ref AudioSource src)
+        {
+            if (src != null) Destroy(src);
+            src = null;
+        }
+
         private AudioSource Make(Sfx sfx)
         {
             var src = gameObject.AddComponent<AudioSource>();

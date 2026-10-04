@@ -48,6 +48,20 @@ namespace VoxelEngine.FX
         /// <see cref="Exterior01"/> toward it every call. Driven by
         /// <see cref="WorldAudioBootstrap"/> in the gameplay scene.
         /// </summary>
+        /// <summary>14.55.1 - called instead of <see cref="Tick"/> while no
+        /// world exists (main menu). Snaps the duck back to neutral so vacuum
+        /// silence from a previous session (statics survive scene loads and
+        /// editor runs without domain reload) cannot mute the next world's
+        /// one-shots, and drops the stale listener so the new scene's camera
+        /// is re-found.</summary>
+        public static void ResetToNeutral()
+        {
+            Exterior01 = 1f;
+            _target = 1f;
+            _listener = null;
+            _sampleTimer = 0f;
+        }
+
         public static void Tick()
         {
             if (_listener == null)

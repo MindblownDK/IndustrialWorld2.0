@@ -102,6 +102,12 @@ namespace VoxelEngine.Combat
             if (UnityEngine.Object.FindAnyObjectByType<EnemySpawner>() == null)
             {
                 var go = new GameObject("EnemySpawner");
+                // 14.55.1 - AfterSceneLoad fires ONCE per app run, in whatever
+                // scene loads first. Entering the game FROM the main menu used
+                // to destroy the spawner with the menu scene and never recreate
+                // it - no ghouls, and no HostileSync pump. Persist it instead
+                // (PassiveAnimalSpawner has done this all along).
+                UnityEngine.Object.DontDestroyOnLoad(go);
                 go.AddComponent<EnemySpawner>();
             }
         }

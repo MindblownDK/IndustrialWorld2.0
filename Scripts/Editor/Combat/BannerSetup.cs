@@ -116,6 +116,20 @@ namespace VoxelEngine.EditorTools
                 existed = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null;
                 var root = existed ? PrefabUtility.LoadPrefabContents(prefabPath) : new GameObject(rootName);
                 root.name = rootName;
+                // 14.55.1 - uncommitted .meta GUID churn leaves dead "Missing
+                // Script" slots on the prefab (the console warnings on the
+                // banner prefabs). Strip them here; the step re-adds every
+                // component it owns fresh right after, so a re-run fully heals.
+                if (existed)
+                {
+                    int dead = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(root);
+                    foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                        if (t != root.transform)
+                            dead += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                    if (dead > 0)
+                        Debug.Log($"[BannerSetup] '{prefabPath}' carried {dead} Missing Script slot(s) - " +
+                                  "removed and re-added fresh. Commit the script .meta files to stop this recurring.");
+                }
                 // Regenerate only our own children; custom additions survive.
                 for (int i = root.transform.childCount - 1; i >= 0; i--)
                 {

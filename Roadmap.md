@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.55.0-dev`
-**Roadmap Version:** `14.55.0-dev`
+**Current Version:** `14.55.1-dev`
+**Roadmap Version:** `14.55.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.55.1-dev - Husks, Hushes and Healers
+Live-test fixes: enemy setup steps rebuild script-stripped prefabs in place (same GUID, scatter refs intact); banner step strips dead Missing Script slots before re-adding; EnemySpawner persists across the menu-to-game scene change (it died with the menu, taking ghoul spawns and the 14.55.0 hostile pump with it); world audio bootstrap is persistent and arms when a world appears, so menu-first launches get machine ambience and un-muted one-shots (stale vacuum duck reset in menus; ambience loop sources torn down cleanly).
+
 ### 14.55.0-dev - One Horde
 Hostile replication on the AnimalSync pattern: host simulates all seven enemy types and streams spawn/pose/health/removal; guests cull local-born hostiles and run kinematic replicas. Enemies hunt the nearest player (local or avatar); all hostile damage lands victim-side through one strike funnel carrying poison/burn/petrify; guest hits are intents with the hitter as damage source (frontal armor judges correctly); fireball/spike volleys, fire walls and wing gusts replay on guests as visual-only casts from the replica's own prefab fields.
 
@@ -40,9 +43,6 @@ CrusaderInkCalibrator upgraded from one-shot to live cling: full scan at ~0.6 s 
 
 ### 14.53.0-dev - Ink, Skin and Sound
 Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default every launch; direct audio with per-track mute, label swaps in place). Crest fixes from the 14.52 live test: the brand rune hide now uses the deep search (the rune rides the spine bone, root.Find never saw it), and the icon quad moved flush - a finger above the motto, 1 cm off the skin, 10-degree chest-plane tilt, 0.16 scale, enforced every application; chest ink pulled from 8 mm to 4 mm off the skin.
-
-### 14.52.1-dev - A Quiet Console
-Compile fix + deprecation sweep: grid-collision cooldown keyed by entity reference (GetInstanceID retired in this Unity); all twelve FindObjectsByType sort-mode call sites moved to the plain overload (none relied on order); beacon HUD marker scale/rotation moved from VisualElement.transform to style.scale/style.rotate. Zero behavior change - the console only reports FishNet vendor code now.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
