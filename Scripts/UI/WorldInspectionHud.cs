@@ -233,6 +233,14 @@ namespace VoxelEngine.UI
                 Hide();
                 return;
             }
+            // 14.60.0 - piloting hides the card: from the seat the crosshair only
+            // ever sweeps the ship's own hull, so the card cycled through deck
+            // blocks the whole flight. The cockpit HUD owns that screen time.
+            if (VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive)
+            {
+                Hide();
+                return;
+            }
 
             if (Time.unscaledTime < _nextProbe) return;
             _nextProbe = Time.unscaledTime + ProbeInterval;

@@ -89,6 +89,19 @@ namespace VoxelEngine.GridSystem
             // Players never blunt a hull - their damage is victim-side.
             if (collision.collider.GetComponentInParent<CharacterController>() != null) return;
 
+            // 14.60.0 - "my ship takes damage in empty space": two real sources,
+            // both phantom. (1) Planet-LOD safety shells and other runtime helper
+            // colliders are not crashable matter. (2) A floating-origin rebase or
+            // reference-frame switch teleports the scene and re-expresses
+            // velocities - PhysX reads the discontinuity as a monster impact for
+            // a step or two. Hold fire briefly after any jolt.
+            if (collision.collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() != null) return;
+            string hitName = collision.collider.gameObject.name;
+            if (hitName.IndexOf("PlanetLOD", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || hitName.IndexOf("OceanLOD", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || hitName.IndexOf("NativeSphericalWater", System.StringComparison.OrdinalIgnoreCase) >= 0) return;
+            if (Time.time - VoxelEngine.Cosmos.SpaceOrigin.LastJoltTime < 1.5f) return;
+
             float speed = collision.relativeVelocity.magnitude;
             if (speed < MinImpactSpeed) return;
             _nextImpactAt = Time.time + ImpactCooldown;

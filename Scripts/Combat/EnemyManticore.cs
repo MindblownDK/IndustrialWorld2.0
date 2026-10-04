@@ -94,7 +94,8 @@ namespace VoxelEngine.Combat
                     FireSpikeVolley(up);
                 }
                 // Melee claws.
-                if (distP <= meleeRange && Time.time >= _nextMeleeAt)
+                if (distP <= meleeRange && Vector3.Distance(_player.position, pos) <= meleeRange + 0.8f
+                    && Time.time >= _nextMeleeAt)
                 {
                     _nextMeleeAt = Time.time + meleeCooldown;
                     MeleeAttack();

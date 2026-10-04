@@ -83,7 +83,8 @@ namespace VoxelEngine.Combat
                     _nextGazeAt = Time.time + gazeCooldown;
                     PetrifyingGaze(pos, up);
                 }
-                if (distP <= biteRange && Time.time >= _nextBiteAt)
+                if (distP <= biteRange && Vector3.Distance(_player.position, pos) <= biteRange + 0.8f
+                    && Time.time >= _nextBiteAt)
                 {
                     _nextBiteAt = Time.time + biteCooldown;
                     VenomBite();

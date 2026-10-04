@@ -311,12 +311,22 @@ namespace VoxelEngine.GridSystem
             {
                 double3 toTarget = registry.CosmicPositionOf(nearest) - gridCosmic;
                 double angleDeg = AngleDeg(CosmicRegistry.ToDouble3(aimDir), toTarget);
-                if (angleDeg <= targetConeDeg && nearestDist > minJumpKm * 2d)
+                // 14.60.0 - two fixes in one line of math. (1) The old arrival
+                // point was planet + radial*(R+alt) with radial pointing grid->
+                // planet: BEYOND the planet, a built-in far-side overshoot on
+                // every locked jump. The near-side point is planet MINUS that.
+                // (2) The old minJumpKm*2 gate (800 km) made a planet you had
+                // just overshot un-lockable - the drive fell back to a 2500 km
+                // blind hop and overshot again, forever. Lock now only requires
+                // being outside the arrival shell itself.
+                double surfaceRadiusKm = nearest.settings.radiusKm;
+                double lockFloorKm = surfaceRadiusKm + arrivalAltitudeKm + 10d;
+                if (angleDeg <= targetConeDeg && nearestDist > lockFloorKm)
                 {
                     targetPlanet = nearest;
-                    double surfaceRadiusKm = nearest.settings.radiusKm;
                     double3 radial = math.normalizesafe(toTarget, new double3(0d, 1d, 0d));
-                    destination = registry.CosmicPositionOf(nearest) + radial * (surfaceRadiusKm + arrivalAltitudeKm);
+                    destination = registry.CosmicPositionOf(nearest)
+                                  - radial * (surfaceRadiusKm + arrivalAltitudeKm);
                 }
             }
 
@@ -539,6 +549,20 @@ namespace VoxelEngine.GridSystem
             Cooldown01 = 1f;
             System.Action jump = () =>
             {
+                // 14.60.0 - planets move km/s on their orbits, and the player can
+                // sit on the confirm dialog as long as they like: a destination
+                // captured at confirm time is stale by fire time. For a locked
+                // body, recompute the near-side arrival from where the planet IS
+                // at this instant.
+                if (lockBody != null && lockBody.settings != null)
+                {
+                    double3 nowGrid = origin.GetCosmicKm(transform.position);
+                    double3 toT = registry.CosmicPositionOf(lockBody) - nowGrid;
+                    double3 radialNow = math.normalizesafe(toT, new double3(0d, 1d, 0d));
+                    destination = registry.CosmicPositionOf(lockBody)
+                                  - radialNow * (lockBody.settings.radiusKm + arrivalAltitudeKm);
+                    destination = ClampToSafeArrival(registry, destination);
+                }
                 Vector3 keepVel = CarryVelocity();
                 ApplyWarpHop(origin, registry, destination, lockBody);
                 FinishArrival(keepVel);

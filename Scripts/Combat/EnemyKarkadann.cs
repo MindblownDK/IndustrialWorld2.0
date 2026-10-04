@@ -132,7 +132,7 @@ namespace VoxelEngine.Combat
                 case State.Charge:
                     _stateTimer -= dt;
                     moveDir = _chargeDir; spd = chargeSpeed; faceDir = _chargeDir;
-                    if (_player != null && distP < 2.7f)
+                    if (_player != null && distP < 2.7f && Vector3.Distance(_player.position, pos) < 3.5f)
                     {
                         ChargeHit(up);
                         _state = State.Recover; _stateTimer = recoverTime; _nextChargeAt = Time.time + chargeCooldown;

@@ -72,7 +72,12 @@ namespace VoxelEngine.Combat
                 moveDir = flatToPlayer.sqrMagnitude > 0.0001f ? flatToPlayer.normalized
                                                               : Vector3.ProjectOnPlane(transform.forward, up).normalized;
                 spd = distP > attackRange ? chaseSpeed : 0f;
-                if (distP <= attackRange && Time.time >= _nextAttackAt)
+                // 14.60.0 - the bite needs TRUE range, not the tangent-plane
+                // projection: distP ignores height, so a player hovering far
+                // above read as "in reach" and was mauled from the sky.
+                float trueDist = Vector3.Distance(_player.position, pos);
+                if (distP <= attackRange && trueDist <= attackRange + 0.8f
+                    && Time.time >= _nextAttackAt)
                 {
                     _nextAttackAt = Time.time + attackCooldown;
                     AttackPlayer();

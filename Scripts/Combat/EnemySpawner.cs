@@ -73,13 +73,25 @@ namespace VoxelEngine.Combat
                 return;
             }
 
-            // Spawn near the player — no raycast needed (radial gravity settles the ghoul onto the surface).
+            // 14.60.0 - ghouls are SURFACE hunters: no world streamed here, no
+            // meaningful gravity, or no ground under the spawn point means no
+            // spawn. This is what put ghouls in open space next to ships.
+            if (VoxelEngine.Core.ActiveWorld.Current == null) return;
+            if (VoxelEngine.Cosmos.GravityProvider.GetGravity(ppos).magnitude < 0.5f) return;
+
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ppos);
             Vector3 rand = Random.onUnitSphere;
             Vector3 tangent = rand - Vector3.Project(rand, up);
             if (tangent.sqrMagnitude < 0.001f) return;
             tangent = tangent.normalized * Random.Range(spawnNearMin, spawnNearMax);
             Vector3 spawnPos = ppos + tangent + up * 2.5f;
+
+            // Ground check: the spawn point must sit over real footing (and not a
+            // ship hull) - a player flying high no longer seeds ghouls in midair.
+            if (!Physics.Raycast(spawnPos + up * 2f, -up, out var groundHit, 12f,
+                    ~0, QueryTriggerInteraction.Ignore)) return;
+            if (groundHit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) return;
+            spawnPos = groundHit.point + up * 1.2f;
 
             var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(-tangent, up));
             var ghoul = go.GetComponent<EnemyGhoul>();

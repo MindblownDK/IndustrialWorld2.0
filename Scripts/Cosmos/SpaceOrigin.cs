@@ -100,6 +100,12 @@ namespace VoxelEngine.Cosmos
         /// <summary>Fired when the scene reference frame changes (body, or null = star frame).</summary>
         public static event System.Action<CelestialBody> OnFrameChanged;
 
+        /// <summary>Time.time of the last origin rebase or reference-frame switch
+        /// (14.60.0). Both teleport every scene object and re-express velocities,
+        /// which physics sees for one step as a phantom high-speed contact -
+        /// impact systems hold their fire for a moment after a jolt.</summary>
+        public static float LastJoltTime { get; private set; } = -999f;
+
         /// <summary>Fired with the scene-space velocity delta (m/s) that was applied to every scene object.</summary>
         public static event System.Action<Vector3> OnFrameVelocityApplied;
 
@@ -219,6 +225,7 @@ namespace VoxelEngine.Cosmos
             proximityHoldBody = null;
             CelestialBody old = FrameBody;
             FrameBody = body;
+            LastJoltTime = Time.time;
             if (body != null)
             {
                 var inst = FindInstanceOf(body);
@@ -442,6 +449,7 @@ namespace VoxelEngine.Cosmos
             double3 oldFrameVel = FrameVelocityKmS;
             CelestialBody oldFrameBody = FrameBody;
             FrameBody = candidateBody;
+            LastJoltTime = Time.time;
 
             if (candidateBody != null)
             {
@@ -558,6 +566,7 @@ namespace VoxelEngine.Cosmos
         /// real change of cosmic position.</summary>
         private void ShiftWorld(Vector3 delta, Transform keepRoot = null)
         {
+            LastJoltTime = Time.time;
             if (delta.sqrMagnitude < 1e-9f) return;
 
             foreach (var root in _roots)

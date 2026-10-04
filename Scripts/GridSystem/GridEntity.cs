@@ -811,7 +811,91 @@ namespace VoxelEngine.GridSystem
             GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
 
             if (_blocks.Count == 0 && (PrecisionAttachments == null || PrecisionAttachments.Count == 0))
+            {
                 Destroy(gameObject);
+                return;
+            }
+
+            // 14.60.0 - structural integrity: a removal may have cut blocks loose
+            // from the hull. Disconnected islands break off and are dismantled -
+            // a ship can no longer carry free-floating armor two meters off deck.
+            if (!_pruningIslands) PruneDisconnectedIslands();
+        }
+
+        // Re-entry guard: island pruning removes blocks through RemoveBlock itself.
+        private bool _pruningIslands;
+
+        private static readonly Vector3Int[] SixNeighbours =
+        {
+            new(1, 0, 0), new(-1, 0, 0), new(0, 1, 0),
+            new(0, -1, 0), new(0, 0, 1), new(0, 0, -1)
+        };
+
+        /// <summary>Flood-fills the block lattice (6-neighbour) and removes every
+        /// component not connected to the main hull. The kept component is the one
+        /// holding a cockpit; without one, the largest survives (14.60.0).</summary>
+        private void PruneDisconnectedIslands()
+        {
+            if (_blocks.Count <= 1) return;
+
+            var remaining = new HashSet<Vector3Int>(_blocks.Keys);
+            var components = new List<List<Vector3Int>>();
+            var stack = new Stack<Vector3Int>();
+            while (remaining.Count > 0)
+            {
+                var comp = new List<Vector3Int>();
+                var e = remaining.GetEnumerator(); e.MoveNext();
+                Vector3Int seed = e.Current;
+                remaining.Remove(seed);
+                stack.Push(seed);
+                while (stack.Count > 0)
+                {
+                    Vector3Int cell = stack.Pop();
+                    comp.Add(cell);
+                    for (int i = 0; i < SixNeighbours.Length; i++)
+                    {
+                        Vector3Int n = cell + SixNeighbours[i];
+                        if (remaining.Remove(n)) stack.Push(n);
+                    }
+                }
+                components.Add(comp);
+            }
+            if (components.Count <= 1) return;
+
+            int keep = -1;
+            for (int c = 0; c < components.Count && keep < 0; c++)
+            {
+                var comp = components[c];
+                for (int i = 0; i < comp.Count; i++)
+                {
+                    var b = GetBlock(comp[i]);
+                    if (b != null && b.GetComponentInChildren<GridCockpit>() != null) { keep = c; break; }
+                }
+            }
+            if (keep < 0)
+            {
+                int best = -1;
+                for (int c = 0; c < components.Count; c++)
+                    if (components[c].Count > best) { best = components[c].Count; keep = c; }
+            }
+
+            int dropped = 0;
+            _pruningIslands = true;
+            try
+            {
+                for (int c = 0; c < components.Count; c++)
+                {
+                    if (c == keep) continue;
+                    var comp = components[c];
+                    for (int i = 0; i < comp.Count; i++) { RemoveBlock(comp[i]); dropped++; }
+                }
+            }
+            finally { _pruningIslands = false; }
+
+            if (dropped > 0 && !VoxelEngine.Networking.NetworkSession.IsDedicated)
+                VoxelEngine.UI.BuildFeedbackHud.Show("Structural Integrity",
+                    dropped == 1 ? "1 disconnected block broke off" : $"{dropped} disconnected blocks broke off",
+                    null, new Color(1f, 0.7f, 0.25f));
         }
 
         public GridBlock GetBlock(Vector3Int gridPos)

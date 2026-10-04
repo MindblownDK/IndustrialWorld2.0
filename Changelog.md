@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.59.0-dev`
+**Current Version:** `14.60.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.0-dev] Live-Test Bug Round
+
+**Nine live-test fixes: enemies respect altitude and never spawn in space, locked warp jumps land on the near side of a moving planet and can always re-lock, small moons actually capture your ship, phantom deep-space hull damage is gone, floating hull islands break off, and the look-at card stays out of the cockpit.**
+
+- Ghoul sky-strike fixed: melee attacks now also require true 3D distance, not just the surface-plane projection - a player hovering on the jetpack far above a ghoul can no longer be bitten from the ground. The same planar gate was fixed on the Basilisk bite, Karkadann trample and Manticore claws before anyone met it up a cliff.
+- Ghouls no longer spawn in open space next to ships: the spawner requires a streamed world, meaningful gravity (over 0.5 m/s2) at the player, and real footing - a downward probe must hit terrain (never a ship hull), and the spawn snaps onto that ground instead of hanging at player altitude.
+- Warp overshoot fixed at the root: the locked-jump arrival point was computed on the FAR side of the target planet (origin-to-planet direction extended past the center), so every locked jump overshot by two arrival altitudes plus the planet. Arrivals now sit on the near side, and the destination is recomputed from the planet's live orbital position at the moment the drive fires - however long the confirm dialog sat open, you arrive where the planet IS, not where it was.
+- Can't-jump-back trap fixed: planet lock no longer requires being 800 km out (2x min jump). The drive locks any planet in the cone outside its own arrival shell, so after an overshoot you simply aim back and jump - no more falling back to a full-range blind hop that overshoots again.
+- Moon gravity capture: the proximity handover now engages out to the larger of the hold range or 2.5x the body's radius (it was a fixed 72 km window), so approaching a moon captures your ship into its reference frame early enough that it stops drifting away along its orbit while you chase it. The leave-guard against the current body is a fixed 50 km so two worlds can always hand over cleanly. Deep-space zero-g far from any body remains by design - with capture and jumps fixed you no longer get stranded in it by accident.
+- Phantom hull damage in empty space fixed: grid impact damage now ignores runtime helper colliders (planet-LOD safety shells, ocean LOD, spherical water) and holds fire for 1.5 s after a floating-origin rebase or reference-frame switch - both teleport the scene and re-express velocities, which physics briefly misreads as a monster collision.
+- Structural integrity: removing a block now flood-fills the hull and breaks off any disconnected islands (they are dismantled with a HUD notice). The kept part is the one holding a cockpit, otherwise the largest. Free-floating armor plates off the deck are no longer possible; island removals replicate through the normal removal channel.
+- The top-left look-at card hides while piloting: from the seat it only ever swept the ship's own hull and cycled through deck blocks all flight. It already hid when aiming at nothing; that now includes the whole piloting state.
+
+Known deferrals to the next rounds: the Wireless Terminal and Crusader Shield missing-script-on-load healers (asset-level fix, queued with the 14.61.0 feature round), and the 14.61.0 features themselves (grid-relative dampeners, magnetic boots, exit-velocity inheritance, repair tool).
+---
 
 ### [14.59.0-dev] No Planet Left Behind
 

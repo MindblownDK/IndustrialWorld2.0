@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.59.0-dev`
-**Roadmap Version:** `14.59.0-dev`
+**Current Version:** `14.60.0-dev`
+**Roadmap Version:** `14.60.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.60.0-dev - Live-Test Bug Round
+Nine live-test fixes: true-3D melee gates on ground enemies (no more sky-strikes); spawner requires world + gravity + terrain footing (no ghouls in space, never on hulls); locked warp arrivals computed on the NEAR side from the planet's live position at fire time (far-side overshoot and stale-confirm drift both fixed); planet lock allowed anywhere outside the arrival shell (no more can't-jump-back trap); proximity capture engages at max(hold range, 2.5x body radius) with a fixed 50 km leave-guard (moons now take over); grid impacts ignore LOD helper colliders and hold fire 1.5 s after origin/frame jolts (no phantom deep-space damage); block removal prunes disconnected hull islands (kept part = cockpit's, else largest); look-at card hidden while piloting.
+
 ### 14.59.0-dev - No Planet Left Behind
 Multi-planet terrain catch-up (closes the 14.8.0 deferral): a guest's body change triggers a catch-up request and the host streams that planet's edited chunks - from the live world when standing on it, else straight from the per-body chunk store on disk. Re-arrival heals mid-session divergence (live ops still skip other planets by design); a per-connection served-ledger dedupes the arrival request against the join push and throttles to one serve per planet per 30 s; body names are validated as store-folder names so requests cannot walk the host's disk. Remaining milestone-4 deferral: fluid-sim state only.
 
@@ -40,9 +43,6 @@ Security hardening part two: lock intents are cross-checked against the connecti
 
 ### 14.56.0-dev - Nobody Knows the Code
 Code-lock security hardening: combinations rest as salted SHA-256 (`sha256:salt:hash`), hashed on the typing machine; the wire and join snapshots carry a hash-stripped public form, so guests hold the salt but never the hash. Keypad attempts, code setting and lock toggles from guests are host-validated intents with an addressed verdict (CHECKING... state, 4 s timeout); guest-authored lock announces are accepted only as plain fits onto uncoded locks, removals checked against authorization, rejoin snapshot merges keep the host's secrets. Legacy plaintext saves canonicalize on first load. Remaining accepted gaps: door USE check and lock fit stay client-authored until the intent-conversion pass.
-
-### 14.55.1-dev - Husks, Hushes and Healers
-Live-test fixes: enemy setup steps rebuild script-stripped prefabs in place (same GUID, scatter refs intact); banner step strips dead Missing Script slots before re-adding; EnemySpawner persists across the menu-to-game scene change (it died with the menu, taking ghoul spawns and the 14.55.0 hostile pump with it); world audio bootstrap is persistent and arms when a world appears, so menu-first launches get machine ambience and un-muted one-shots (stale vacuum duck reset in menus; ambience loop sources torn down cleanly).
 
 
 ### Locked Decisions

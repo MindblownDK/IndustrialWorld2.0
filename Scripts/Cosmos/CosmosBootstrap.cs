@@ -1243,16 +1243,27 @@ namespace VoxelEngine.Cosmos
             // unambiguously the one the player is flying to. The streaming-body guard
             // prevents hijacking the frame while the player is still on/near their
             // current body (a forced switch there would apply a velocity delta kick).
-            float engageM = _spaceOrigin.proximityHoldRangeKm * 1000f * 0.6f;
+            // 14.60.0 - capture engages much farther out and scales with the
+            // body: the old 0.6 x 120 km window meant you could park 100 km off
+            // a moon and never be captured - its frame never took over, the moon
+            // kept sailing its orbit away from you, and "gravity never engaged".
+            float holdKm = _spaceOrigin.proximityHoldRangeKm;
+            float radiusKm = nearest.SurfaceRadius / 1000f;
+            float engageM = Mathf.Max(holdKm, radiusKm * 2.5f) * 1000f;
             float streamingSurfaceDist = float.MaxValue;
             if (_streamingBody != null)
             {
                 streamingSurfaceDist = Vector3.Distance(viewer.position, _streamingBody.transform.position)
                                        - _streamingBody.SurfaceRadius;
             }
-            if (bestSurfaceDist < engageM && nearest != _streamingBody && streamingSurfaceDist > engageM)
+            // The leave-guard stays FIXED (50 km clear of the current body) so a
+            // bigger engage range cannot deadlock the handover between two worlds.
+            if (bestSurfaceDist < engageM && nearest != _streamingBody && streamingSurfaceDist > 50_000f)
             {
                 _spaceOrigin.proximityHoldBody = nearest;
+                // Hold range must cover the engage distance or SpaceOrigin would
+                // release the hold again on the very next tick.
+                _spaceOrigin.proximityHoldRangeKm = Mathf.Max(_spaceOrigin.proximityHoldRangeKm, engageM / 1000f);
                 Debug.Log($"[CosmosBootstrap] Proximity hold armed for '{nearest.DisplayName}' " +
                           $"(surface {bestSurfaceDist:0} m) — real voxel streaming will engage on arrival.");
             }
