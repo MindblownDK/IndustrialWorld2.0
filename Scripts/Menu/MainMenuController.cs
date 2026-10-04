@@ -1038,6 +1038,7 @@ namespace VoxelEngine.Menu
         private UnityEngine.Video.VideoPlayer _trailerPlayer;
         private RenderTexture _trailerRT;
         private static List<(string title, string body)> _recentChanges;
+        private static bool _trailerMuted = true;   // 14.53.0 - sound is opt-in, every launch
         private static int _changesExpanded = -1;   // which entry is folded open
 
         /// <summary>The trailer theater (right side) and the latest-changes
@@ -1065,6 +1066,30 @@ namespace VoxelEngine.Menu
                 screen.style.height = Length.Percent(100f);
                 screen.pickingMode = PickingMode.Ignore;
                 theater.Add(screen);
+
+                // 14.53.0 - the sound switch, bottom-right corner of the
+                // theater. Default is muted every launch; one click swaps the
+                // label and the audio, no page rebuild needed.
+                var soundBtn = new Button { text = _trailerMuted ? "SOUND: OFF" : "SOUND: ON" };
+                soundBtn.clicked += () =>
+                {
+                    _trailerMuted = !_trailerMuted;
+                    ApplyTrailerMute();
+                    soundBtn.text = _trailerMuted ? "SOUND: OFF" : "SOUND: ON";
+                };
+                soundBtn.style.position = Position.Absolute;
+                soundBtn.style.right = 16;
+                soundBtn.style.bottom = 16;
+                soundBtn.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.55f));
+                soundBtn.style.color = new StyleColor(T.TextPrimary);
+                soundBtn.style.fontSize = 11;
+                soundBtn.style.paddingLeft = 10;
+                soundBtn.style.paddingRight = 10;
+                soundBtn.style.paddingTop = 5;
+                soundBtn.style.paddingBottom = 5;
+                T.Radius(soundBtn, 4f);
+                T.Border(soundBtn, 1, T.BorderDim);
+                theater.Add(soundBtn);
             }
             else
             {
@@ -1167,9 +1192,11 @@ namespace VoxelEngine.Menu
             vp.targetTexture = _trailerRT;
             vp.url = path;
             vp.isLooping = true;
-            // Silent on purpose: menu music territory, not a cinema.
-            vp.audioOutputMode = UnityEngine.Video.VideoAudioOutputMode.None;
+            // 14.53.0 - sound exists but starts MUTED: direct output with the
+            // track muted until the SOUND button on the theater says otherwise.
+            vp.audioOutputMode = UnityEngine.Video.VideoAudioOutputMode.Direct;
             _trailerPlayer = vp;
+            ApplyTrailerMute();
             _trailerPlayer.Play();
             return true;
         }
@@ -1177,6 +1204,21 @@ namespace VoxelEngine.Menu
         private void PauseTrailer()
         {
             if (_trailerPlayer != null && _trailerPlayer.isPlaying) _trailerPlayer.Pause();
+        }
+
+        /// <summary>Push the mute flag onto every audio track the clip has.
+        /// Safe before prepare and on clips with no audio at all.</summary>
+        private void ApplyTrailerMute()
+        {
+            if (_trailerPlayer == null) return;
+            try
+            {
+                ushort tracks = _trailerPlayer.audioTrackCount;
+                if (tracks == 0) tracks = 1;   // not prepared yet - mute track 0 ahead of time
+                for (ushort t = 0; t < tracks; t++)
+                    _trailerPlayer.SetDirectAudioMute(t, _trailerMuted);
+            }
+            catch { /* a soundless trailer is never an error */ }
         }
 
         /// <summary>The newest five entries out of Changelog.md - title AND

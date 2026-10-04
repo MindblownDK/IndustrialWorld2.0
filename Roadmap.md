@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.52.1-dev`
-**Roadmap Version:** `14.52.1-dev`
+**Current Version:** `14.53.0-dev`
+**Roadmap Version:** `14.53.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.53.0-dev - Ink, Skin and Sound
+Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default every launch; direct audio with per-track mute, label swaps in place). Crest fixes from the 14.52 live test: the brand rune hide now uses the deep search (the rune rides the spine bone, root.Find never saw it), and the icon quad moved flush - a finger above the motto, 1 cm off the skin, 10-degree chest-plane tilt, 0.16 scale, enforced every application; chest ink pulled from 8 mm to 4 mm off the skin.
+
 ### 14.52.1-dev - A Quiet Console
 Compile fix + deprecation sweep: grid-collision cooldown keyed by entity reference (GetInstanceID retired in this Unity); all twelve FindObjectsByType sort-mode call sites moved to the plain overload (none relied on order); beacon HUD marker scale/rotation moved from VisualElement.transform to style.scale/style.rotate. Zero behavior change - the console only reports FishNet vendor code now.
 
@@ -40,9 +43,6 @@ Menus scale with screen size (UITheme.ApplyMenuScale, 1536x864 reference matched
 
 ### 14.50.0-dev - The Menu Keeps Left
 Menu/UX round: main menu and pause menu panels anchor LEFT (one 64px gutter, vertically centered, every page) instead of screen-center; the six-tab settings bar wraps instead of overflowing, both menus. Keybind screen gained a search bar (shared SettingsUI.KeybindTab): filters by function name or bound button, toggles rows in place so typing never loses focus, filter survives rebinds, empty result says so.
-
-### 14.49.1-dev - Labels That Tell the Truth
-Icon editor's BLANK / NO ICON / OPEN FOLDER / RESCAN labels were printed in the slot background's own dark color - invisible but clickable; bright now (MiniBtn accent IS the label color when unfilled). Pause menu quit button reads DISCONNECT for guests (anyone not hosting) and skips the world-state and research write-outs on the way home - a guest's copy is a discarded cache; hosts and singleplayer keep SAVE & QUIT.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

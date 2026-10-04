@@ -159,8 +159,11 @@ namespace VoxelEngine.Networking
             }
 
             // ── default symbols step aside while a custom icon is worn ──
+            // 14.53.0 - FindDeep, not root.Find: on the rigged body the rune
+            // rides the spine bone (exactly like the ink), so a root-level
+            // search never found it and the rune stayed put under the icon.
             bool hasIcon = icon != null;
-            var rune = root.Find("BrandRune");
+            var rune = FindDeep(root, "BrandRune");
             if (rune != null) rune.gameObject.SetActive(!hasIcon);
             var armorRig = root.Find(ArmorRigName);
             if (armorRig != null)
@@ -189,19 +192,24 @@ namespace VoxelEngine.Networking
             if (crest == null)
             {
                 crest = new GameObject(CrestName).transform;
-                if (inkT != null)
-                {
-                    crest.SetParent(inkT, false);
-                    // Up onto the upper chest (where the rune/cross sat) and a
-                    // few cm out so it clears skin and tabard alike.
-                    crest.localPosition = new Vector3(0f, 0.14f, -0.035f);
-                }
-                else
-                {
-                    crest.SetParent(root, false);   // no ink anchor - root fallback
-                    crest.localPosition = new Vector3(0f, 1.45f, 0.185f);
-                    crest.localRotation = Quaternion.Euler(0f, 180f, 0f);
-                }
+                if (inkT != null) crest.SetParent(inkT, false);
+                else crest.SetParent(root, false);   // no ink anchor - root fallback
+            }
+            // 14.53.0 - FLUSH placement, enforced every call: the quad sits a
+            // finger's width above the motto and a single centimeter off the
+            // skin, tilted 10 degrees so it lies along the chest plane the
+            // way the pecs actually slope. The old spot (14cm up, 3.5cm out)
+            // was at the clavicle, where the chest curves away - the icon
+            // read as a floating card, not a tattoo.
+            if (inkT != null && crest.parent == inkT)
+            {
+                crest.localPosition = new Vector3(0f, 0.085f, -0.012f);
+                crest.localRotation = Quaternion.Euler(10f, 0f, 0f);
+            }
+            else
+            {
+                crest.localPosition = new Vector3(0f, 1.40f, 0.165f);
+                crest.localRotation = Quaternion.Euler(-10f, 180f, 0f);
             }
             var iconT = crest.Find("CrestIcon");
             if (iconT == null)
@@ -214,10 +222,10 @@ namespace VoxelEngine.Networking
                 iconT.SetParent(crest, false);
                 iconT.localPosition = Vector3.zero;
                 iconT.localRotation = Quaternion.identity;
-                iconT.localScale = new Vector3(0.20f, 0.20f, 1f);
                 var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
                 iconT.GetComponent<MeshRenderer>().material = new Material(shader);
             }
+            iconT.localScale = new Vector3(0.16f, 0.16f, 1f);
             var mat = iconT.GetComponent<MeshRenderer>().material;
             mat.mainTexture = icon;
             mat.color = Color.white;
@@ -533,7 +541,7 @@ namespace VoxelEngine.Networking
             // above, recentered and scaled exactly like the rig itself.
             float chestFront = (chestFrontModel - (min.z + max.z) * 0.5f) * s;
             BuildTattoos(root, runeRed,
-                chestInkPos: new Vector3(0f, 1.31f, chestFront + 0.008f),
+                chestInkPos: new Vector3(0f, 1.31f, chestFront + 0.004f),   // 14.53.0 - closer to the skin
                 runePos: new Vector3(-0.16f, 1.47f, chestFront + 0.008f),
                 runeRot: Quaternion.identity);
 

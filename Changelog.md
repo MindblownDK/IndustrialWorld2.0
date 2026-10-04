@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.52.1-dev`
+**Current Version:** `14.53.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.53.0-dev] Ink, Skin and Sound
+
+**Type:** MINOR - the trailer gets a voice switch, and the crest learns the difference between worn and hovered.
+
+**The trailer has a SOUND button.** Bottom-right corner of the theater: SOUND: OFF / SOUND: ON. Default is muted on every launch - sound is strictly opt-in - and one click swaps both the audio and the label in place, no page rebuild. The player now runs direct audio output with every track muted until asked, so unmuting is instant; a clip with no audio track at all stays a silent film without complaint.
+
+**The default symbol now actually steps aside.** The brand rune rides the spine bone on the rigged body - exactly like the chest ink - but the hide-call searched only the model root, so on real rigs the rune never hid and the icon landed on top of it. The search is deep now; icon on means rune (and tabard front cross) off, icon off means they return.
+
+**The crest sits ON the chest, not in front of it.** The icon quad moved from the clavicle (14 cm above the motto, 3.5 cm off the skin - right where the chest curves away, which read as a floating card) down to a finger's width above the chest text and a single centimeter off the skin, tilted ten degrees to lie along the slope of the pecs, and slightly smaller. The chest ink itself also moved from 8 mm to 4 mm off the skin. Placement is enforced on every application, so an avatar that already wore a crest snaps to the corrected pose instead of keeping the old float.
 
 ### [14.52.1-dev] A Quiet Console
 
