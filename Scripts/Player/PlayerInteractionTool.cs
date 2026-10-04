@@ -1854,7 +1854,12 @@ namespace VoxelEngine.Player
             type = VoxelEngine.Combat.DamageType.Melee;
             if (stack.IsEmpty || stack.item == null)
             {
-                damage = 4f; range = 2.1f; rate = handFireRate;   // the punch
+                // 14.46.1: punch reach is measured from the CAMERA to the
+                // target's replicated capsule - 2.1m only connected when the
+                // players stood nose to nose, which read as "fists cannot
+                // hit at all" in live play. 2.8m lands at honest arm's
+                // length and stays well under every crafted weapon.
+                damage = 4f; range = 2.8f; rate = handFireRate;   // the punch
                 return;
             }
             if (stack.item is VoxelEngine.Combat.WeaponItem w)
@@ -1871,7 +1876,7 @@ namespace VoxelEngine.Player
                 range = 2.4f; rate = t.fireRate;
                 return;
             }
-            damage = 5f; range = 2.2f; rate = 2f;   // any held object is a club
+            damage = 5f; range = 2.6f; rate = 2f;   // any held object is a club (reach: see punch note)
         }
 
         private void HitTree(Tree tree)

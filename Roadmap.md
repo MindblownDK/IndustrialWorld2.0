@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.46.0-dev`
-**Roadmap Version:** `14.46.0-dev`
+**Current Version:** `14.46.1-dev`
+**Roadmap Version:** `14.46.1-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.46.1-dev - An Invite That Arrives, A Punch That Lands
+Second dedicated shakedown (identity + weather sync confirmed). Team invites were dying of clock skew: expiry stamped by the host's wall clock but judged by each client's own - clients now trust the roster as sent, and the host prunes expired invites on a five-second timer and rebroadcasts only on change. Punch reach 2.1m -> 2.8m (club 2.2m -> 2.6m): measured camera-to-replicated-capsule, the old reach only landed nose to nose. Cosmos visuals (distant-body/singularity beacons, quasar/singularity/solar-glare/space-dust/rain-fog renderers) retire themselves headless, same guard pattern as the 14.46.0 weather rigs.
+
 ### 14.46.0-dev - Same Sky, Same Names
 Dedicated-session shakedown fixes. Root cause of the guest-to-guest failures (no hits, no invites, unnameable team members): avatar identity SyncVars are one-shot writes and the initial delivery proved lossy, leaving bodies without ids. Fix is a server-side identity announce broadcast (at spawn, on rename, per existing avatar to every joiner) keyed by network object id, with a client-side pending cache for announces that outrun their spawn; SyncVars stay the fast path and outrank the fallback. Weather is now host-authoritative: only the host rolls states, clients adopt them (join + change + 15s keepalive) and keep blend/intensity/thunder local; debug hotkeys refuse on clients. All weather visual rigs (particles, clouds, lighting, audio, sea state) retire themselves on a dedicated server - fixes the WeatherParticles NRE and shader-stripping spam. Remaining shakedown items queued: fauna sync, server administration, server browser (favorites + LAN), player customization, menu layout + keybind search.
 
@@ -40,10 +43,6 @@ Storage-arc finale: auto-crafting goes ambient. The exporter gains a third upgra
 
 ### 14.43.0-dev - The Network Learns to Craft
 Auto-crafting ships through the pattern system (closing the 14.40.0 deferral). Patterns are physical items: Blank Patterns (step 111) are encoded with any unlocked recipe at the Pattern Terminal and filed into the Server Controller's bank - capacity = installed RAM units (RAM 4 = 4, RAM 16 = 16, 64 ceiling), over-the-line patterns go inert instead of vanishing, eject to carry recipes between networks, and the encoded recipe rides the stack payload like a disk's ledger. The controller crafts one item at a time at CPU speed (+25 W while active), takes ingredients per craft with refund-on-cancel, and gates each recipe on its station tier being a network member - crafting stations now join by touch or Data Pipe like every other device. Full-chain recursion queues child jobs for missing intermediates that have filed patterns (tree-deep, cycle/depth guarded, pending production counted); both terminal panels are remade (encode bench with search, order desk with live queue, ETA, reasons and cancel); bank and queue ride the container and factory-runtime seams additively, so saves resume mid-batch and clients converge to the host's queue.
-
-### 14.42.0-dev - The Plug Meets the Machine
-Field-test round on the storage network. The data pipe gains the energy pipe's auto-connect bridge arms: every open plug sitting against a storage device grows a visible cable arm flush into its face (mated plugs never do, ghosts stay armless, bridged pipes carry per-instance meshes and clean up after themselves). The equipment console's ORBITAL SYSTEMS card becomes COMMS AND NAVIGATION with two device slots - Orbital Map and handheld Wireless Terminal, either in either - each with its own readout (the terminal shows a live LINKED / NO SIGNAL verdict); every wireless gate honors the equipped terminal first and still accepts a carried one; the one-slot bay resizes additively on old saves. Drawer and controller FRONTS take right-click insertion even with placeable blocks held (sides/top/back stay build surfaces); drawer face icons are normalized to a fixed world size whatever their import PPU (Storage Item Display too). Setup step 110 rebuilds the Storage Drawer and Drawer Controller as framed steel furniture - gunmetal frames, recessed faces, label plates, bolts, handle, LED fill strip, and the controller's emissive core eye - non-destructively.
-14.42.1 field polish: drawer face text and icon un-mirrored (quad displays turned to actually face the viewer, self-healing on every placed drawer at refresh time), amount text shrunk to label size, drawer/item-display text swapped onto the depth-tested WorldText material so digits stop shining through terrain and blocks, and the storage terminal's stack counts moved to the icon's bottom-left corner in the inventory's exact LCD chip style.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

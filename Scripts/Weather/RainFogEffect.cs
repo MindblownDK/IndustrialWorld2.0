@@ -34,6 +34,9 @@ namespace VoxelEngine.Weather
 
         private void LateUpdate()
         {
+            // 14.46.1: no shaders on a dedicated server - purely visual,
+            // the component retires itself headless.
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             var weather = WeatherManager.Instance;
             if (weather == null) return;
 

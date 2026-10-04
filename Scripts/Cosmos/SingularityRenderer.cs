@@ -44,6 +44,10 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
+            // 14.46.1: a dedicated server has no shaders (Dedicated Server
+            // Optimizations strips them) - creating materials headless threw
+            // every frame. Purely visual: the component retires itself.
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             if (instance == null) { SetAllActive(false); return; }
             var registry = CosmicRegistry.Instance;
             var origin = SpaceOrigin.Instance;

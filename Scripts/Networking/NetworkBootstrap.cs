@@ -942,6 +942,15 @@ namespace VoxelEngine.Networking
         {
             PollWeatherBroadcast();   // server-side no-op costs one bool test
 
+            // 14.46.1 - invite expiry is the HOST's call now (clients stopped
+            // judging it with their own clocks), so the host sweeps every few
+            // seconds and rebroadcasts only when something actually died.
+            if (_serverStarted && Time.unscaledTime >= _nextInvitePruneAt)
+            {
+                _nextInvitePruneAt = Time.unscaledTime + 5f;
+                if (TeamRegistry.PruneExpiredTick()) BroadcastTeamRoster("");
+            }
+
             // Guest -> host state upload. Offline and hosting both skip on the
             // first condition, so this costs one bool test a frame in the cases
             // that are not multiplayer at all.
@@ -2192,6 +2201,7 @@ namespace VoxelEngine.Networking
         private byte _lastWeatherTarget = 255;
         private float _nextWeatherKeepaliveAt;
         private const float WeatherKeepaliveSeconds = 15f;
+        private float _nextInvitePruneAt;
 
         /// <summary>Server: current weather states to one connection.</summary>
         private void SendWeatherTo(NetworkConnection conn)

@@ -34,6 +34,9 @@ namespace VoxelEngine.Cosmos
 
         private void Awake()
         {
+            // 14.46.1: no shaders on a dedicated server - purely visual,
+            // the component retires itself headless.
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             EnsureSystem();
             if (_renderer != null) _renderer.enabled = false;
         }

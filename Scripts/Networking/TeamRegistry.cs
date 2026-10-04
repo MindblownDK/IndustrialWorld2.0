@@ -150,18 +150,23 @@ namespace VoxelEngine.Networking
             return false;
         }
 
-        /// <summary>Answerable invites for this player, expiry-filtered. The
-        /// host prunes on every change; clients additionally hide anything
-        /// already past its moment so the UI cannot offer a dead button.</summary>
+        /// <summary>Answerable invites for this player. 14.46.1: the expiry
+        /// stamp is written by the HOST's wall clock, so only the authority
+        /// compares it against its own clock. A client whose clock ran a
+        /// minute ahead of the server used to see every invite as already
+        /// dead and silently hid it - now clients trust the roster as sent,
+        /// and the host's periodic prune (NetworkBootstrap) retires expired
+        /// invites for everyone within seconds.</summary>
         public static List<TeamInviteData> InvitesFor(string playerId)
         {
             var live = new List<TeamInviteData>();
             if (string.IsNullOrEmpty(playerId)) return live;
+            bool authority = NetworkSession.IsAuthority;
             double now = DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
             for (int i = 0; i < _state.invites.Count; i++)
             {
                 var inv = _state.invites[i];
-                if (inv != null && inv.invitedId == playerId && inv.expiresAtUtc > now)
+                if (inv != null && inv.invitedId == playerId && (!authority || inv.expiresAtUtc > now))
                     live.Add(inv);
             }
             return live;
@@ -419,6 +424,17 @@ namespace VoxelEngine.Networking
         {
             double now = DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
             _state.invites.RemoveAll(i => i == null || i.expiresAtUtc <= now);
+        }
+
+        /// <summary>14.46.1 - host-side timer prune. Clients no longer judge
+        /// expiry with their own clocks, so the host must retire dead invites
+        /// even when nothing else changes. Returns true when something was
+        /// removed, so the caller knows to rebroadcast the roster.</summary>
+        public static bool PruneExpiredTick()
+        {
+            int before = _state.invites.Count;
+            PruneExpired();
+            return _state.invites.Count != before;
         }
 
         /// <summary>State changed: bump the version, save the file, and let

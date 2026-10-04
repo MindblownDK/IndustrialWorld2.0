@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.46.0-dev`
+**Current Version:** `14.46.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.46.1-dev] An Invite That Arrives, A Punch That Lands
+
+**Type:** PATCH - second dedicated shakedown. Identity and weather sync confirmed working; this round retires the three leftovers.
+
+**Team invites died of clock skew.** The invite expiry stamp is written by the HOST's wall clock, but every client compared it against its OWN wall clock - a machine running a minute ahead of the server judged every invite already dead and silently hid it, which is exactly "the leader can invite but the player never gets it". Clients no longer judge expiry at all: they trust the roster as broadcast, and the host - the only machine whose clock signed the stamp - sweeps expired invites every five seconds and rebroadcasts only when something actually died. The 90-second invite lifetime is unchanged; it is simply measured by one clock now.
+
+**Fists reach arm's length.** Punch range was 2.1 meters measured from the camera to the target's replicated capsule - with interpolation in the mix it only connected nose to nose, which read as "bare hands cannot hit players at all". A punch now reaches 2.8m and an improvised club 2.6m: honest arm's length, still well under every crafted weapon, damage untouched.
+
+**The cosmos learns what the weather learned.** The shader-stripped dedicated build was still being asked to build materials by the space visuals - distant-body beacons and singularity beacons threw ArgumentNullExceptions every frame, with the quasar, singularity, solar-glare, space-dust and rain-fog renderers on the same path behind them. All of them now retire themselves on a dedicated server before touching a single shader, same pattern as the weather rigs in 14.46.0. If any further visual spams the console, it gets the same two-line guard.
 
 ### [14.46.0-dev] Same Sky, Same Names
 
