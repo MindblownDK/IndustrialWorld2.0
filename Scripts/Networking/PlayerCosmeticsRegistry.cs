@@ -73,19 +73,25 @@ namespace VoxelEngine.Networking
         // ───────────────────── local store (this machine) ─────────────────────
 
         private const string ChestTextKey = "iw_player_chest_text";
-        private const string IconFileName = "player_icon.png";
+
+        // 14.51.0 - BOTH local stores are keyed by the identity slot, exactly
+        // like the player id itself. Before this, two test instances on one
+        // machine shared player_icon.png and the chest-text pref, so editing
+        // one player's crest edited every simulated player at once.
+        private static string ChestTextStoreKey => ChestTextKey + PlayerIdentity.StoreSlotSuffix;
 
         public static string LocalChestText
         {
-            get => PlayerPrefs.GetString(ChestTextKey, "");
+            get => PlayerPrefs.GetString(ChestTextStoreKey, "");
             set
             {
-                PlayerPrefs.SetString(ChestTextKey, Sanitize(value));
+                PlayerPrefs.SetString(ChestTextStoreKey, Sanitize(value));
                 PlayerPrefs.Save();
             }
         }
 
-        private static string IconFilePath => Path.Combine(Application.persistentDataPath, IconFileName);
+        private static string IconFilePath => Path.Combine(Application.persistentDataPath,
+            "player_icon" + PlayerIdentity.StoreSlotSuffix + ".png");
 
         /// <summary>The folder the player drops PNG/JPG icon sources into.</summary>
         public static string IconsFolder

@@ -49,6 +49,9 @@ namespace VoxelEngine.Menu
             _doc.sortingOrder = 1000;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            // 14.51.0 - same scale law as the main menu (shared asset, but
+            // applying here too covers an inspector-assigned override).
+            T.ApplyMenuScale(_doc.panelSettings);
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)

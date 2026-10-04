@@ -135,11 +135,12 @@ namespace VoxelEngine.Networking
             TintPlates(rigR, mat);
         }
 
-        /// <summary>14.49.0 - the personal crest: the player's custom icon and
-        /// chest text, worn on the chest plane just in front of the tabard so
-        /// it reads with or without armor. Either part may be absent; with
-        /// both absent the crest is removed entirely. Positions are root-local
-        /// like the armor rigs, so both body variants wear it the same.</summary>
+        /// <summary>14.49.0/14.51.0 - the personal crest. The icon REPLACES
+        /// the default chest symbols (the brand rune on bare skin, the red
+        /// cross on the tabard front) and the chest text REPLACES the default
+        /// chest-ink motto; clear either and the default comes straight back.
+        /// Positions are root-local like the armor rigs, so both body
+        /// variants wear it the same.</summary>
         public const string CrestName = "PlayerCrest";
 
         public static void SetCrest(Transform avatarRoot, Texture2D icon, string chestText)
@@ -147,9 +148,31 @@ namespace VoxelEngine.Networking
             var root = EnsureBuilt(avatarRoot);
             if (root == null) return;
 
+            // ── chest text: the ink itself. A custom line takes the motto's
+            // place on the skin; empty restores the motto verbatim. ──
+            var inkT = FindDeep(root, "ChestInk");   // may ride a spine bone on the rigged body
+            if (inkT != null)
+            {
+                var ink = inkT.GetComponent<TextMesh>();
+                if (ink != null)
+                    ink.text = string.IsNullOrEmpty(chestText) ? DefaultChestInk : chestText;
+            }
+
+            // ── default symbols step aside while a custom icon is worn ──
+            bool hasIcon = icon != null;
+            var rune = root.Find("BrandRune");
+            if (rune != null) rune.gameObject.SetActive(!hasIcon);
+            var armorRig = root.Find(ArmorRigName);
+            if (armorRig != null)
+            {
+                var crossV = armorRig.Find("CrossVF");
+                if (crossV != null) crossV.gameObject.SetActive(!hasIcon);
+                var crossH = armorRig.Find("CrossHF");
+                if (crossH != null) crossH.gameObject.SetActive(!hasIcon);
+            }
+
             var crest = root.Find(CrestName);
-            bool anything = icon != null || !string.IsNullOrEmpty(chestText);
-            if (!anything)
+            if (!hasIcon)
             {
                 if (crest != null) Object.Destroy(crest.gameObject);
                 return;
@@ -160,58 +183,28 @@ namespace VoxelEngine.Networking
                 crest.SetParent(root, false);
             }
 
-            // ── icon: one textured quad on the upper chest ──
-            // Same facing fix as every TextMesh here: the front reads from -Z,
-            // so it turns its back to the model's forward.
+            // ── icon: one textured quad on the upper chest, in front of the
+            // tabard plane so it reads with or without armor. Same facing fix
+            // as every TextMesh here: the front reads from -Z, so it turns
+            // its back to the model's forward. ──
             var iconT = crest.Find("CrestIcon");
-            if (icon != null)
+            if (iconT == null)
             {
-                if (iconT == null)
-                {
-                    var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    go.name = "CrestIcon";
-                    var col = go.GetComponent<Collider>();
-                    if (col != null) Object.Destroy(col);
-                    iconT = go.transform;
-                    iconT.SetParent(crest, false);
-                    iconT.localPosition = new Vector3(0f, 1.40f, 0.185f);
-                    iconT.localRotation = Quaternion.Euler(0f, 180f, 0f);
-                    iconT.localScale = new Vector3(0.17f, 0.17f, 1f);
-                    var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                    iconT.GetComponent<MeshRenderer>().material = new Material(shader);
-                }
-                var mat = iconT.GetComponent<MeshRenderer>().material;
-                mat.mainTexture = icon;
-                mat.color = Color.white;
+                var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                go.name = "CrestIcon";
+                var col = go.GetComponent<Collider>();
+                if (col != null) Object.Destroy(col);
+                iconT = go.transform;
+                iconT.SetParent(crest, false);
+                iconT.localPosition = new Vector3(0f, 1.32f, 0.185f);
+                iconT.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                iconT.localScale = new Vector3(0.20f, 0.20f, 1f);
+                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                iconT.GetComponent<MeshRenderer>().material = new Material(shader);
             }
-            else if (iconT != null) Object.Destroy(iconT.gameObject);
-
-            // ── chest text: one line under the icon ──
-            var textT = crest.Find("CrestText");
-            if (!string.IsNullOrEmpty(chestText))
-            {
-                TextMesh tm;
-                if (textT == null)
-                {
-                    var go = new GameObject("CrestText");
-                    textT = go.transform;
-                    textT.SetParent(crest, false);
-                    textT.localPosition = new Vector3(0f, 1.27f, 0.185f);
-                    textT.localRotation = Quaternion.Euler(0f, 180f, 0f);
-                    tm = go.AddComponent<TextMesh>();
-                    tm.characterSize = 0.010f;
-                    tm.fontSize = 30;
-                    tm.anchor = TextAnchor.MiddleCenter;
-                    tm.alignment = TextAlignment.Center;
-                    tm.color = new Color(0.13f, 0.10f, 0.08f, 0.97f);
-                    // World-space text must lose the GUI shader's ZTest Always,
-                    // or the line shines through walls and the model itself.
-                    Rendering.WorldTextMaterial.Apply(tm);
-                }
-                else tm = textT.GetComponent<TextMesh>();
-                if (tm != null) tm.text = chestText;
-            }
-            else if (textT != null) Object.Destroy(textT.gameObject);
+            var mat = iconT.GetComponent<MeshRenderer>().material;
+            mat.mainTexture = icon;
+            mat.color = Color.white;
         }
 
         /// <summary>Apply a player's chosen skin tone. On the rigged body the tint
@@ -628,6 +621,11 @@ namespace VoxelEngine.Networking
 
         // ─────────────────────────── tattoos ───────────────────────────
 
+        /// <summary>The crew motto every chest wears until its owner writes
+        /// their own line (14.51.0 - custom chest text swaps in and out of
+        /// this same ink, so one constant is the single source of truth).</summary>
+        public const string DefaultChestInk = "The lion with little pecker\ndevelops big roar\n- CalleTheLion";
+
         private static void BuildTattoos(Transform root, Material runeRed,
             Vector3 chestInkPos, Vector3 runePos, Quaternion runeRot)
         {
@@ -639,7 +637,7 @@ namespace VoxelEngine.Networking
             inkGo.transform.localPosition = chestInkPos;
             inkGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             var ink = inkGo.AddComponent<TextMesh>();
-            ink.text = "The lion with little pecker\ndevelops big roar\n- CalleTheLion";
+            ink.text = DefaultChestInk;
             ink.characterSize = 0.010f;
             ink.fontSize = 30;
             ink.anchor = TextAnchor.MiddleCenter;

@@ -814,6 +814,19 @@ namespace VoxelEngine.UI
         /// Call after constructing any ScrollView inside a themed panel.
         /// Optional accent overrides the default steel-blue thumb colour.
         /// </summary>
+        /// <summary>14.51.0 - one scale law for every menu panel: scale with
+        /// screen size against a 1536x864 reference, matched on height. At
+        /// 1080p everything draws 1.25x bigger than before; at 1440p or 4K it
+        /// keeps exactly that apparent size instead of shrinking to threads.</summary>
+        public static void ApplyMenuScale(PanelSettings ps)
+        {
+            if (ps == null) return;
+            ps.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            ps.referenceResolution = new Vector2Int(1536, 864);
+            ps.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
+            ps.match = 1f;
+        }
+
         public static void StyleScroller(ScrollView scroll, Color? accent = null)
         {
             if (scroll == null) return;
@@ -859,21 +872,22 @@ namespace VoxelEngine.UI
             // must be centred with explicit cross-axis insets:
             // (rail 10px − bar 6px) / 2 = 2px on each side.
 
-            // Track — near-invisible inset channel.
+            // Track — near-invisible inset channel. 14.51.0: full rail width,
+            // same as the thumb below, so the pill and its track agree.
             var tracker = scroller.slider.Q("unity-tracker");
             if (tracker != null)
             {
                 tracker.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.04f));
-                Radius(tracker, 3f);
+                Radius(tracker, 4f);
                 Border(tracker, 0, Color.clear);
                 if (vertical)
                 {
-                    tracker.style.left  = 2; tracker.style.right  = 2;
+                    tracker.style.left  = 0; tracker.style.right  = 0;
                     tracker.style.width = StyleKeyword.Auto;
                 }
                 else
                 {
-                    tracker.style.top    = 2; tracker.style.bottom = 2;
+                    tracker.style.top    = 0; tracker.style.bottom = 0;
                     tracker.style.height = StyleKeyword.Auto;
                 }
             }
@@ -892,23 +906,26 @@ namespace VoxelEngine.UI
             if (dragger != null)
             {
                 dragger.style.backgroundColor = new StyleColor(thumbCol);
-                Radius(dragger, 3f);
+                Radius(dragger, 4f);
                 Border(dragger, 0, Color.clear);
+                // 14.51.0 - the pill FILLS the rail. The old 2px insets plus a
+                // 6px max-width left the thumb hugging one edge of a wider
+                // track on every scrollbar in the game; no insets, no cap.
                 if (vertical)
                 {
-                    dragger.style.left = 2;
-                    dragger.style.right = 2;
+                    dragger.style.left = 0;
+                    dragger.style.right = 0;
                     dragger.style.width = StyleKeyword.Auto;
+                    dragger.style.maxWidth = StyleKeyword.None;
                     dragger.style.minHeight = 24;
-                    dragger.style.maxWidth = 6;
                 }
                 else
                 {
-                    dragger.style.top = 2;
-                    dragger.style.bottom = 2;
+                    dragger.style.top = 0;
+                    dragger.style.bottom = 0;
                     dragger.style.height = StyleKeyword.Auto;
+                    dragger.style.maxHeight = StyleKeyword.None;
                     dragger.style.minWidth = 24;
-                    dragger.style.maxHeight = 6;
                 }
 
                 Color hover  = new(thumbCol.r * 1.35f, thumbCol.g * 1.35f, thumbCol.b * 1.35f);

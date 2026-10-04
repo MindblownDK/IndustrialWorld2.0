@@ -119,6 +119,12 @@ namespace VoxelEngine.Networking
             }
         }
 
+        /// <summary>14.51.0 - the slot suffix, published so every OTHER piece
+        /// of per-player local state (cosmetics, future preferences) can key
+        /// its storage the same way. Two test instances on one machine must
+        /// disagree about who they are in every file, not just the id.</summary>
+        public static string StoreSlotSuffix => SlotSuffix;
+
         private static int InstanceSlot
         {
             get

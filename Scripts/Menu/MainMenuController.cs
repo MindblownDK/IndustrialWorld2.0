@@ -136,6 +136,8 @@ namespace VoxelEngine.Menu
                 // "No Theme Style Sheet set" warning disappears.
                 _doc.panelSettings.themeStyleSheet = LoadOrCreateDefaultTheme();
             }
+            // 14.51.0 - menus scale with the screen (and grew 1.25x at 1080p).
+            T.ApplyMenuScale(_doc.panelSettings);
             if (_newSeed == 0)
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
 
@@ -289,6 +291,10 @@ namespace VoxelEngine.Menu
                 case Page.EditPlayer: BuildEditPlayerPage(); break;
                 case Page.Settings: BuildSettingsPage(); break;
             }
+
+            // 14.51.0 - the trailer only plays on the front page; sub-pages
+            // pause it so nothing decodes video behind a settings screen.
+            if (_page != Page.Main) PauseTrailer();
         }
 
         // ════════════════════════════════════════════════════════════
@@ -296,6 +302,12 @@ namespace VoxelEngine.Menu
         // ════════════════════════════════════════════════════════════
         private void BuildMainPage()
         {
+            // 14.51.0 - the front page dresses the whole screen: trailer on
+            // the right, latest changes top-left, menu on the left. The
+            // dressing exists ONLY here - every other page rebuilds the root
+            // without it, so tabs stay clean.
+            BuildMenuDressing();
+
             var panel = MakePanel(420, 0);
             _root.Add(panel);
 
@@ -1019,6 +1031,158 @@ namespace VoxelEngine.Menu
         }
 
         // ════════════════════════════════════════════════════════════
+        //            14.51.0 FRONT-PAGE DRESSING (trailer + changelog)
+        // ════════════════════════════════════════════════════════════
+
+        private UnityEngine.Video.VideoPlayer _trailerPlayer;
+        private RenderTexture _trailerRT;
+        private static List<string> _recentChanges;
+
+        /// <summary>The trailer theater (right side) and the latest-changes
+        /// card (top-left). Both are absolute overlays added BEFORE the menu
+        /// panel, so the menu always draws above them.</summary>
+        private void BuildMenuDressing()
+        {
+            // ── right side: the theater ───────────────────────────────
+            var theater = new VisualElement();
+            theater.style.position = Position.Absolute;
+            theater.style.left = Length.Percent(46f);
+            theater.style.right = 0;
+            theater.style.top = 0;
+            theater.style.bottom = 0;
+            theater.style.backgroundColor = new StyleColor(Color.black);
+            theater.style.justifyContent = Justify.Center;
+            theater.style.alignItems = Align.Center;
+            theater.pickingMode = PickingMode.Ignore;
+            _root.Add(theater);
+
+            if (EnsureTrailer())
+            {
+                var screen = new Image { image = _trailerRT, scaleMode = ScaleMode.ScaleToFit };
+                screen.style.width = Length.Percent(100f);
+                screen.style.height = Length.Percent(100f);
+                screen.pickingMode = PickingMode.Ignore;
+                theater.Add(screen);
+            }
+            else
+            {
+                var hint = T.Muted("Drop a Trailer.mp4 into StreamingAssets and the trailer plays here.");
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                hint.style.maxWidth = 360;
+                hint.pickingMode = PickingMode.Ignore;
+                theater.Add(hint);
+            }
+
+            // ── top-left: the latest five changes ─────────────────────
+            var log = new VisualElement();
+            log.style.position = Position.Absolute;
+            log.style.left = 64;
+            log.style.top = 20;
+            log.style.width = 400;
+            log.style.backgroundColor = new StyleColor(new Color(T.BgCard.r, T.BgCard.g, T.BgCard.b, 0.82f));
+            log.style.paddingLeft = 12;
+            log.style.paddingRight = 12;
+            log.style.paddingTop = 8;
+            log.style.paddingBottom = 8;
+            T.Radius(log, 6f);
+            T.Border(log, 1, T.BorderDim);
+            log.pickingMode = PickingMode.Ignore;
+
+            var logTitle = T.Muted("LATEST CHANGES");
+            logTitle.style.marginBottom = 4;
+            log.Add(logTitle);
+
+            var changes = RecentChanges();
+            if (changes.Count == 0)
+            {
+                log.Add(T.Muted("Changelog.md not found."));
+            }
+            else foreach (var line in changes)
+            {
+                var l = T.Body(line);
+                l.style.fontSize = 11;
+                l.style.whiteSpace = WhiteSpace.NoWrap;
+                l.style.overflow = Overflow.Hidden;
+                l.style.marginBottom = 2;
+                l.pickingMode = PickingMode.Ignore;
+                log.Add(l);
+            }
+            _root.Add(log);
+        }
+
+        /// <summary>Find and run the trailer; false = no file, show the hint.
+        /// The player and its render texture live on this GameObject and are
+        /// reused across page visits - leaving the page merely pauses it.</summary>
+        private bool EnsureTrailer()
+        {
+            if (_trailerPlayer != null)
+            {
+                if (!_trailerPlayer.isPlaying) _trailerPlayer.Play();
+                return true;
+            }
+
+            string path = null;
+            try
+            {
+                foreach (var name in new[] { "Trailer.mp4", "trailer.mp4", "Trailer.webm", "trailer.webm", "Trailer.mov" })
+                {
+                    string candidate = Path.Combine(Application.streamingAssetsPath, name);
+                    if (File.Exists(candidate)) { path = candidate; break; }
+                }
+            }
+            catch { }
+            if (path == null) return false;
+
+            _trailerRT = new RenderTexture(1280, 720, 0) { name = "TrailerRT" };
+            var vp = gameObject.AddComponent<UnityEngine.Video.VideoPlayer>();
+            vp.playOnAwake = false;
+            vp.renderMode = UnityEngine.Video.VideoRenderMode.RenderTexture;
+            vp.targetTexture = _trailerRT;
+            vp.url = path;
+            vp.isLooping = true;
+            // Silent on purpose: menu music territory, not a cinema.
+            vp.audioOutputMode = UnityEngine.Video.VideoAudioOutputMode.None;
+            _trailerPlayer = vp;
+            _trailerPlayer.Play();
+            return true;
+        }
+
+        private void PauseTrailer()
+        {
+            if (_trailerPlayer != null && _trailerPlayer.isPlaying) _trailerPlayer.Pause();
+        }
+
+        /// <summary>The newest five "### [version] title" lines out of
+        /// Changelog.md - read from Assets in the editor, from
+        /// StreamingAssets in a build (copy it there when packaging).</summary>
+        private static List<string> RecentChanges()
+        {
+            if (_recentChanges != null) return _recentChanges;
+            _recentChanges = new List<string>();
+            try
+            {
+                string[] candidates =
+                {
+                    Path.Combine(Application.dataPath, "Changelog.md"),
+                    Path.Combine(Application.streamingAssetsPath, "Changelog.md")
+                };
+                foreach (var candidate in candidates)
+                {
+                    if (!File.Exists(candidate)) continue;
+                    foreach (var line in File.ReadLines(candidate))
+                    {
+                        if (!line.StartsWith("### ", StringComparison.Ordinal)) continue;
+                        _recentChanges.Add(line.Substring(4).Trim());
+                        if (_recentChanges.Count >= 5) break;
+                    }
+                    break;
+                }
+            }
+            catch { }
+            return _recentChanges;
+        }
+
+        // ════════════════════════════════════════════════════════════
         //                14.48.0 SERVER BROWSER HELPERS
         // ════════════════════════════════════════════════════════════
 
@@ -1085,6 +1249,7 @@ namespace VoxelEngine.Menu
             host.Clear();
 
             var scroll = new ScrollView();
+            T.StyleScroller(scroll);
             scroll.style.maxHeight = 236;
 
             if (_mpTab == MpTab.Lan)
@@ -1271,6 +1436,7 @@ namespace VoxelEngine.Menu
             EnsurePlayerDrafts();
 
             var scroll = new ScrollView();
+            T.StyleScroller(scroll);
             scroll.style.maxHeight = 640;
             panel.Add(scroll);
 

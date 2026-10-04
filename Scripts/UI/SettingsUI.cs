@@ -619,9 +619,13 @@ namespace VoxelEngine.UI
         /// after a rebind (or switching menus) keeps the filter you typed.</summary>
         private static string _keybindFilter = "";
 
+        /// <summary>14.51.0 - what the search reads: 0 = the function names,
+        /// 1 = the bound buttons. Two explicit buttons, as requested.</summary>
+        private static int _keybindSearchMode;
+
         public static void KeybindTab(VisualElement p, MonoBehaviour host, Action rebuild)
         {
-            // ── search bar: by function OR by the bound button ────────
+            // ── search bar + the two mode buttons ─────────────────────
             // Filtering toggles row visibility in place - no rebuild while
             // typing, so the field never loses focus mid-word.
             var search = new TextField { value = _keybindFilter };
@@ -634,27 +638,35 @@ namespace VoxelEngine.UI
             T.Border(search, 1, T.BorderDim);
             p.Add(search);
 
-            var searchHint = Hint("Search by function (jump, inventory...) or by button (F, Mouse1, Tab...). Blank shows everything.");
-            searchHint.style.marginBottom = 8;
-            p.Add(searchHint);
-
-            var rows = new List<(VisualElement row, string haystack)>();
+            var rows = new List<(VisualElement row, string funcHay, string keyHay)>();
             var nothing = Hint("No keybind matches that search.");
             nothing.style.display = DisplayStyle.None;
-            p.Add(nothing);
 
             void ApplyFilter()
             {
                 string f = (_keybindFilter ?? "").Trim().ToLowerInvariant();
                 int visible = 0;
-                foreach (var (row, haystack) in rows)
+                foreach (var (row, funcHay, keyHay) in rows)
                 {
-                    bool show = string.IsNullOrEmpty(f) || haystack.Contains(f);
+                    string hay = _keybindSearchMode == 1 ? keyHay : funcHay;
+                    bool show = string.IsNullOrEmpty(f) || hay.Contains(f);
                     row.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
                     if (show) visible++;
                 }
                 nothing.style.display = visible == 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
+
+            var modeRow = Segmented(new[] { "Search By Function", "Search By Button" },
+                _keybindSearchMode, i => { _keybindSearchMode = i; rebuild?.Invoke(); });
+            modeRow.style.marginBottom = 4;
+            p.Add(modeRow);
+
+            var searchHint = Hint(_keybindSearchMode == 1
+                ? "Type a button: F, Tab, Mouse1, LeftShift... Blank shows everything."
+                : "Type a function: jump, inventory, screenshot... Blank shows everything.");
+            searchHint.style.marginBottom = 8;
+            p.Add(searchHint);
+            p.Add(nothing);
 
             search.RegisterValueChangedCallback(e => { _keybindFilter = e.newValue; ApplyFilter(); });
 
@@ -691,7 +703,9 @@ namespace VoxelEngine.UI
                 row.Add(btn);
                 p.Add(row);
 
-                rows.Add((row, (Prettify(a.ToString()) + " " + GameSettings.GetKey(a)).ToLowerInvariant()));
+                rows.Add((row,
+                    Prettify(a.ToString()).ToLowerInvariant(),
+                    GameSettings.GetKey(a).ToLowerInvariant()));
             }
 
             ApplyFilter();

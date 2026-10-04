@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.50.0-dev`
+**Current Version:** `14.51.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.51.0-dev] The Menu Puts On a Show
+
+**Type:** MINOR - the menu becomes a front page, the crusader's crest becomes personal, and three long-standing irritations die.
+
+**Menus scale with the screen now - and grew.** Both menus (main and pause, they share one panel preset) switched from constant-pixel to scale-with-screen-size against a 1536x864 reference, matched on height. At 1080p everything draws a quarter bigger than before; at 1440p and 4K the menu keeps that same apparent size instead of shrinking into threads. One rule in `UITheme.ApplyMenuScale`, applied by both controllers, inherited by every page.
+
+**The front page puts on a show.** The right side of the main menu is now a black theater that plays `StreamingAssets/Trailer.mp4` on a loop (muted, letterboxed; a quiet hint tells you where to drop the file if it is missing), and the top-left corner carries a LATEST CHANGES card listing the five most recent entries parsed straight out of `Changelog.md`. Both live ONLY on the front page - open any tab (saves, multiplayer, settings) and the dressing is gone and the trailer pauses, so nothing decodes video behind a settings screen.
+
+**Your crest is yours, not the machine's.** Chest text and icon were stored under one machine-wide key, so every simulated player on one computer wore the same crest. They are now keyed by the same instance slot that already separates player identities (`player_icon_2.png`, slot-suffixed chest text) - each running instance on one machine edits and wears its own. The icon gallery folder stays shared on purpose: it is a palette, not an identity.
+
+**The crest replaces the default markings instead of floating over them.** An icon now hides the stock chest symbol and the front tabard cross and takes their place on the chest; no icon means the stock look returns, exactly as before the editor existed. Custom chest text is printed into the chest ink itself, replacing the default motto - "The lion with little pecker develops big roar - CalleTheLion" - which returns the moment the custom text is cleared. The name stays above the player's head, untouched.
+
+**The keybind search knows what it is looking for.** Two buttons above the search bar - SEARCH BY FUNCTION and SEARCH BY BUTTON - make the mode explicit instead of matching both at once: by function finds jump and inventory, by button finds everything bound to F or Mouse1 and nothing that merely mentions it. Same screen in the main menu and pause menu, filter still survives rebinds, typing still never loses focus.
+
+**Scrollbars are scrollbars again.** The scroller thumb carried a 6px size cap plus side insets from an earlier skin, which pinned it to the left edge of its track as a thin stripe. Caps and insets are gone - the thumb now fills the rail's width edge to edge, on every scrollbar in the game: terminals, grids, admin panels, settings pages, the server browser and the player editor (the last two had also never been handed the house style; they have it now).
+
+**External Storage stops forgetting its script.** The block's script lost its prefab reference on every editor reopen because its `.meta` file (the script's permanent identity) was never committed, so every machine invented a fresh one. An editor-load healer now checks the prefab, strips any dead script slot and re-attaches `ExternalStorageBlock` automatically - and the round's delivery notes name the real cure: committing the meta files.
 
 ### [14.50.0-dev] The Menu Keeps Left
 

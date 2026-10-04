@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.50.0-dev`
-**Roadmap Version:** `14.50.0-dev`
+**Current Version:** `14.51.0-dev`
+**Roadmap Version:** `14.51.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.51.0-dev - The Menu Puts On a Show
+Menus scale with screen size (UITheme.ApplyMenuScale, 1536x864 reference matched on height - bigger at 1080p, constant apparent size above). Front page only: right-half trailer theater (StreamingAssets/Trailer.mp4, muted loop, hint when absent) and a top-left LATEST CHANGES card (five newest Changelog.md titles); both vanish and the trailer pauses on every sub-page. Crests are per instance slot on one machine; an icon replaces the stock chest symbol and front cross, custom text replaces the default chest motto, defaults return when cleared, nameplate untouched. Keybind search split into SEARCH BY FUNCTION / SEARCH BY BUTTON modes. Scroller thumb size caps removed - the pill fills its rail everywhere, and the browser/player-editor scrollviews got the house style. Editor-load healer re-attaches ExternalStorageBlock to its prefab when the missing-meta GUID churn strips it.
+
 ### 14.50.0-dev - The Menu Keeps Left
 Menu/UX round: main menu and pause menu panels anchor LEFT (one 64px gutter, vertically centered, every page) instead of screen-center; the six-tab settings bar wraps instead of overflowing, both menus. Keybind screen gained a search bar (shared SettingsUI.KeybindTab): filters by function name or bound button, toggles rows in place so typing never loses focus, filter survives rebinds, empty result says so.
 
@@ -40,9 +43,6 @@ Player cosmetics: EDIT PLAYER page on the main menu's multiplayer page - name (2
 
 ### 14.48.1-dev - The Book Remembers the Keys
 Server browser polish: saved/favorited entries carry an optional password (Add Server box) autofilled on their JOIN; accepted joins write the working password back to the entry (blank = open recorded too); rows show "password saved"; blank re-adds never wipe a key. JOIN GAME plus its fields removed from the pause menu's multiplayer tab - joining is main-menu only now, a note points there; HOST THIS WORLD stays.
-
-### 14.48.0-dev - The Menu Learns Your Friends' Addresses
-Server browser on the main menu's multiplayer page: SERVERS / FAVORITES / RECENT / LAN SCAN tabs over one machine-wide server_browser.json (manual add form, FAV pinning, successful joins self-record newest-first capped at ten). LAN discovery: every hosting machine answers UDP probes on 47788 with name/world/port/players; the LAN tab scans on open, rows join or star straight into the book. Join addresses accept an optional :port everywhere; one join path serves the direct field and every row. The kicked/banned/refused modal now frees the cursor when dismissed outside a running world (main-menu mouse-lock fix).
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
