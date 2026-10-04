@@ -89,6 +89,7 @@ namespace VoxelEngine.Menu
         private bool _iconDraftHasImage;
         private bool _iconPainting;
         private Color32 _iconBrush = new Color32(168, 24, 28, 255);
+        private bool _iconErasing;   // 14.52.0 - eraser paints the blank canvas color
         private int _iconBrushRadius = 6;
         private readonly Dictionary<string, Texture2D> _iconGalleryCache = new();
         private string _expandedAutosaveWorld = string.Empty;
@@ -1036,7 +1037,8 @@ namespace VoxelEngine.Menu
 
         private UnityEngine.Video.VideoPlayer _trailerPlayer;
         private RenderTexture _trailerRT;
-        private static List<string> _recentChanges;
+        private static List<(string title, string body)> _recentChanges;
+        private static int _changesExpanded = -1;   // which entry is folded open
 
         /// <summary>The trailer theater (right side) and the latest-changes
         /// card (top-left). Both are absolute overlays added BEFORE the menu
@@ -1073,20 +1075,21 @@ namespace VoxelEngine.Menu
                 theater.Add(hint);
             }
 
-            // ── top-left: the latest five changes ─────────────────────
+            // ── top-right: the latest five changes, expandable (14.52.0) ──
+            // Each title is a button; clicking it folds the full entry text
+            // out underneath, so a player can actually READ what was added.
             var log = new VisualElement();
             log.style.position = Position.Absolute;
-            log.style.left = 64;
+            log.style.right = 24;
             log.style.top = 20;
-            log.style.width = 400;
-            log.style.backgroundColor = new StyleColor(new Color(T.BgCard.r, T.BgCard.g, T.BgCard.b, 0.82f));
+            log.style.width = 440;
+            log.style.backgroundColor = new StyleColor(new Color(T.BgCard.r, T.BgCard.g, T.BgCard.b, 0.90f));
             log.style.paddingLeft = 12;
             log.style.paddingRight = 12;
             log.style.paddingTop = 8;
             log.style.paddingBottom = 8;
             T.Radius(log, 6f);
             T.Border(log, 1, T.BorderDim);
-            log.pickingMode = PickingMode.Ignore;
 
             var logTitle = T.Muted("LATEST CHANGES");
             logTitle.style.marginBottom = 4;
@@ -1097,15 +1100,39 @@ namespace VoxelEngine.Menu
             {
                 log.Add(T.Muted("Changelog.md not found."));
             }
-            else foreach (var line in changes)
+            else for (int i = 0; i < changes.Count; i++)
             {
-                var l = T.Body(line);
-                l.style.fontSize = 11;
-                l.style.whiteSpace = WhiteSpace.NoWrap;
-                l.style.overflow = Overflow.Hidden;
-                l.style.marginBottom = 2;
-                l.pickingMode = PickingMode.Ignore;
-                log.Add(l);
+                int idx = i;
+                bool open = _changesExpanded == idx;
+
+                var head = new Button(() =>
+                {
+                    _changesExpanded = _changesExpanded == idx ? -1 : idx;
+                    BuildUI();
+                }) { text = (open ? "v  " : ">  ") + changes[idx].title };
+                head.style.backgroundColor = new StyleColor(open
+                    ? new Color(1f, 1f, 1f, 0.07f) : Color.clear);
+                head.style.color = new StyleColor(open ? T.AccentCyan : T.TextPrimary);
+                head.style.fontSize = 11;
+                head.style.unityTextAlign = TextAnchor.MiddleLeft;
+                head.style.marginBottom = 1;
+                head.style.paddingTop = 3;
+                head.style.paddingBottom = 3;
+                T.Radius(head, 4f);
+                T.Border(head, 0, Color.clear);
+                log.Add(head);
+
+                if (!open) continue;
+                var bodyScroll = new ScrollView();
+                T.StyleScroller(bodyScroll);
+                bodyScroll.style.maxHeight = 280;
+                bodyScroll.style.marginBottom = 6;
+                var body = T.Body(changes[idx].body);
+                body.style.fontSize = 11;
+                body.style.whiteSpace = WhiteSpace.Normal;
+                body.style.color = new StyleColor(T.TextSecondary);
+                bodyScroll.Add(body);
+                log.Add(bodyScroll);
             }
             _root.Add(log);
         }
@@ -1152,13 +1179,14 @@ namespace VoxelEngine.Menu
             if (_trailerPlayer != null && _trailerPlayer.isPlaying) _trailerPlayer.Pause();
         }
 
-        /// <summary>The newest five "### [version] title" lines out of
-        /// Changelog.md - read from Assets in the editor, from
-        /// StreamingAssets in a build (copy it there when packaging).</summary>
-        private static List<string> RecentChanges()
+        /// <summary>The newest five entries out of Changelog.md - title AND
+        /// body, so the card can fold the full notes open. Read from Assets
+        /// in the editor, from StreamingAssets in a build (copy it there
+        /// when packaging). Markdown bold markers are stripped for the UI.</summary>
+        private static List<(string title, string body)> RecentChanges()
         {
             if (_recentChanges != null) return _recentChanges;
-            _recentChanges = new List<string>();
+            _recentChanges = new List<(string, string)>();
             try
             {
                 string[] candidates =
@@ -1169,12 +1197,29 @@ namespace VoxelEngine.Menu
                 foreach (var candidate in candidates)
                 {
                     if (!File.Exists(candidate)) continue;
+                    string title = null;
+                    var body = new System.Text.StringBuilder();
                     foreach (var line in File.ReadLines(candidate))
                     {
-                        if (!line.StartsWith("### ", StringComparison.Ordinal)) continue;
-                        _recentChanges.Add(line.Substring(4).Trim());
-                        if (_recentChanges.Count >= 5) break;
+                        if (line.StartsWith("### ", StringComparison.Ordinal))
+                        {
+                            if (title != null)
+                            {
+                                _recentChanges.Add((title, body.ToString().Trim()));
+                                if (_recentChanges.Count >= 5) { title = null; break; }
+                            }
+                            title = line.Substring(4).Trim();
+                            body.Length = 0;
+                            continue;
+                        }
+                        if (title == null) continue;
+                        string clean = line.Replace("**", "").TrimEnd();
+                        if (clean.Length == 0 && body.Length > 0
+                            && body[body.Length - 1] == '\n') continue;   // collapse blank runs
+                        body.Append(clean).Append('\n');
                     }
+                    if (title != null && _recentChanges.Count < 5)
+                        _recentChanges.Add((title, body.ToString().Trim()));
                     break;
                 }
             }
@@ -1496,14 +1541,14 @@ namespace VoxelEngine.Menu
             srcRow.style.flexWrap = Wrap.Wrap;
             srcRow.Add(MiniBtn("BLANK", () =>
             {
-                FillIconDraft(new Color32(242, 238, 228, 255));
+                FillIconDraft(IconBlank);
                 _iconDraftHasImage = true;
                 preview.MarkDirtyRepaint();
                 BuildUI();
             }, T.TextPrimary));
             srcRow.Add(MiniBtn("NO ICON", () =>
             {
-                FillIconDraft(new Color32(242, 238, 228, 255));
+                FillIconDraft(IconBlank);
                 _iconDraftHasImage = false;
                 BuildUI();
             }, T.TextPrimary));
@@ -1575,12 +1620,12 @@ namespace VoxelEngine.Menu
                 foreach (var swatch in IconBrushPalette())
                 {
                     var c = swatch;
-                    var b = new Button(() => { _iconBrush = c; BuildUI(); }) { text = "" };
+                    var b = new Button(() => { _iconBrush = c; _iconErasing = false; BuildUI(); }) { text = "" };
                     b.style.width = 24; b.style.height = 24;
                     b.style.marginRight = 4; b.style.marginBottom = 4;
                     b.style.backgroundColor = new StyleColor((Color)c);
                     T.Radius(b, 4);
-                    bool selected = c.r == _iconBrush.r && c.g == _iconBrush.g
+                    bool selected = !_iconErasing && c.r == _iconBrush.r && c.g == _iconBrush.g
                         && c.b == _iconBrush.b && c.a == _iconBrush.a;
                     T.Border(b, selected ? 2 : 1, selected ? Color.white : T.BorderDim);
                     swatches.Add(b);
@@ -1596,6 +1641,11 @@ namespace VoxelEngine.Menu
                     sizeRow.Add(MiniBtn(label, () => { _iconBrushRadius = r; BuildUI(); },
                         _iconBrushRadius == r ? T.AccentCyan : T.TextSecondary, _iconBrushRadius == r));
                 }
+                // 14.52.0 - the eraser: paints the blank canvas color, so a
+                // slip is undone with the same drag that caused it.
+                sizeRow.Add(T.Muted("  "));
+                sizeRow.Add(MiniBtn("ERASER", () => { _iconErasing = !_iconErasing; BuildUI(); },
+                    _iconErasing ? T.AccentCyan : T.TextSecondary, _iconErasing));
                 scroll.Add(sizeRow);
             }
 
@@ -1641,10 +1691,13 @@ namespace VoxelEngine.Menu
             }
             else
             {
-                FillIconDraft(new Color32(242, 238, 228, 255));
+                FillIconDraft(IconBlank);
                 _iconDraftHasImage = false;
             }
         }
+
+        /// <summary>The blank canvas color - what the eraser paints with.</summary>
+        private static readonly Color32 IconBlank = new Color32(242, 238, 228, 255);
 
         private void FillIconDraft(Color32 color)
         {
@@ -1699,7 +1752,7 @@ namespace VoxelEngine.Menu
                 {
                     int dx = x - cx;
                     if (dx * dx + dy * dy > r2) continue;
-                    _iconDraftPixels[y * w + x] = _iconBrush;
+                    _iconDraftPixels[y * w + x] = _iconErasing ? IconBlank : _iconBrush;
                 }
             }
             _iconDraft.SetPixels32(_iconDraftPixels);

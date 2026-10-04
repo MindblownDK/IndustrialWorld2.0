@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.51.0-dev`
-**Roadmap Version:** `14.51.0-dev`
+**Current Version:** `14.52.1-dev`
+**Roadmap Version:** `14.52.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 14.52.1-dev - A Quiet Console
+Compile fix + deprecation sweep: grid-collision cooldown keyed by entity reference (GetInstanceID retired in this Unity); all twelve FindObjectsByType sort-mode call sites moved to the plain overload (none relied on order); beacon HUD marker scale/rotation moved from VisualElement.transform to style.scale/style.rotate. Zero behavior change - the console only reports FishNet vendor code now.
+
+### 14.52.0-dev - The World Hits Back
+Real collision destruction: grids judge their own crashes on the simulating machine (contact-cell block damage scaled by speed and mass, normal removal path so splits/drops/sync behave; hard terrain hits carve replicated craters with FX and shake; under 6 m/s is a landing). Player collision damage is victim-side like fall damage: grid hits use closing speed along the surface normal times a mass factor (pose-delta grid velocity, so kinematic replicas hit too); mid-air player-vs-player via symmetric avatar proximity sweeps, both machines hurt only their own crusader. Crest and chest text now ride the chest-ink anchor on the spine bone (tattooed, follows every animation; spine search gained contains-fallbacks). Nameplate guaranteed: built at runtime if the prefab reference is lost, always enforced above head over health bar. Front-page changelog card moved top-right with fold-open full entries. Both painting boards (player icon, team banner) gained an ERASER that paints the blank canvas color.
+
 ### 14.51.0-dev - The Menu Puts On a Show
 Menus scale with screen size (UITheme.ApplyMenuScale, 1536x864 reference matched on height - bigger at 1080p, constant apparent size above). Front page only: right-half trailer theater (StreamingAssets/Trailer.mp4, muted loop, hint when absent) and a top-left LATEST CHANGES card (five newest Changelog.md titles); both vanish and the trailer pauses on every sub-page. Crests are per instance slot on one machine; an icon replaces the stock chest symbol and front cross, custom text replaces the default chest motto, defaults return when cleared, nameplate untouched. Keybind search split into SEARCH BY FUNCTION / SEARCH BY BUTTON modes. Scroller thumb size caps removed - the pill fills its rail everywhere, and the browser/player-editor scrollviews got the house style. Editor-load healer re-attaches ExternalStorageBlock to its prefab when the missing-meta GUID churn strips it.
 
@@ -37,12 +43,6 @@ Menu/UX round: main menu and pause menu panels anchor LEFT (one 64px gutter, ver
 
 ### 14.49.1-dev - Labels That Tell the Truth
 Icon editor's BLANK / NO ICON / OPEN FOLDER / RESCAN labels were printed in the slot background's own dark color - invisible but clickable; bright now (MiniBtn accent IS the label color when unfilled). Pause menu quit button reads DISCONNECT for guests (anyone not hosting) and skips the world-state and research write-outs on the way home - a guest's copy is a discarded cache; hosts and singleplayer keep SAVE & QUIT.
-
-### 14.49.0-dev - The Crusader Gets a Face
-Player cosmetics: EDIT PLAYER page on the main menu's multiplayer page - name (20 cap), chest text (24 cap, server-sanitized), personal icon (PlayerIcons folder gallery or painting board, canonical 128x128 PNG, 300KB ceiling, NO ICON honest). Avatars wear the crest on the chest plane in front of the tabard (reads with or without armor; world-text material, no wall bleed); icons also ride the pause menu PLAYERS rows and the Administration player cards, live via registry version. Cosmetics are per-MACHINE (PlayerPrefs + player_icon.png), upload behind the identity handshake every join (empty clears), host validates and rebroadcasts, late joiners replayed behind team banners; nothing persists on the host; dedicated renders none of it.
-
-### 14.48.1-dev - The Book Remembers the Keys
-Server browser polish: saved/favorited entries carry an optional password (Add Server box) autofilled on their JOIN; accepted joins write the working password back to the entry (blank = open recorded too); rows show "password saved"; blank re-adds never wipe a key. JOIN GAME plus its fields removed from the pause menu's multiplayer tab - joining is main-menu only now, a note points there; HOST THIS WORLD stays.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

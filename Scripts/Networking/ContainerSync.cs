@@ -145,7 +145,7 @@ namespace VoxelEngine.Networking
         {
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
             if (persistence == null) yield break;
-            foreach (var block in Object.FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
+            foreach (var block in Object.FindObjectsByType<PlacedBlock>())
             {
                 if (block == null || block.Item == null) continue;
                 if (block.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) continue;
@@ -234,7 +234,7 @@ namespace VoxelEngine.Networking
         {
             _nextRescan = Time.unscaledTime + RescanSeconds;
             _blocks.Clear();
-            foreach (var block in FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
+            foreach (var block in FindObjectsByType<PlacedBlock>())
             {
                 if (block == null || block.Item == null) continue;
                 if (block.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) continue;

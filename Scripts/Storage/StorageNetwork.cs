@@ -108,7 +108,7 @@ namespace VoxelEngine.Storage
 
         private static void Collect<T>(List<Component> into) where T : Behaviour
         {
-            var found = Object.FindObjectsByType<T>(FindObjectsSortMode.None);
+            var found = Object.FindObjectsByType<T>();
             foreach (var f in found)
                 if (f != null && f.isActiveAndEnabled) into.Add(f);
         }

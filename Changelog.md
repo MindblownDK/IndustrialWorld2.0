@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.51.0-dev`
+**Current Version:** `14.52.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.52.1-dev] A Quiet Console
+
+**Type:** PATCH - the compile log goes silent: one real error from 14.52.0 and the long-deferred deprecation sweep.
+
+**The one error.** The grid-collision cooldown in the new player impact system keyed itself by `GetInstanceID()`, which this Unity has retired outright. The cooldown table is now keyed by the grid entity reference itself - no id needed, no obsolete call, same behavior.
+
+**The deprecation sweep (deferred since 14.44).** All twelve `FindObjectsByType(FindObjectsSortMode.None)` call sites - BlockSync, BuildingSync, ContainerSync, DropSync, GridSync, MachineSync, ExternalStorageBlock, StorageNetwork - now use the plain overload Unity asks for; none of them ever relied on sort order. The beacon HUD's two `VisualElement.transform` writes (marker pop-in scale, diamond rotation) moved to `style.scale` / `style.rotate`, the UI Toolkit replacements. Pure mechanical substitutions, zero behavior change, and a console that only speaks when something is actually wrong.
+
+### [14.52.0-dev] The World Hits Back
+
+**Type:** MINOR - real collision destruction arrives, the crest becomes a true tattoo, and four reports from the 14.51 live test are closed.
+
+**Crashing is now a decision with consequences.** Every grid judges its own impacts on the machine that simulates it: blocks around each contact point take damage scaled by impact speed and the grid's own mass - a scout scuffs its nose, a freighter at speed loses whole sections of hull, and destroyed blocks go through the normal removal path so structural splits, drops and the grid-state sync all behave exactly as if a weapon had done it. A hard hit on raw voxel terrain gouges a crater that replicates through the same path explosion craters already use, with impact FX and distance-scaled camera shake. Below 6 m/s nothing happens - landings are still landings.
+
+**Collisions hurt players - always victim-side, like fall damage.** Fly into a hull, or get run over by one, and the closing speed ALONG THE SURFACE NORMAL decides the damage, scaled by the grid's mass - standing on a moving deck is contact at zero normal speed and stays free, being rammed by something heavy is not. Grid velocity comes from a pose-delta tracker, so a replicated kinematic grid on a guest machine hits exactly as hard as the host's live rigidbody. And two crusaders who meet mid-air now both pay for it: each machine runs the same proximity sweep against the replicated avatars and hurts only its own player, so both parties bleed with no packets and no double-apply. Same damage curve family as fall damage, spawn grace included, and the death screen names the ship (or the other crusader) that ended you.
+
+**The crest is tattooed on, not hovering nearby.** The icon quad now hangs off the chest-ink anchor, which rides the spine bone on the rigged body - so crest and chest text follow every animation, hits and deaths included, instead of the body animating through a floating decal. The spine search also grew honest fallbacks (any bone containing "spine" or "chest", highest wins) so unconventional rigs tattoo instead of float.
+
+**The name lives above the head - guaranteed.** An avatar whose prefab lost the nameplate reference used to show no name at all, leaving the chest print as the only name in sight. The avatar now builds its own nameplate at runtime when the reference is missing (built-in font, same look as the prefab one) and always enforces the above-head anchor, name over health bar, exactly as designed.
+
+**Latest changes moved to the top right - and they open.** The front-page changelog card now sits in the top-right corner over the theater, and every entry is a fold: click a title and the full release notes unfold underneath in a scrollable panel, click again to close. Five newest entries, bold markers stripped, straight from Changelog.md.
+
+**Both painting boards got an eraser.** The player-icon painter and the team-banner painter each have an ERASER button next to the brush sizes: it paints the blank canvas color, so a slip is undone with the same drag that caused it. Picking any color swatch puts the brush back.
 
 ### [14.51.0-dev] The Menu Puts On a Show
 

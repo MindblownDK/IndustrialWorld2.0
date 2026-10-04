@@ -230,6 +230,8 @@ namespace VoxelEngine.Player
             // Ensure water/equipment trackers exist for movement-state checks.
             if (GetComponent<PlayerWaterState>() == null) gameObject.AddComponent<PlayerWaterState>();
             if (GetComponent<PlayerEquipment>() == null) gameObject.AddComponent<PlayerEquipment>();
+            // 14.52.0 - collisions hurt: grids and other players, victim-side.
+            if (GetComponent<PlayerImpactDamage>() == null) gameObject.AddComponent<PlayerImpactDamage>();
             if (GetComponent<LiquidContactEffects>() == null) gameObject.AddComponent<LiquidContactEffects>();
             _smoothedEyeHeight = standEyeHeight;
 

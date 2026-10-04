@@ -144,7 +144,7 @@ namespace VoxelEngine.Networking
         /// world in one stalled frame. Enumerate it once.</summary>
         public static IEnumerable<BlockSnapshot> StreamSnapshot()
         {
-            foreach (var block in Object.FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
+            foreach (var block in Object.FindObjectsByType<PlacedBlock>())
             {
                 if (block == null || block.Item == null) continue;
                 if (block.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) continue;
@@ -299,7 +299,7 @@ namespace VoxelEngine.Networking
         {
             PlacedBlock best = null;
             float bestSq = 0.25f * 0.25f;
-            foreach (var block in Object.FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
+            foreach (var block in Object.FindObjectsByType<PlacedBlock>())
             {
                 if (block == null || block.Item == null) continue;
                 if (block.Item.itemId != itemId) continue;

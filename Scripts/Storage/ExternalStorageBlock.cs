@@ -149,7 +149,7 @@ namespace VoxelEngine.Storage
         private bool IsControllerOwned(StorageDrawer drawer)
         {
             if (ConnectedRack == null) return false;
-            var ctrls = FindObjectsByType<StorageDrawerController>(FindObjectsSortMode.None);
+            var ctrls = FindObjectsByType<StorageDrawerController>();
             foreach (var dc in ctrls)
             {
                 if (dc == null || !dc.IsAvailable || dc.ConnectedRack != ConnectedRack) continue;

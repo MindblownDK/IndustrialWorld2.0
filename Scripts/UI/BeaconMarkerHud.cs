@@ -144,7 +144,8 @@ namespace VoxelEngine.UI
                 float presence = Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(300f, 6000f, dist));
                 float ease = entry.Alpha * entry.Alpha * (3f - 2f * entry.Alpha); // smoothstep
                 entry.Root.style.opacity = presence * ease;
-                entry.Root.transform.scale = Vector3.one * Mathf.Lerp(0.7f, 1f, ease);
+                float popScale = Mathf.Lerp(0.7f, 1f, ease);   // style.scale - VisualElement.transform is obsolete (14.52.1)
+                entry.Root.style.scale = new Scale(new Vector2(popScale, popScale));
                 entry.Root.style.display = DisplayStyle.Flex;
                 entry.Root.style.left = entry.PanelPos.x - 60f;
                 entry.Root.style.top = entry.PanelPos.y - 7f;
@@ -182,7 +183,7 @@ namespace VoxelEngine.UI
             diamond.style.borderTopWidth = diamond.style.borderBottomWidth =
             diamond.style.borderLeftWidth = diamond.style.borderRightWidth = 2f;
             diamond.style.backgroundColor = new Color(0.04f, 0.05f, 0.07f, 0.55f);
-            diamond.transform.rotation = Quaternion.Euler(0f, 0f, 45f);
+            diamond.style.rotate = new Rotate(45f);   // style.rotate - VisualElement.transform is obsolete (14.52.1)
             root.Add(diamond);
 
             var name = MakeLabel(11, FontStyle.Bold);

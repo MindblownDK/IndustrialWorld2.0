@@ -171,22 +171,38 @@ namespace VoxelEngine.Networking
                 if (crossH != null) crossH.gameObject.SetActive(!hasIcon);
             }
 
-            var crest = root.Find(CrestName);
+            var crest = FindDeep(root, CrestName);
             if (!hasIcon)
             {
                 if (crest != null) Object.Destroy(crest.gameObject);
                 return;
             }
+
+            // ── icon: one textured quad TATTOOED onto the chest (14.52.0).
+            // It hangs under the ChestInk anchor, which rides the spine bone
+            // on the rigged body - so the crest moves with every animation
+            // (hits, deaths, the lot) instead of floating in root space while
+            // the body animates through it. Ink local space is already turned
+            // to read from the front, so the quad needs no flip of its own;
+            // -Z in ink space points OUT of the chest. The primitive fallback
+            // body parents identically - its ink just never moves. ──
             if (crest == null)
             {
                 crest = new GameObject(CrestName).transform;
-                crest.SetParent(root, false);
+                if (inkT != null)
+                {
+                    crest.SetParent(inkT, false);
+                    // Up onto the upper chest (where the rune/cross sat) and a
+                    // few cm out so it clears skin and tabard alike.
+                    crest.localPosition = new Vector3(0f, 0.14f, -0.035f);
+                }
+                else
+                {
+                    crest.SetParent(root, false);   // no ink anchor - root fallback
+                    crest.localPosition = new Vector3(0f, 1.45f, 0.185f);
+                    crest.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                }
             }
-
-            // ── icon: one textured quad on the upper chest, in front of the
-            // tabard plane so it reads with or without armor. Same facing fix
-            // as every TextMesh here: the front reads from -Z, so it turns
-            // its back to the model's forward. ──
             var iconT = crest.Find("CrestIcon");
             if (iconT == null)
             {
@@ -196,8 +212,8 @@ namespace VoxelEngine.Networking
                 if (col != null) Object.Destroy(col);
                 iconT = go.transform;
                 iconT.SetParent(crest, false);
-                iconT.localPosition = new Vector3(0f, 1.32f, 0.185f);
-                iconT.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                iconT.localPosition = Vector3.zero;
+                iconT.localRotation = Quaternion.identity;
                 iconT.localScale = new Vector3(0.20f, 0.20f, 1f);
                 var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
                 iconT.GetComponent<MeshRenderer>().material = new Material(shader);
@@ -522,9 +538,15 @@ namespace VoxelEngine.Networking
                 runeRot: Quaternion.identity);
 
             // Ride the spine so future animations carry the ink with the chest.
+            // 14.52.0 - broadened search: exact suffixes first, then any bone
+            // whose name merely CONTAINS spine/chest (case-insensitive,
+            // highest one wins = closest to the chest), so a rig with
+            // unconventional bone names still tattoos instead of floating.
             var spine = FindBoneEndingIn(rigGo, "Spine2");
             if (spine == null) spine = FindBoneEndingIn(rigGo, "Spine1");
             if (spine == null) spine = FindBoneEndingIn(rigGo, "Spine");
+            if (spine == null) spine = FindBoneContaining(rigGo, "spine");
+            if (spine == null) spine = FindBoneContaining(rigGo, "chest");
             if (spine != null)
             {
                 var inkT = root.Find("ChestInk");
@@ -533,6 +555,19 @@ namespace VoxelEngine.Networking
                 if (runeT != null) runeT.SetParent(spine, true);
             }
             return true;
+        }
+
+        /// <summary>Loose fallback: any bone whose name contains the needle
+        /// (case-insensitive). The HIGHEST match wins - for spine chains that
+        /// is the bone nearest the chest, which is where tattoos live.</summary>
+        private static Transform FindBoneContaining(GameObject rigGo, string needle)
+        {
+            Transform best = null;
+            foreach (var t in rigGo.GetComponentsInChildren<Transform>(true))
+                if (t.name.ToLowerInvariant().Contains(needle)
+                    && (best == null || t.position.y > best.position.y))
+                    best = t;
+            return best;
         }
 
         /// <summary>Shortest bone name wins so "Spine" never grabs a longer twin.

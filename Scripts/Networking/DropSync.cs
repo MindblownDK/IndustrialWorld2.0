@@ -173,7 +173,7 @@ namespace VoxelEngine.Networking
         {
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
             if (persistence == null) yield break;
-            foreach (var drop in Object.FindObjectsByType<DroppedItem>(FindObjectsSortMode.None))
+            foreach (var drop in Object.FindObjectsByType<DroppedItem>())
             {
                 if (drop == null || drop.stack == null || drop.stack.IsEmpty) continue;
                 if (string.IsNullOrEmpty(drop.NetId))

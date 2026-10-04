@@ -169,7 +169,7 @@ namespace VoxelEngine.Networking
         /// base in one stalled frame. Enumerate it once.</summary>
         public static IEnumerable<PieceSnapshot> StreamSnapshot()
         {
-            foreach (var pb in Object.FindObjectsByType<PlacedTieredBlock>(FindObjectsSortMode.None))
+            foreach (var pb in Object.FindObjectsByType<PlacedTieredBlock>())
             {
                 if (pb == null || pb.definition == null) continue;   // ghosts carry no definition
                 float rise = 0f, height = 0f;
@@ -350,7 +350,7 @@ namespace VoxelEngine.Networking
         {
             PlacedTieredBlock best = null;
             float bestSq = 0.25f * 0.25f;
-            foreach (var pb in Object.FindObjectsByType<PlacedTieredBlock>(FindObjectsSortMode.None))
+            foreach (var pb in Object.FindObjectsByType<PlacedTieredBlock>())
             {
                 if (pb == null || pb.definition == null) continue;
                 if (pb.definition.family.ToString() != family) continue;

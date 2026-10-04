@@ -396,7 +396,7 @@ namespace VoxelEngine.Networking
         {
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
             if (persistence == null) yield break;
-            foreach (var grid in Object.FindObjectsByType<GridEntity>(FindObjectsSortMode.None))
+            foreach (var grid in Object.FindObjectsByType<GridEntity>())
             {
                 if (grid == null || grid.BlockCount == 0) continue;
                 string json = persistence.CaptureGridJson(grid);

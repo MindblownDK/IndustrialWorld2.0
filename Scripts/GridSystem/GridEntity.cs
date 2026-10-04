@@ -376,6 +376,11 @@ namespace VoxelEngine.GridSystem
             _rb.interpolation = RigidbodyInterpolation.Interpolate;
             _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
+            // 14.52.0 - real destruction: every grid judges its own crashes
+            // (block damage, craters, FX) and tracks pose-delta velocity so
+            // players can be hurt by kinematic replicas too.
+            if (GetComponent<GridImpact>() == null) gameObject.AddComponent<GridImpact>();
+
             // Auto-attach the maritime propulsion system so EVERY grid gets buoyancy
             // + water interaction for free (harmless for ships in space — zero submergence = zero force).
             if (GetComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>() == null)

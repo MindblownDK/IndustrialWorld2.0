@@ -458,8 +458,29 @@ namespace VoxelEngine.Networking
             _ghostRot.Value = rot;
         }
 
+        // ── replicated-motion estimate (14.52.0) ─────────────────────
+        // Collision damage needs "how fast is that crusader moving" for
+        // avatars, whose transforms are driven by replication, not physics.
+        private Vector3 _velTrackPos;
+        private Vector3 _estimatedVelocity;
+
+        /// <summary>Frame-delta velocity of this avatar's replicated body.</summary>
+        public Vector3 EstimatedVelocity => _estimatedVelocity;
+
         private void LateUpdate()
         {
+            float dt = Time.deltaTime;
+            if (dt > 0f)
+            {
+                Vector3 raw = (transform.position - _velTrackPos) / dt;
+                // Light smoothing: replication arrives in bursts, and a
+                // single teleport-sized frame must not read as lethal speed.
+                _estimatedVelocity = raw.sqrMagnitude > 10000f
+                    ? Vector3.zero   // >100 m/s in one frame = teleport/snap, not motion
+                    : Vector3.Lerp(_estimatedVelocity, raw, 0.5f);
+                _velTrackPos = transform.position;
+            }
+
             PollCrest();
             if (IsOwner || nameplate == null) return;
             var cam = Camera.main;
@@ -534,7 +555,46 @@ namespace VoxelEngine.Networking
 
         private void ApplyNameplate()
         {
-            if (nameplate == null) return;
+            // 14.52.0 - the plate is GUARANTEED, and guaranteed ABOVE THE
+            // HEAD. A prefab that lost the reference (meta churn strips the
+            // component, re-adding it blanks the field) used to mean no name
+            // at all - the only name left visible was whatever was printed on
+            // the chest. Build one at runtime when missing and always enforce
+            // the above-head anchor, so the name never rides anywhere else.
+            if (nameplate == null)
+            {
+                var found = transform.Find("Nameplate");
+                if (found != null) nameplate = found.GetComponent<TextMesh>();
+            }
+            if (nameplate == null)
+            {
+                var plateGo = new GameObject("Nameplate");
+                plateGo.transform.SetParent(transform, false);
+                nameplate = plateGo.AddComponent<TextMesh>();
+                nameplate.characterSize = 0.12f;
+                nameplate.fontSize = 64;
+                nameplate.anchor = TextAnchor.LowerCenter;
+                nameplate.alignment = TextAlignment.Center;
+                nameplate.color = new Color(0.92f, 0.94f, 0.97f);
+                // A runtime TextMesh starts with no font - and no font means
+                // no glyphs at all. The built-in always exists.
+                try
+                {
+                    var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                    if (font != null)
+                    {
+                        nameplate.font = font;
+                        var r = plateGo.GetComponent<MeshRenderer>();
+                        if (r != null) r.material = font.material;
+                    }
+                }
+                catch { /* glyphless beats crashing */ }
+            }
+            var plate = nameplate.transform;
+            if (plate.parent != transform) plate.SetParent(transform, false);
+            plate.localPosition = new Vector3(0f, 2.25f, 0f);   // above the head, above the bar
+            plate.localScale = Vector3.one;
+
             string name = PlayerName;   // SyncVar or announce fallback
             nameplate.text = string.IsNullOrEmpty(name) ? "..." : name;
         }

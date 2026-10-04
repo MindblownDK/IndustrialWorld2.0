@@ -46,6 +46,7 @@ namespace VoxelEngine.UI
         private static string _bannerDraftTop, _bannerDraftMiddle, _bannerDraftBottom;
         private static bool _bannerPainting;
         private static Color32 _brushColor = new Color32(168, 24, 28, 255);
+        private static bool _bannerErasing;   // 14.52.0 - eraser paints the blank cloth color
         private static int _brushRadius = 8;
         private static readonly Dictionary<string, Texture2D> _galleryCache = new();
 
@@ -442,7 +443,7 @@ namespace VoxelEngine.UI
             {
                 // Wipe the image entirely - plain cloth, a fresh start for
                 // painting from scratch (14.37.1).
-                FillDraft(new Color32(242, 238, 228, 255));
+                FillDraft(ClothBlank);
                 _bannerDraftCustom = true;
                 preview.MarkDirtyRepaint();
             }, T.BgSlot));
@@ -511,11 +512,11 @@ namespace VoxelEngine.UI
                     foreach (var swatch in BrushPalette())
                     {
                         var c = swatch;
-                        var b = new Button(() => { _brushColor = c; rebuild?.Invoke(); }) { text = "" };
+                        var b = new Button(() => { _brushColor = c; _bannerErasing = false; rebuild?.Invoke(); }) { text = "" };
                         b.style.width = 24; b.style.height = 24; b.style.marginRight = 4;
                         b.style.backgroundColor = new StyleColor((Color)c);
                         T.Radius(b, 4);
-                        bool selected = c.r == _brushColor.r && c.g == _brushColor.g
+                        bool selected = !_bannerErasing && c.r == _brushColor.r && c.g == _brushColor.g
                             && c.b == _brushColor.b && c.a == _brushColor.a;
                         T.Border(b, selected ? 2 : 1, selected ? Color.white : T.BorderDim);
                         swatchRow.Add(b);
@@ -529,6 +530,10 @@ namespace VoxelEngine.UI
                         sizeRow.Add(SmallBtn(label, () => { _brushRadius = r; rebuild?.Invoke(); },
                             _brushRadius == r ? T.AccentCyan : T.BgSlot));
                     }
+                    // 14.52.0 - the eraser: paints the blank cloth color, so
+                    // a slip is undone with the same drag that caused it.
+                    sizeRow.Add(SmallBtn("ERASER", () => { _bannerErasing = !_bannerErasing; rebuild?.Invoke(); },
+                        _bannerErasing ? T.AccentCyan : T.BgSlot));
                     card.Add(sizeRow);
                 }
             }
@@ -593,6 +598,9 @@ namespace VoxelEngine.UI
 
         /// <summary>Flood the draft cloth with one flat color - the BLANK
         /// CLOTH action, for painting a banner from nothing.</summary>
+        /// <summary>The blank cloth color - what the eraser paints with.</summary>
+        private static readonly Color32 ClothBlank = new Color32(242, 238, 228, 255);
+
         private static void FillDraft(Color32 color)
         {
             if (_bannerDraftCloth == null) return;
@@ -648,7 +656,7 @@ namespace VoxelEngine.UI
                 {
                     int dx = x - cx;
                     if (dx * dx + dy * dy > r2) continue;
-                    _bannerDraftPixels[y * w + x] = _brushColor;
+                    _bannerDraftPixels[y * w + x] = _bannerErasing ? ClothBlank : _brushColor;
                 }
             }
             _bannerDraftCloth.SetPixels32(_bannerDraftPixels);
