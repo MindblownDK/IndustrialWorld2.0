@@ -9,6 +9,7 @@
 
 using UnityEngine;
 using VoxelEngine.Combat;
+using VoxelEngine.Networking;
 
 namespace VoxelEngine.Fauna
 {
@@ -31,6 +32,9 @@ namespace VoxelEngine.Fauna
         public float fleeDuration   = 4f;
 
         protected Rigidbody _rb;
+        private bool _replica;   // 14.54.0 - a networked puppet: no AI, no local damage
+        /// <summary>True on guests for host-streamed animals.</summary>
+        public bool IsReplica => _replica;
         private Vector3 _home;
         private Vector3 _wanderTarget;
         private float _nextWanderAt;
@@ -50,11 +54,55 @@ namespace VoxelEngine.Fauna
             _rb.useGravity = false;
             _rb.freezeRotation = true;
             PickWander();
+
+            // ── 14.54.0 multiplayer: one herd, the host's ──
+            if (AnimalSync.SpawningReplica)
+            {
+                // Born as a networked puppet - configured by MakeReplica right
+                // after Instantiate returns; stay inert until then.
+                _replica = true;
+                _rb.isKinematic = true;
+            }
+            else if (NetworkSession.Mode == SessionMode.Client)
+            {
+                // Guests grow no fauna of their own: scatter and spawner
+                // births self-destruct, only host-streamed replicas live here.
+                Destroy(gameObject);
+            }
+            else
+            {
+                AnimalSync.Register(this);   // host streams it, offline no-ops
+            }
+        }
+
+        /// <summary>Configure this instance as a guest-side puppet: AI off,
+        /// physics off, colliders kept so weapons can still aim at it.</summary>
+        public void MakeReplica()
+        {
+            _replica = true;
+            _rb.isKinematic = true;
+            enabled = false;   // no FixedUpdate AI; AnimalSync moves the transform
+        }
+
+        /// <summary>Replicated health lands directly - no flee, no death roll.
+        /// The host's removal broadcast is what kills a replica.</summary>
+        public void NetworkSetHealth(float health)
+        {
+            Health = Mathf.Max(0f, health);
+        }
+
+        private void OnDestroy()
+        {
+            AnimalSync.Unregister(this);
         }
 
         // Spook + run from the damage source instead of fighting back.
         public override void TakeDamage(DamageEvent e)
         {
+            // 14.54.0 - a replica never bleeds locally: the hit is an intent,
+            // the host's health/flee/death stream is the outcome.
+            if (_replica) { AnimalSync.AnnounceHit(this, e); return; }
+
             base.TakeDamage(e);
             if (!IsAlive) return;
 
@@ -76,12 +124,22 @@ namespace VoxelEngine.Fauna
         /// </summary>
         public void ApplyAttritionDamage(float amount)
         {
+            if (_replica) return;   // hunger is simulated on the host only
             if (amount <= 0f || !IsAlive) return;
             base.TakeDamage(new DamageEvent { amount = amount, type = DamageType.Melee });
         }
 
+        /// <summary>Death announces BEFORE the loot roll so the removal and
+        /// the DropSync spawns leave in the right order.</summary>
+        protected override void Die(DamageEvent e)
+        {
+            AnimalSync.AnnounceDied(this);
+            base.Die(e);
+        }
+
         protected virtual void FixedUpdate()
         {
+            if (_replica) return;   // puppets are moved by AnimalSync
             float dt = Time.fixedDeltaTime;
             Vector3 pos = transform.position;
             Vector3 up   = VoxelEngine.Cosmos.GravityProvider.GetUp(pos);

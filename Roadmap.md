@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.53.2-dev`
-**Roadmap Version:** `14.53.2-dev`
+**Current Version:** `14.54.0-dev`
+**Roadmap Version:** `14.54.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.54.0-dev - One Herd
+Fauna replication: the host simulates all livestock and horses, streaming spawn/pose/health/removal; guests cull locally-born animals and run kinematic replicas of the same prefabs. Guest hits are intents the host applies authoritatively (loot via DropSync); mounting hands the horse to the rider's machine while everyone else glues it under the rider's avatar; spawn re-announce every 5 s doubles as the late-join snapshot. Hostile creatures deferred to their own sync round.
+
 ### 14.53.2-dev - Glued to the Chest
 CrusaderInkCalibrator upgraded from one-shot to live cling: full scan at ~0.6 s (after the bind-pose blend), remembering the chest-patch vertex indices, then a re-measure every 3rd frame over only those cached vertices, easing the ink anchor onto the live surface at half the error per pass. Tracks breathing/leaning/locomotion without popping; crest follows; dedicated servers skip it. (14.53.1 one-shot measured mid-blend five frames in - that was the residual float.)
 
@@ -40,9 +43,6 @@ Compile fix + deprecation sweep: grid-collision cooldown keyed by entity referen
 
 ### 14.52.0-dev - The World Hits Back
 Real collision destruction: grids judge their own crashes on the simulating machine (contact-cell block damage scaled by speed and mass, normal removal path so splits/drops/sync behave; hard terrain hits carve replicated craters with FX and shake; under 6 m/s is a landing). Player collision damage is victim-side like fall damage: grid hits use closing speed along the surface normal times a mass factor (pose-delta grid velocity, so kinematic replicas hit too); mid-air player-vs-player via symmetric avatar proximity sweeps, both machines hurt only their own crusader. Crest and chest text now ride the chest-ink anchor on the spine bone (tattooed, follows every animation; spine search gained contains-fallbacks). Nameplate guaranteed: built at runtime if the prefab reference is lost, always enforced above head over health bar. Front-page changelog card moved top-right with fold-open full entries. Both painting boards (player icon, team banner) gained an ERASER that paints the blank canvas color.
-
-### 14.51.0-dev - The Menu Puts On a Show
-Menus scale with screen size (UITheme.ApplyMenuScale, 1536x864 reference matched on height - bigger at 1080p, constant apparent size above). Front page only: right-half trailer theater (StreamingAssets/Trailer.mp4, muted loop, hint when absent) and a top-left LATEST CHANGES card (five newest Changelog.md titles); both vanish and the trailer pauses on every sub-page. Crests are per instance slot on one machine; an icon replaces the stock chest symbol and front cross, custom text replaces the default chest motto, defaults return when cleared, nameplate untouched. Keybind search split into SEARCH BY FUNCTION / SEARCH BY BUTTON modes. Scroller thumb size caps removed - the pill fills its rail everywhere, and the browser/player-editor scrollviews got the house style. Editor-load healer re-attaches ExternalStorageBlock to its prefab when the missing-meta GUID churn strips it.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -80,7 +80,8 @@ Menus scale with screen size (UITheme.ApplyMenuScale, 1536x864 reference matched
 - **Armor stays equipped through death** (decided 14.36.0): the loot bag carries the 40 carried slots; worn equipment is not part of the drop.
 - **Refund on a refused grid placement** (accepted 14.29.0): two players reaching for the same cell in the same instant - the loser's locally paid cost is not refunded; the echo removes the block.
 - **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
-- **Fauna/animal sync** (surfaced 14.46.0): creatures simulate per-machine and are not replicated between players; needs its own round (spawn/population authority + pose sync).
+- **Hostile creature sync** (narrowed 14.54.0): livestock and horses replicate host-authoritatively since 14.54.0; ghouls, basilisks, rocs and bosses still simulate per-machine - their attack paths hit the local player directly and need their own intent-rerouting round.
+- **Same-instant double mount** (accepted 14.54.0): two players taking the same horse in the same wire instant - the later mount announce wins the glue; the earlier rider dismounts into a horse that is no longer theirs. Same vanishingly small window as the drop/loot races.
 - **Weather sampled at the host's frame** (accepted 14.46.0): the one true sky is rolled where the host stands (or at the world frame on a dedicated server); per-region weather is future work.
 - **Dedicated headless server** (milestone 12, part 1 shipped 14.45.0): boot path, config and save carry-forward are live; remaining are the security hardening pass and converting client requests to intents, plus hardening every system that still assumes a local player at runtime (surfaced by dedicated-session testing).
 - **Security hardening** (deferred 14.6.0): code-lock codes travel and rest in plain text; move validation server-side and audit every broadcast for data a client should not see.

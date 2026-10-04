@@ -65,6 +65,10 @@ namespace VoxelEngine.Fauna
 
             VoxelEngine.UI.BuildFeedbackHud.Show("Mounted",
                 "WASD ride   Shift gallop   Space jump   F dismount", null, new Color(0.50f, 0.85f, 1f));
+
+            // 14.54.0 - take the reins on the wire: the host suspends its AI
+            // and every other machine glues this horse under our avatar.
+            VoxelEngine.Networking.AnimalSync.AnnounceMount(this, mounted: true);
         }
 
         // ── Dismount (mirrors GridCockpit.Exit) ───────────────────
@@ -84,6 +88,10 @@ namespace VoxelEngine.Fauna
             player.ResetVelocity();
             player.IsMounted = false;
             Rider = null;
+
+            // 14.54.0 - hand the reins back: the announce carries our final
+            // pose so the host resumes the real animal exactly here.
+            VoxelEngine.Networking.AnimalSync.AnnounceMount(this, mounted: false);
         }
 
         private void Update()

@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.53.2-dev`
+**Current Version:** `14.54.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.54.0-dev] One Herd
+
+**Livestock and horses are now synchronized in multiplayer.**
+
+- New AnimalSync layer: the host simulates every animal and streams spawn, pose, health and removal to all guests. Guests no longer grow a private herd of their own - locally born animals self-destruct and are replaced by host-streamed replicas built from the same Livestock prefabs.
+- Cows, sheep, pigs and horses now stand in the same place, at the same health, on every machine in a session.
+- Guests can hunt and harvest: hitting an animal sends a damage intent to the host, which applies it authoritatively - the animal flees, bleeds and dies for everyone, and its loot arrives through the existing drop replication.
+- Horses are rideable by any player. Mounting hands the reins to the rider's machine; everyone else sees the horse glued correctly under the rider's avatar, and dismounting hands the animal back to the host exactly where the rider left it.
+- Late joiners receive the full herd automatically: animal spawns are re-announced every few seconds as a self-healing snapshot, and stale replicas are culled if their stream goes silent.
+- Hunger attrition, breeding and despawning are simulated on the host only, so husbandry results are identical for all players.
+- Known limits for this round: hostile creatures are not yet synchronized (planned as its own round), and two players mounting the same horse in the same instant resolves to whichever announce lands last.
 
 ### [14.53.2-dev] Glued to the Chest
 

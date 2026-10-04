@@ -43,8 +43,17 @@ namespace VoxelEngine.Fauna
 
         private void Update()
         {
+            // 14.54.0 - the sync pump rides the spawner's heartbeat: hosts
+            // stream the herd, guests ease their replicas. Runs either way.
+            VoxelEngine.Networking.AnimalSync.Pump();
+
             var player = VoxelEngine.Player.PlayerStats.Instance;
             if (player == null) return;
+
+            // Guests never spawn, cull or despawn fauna - the host's stream
+            // is the only herd that exists on this machine.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return;
             Vector3 ppos = player.transform.position;
 
             bool vacuum = VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(ppos)

@@ -579,6 +579,60 @@ namespace VoxelEngine.Networking
         public List<DropRecord> Records;
     }
 
+    // ── livestock on the wire (14.54.0) - host streams, guests puppet ──
+
+    /// <summary>An animal exists. Re-sent every few seconds as a self-healing
+    /// late-join snapshot; a known id treats it as a pose/health correction.</summary>
+    public struct AnimalSpawnBroadcast : IBroadcast
+    {
+        public int Id;
+        public byte Species;
+        public bool Rideable;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public float Health;
+    }
+
+    public struct AnimalPoseBroadcast : IBroadcast
+    {
+        public int Id;
+        public Vector3 Position;
+        public Quaternion Rotation;
+    }
+
+    public struct AnimalHealthBroadcast : IBroadcast
+    {
+        public int Id;
+        public float Health;
+    }
+
+    public struct AnimalRemovedBroadcast : IBroadcast
+    {
+        public int Id;
+        public bool Died;
+    }
+
+    /// <summary>Guest -> host intent: my weapon connected with animal Id.</summary>
+    public struct AnimalHitBroadcast : IBroadcast
+    {
+        public int Id;
+        public float Amount;
+        public Vector3 Point;
+        public Vector3 Direction;
+    }
+
+    /// <summary>Any rider machine: I took / released the reins of animal Id.
+    /// While mounted, every other machine glues the animal under the rider's
+    /// avatar; the dismount carries the final pose for the host to resume at.</summary>
+    public struct AnimalMountBroadcast : IBroadcast
+    {
+        public int Id;
+        public string RiderId;
+        public bool Mounted;
+        public Vector3 Position;
+        public Quaternion Rotation;
+    }
+
     /// <summary>A death loot bag appeared (14.36.0). Payload is the bag's
     /// slot-indexed save-format JSON, so stacks arrive intact and in place.</summary>
     public struct BagSpawnedBroadcast : IBroadcast
@@ -755,6 +809,12 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
             _networkManager.ServerManager.RegisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
             _networkManager.ServerManager.RegisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<AnimalSpawnBroadcast>(OnServerAnimalSpawn);
+            _networkManager.ServerManager.RegisterBroadcast<AnimalPoseBroadcast>(OnServerAnimalPose);
+            _networkManager.ServerManager.RegisterBroadcast<AnimalHealthBroadcast>(OnServerAnimalHealth);
+            _networkManager.ServerManager.RegisterBroadcast<AnimalRemovedBroadcast>(OnServerAnimalRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<AnimalHitBroadcast>(OnServerAnimalHit);
+            _networkManager.ServerManager.RegisterBroadcast<AnimalMountBroadcast>(OnServerAnimalMount);
             _networkManager.ServerManager.RegisterBroadcast<BagSpawnedBroadcast>(OnServerBagSpawned);
             _networkManager.ServerManager.RegisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
             _networkManager.ServerManager.RegisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
@@ -796,6 +856,11 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
             _networkManager.ClientManager.RegisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
             _networkManager.ClientManager.RegisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<AnimalSpawnBroadcast>(OnClientAnimalSpawn);
+            _networkManager.ClientManager.RegisterBroadcast<AnimalPoseBroadcast>(OnClientAnimalPose);
+            _networkManager.ClientManager.RegisterBroadcast<AnimalHealthBroadcast>(OnClientAnimalHealth);
+            _networkManager.ClientManager.RegisterBroadcast<AnimalRemovedBroadcast>(OnClientAnimalRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<AnimalMountBroadcast>(OnClientAnimalMount);
             _networkManager.ClientManager.RegisterBroadcast<BagSpawnedBroadcast>(OnClientBagSpawned);
             _networkManager.ClientManager.RegisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
             _networkManager.ClientManager.RegisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
@@ -888,6 +953,12 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
             _networkManager.ServerManager.UnregisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<AnimalSpawnBroadcast>(OnServerAnimalSpawn);
+            _networkManager.ServerManager.UnregisterBroadcast<AnimalPoseBroadcast>(OnServerAnimalPose);
+            _networkManager.ServerManager.UnregisterBroadcast<AnimalHealthBroadcast>(OnServerAnimalHealth);
+            _networkManager.ServerManager.UnregisterBroadcast<AnimalRemovedBroadcast>(OnServerAnimalRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<AnimalHitBroadcast>(OnServerAnimalHit);
+            _networkManager.ServerManager.UnregisterBroadcast<AnimalMountBroadcast>(OnServerAnimalMount);
             _networkManager.ServerManager.UnregisterBroadcast<BagSpawnedBroadcast>(OnServerBagSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
             _networkManager.ServerManager.UnregisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
@@ -929,6 +1000,11 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
             _networkManager.ClientManager.UnregisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<AnimalSpawnBroadcast>(OnClientAnimalSpawn);
+            _networkManager.ClientManager.UnregisterBroadcast<AnimalPoseBroadcast>(OnClientAnimalPose);
+            _networkManager.ClientManager.UnregisterBroadcast<AnimalHealthBroadcast>(OnClientAnimalHealth);
+            _networkManager.ClientManager.UnregisterBroadcast<AnimalRemovedBroadcast>(OnClientAnimalRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<AnimalMountBroadcast>(OnClientAnimalMount);
             _networkManager.ClientManager.UnregisterBroadcast<BagSpawnedBroadcast>(OnClientBagSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
             _networkManager.ClientManager.UnregisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
@@ -3386,6 +3462,49 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.Broadcast(new DropRemovedBroadcast { Id = id });
         }
 
+        // ── livestock (14.54.0) ──
+
+        public void SendAnimalSpawn(int id, byte species, bool rideable,
+            Vector3 pos, Quaternion rot, float health)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new AnimalSpawnBroadcast
+            { Id = id, Species = species, Rideable = rideable, Position = pos, Rotation = rot, Health = health });
+        }
+
+        public void SendAnimalPose(int id, Vector3 pos, Quaternion rot)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new AnimalPoseBroadcast
+            { Id = id, Position = pos, Rotation = rot });
+        }
+
+        public void SendAnimalHealth(int id, float health)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new AnimalHealthBroadcast { Id = id, Health = health });
+        }
+
+        public void SendAnimalRemoved(int id, bool died)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new AnimalRemovedBroadcast { Id = id, Died = died });
+        }
+
+        public void SendAnimalHit(int id, float amount, Vector3 point, Vector3 direction)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new AnimalHitBroadcast
+            { Id = id, Amount = amount, Point = point, Direction = direction });
+        }
+
+        public void SendAnimalMount(int id, string riderId, bool mounted, Vector3 pos, Quaternion rot)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new AnimalMountBroadcast
+            { Id = id, RiderId = riderId, Mounted = mounted, Position = pos, Rotation = rot });
+        }
+
         private void OnServerDropSpawned(NetworkConnection conn, DropSpawnedBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
@@ -3412,6 +3531,77 @@ namespace VoxelEngine.Networking
             if (!_serverStarted) return;
             if (!conn.IsLocalClient) DropSync.ApplyRemoved(msg.Id);
             RelayToOthers(conn, msg);
+        }
+
+        // ── livestock (14.54.0): state flows host->guests, intents guest->host ──
+
+        private void OnServerAnimalSpawn(NetworkConnection conn, AnimalSpawnBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);   // only the host authors state
+        }
+
+        private void OnServerAnimalPose(NetworkConnection conn, AnimalPoseBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnServerAnimalHealth(NetworkConnection conn, AnimalHealthBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnServerAnimalRemoved(NetworkConnection conn, AnimalRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnServerAnimalHit(NetworkConnection conn, AnimalHitBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                AnimalSync.HostApplyHit(msg.Id, msg.Amount, msg.Point, msg.Direction);
+        }
+
+        private void OnServerAnimalMount(NetworkConnection conn, AnimalMountBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                AnimalSync.HostApplyMount(msg.Id, msg.RiderId, msg.Mounted, msg.Position, msg.Rotation);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientAnimalSpawn(AnimalSpawnBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            AnimalSync.ApplySpawned(msg.Id, msg.Species, msg.Rideable, msg.Position, msg.Rotation, msg.Health);
+        }
+
+        private void OnClientAnimalPose(AnimalPoseBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            AnimalSync.ApplyPose(msg.Id, msg.Position, msg.Rotation);
+        }
+
+        private void OnClientAnimalHealth(AnimalHealthBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            AnimalSync.ApplyHealth(msg.Id, msg.Health);
+        }
+
+        private void OnClientAnimalRemoved(AnimalRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            AnimalSync.ApplyRemoved(msg.Id, msg.Died);
+        }
+
+        private void OnClientAnimalMount(AnimalMountBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            AnimalSync.ApplyMountRemote(msg.Id, msg.RiderId, msg.Mounted, msg.Position, msg.Rotation);
         }
 
         private void OnServerDropSnapshot(NetworkConnection conn, DropSnapshotBroadcast msg, Channel channel)
@@ -3732,6 +3922,7 @@ namespace VoxelEngine.Networking
             TeamRegistry.ClearMirror(wasGuest);
             ServerAdminRegistry.ResetSession();   // 14.47.0 - mirror/reload on next session
             PlayerCosmeticsRegistry.ResetSession();   // 14.49.0 - next session re-uploads
+            AnimalSync.ResetSession();   // 14.54.0 - the herd dies with the session
             GridSync.Clear();
             GridStateSync.Clear();
             GridBuildSync.Clear();
