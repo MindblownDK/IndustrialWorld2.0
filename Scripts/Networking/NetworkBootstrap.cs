@@ -33,6 +33,51 @@ namespace VoxelEngine.Networking
     {
         public string PlayerId;
         public string PlayerName;
+        /// <summary>14.47.0 - join password. Checked at the door by the
+        /// admin registry; empty is correct for open servers and renames
+        /// (an admitted player re-announcing a name is never re-checked).</summary>
+        public string Password;
+    }
+
+    /// <summary>14.47.0 - client -> server: one administrative intent (kick,
+    /// ban, promote, whitelist, password, claim, world rule...). Op values
+    /// live in ServerAdminRegistry. The server stamps the requester from its
+    /// connection table and decides; nothing applies optimistically.</summary>
+    public struct AdminIntentBroadcast : IBroadcast
+    {
+        public byte Op;
+        public string TargetId;
+        public string Text;
+        public long Number;
+    }
+
+    /// <summary>14.47.0 - server -> client: the administrative state, sent
+    /// per connection. YourRank is always honest; Json is the full roster
+    /// for owner/admins and empty for everyone else.</summary>
+    public struct AdminStateBroadcast : IBroadcast
+    {
+        public int YourRank;
+        /// <summary>True on a dedicated server - a rank-less client still
+        /// needs this one bit to render the claim box honestly.</summary>
+        public bool Dedicated;
+        public string Json;
+    }
+
+    /// <summary>14.47.0 - server -> one client: a verdict or a goodbye.
+    /// Kind: 0 info (intent feedback), 1 kicked, 2 banned, 3 join refused.</summary>
+    public struct AdminNoticeBroadcast : IBroadcast
+    {
+        public byte Kind;
+        public string Text;
+    }
+
+    /// <summary>14.47.0 - server -> everyone: one world rule changed at
+    /// runtime (friendly fire, weight limits...). Clients apply it through
+    /// the same parser the host used, so the values cannot drift.</summary>
+    public struct WorldRuleBroadcast : IBroadcast
+    {
+        public string Key;
+        public string Value;
     }
 
     /// <summary>Client -> server: one chat line (14.19.0). The server stamps
@@ -682,6 +727,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.RegisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
             _networkManager.ServerManager.RegisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
+            _networkManager.ServerManager.RegisterBroadcast<AdminIntentBroadcast>(OnServerAdminIntent);
             _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -717,6 +763,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
+            _networkManager.ClientManager.RegisterBroadcast<AdminStateBroadcast>(OnClientAdminState);
+            _networkManager.ClientManager.RegisterBroadcast<AdminNoticeBroadcast>(OnClientAdminNotice);
+            _networkManager.ClientManager.RegisterBroadcast<WorldRuleBroadcast>(OnClientWorldRule);
             _networkManager.ClientManager.RegisterBroadcast<TeamBannerStateBroadcast>(OnClientBannerState);
             _networkManager.ClientManager.RegisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
@@ -809,6 +858,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.UnregisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
             _networkManager.ServerManager.UnregisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
+            _networkManager.ServerManager.UnregisterBroadcast<AdminIntentBroadcast>(OnServerAdminIntent);
             _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -844,6 +894,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
+            _networkManager.ClientManager.UnregisterBroadcast<AdminStateBroadcast>(OnClientAdminState);
+            _networkManager.ClientManager.UnregisterBroadcast<AdminNoticeBroadcast>(OnClientAdminNotice);
+            _networkManager.ClientManager.UnregisterBroadcast<WorldRuleBroadcast>(OnClientWorldRule);
             _networkManager.ClientManager.UnregisterBroadcast<TeamBannerStateBroadcast>(OnClientBannerState);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
@@ -1047,7 +1100,16 @@ namespace VoxelEngine.Networking
                 // to a host who is no longer there. Leaving them in it was the
                 // "host quit and nothing happened" fault: send them home.
                 var session = VoxelEngine.Menu.WorldSession.Instance;
-                if (session != null && session.IsRemoteJoin) ReturnGuestToMenu("The host closed the session.");
+                if (session != null && session.IsRemoteJoin)
+                {
+                    // 14.47.0 - a kick/ban/refusal notice that just landed is
+                    // the real reason this connection died; say that instead
+                    // of the generic goodbye.
+                    string reason = Time.unscaledTime - _lastNoticeAt < 15f && !string.IsNullOrEmpty(LastSessionNotice)
+                        ? LastSessionNotice
+                        : "The host closed the session.";
+                    ReturnGuestToMenu(reason);
+                }
             }
         }
 
@@ -1091,9 +1153,21 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.Broadcast(new IdentityBroadcast
             {
                 PlayerId = PlayerIdentity.LocalId,
-                PlayerName = PlayerIdentity.LocalName
+                PlayerName = PlayerIdentity.LocalName,
+                Password = JoinPassword ?? ""
             });
         }
+
+        /// <summary>14.47.0 - the join password the player typed, handed to
+        /// the identity handshake. Static: set by whichever menu starts the
+        /// join, survives the scene load in between.</summary>
+        public static string JoinPassword { get; set; } = "";
+
+        /// <summary>14.47.0 - the last kick/ban/refusal the server sent this
+        /// client, so the menu can say WHY the session ended instead of a
+        /// generic goodbye.</summary>
+        public static string LastSessionNotice { get; set; } = "";
+        private float _lastNoticeAt = -999f;
 
         // ─────────────────────────── server: identity -> avatar ───────────────────────────
 
@@ -1112,6 +1186,24 @@ namespace VoxelEngine.Networking
                     AnnounceIdentity(existing, null);   // rename: re-announce to everyone
                 }
                 return;
+            }
+
+            // 14.47.0 - the door. Bans, whitelist and the join password are
+            // judged HERE, before an avatar exists: a refused player gets the
+            // reason and the disconnect, and the world never saw them. The
+            // listen host's own local client is never checked - the machine
+            // that holds the save cannot be locked out of it.
+            if (!connection.IsLocalClient)
+            {
+                string refusal = ServerAdminRegistry.AdmissionCheck(msg.PlayerId, msg.PlayerName, msg.Password);
+                if (refusal != null)
+                {
+                    Debug.Log($"[Admin] join refused for '{msg.PlayerName}' ({msg.PlayerId}): {refusal}");
+                    _networkManager.ServerManager.Broadcast(connection, new AdminNoticeBroadcast
+                    { Kind = NoticeRejected, Text = refusal }, true);
+                    connection.Disconnect(false);   // false: let the reason flush first
+                    return;
+                }
             }
 
             if (avatarPrefab == null)
@@ -1208,6 +1300,19 @@ namespace VoxelEngine.Networking
                 // roster, so the joiner's banner blocks, shields and screens
                 // fly the right colours from the first frame.
                 SendTeamBannersTo(connection);
+
+                // 14.47.0 - a fresh dedicated world adopts its first player
+                // as owner; everyone is then told their rank (and the
+                // privileged also get the roster) so the Administration tab
+                // renders honestly from the first open.
+                if (ServerAdminRegistry.HostMaybeAutoClaim(playerId, msg.PlayerName))
+                    _networkManager.ServerManager.Broadcast(connection, new AdminNoticeBroadcast
+                    {
+                        Kind = NoticeInfo,
+                        Text = "You are the first player on this server - it is now YOURS. " +
+                               "Manage it under MULTIPLAYER -> SERVER ADMINISTRATION."
+                    }, true);
+                SendAdminStateTo(connection);
             }
         }
 
@@ -1219,7 +1324,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.Broadcast(new IdentityBroadcast
             {
                 PlayerId = PlayerIdentity.LocalId,
-                PlayerName = PlayerIdentity.LocalName
+                PlayerName = PlayerIdentity.LocalName,
+                Password = JoinPassword ?? ""
             });
         }
 
@@ -2678,6 +2784,141 @@ namespace VoxelEngine.Networking
                 VoxelEngine.UI.BuildFeedbackHud.Show("Teams", msg.Error, null, new Color(0.82f, 0.22f, 0.18f));
         }
 
+        // ── Server administration (14.47.0) ──────────────────────────────
+        //
+        // Same shape as the roster: intents up, state down. The state is
+        // personalized per connection - everyone learns their RANK, only the
+        // owner and admins get the roster (bans, whitelist, admin list).
+
+        public const byte NoticeInfo = 0;
+        public const byte NoticeKicked = 1;
+        public const byte NoticeBanned = 2;
+        public const byte NoticeRejected = 3;
+
+        /// <summary>Client: forward one administrative intent to the host.</summary>
+        public void SendAdminIntent(byte op, string targetId, string text, long number)
+        {
+            if (!_clientStarted)
+            {
+                Debug.Log("[Admin] intent NOT sent: no client connection running.");
+                return;
+            }
+            Debug.Log($"[Admin] intent sent: op={op} target='{targetId}'.");
+            _networkManager.ClientManager.Broadcast(new AdminIntentBroadcast
+            { Op = op, TargetId = targetId ?? "", Text = text ?? "", Number = number });
+        }
+
+        private void OnServerAdminIntent(NetworkConnection conn, AdminIntentBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string requesterId)
+                || string.IsNullOrEmpty(requesterId))
+            {
+                Debug.Log($"[Admin] intent dropped: connection {conn.ClientId} has no admitted identity.");
+                return;
+            }
+
+            string error = ServerAdminRegistry.HostApply(msg.Op, requesterId, msg.TargetId, msg.Text, msg.Number);
+            Debug.Log($"[Admin] intent op={msg.Op} from {requesterId} target='{msg.TargetId}' -> " +
+                      (string.IsNullOrEmpty(error) ? "applied" : $"refused: {error}"));
+            if (!string.IsNullOrEmpty(error))
+                _networkManager.ServerManager.Broadcast(conn, new AdminNoticeBroadcast
+                { Kind = NoticeInfo, Text = error }, true);
+        }
+
+        /// <summary>Server: the administrative state to every remote client,
+        /// personalized - rank for all, roster only for the privileged.
+        /// Called by the registry after every applied change.</summary>
+        public void BroadcastAdminState()
+        {
+            if (!_serverStarted) return;
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                SendAdminStateTo(client);
+            }
+        }
+
+        private void SendAdminStateTo(NetworkConnection conn)
+        {
+            if (!_serverStarted || conn == null || conn.IsLocalClient) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string playerId)) return;
+            int rank = ServerAdminRegistry.RankOf(playerId);
+            _networkManager.ServerManager.Broadcast(conn, new AdminStateBroadcast
+            {
+                YourRank = rank,
+                Dedicated = DedicatedServer.IsActive,
+                Json = rank >= ServerAdminRegistry.RankAdmin ? ServerAdminRegistry.ToWireJson() : ""
+            }, true);
+        }
+
+        /// <summary>Server: one world rule changed - everyone applies the
+        /// same value through the same parser.</summary>
+        public void BroadcastWorldRule(string key, string value)
+        {
+            if (!_serverStarted) return;
+            var msg = new WorldRuleBroadcast { Key = key ?? "", Value = value ?? "" };
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                _networkManager.ServerManager.Broadcast(client, msg, true);
+            }
+        }
+
+        /// <summary>Server: say goodbye properly, then hang up. Returns false
+        /// when the player is not online (a ban still records; a kick of an
+        /// absent player is refused upstream).</summary>
+        public bool DisconnectPlayer(string playerId, byte noticeKind, string text)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(playerId)) return false;
+            foreach (var entry in _playerIdByConnection)
+            {
+                if (entry.Value != playerId) continue;
+                if (!_networkManager.ServerManager.Clients.TryGetValue(entry.Key, out var conn)
+                    || conn == null) return false;
+                _networkManager.ServerManager.Broadcast(conn, new AdminNoticeBroadcast
+                { Kind = noticeKind, Text = text ?? "" }, true);
+                conn.Disconnect(false);   // false: the goodbye flushes first
+                return true;
+            }
+            return false;
+        }
+
+        private void OnClientAdminState(AdminStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host reads its registry directly
+            ServerAdminRegistry.ApplySnapshot(msg.Json, msg.YourRank, msg.Dedicated);
+        }
+
+        private void OnClientAdminNotice(AdminNoticeBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;
+            if (msg.Kind == NoticeInfo)
+            {
+                // Intent feedback or a welcome line - show it, keep playing.
+                VoxelEngine.UI.BuildFeedbackHud.Show("Server", msg.Text ?? "",
+                    null, new Color(0.85f, 0.65f, 0.13f));
+                return;
+            }
+            // Kicked, banned or refused at the door: the disconnect is right
+            // behind this message. Remember why, so the menu can say it - and
+            // say it on the HUD too, for a guest who keeps their own world.
+            LastSessionNotice = msg.Text ?? "";
+            _lastNoticeAt = Time.unscaledTime;
+            VoxelEngine.UI.BuildFeedbackHud.Show("Server", msg.Text ?? "",
+                null, new Color(0.82f, 0.22f, 0.18f));
+            Debug.Log($"[Admin] server notice (kind {msg.Kind}): {msg.Text}");
+        }
+
+        private void OnClientWorldRule(WorldRuleBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;
+            if (!ServerAdminRegistry.ApplyRuleLocal(msg.Key, msg.Value))
+                Debug.LogWarning($"[Admin] unknown world rule from host: '{msg.Key}'.");
+        }
+
         /// <summary>Client: forward one team intent to the host. The server
         /// decides; nothing is applied optimistically.</summary>
         public void SendTeamIntent(TeamIntentBroadcast intent)
@@ -3300,6 +3541,7 @@ namespace VoxelEngine.Networking
             NetworkSession.SetMode(SessionMode.Offline);
             VoxelEngine.Persistence.PlayerRecords.ClearLocal();
             TeamRegistry.ClearMirror(wasGuest);
+            ServerAdminRegistry.ResetSession();   // 14.47.0 - mirror/reload on next session
             GridSync.Clear();
             GridStateSync.Clear();
             GridBuildSync.Clear();

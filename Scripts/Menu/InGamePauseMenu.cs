@@ -32,7 +32,7 @@ namespace VoxelEngine.Menu
         private CursorLockMode _savedLock;
         private bool          _savedVis;
 
-        private enum Page  { Pause, Settings, Multiplayer, Teams }
+        private enum Page  { Pause, Settings, Multiplayer, Teams, Admin }
         private enum STab  { Display, Camera, Interface, Audio, Saving, Keybinds }
         private Page _page = Page.Pause;
         private Page _lastBuiltPage = (Page)(-1);
@@ -154,6 +154,7 @@ namespace VoxelEngine.Menu
             if      (_page == Page.Pause)       BuildPause();
             else if (_page == Page.Multiplayer) BuildMultiplayer();
             else if (_page == Page.Teams)       BuildTeams();
+            else if (_page == Page.Admin)       BuildAdmin();
             else                                BuildSettings();
         }
 
@@ -312,6 +313,17 @@ namespace VoxelEngine.Menu
                 addrField.RegisterValueChangedCallback(evt => _mpAddress = evt.newValue);
                 panel.Add(addrField);
                 panel.Add(T.Spacer(6));
+
+                // 14.47.0 - passworded servers. Blank is correct for open
+                // ones; a wrong password comes back as a named refusal.
+                panel.Add(T.Muted("SERVER PASSWORD (IF ANY)"));
+                var pwField = MpField(VoxelEngine.Networking.NetworkBootstrap.JoinPassword);
+                pwField.isPasswordField = true;
+                pwField.RegisterValueChangedCallback(evt =>
+                    VoxelEngine.Networking.NetworkBootstrap.JoinPassword = evt.newValue);
+                panel.Add(pwField);
+                panel.Add(T.Spacer(6));
+
                 panel.Add(PrimaryBtn("→   JOIN GAME", () =>
                 {
                     ReleaseFreezeForSession();
@@ -326,6 +338,15 @@ namespace VoxelEngine.Menu
                 playersLabel.style.whiteSpace = WhiteSpace.Normal;
                 panel.Add(playersLabel);
                 panel.Add(T.Spacer(14));
+
+                // 14.47.0 - the server's door, for those allowed to hold the
+                // keys. Always visible while online: the rank-less see the
+                // claim box, so a fresh owner can find the way in.
+                panel.Add(PrimaryBtn("◆   SERVER ADMINISTRATION", () =>
+                {
+                    _page = Page.Admin; BuildUI();
+                }, T.BgSlot));
+                panel.Add(T.Spacer(6));
                 panel.Add(PrimaryBtn("✕   DISCONNECT", () =>
                 {
                     bootstrap.StopSession();
@@ -422,6 +443,47 @@ namespace VoxelEngine.Menu
             {
                 if (!_open || _page != Page.Teams) return;
                 if (VoxelEngine.Networking.TeamRegistry.Version != builtVersion) BuildUI();
+            }).Every(500);
+        }
+
+        // ── Server Administration Page (14.47.0) ───────────────────
+        private void BuildAdmin()
+        {
+            var panel = MakePanel(560, 0);
+            _root.Add(panel);
+
+            var hdr = new VisualElement();
+            hdr.style.flexDirection = FlexDirection.Row;
+            hdr.style.alignItems    = Align.Center;
+            hdr.style.marginBottom  = 6;
+            var title = T.Title("SERVER ADMINISTRATION");
+            title.style.flexGrow = 1;
+            hdr.Add(title);
+            var backBtn = PrimaryBtn("← BACK", () => { _page = Page.Multiplayer; BuildUI(); }, T.BgSlot);
+            backBtn.style.minWidth  = 90;
+            backBtn.style.minHeight = 30;
+            backBtn.style.fontSize  = 11;
+            hdr.Add(backBtn);
+            panel.Add(hdr);
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(8));
+
+            // Content comes from ServerAdminPanel; this menu keeps only the
+            // chrome and the live refresh - the TeamsPanel division of labour.
+            panel.Add(VoxelEngine.UI.ServerAdminPanel.Build(BuildUI));
+
+            // Live refresh: the state moves when ANY admin touches it, and a
+            // session that drops must not leave a dead admin page open.
+            int builtVersion = VoxelEngine.Networking.ServerAdminRegistry.Version;
+            bool wasOnline = VoxelEngine.Networking.NetworkBootstrap.Instance != null
+                && VoxelEngine.Networking.NetworkBootstrap.Instance.IsOnline;
+            panel.schedule.Execute(() =>
+            {
+                if (!_open || _page != Page.Admin) return;
+                var bootstrap = VoxelEngine.Networking.NetworkBootstrap.Instance;
+                bool online = bootstrap != null && bootstrap.IsOnline;
+                if (online != wasOnline) { _page = Page.Multiplayer; BuildUI(); return; }
+                if (VoxelEngine.Networking.ServerAdminRegistry.Version != builtVersion) BuildUI();
             }).Every(500);
         }
 

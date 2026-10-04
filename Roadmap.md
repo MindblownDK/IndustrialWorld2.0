@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.46.2-dev`
-**Roadmap Version:** `14.46.2-dev`
+**Current Version:** `14.47.0-dev`
+**Roadmap Version:** `14.47.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.47.0-dev - The Owner Holds the Keys
+Server administration ships. Ownership is a property of the WORLD (server_admin.json sidecar, keyed by stable player id - one player can own many servers): a listen host is always owner, a fresh dedicated world adopts its first ever player, and the config's adminPassword claims/recovers ownership from the new SERVER ADMINISTRATION page (pause menu -> multiplayer). Owner promotes admins; owner/admins kick, ban (1h/24h/7d/permanent, host-clock expiry), run the whitelist (name pins to id on first join) and edit all world rules live (friendly fire, loot respawn, banner painting, drop warning, weights, drop cap, team limits) - one WorldRuleBroadcast per change, same parser both sides. Admission (ban/whitelist/password) is judged at the identity handshake before an avatar exists, with named refusals delivered to the door, the HUD and the main menu. server_config.json gained join password, whitelist switch and tri-state world-rule overrides, and in-game edits write back so the file always shows live values. Both join forms gained a password field.
+
 ### 14.46.2-dev - The Server Names Its Reasons
 Third dedicated shakedown. The continuous bare shader warning was the OCEAN, not the sky: the procedural ocean shell re-entered its material factory every 0.05s while the material stayed null (four Shader.Find calls per tick on a stripped-shader server), with the liquid-mesh material cache on the same retry - both now retire headless, plus the last five cosmos visuals (grass, asteroid field, planet sky, nebula, starfield) and the avatar body builder; the fluid SIM keeps running. Punches-on-players and invites both die in silent server guard clauses, so every refusal now logs its reason (hit path: unknown connection, empty ids, unknown target with the known-id list, friendly fire, missing avatar, out of range with distances; team path: op/requester/target/verdict) and clients log sends, applied rosters and near-miss swings - one punch plus one invite yields a complete named trace.
 
@@ -40,9 +43,6 @@ Dedicated-session shakedown fixes. Root cause of the guest-to-guest failures (no
 
 ### 14.45.0-dev - The Server Stands Alone
 Milestone 12, part 1: the headless dedicated-server boot path. One per-process answer (NetworkSession.IsDedicated) covers detection via the Dedicated Server build target, a -server launch flag, or the editor test hook (Tools -> Voxel Engine -> Dedicated Server). server_config.json next to the executable (template written on first run) plus command-line overrides picks world, port, player cap, autosave cadence and new-world seed. The menu never renders: an existing world loads like a click, a missing one is created like NEW WORLD, and the runner strips the client-side scene (local player asleep before its first Start, cameras/audio off) then opens a server-only FishNet connection with port and cap set on the transport. The save pipeline carries the local-player block forward verbatim when no player exists (additive localPlayerAbsent flag for worlds born dedicated), so saves move freely between singleplayer, listen-server and dedicated hosting. 60 fps headless cap and a one-minute heartbeat log. Part 2 (security hardening + intent-RPC conversions) is next.
-
-### 14.44.0-dev - Shelves That Order Their Own Refills
-Storage-arc finale: auto-crafting goes ambient. The exporter gains a third upgrade slot for the Crafting Card (whitelist shortfalls become merge-guarded auto-craft orders, max four per pass) and a KEEP STOCKED target (fill each adjacent container to N of every whitelisted item, 0 = legacy fill-forever); delivery now extracts-then-refunds so neither side double-counts. The importer/exporter filter is finally editable (mode toggle, icon chips, catalog search) and finally persists - mode + ids + stock target ride the factory-runtime seam additively. The fullscreen terminal (and wireless handheld) reads the pattern bank: C chips on stocked craftables, dimmed CRAFT cells for out-of-stock patterns, RMB queues one batch / SHIFT+RMB ten, tooltip and hint bar teach it. Setup step 112 authors the card, recipe, catalog entry and refreshed descriptions.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

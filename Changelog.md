@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.46.2-dev`
+**Current Version:** `14.47.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.47.0-dev] The Owner Holds the Keys
+
+**Type:** MINOR - server administration. Every server now has an OWNER, owners appoint ADMINS, and both run the server from a new SERVER ADMINISTRATION page under the pause menu's multiplayer tab: kick and ban players (timed or permanent), run a whitelist, set a join password, and edit every world rule live for everyone. Save-compatible: one additive sidecar per world, one additive handshake field.
+
+**Ownership is a property of the world.** Each world remembers its owner by stable player id in a sidecar next to the save (server_admin.json), so one player can own any number of servers and a world keeps its owner across reboots and even across hosting modes. A listen server's host is always its owner - they hold the save file, no registry entry can outrank the disk. A fresh dedicated world adopts the first player who ever joins it and tells them so. And the adminPassword in server_config.json always works as claim or recovery from the Administration page: enter it and the server is yours, with the previous owner stepping down to admin rather than out.
+
+**Ranks that cannot eat themselves.** Owner outranks admin outranks player, and nobody can kick, ban or demote a peer or superior - the owner is unkickable, unbannable and cannot lock themselves out: owner and admins bypass both the whitelist and the join password by design. Admins kick, ban, manage the whitelist and edit world rules; only the owner promotes, demotes and sets the join password.
+
+**The door is in one place.** Bans, whitelist and password are all judged at the identity handshake, before an avatar exists - a refused player gets the exact reason (including remaining ban time, measured by the host's clock and nobody else's), the disconnect right behind it, and the world never saw them. Kicked or banned mid-session, the reason follows you out: it shows on the HUD, and the main menu's multiplayer page repeats it so a guest dumped back to the menu is never left guessing. Bans are permanent or timed (one hour, a day, a week - expired bans lift themselves), and the whitelist accepts a typed name until its player first shows up, then pins to their stable id.
+
+**World rules, live.** Friendly fire, ruin loot respawn, banner painting, the drop-void warning, max dropped items, inventory and container weight percents, and the team limits are all editable from the page while everyone plays - one rule broadcast per change, applied through the same parser on host and clients so the values cannot drift, persisted with the world. On a dedicated server the owner also edits the autosave cadence and the server name, and every change writes back to server_config.json so the file an operator reads always shows the values the server actually runs. The config gained all of these as boot overrides too (tri-state: -1 keeps the world's saved value), making it the single source of truth for operators who prefer a text editor.
+
+**Joining a locked server.** Both join forms (main menu and pause menu) gained a password field - blank is correct for open servers, and a wrong password comes back as a named refusal, not a timeout.
+
+**Still open from the shakedown (next rounds, in order):** server browser with favorites and LAN discovery; player customization tab (name, chest text, custom icon); menu layout left-alignment and keybind search; animal/fauna sync.
 
 ### [14.46.2-dev] The Server Names Its Reasons
 

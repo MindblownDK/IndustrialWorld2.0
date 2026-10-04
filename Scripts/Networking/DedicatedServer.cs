@@ -51,6 +51,45 @@ namespace VoxelEngine.Networking
 
         [Tooltip("Seed used ONLY when worldName does not exist yet. 0 = random.")]
         public int newWorldSeed = 0;
+
+        // ── 14.47.0 - administration ───────────────────────────────────
+        // Tri-state ints: -1 keeps the world's saved value, 0/1 force it.
+
+        [Tooltip("Claim/recovery password for the Server Administration tab. Empty disables claiming.")]
+        public string adminPassword = "";
+
+        [Tooltip("Join password players must enter. Empty = open server. Owner and admins bypass it.")]
+        public string serverPassword = "";
+
+        [Tooltip("-1 keep world value, 0 off, 1 on. When on, only whitelisted players may join.")]
+        public int whitelistEnabled = -1;
+
+        [Tooltip("-1 keep world value, 0 off, 1 on.")]
+        public int friendlyFire = -1;
+
+        [Tooltip("-1 keep world value, 0 off, 1 on.")]
+        public int allowRuinLootRespawn = -1;
+
+        [Tooltip("-1 keep world value, 0 off, 1 on.")]
+        public int allowBannerPainting = -1;
+
+        [Tooltip("-1 keep world value, 0 off, 1 on.")]
+        public int showDropVoidWarning = -1;
+
+        [Tooltip("-1 keeps the world's saved value. Clamped 50-10000.")]
+        public int maxDroppedItems = -1;
+
+        [Tooltip("-1 keeps the world's saved value. Percent, clamped 25-1000.")]
+        public int inventoryWeightPercent = -1;
+
+        [Tooltip("-1 keeps the world's saved value. Percent, clamped 25-1000.")]
+        public int containerWeightPercent = -1;
+
+        [Tooltip("-1 keeps the world's saved value. Clamped 1-8.")]
+        public int maxTeams = -1;
+
+        [Tooltip("-1 keeps the world's saved value. Clamped 2-8.")]
+        public int maxTeamMembers = -1;
     }
 
     public static class DedicatedServer
@@ -160,6 +199,67 @@ namespace VoxelEngine.Networking
             return false;
         }
 
+        /// <summary>14.47.0 - persist the live configuration. The file the
+        /// operator reads always shows the values the server actually runs,
+        /// including edits made from the in-game Administration tab.</summary>
+        public static void SaveConfig()
+        {
+            if (_config == null) return;
+            try
+            {
+                File.WriteAllText(ConfigPath, JsonUtility.ToJson(_config, prettyPrint: true));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[Server] Could not write {ConfigPath} ({ex.Message}).");
+            }
+        }
+
+        /// <summary>14.47.0 - copy the live world rules into a config object
+        /// before saving, so a writeback never freezes stale values.</summary>
+        public static void MirrorWorldRules(ServerConfig cfg)
+        {
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session == null || cfg == null) return;
+            cfg.friendlyFire = session.friendlyFire ? 1 : 0;
+            cfg.allowRuinLootRespawn = session.allowRuinLootRespawn ? 1 : 0;
+            cfg.allowBannerPainting = session.allowBannerPainting ? 1 : 0;
+            cfg.showDropVoidWarning = session.showDropVoidWarning ? 1 : 0;
+            cfg.maxDroppedItems = session.maxDroppedItems;
+            cfg.inventoryWeightPercent = session.inventoryWeightPercent;
+            cfg.containerWeightPercent = session.containerWeightPercent;
+            cfg.maxTeams = TeamRegistry.MaxTeams;
+            cfg.maxTeamMembers = TeamRegistry.MaxMembers;
+        }
+
+        /// <summary>14.47.0 - dedicated boot: non-sentinel config values
+        /// override the world's saved rules the moment the world is up, so
+        /// the config file is the operator's single source of truth. The
+        /// admin registry adopts the password/whitelist switch separately.</summary>
+        public static void ApplyWorldOverrides()
+        {
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            var cfg = Config;
+            if (session == null || cfg == null) return;
+
+            if (cfg.friendlyFire >= 0) session.friendlyFire = cfg.friendlyFire == 1;
+            if (cfg.allowRuinLootRespawn >= 0) session.allowRuinLootRespawn = cfg.allowRuinLootRespawn == 1;
+            if (cfg.allowBannerPainting >= 0) session.allowBannerPainting = cfg.allowBannerPainting == 1;
+            if (cfg.showDropVoidWarning >= 0) session.showDropVoidWarning = cfg.showDropVoidWarning == 1;
+            if (cfg.maxDroppedItems >= 0) session.maxDroppedItems = Mathf.Clamp(cfg.maxDroppedItems, 50, 10000);
+            if (cfg.inventoryWeightPercent >= 0)
+                session.inventoryWeightPercent = Mathf.Clamp(cfg.inventoryWeightPercent, 25, 1000);
+            if (cfg.containerWeightPercent >= 0)
+                session.containerWeightPercent = Mathf.Clamp(cfg.containerWeightPercent, 25, 1000);
+            if (cfg.maxTeams >= 1 || cfg.maxTeamMembers >= 2)
+                TeamRegistry.RequestLimits(
+                    cfg.maxTeams >= 1 ? cfg.maxTeams : TeamRegistry.MaxTeams,
+                    cfg.maxTeamMembers >= 2 ? cfg.maxTeamMembers : TeamRegistry.MaxMembers);
+
+            ServerAdminRegistry.HostAdoptConfig(cfg);
+            Debug.Log("[Server] world rules adopted from server_config.json (sentinels kept the save's values).");
+        }
+
         /// <summary>Creates the persistent runner. Idempotent; the menu's
         /// dedicated launch path calls this before loading the game scene.</summary>
         public static void InstallRunner()
@@ -247,6 +347,9 @@ namespace VoxelEngine.Networking
             if (!_serverStarted && NetworkBootstrap.Instance != null)
             {
                 var cfg = DedicatedServer.Config;
+                // 14.47.0 - the config's world rules land BEFORE the door
+                // opens, so the first player already joins under them.
+                DedicatedServer.ApplyWorldOverrides();
                 NetworkBootstrap.Instance.StartDedicated((ushort)cfg.port, cfg.maxPlayers);
                 _serverStarted = true;
                 Debug.Log($"[Server] '{cfg.serverName}' is hosting world " +

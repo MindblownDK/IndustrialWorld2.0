@@ -837,6 +837,17 @@ namespace VoxelEngine.Menu
             var hint = T.Muted("IP address or hostname. Use localhost to join a game on this computer.");
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+            panel.Add(T.Spacer(10));
+
+            // 14.47.0 - passworded servers. Blank is correct for open ones;
+            // a wrong password comes back as a named refusal.
+            panel.Add(FormLabel("Server Password (if any)"));
+            var pwField = new TextField { value = VoxelEngine.Networking.NetworkBootstrap.JoinPassword };
+            pwField.isPasswordField = true;
+            StyleField(pwField);
+            pwField.RegisterValueChangedCallback(e =>
+                VoxelEngine.Networking.NetworkBootstrap.JoinPassword = e.newValue);
+            panel.Add(pwField);
             panel.Add(T.Spacer(16));
 
             panel.Add(PrimaryBtn("JOIN GAME", JoinHost, T.AccentCyan, LucideIcons.Play));
@@ -856,6 +867,16 @@ namespace VoxelEngine.Menu
                 status.style.color = new StyleColor(T.AccentRed);
                 status.style.whiteSpace = WhiteSpace.Normal;
                 panel.Add(status);
+            }
+            else if (!string.IsNullOrEmpty(VoxelEngine.Networking.NetworkBootstrap.LastSessionNotice))
+            {
+                // 14.47.0 - a kicked/banned/refused player lands here; the
+                // reason the server gave is better than a silent menu.
+                panel.Add(T.Spacer(10));
+                var notice = T.Body(VoxelEngine.Networking.NetworkBootstrap.LastSessionNotice);
+                notice.style.color = new StyleColor(T.AccentRed);
+                notice.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(notice);
             }
         }
 
@@ -1002,6 +1023,7 @@ namespace VoxelEngine.Menu
 
             VoxelEngine.Settings.GameSettings.LastHostAddress = address;
             _menuStatus = string.Empty;
+            VoxelEngine.Networking.NetworkBootstrap.LastSessionNotice = "";   // fresh attempt, fresh verdict
 
             // A placeholder world identity, replaced the moment the host's
             // card arrives. It exists only so nothing downstream reads a null
