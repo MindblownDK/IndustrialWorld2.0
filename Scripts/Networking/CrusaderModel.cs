@@ -67,6 +67,11 @@ namespace VoxelEngine.Networking
         public static Transform EnsureBuilt(Transform avatarRoot)
         {
             if (avatarRoot == null) return null;
+            // 14.46.2: a dedicated server needs the avatar's TRANSFORM, not
+            // its body - every material this builder makes would hit the
+            // stripped-shader warning. All visual consumers (animator, held
+            // item, nameplate) already tolerate a missing body.
+            if (NetworkSession.IsDedicated) return null;
             var existing = avatarRoot.Find(RootName);
             if (existing != null) return existing;
 

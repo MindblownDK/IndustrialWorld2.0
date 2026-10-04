@@ -2613,9 +2613,17 @@ namespace VoxelEngine.Networking
         {
             if (!_serverStarted || conn == null) return;
             if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string requesterId)
-                || string.IsNullOrEmpty(requesterId)) return;
+                || string.IsNullOrEmpty(requesterId))
+            {
+                Debug.Log($"[Teams] intent dropped: connection {conn.ClientId} has no admitted identity.");
+                return;
+            }
 
             string error = TeamRegistry.HostApply(msg.Op, requesterId, msg.TeamId, msg.Name, msg.TargetId);
+            // 14.46.2: the server says what it decided - the audit line that
+            // turns "the invite never arrived" into a named cause.
+            Debug.Log($"[Teams] intent op={msg.Op} from {requesterId} target='{msg.TargetId}' -> " +
+                      (string.IsNullOrEmpty(error) ? "applied" : $"refused: {error}"));
             if (string.IsNullOrEmpty(error))
             {
                 BroadcastTeamRoster("");
@@ -2674,7 +2682,12 @@ namespace VoxelEngine.Networking
         /// decides; nothing is applied optimistically.</summary>
         public void SendTeamIntent(TeamIntentBroadcast intent)
         {
-            if (!_clientStarted) return;
+            if (!_clientStarted)
+            {
+                Debug.Log("[Teams] intent NOT sent: no client connection running.");
+                return;
+            }
+            Debug.Log($"[Teams] intent sent: op={intent.Op} target='{intent.TargetId}'.");
             _networkManager.ClientManager.Broadcast(intent);
         }
 
@@ -2776,7 +2789,13 @@ namespace VoxelEngine.Networking
         {
             if (!_serverStarted || conn == null) return;
             if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string attackerId)
-                || string.IsNullOrEmpty(attackerId)) return;
+                || string.IsNullOrEmpty(attackerId))
+            {
+                // 14.46.2: an authority refusing an intent says WHY now -
+                // these lines are the server's audit trail, not debug noise.
+                Debug.Log($"[PvP] hit intent dropped: connection {conn.ClientId} has no admitted identity.");
+                return;
+            }
             HostApplyPlayerHit(attackerId, msg);
         }
 
@@ -2786,24 +2805,53 @@ namespace VoxelEngine.Networking
         public void HostApplyPlayerHit(string attackerId, PlayerHitBroadcast msg)
         {
             if (!_serverStarted) return;
-            if (string.IsNullOrEmpty(attackerId) || string.IsNullOrEmpty(msg.TargetId)) return;
+            // 14.46.2: every refusal names its reason. One punch in a test
+            // session now produces a complete trace in the server log.
+            if (string.IsNullOrEmpty(attackerId) || string.IsNullOrEmpty(msg.TargetId))
+            {
+                Debug.Log($"[PvP] hit refused: empty id (attacker='{attackerId}', target='{msg.TargetId}').");
+                return;
+            }
             if (attackerId == msg.TargetId) return;
-            if (NetworkSession.GetPlayer(msg.TargetId) == null) return;
+            if (NetworkSession.GetPlayer(msg.TargetId) == null)
+            {
+                var known = new System.Text.StringBuilder();
+                foreach (var p in NetworkSession.Players)
+                { if (known.Length > 0) known.Append(", "); known.Append(p.playerId); }
+                Debug.Log($"[PvP] hit refused: target '{msg.TargetId}' not in session. Known: [{known}].");
+                return;
+            }
 
             // The world's friendly-fire rule, against the authoritative roster.
-            if (!PlayerCombat.FriendlyFireAllowed(attackerId, msg.TargetId)) return;
+            if (!PlayerCombat.FriendlyFireAllowed(attackerId, msg.TargetId))
+            {
+                Debug.Log($"[PvP] hit refused: friendly fire ({attackerId} -> {msg.TargetId}).");
+                return;
+            }
 
             // Range sanity: both bodies stand in the host's scene. Generous
             // slack absorbs replication latency without allowing map-wide hits.
             var attackerAvatar = PlayerAvatar.Find(attackerId);
             var targetAvatar = PlayerAvatar.Find(msg.TargetId);
-            if (attackerAvatar == null || targetAvatar == null) return;
+            if (attackerAvatar == null || targetAvatar == null)
+            {
+                Debug.Log($"[PvP] hit refused: avatar lookup failed (attacker " +
+                          $"{(attackerAvatar == null ? "MISSING" : "ok")}, target " +
+                          $"{(targetAvatar == null ? "MISSING" : "ok")}).");
+                return;
+            }
             float allowed = Mathf.Max(0.5f, msg.MaxRange) * 1.35f + 8f;
-            if (Vector3.Distance(attackerAvatar.transform.position,
-                                 targetAvatar.transform.position) > allowed) return;
+            float separation = Vector3.Distance(attackerAvatar.transform.position,
+                                                targetAvatar.transform.position);
+            if (separation > allowed)
+            {
+                Debug.Log($"[PvP] hit refused: out of range ({separation:F1}m > {allowed:F1}m allowed).");
+                return;
+            }
 
             float amount = Mathf.Clamp(msg.Amount, 0f, PlayerCombat.MaxDamagePerHit);
             if (amount <= 0f) return;
+            Debug.Log($"[PvP] {attackerId} hit {msg.TargetId} for {amount:F1} ({separation:F1}m).");
 
             var presence = NetworkSession.GetPlayer(attackerId);
             string attackerName = presence != null && !string.IsNullOrEmpty(presence.displayName)
@@ -2839,7 +2887,12 @@ namespace VoxelEngine.Networking
         /// decides; nothing is applied optimistically.</summary>
         public void SendPlayerHit(PlayerHitBroadcast intent)
         {
-            if (!_clientStarted) return;
+            if (!_clientStarted)
+            {
+                Debug.Log("[PvP] hit intent NOT sent: no client connection running.");
+                return;
+            }
+            Debug.Log($"[PvP] hit intent sent: target={intent.TargetId} amount={intent.Amount:F1}.");
             _networkManager.ClientManager.Broadcast(intent);
         }
 

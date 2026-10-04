@@ -154,6 +154,52 @@ namespace VoxelEngine.Networking
             return session != null && session.friendlyFire;
         }
 
+        private static float _nextMissLogAt;
+
+        /// <summary>14.46.2 - swing-miss diagnostic. Called by the melee
+        /// paths when the avatar sweep found nothing; stays silent for
+        /// ordinary mining swings (nobody anywhere near the ray) and
+        /// otherwise prints, throttled, exactly WHY the nearest avatar was
+        /// not a candidate: empty id, downed, out of reach, or wrong session
+        /// mode. One punch in a test session names the broken link.</summary>
+        public static void LogSwingMiss(Ray ray, float range)
+        {
+            if (Time.unscaledTime < _nextMissLogAt) return;
+            if (NetworkSession.Mode == SessionMode.Offline)
+            {
+                _nextMissLogAt = Time.unscaledTime + 3f;
+                Debug.Log("[PvP] swing: session mode is Offline - avatar sweep never runs in offline mode.");
+                return;
+            }
+
+            string me = NetworkSession.LocalPlayerId;
+            PlayerAvatar nearest = null;
+            float best = float.MaxValue;
+            int others = 0;
+            foreach (var avatar in PlayerAvatar.All)
+            {
+                if (avatar == null) continue;
+                if (avatar.PlayerId == me) continue;
+                others++;
+                float d = Vector3.Distance(ray.origin, avatar.transform.position);
+                if (d < best) { best = d; nearest = avatar; }
+            }
+
+            if (nearest == null)
+            {
+                _nextMissLogAt = Time.unscaledTime + 3f;
+                Debug.Log($"[PvP] swing missed: no other avatars registered on this client (mode={NetworkSession.Mode}).");
+                return;
+            }
+            if (best > range + 6f) return;   // a normal mining swing - stay quiet
+
+            _nextMissLogAt = Time.unscaledTime + 3f;
+            Debug.Log($"[PvP] swing missed: nearest avatar '{nearest.PlayerName}' " +
+                      $"id={(string.IsNullOrEmpty(nearest.PlayerId) ? "EMPTY" : nearest.PlayerId)} " +
+                      $"health={nearest.HealthPercent}% at {best:F2}m " +
+                      $"(swing range {range:F2}m, {others} other(s) registered, mode={NetworkSession.Mode}).");
+        }
+
         // ── victim side ───────────────────────────────────────────────────
 
         /// <summary>Host-approved damage lands on the machine that owns this

@@ -209,6 +209,10 @@ namespace VoxelEngine.WaterSim
 
         private static void EnsureMats()
         {
+            // 14.46.2: a dedicated build ships no shaders - every retry here
+            // printed the engine's bare shader warning. Liquid surfaces stay
+            // material-less headless; nobody is looking at them.
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) return;
             if (_externalWaterMat != null) _liquidMats[0] = _externalWaterMat;
             if (_externalOilMat != null) _liquidMats[1] = _externalOilMat;
 

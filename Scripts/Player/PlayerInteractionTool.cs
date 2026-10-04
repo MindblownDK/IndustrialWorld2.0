@@ -426,6 +426,7 @@ namespace VoxelEngine.Player
                         _nextHit = Time.time + 1f / Mathf.Max(0.1f, skyRate);
                         return;
                     }
+                    VoxelEngine.Networking.PlayerCombat.LogSwingMiss(ray, skyRange);
                 }
 
                 // Mining tools still play their swing when aimed at the sky (nothing to hit).
@@ -558,6 +559,7 @@ namespace VoxelEngine.Player
                     _nextHit = Time.time + 1f / Mathf.Max(0.1f, meleeRate);
                     return;
                 }
+                VoxelEngine.Networking.PlayerCombat.LogSwingMiss(ray, meleeRange);
 
                 // 1) Tree?
                 var tree = hit.collider.GetComponentInParent<Tree>();

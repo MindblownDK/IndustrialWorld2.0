@@ -35,6 +35,10 @@ namespace VoxelEngine.Cosmos
 
         private void Awake()
         {
+            // 14.46.2: no shaders on a dedicated server - purely visual,
+            // the component retires itself headless instead of re-trying
+            // Shader.Find every frame (THE console spam).
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             EnsureStarfield();
         }
 

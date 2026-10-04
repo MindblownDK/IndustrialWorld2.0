@@ -70,6 +70,12 @@ namespace VoxelEngine.WaterSim
 
         private void Awake()
         {
+            // 14.46.2: THE shader-warning spam on dedicated builds lived here.
+            // Rebuild() runs every 0.05s and re-enters CreateDefaultMaterial
+            // whenever the material is still null - on a stripped-shader
+            // server that is 4 Shader.Find calls per tick, forever. The ocean
+            // shell is display-only; the fluid SIM keeps running elsewhere.
+            if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             EnsureRuntimeObjects();
         }
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.46.1-dev`
-**Roadmap Version:** `14.46.1-dev`
+**Current Version:** `14.46.2-dev`
+**Roadmap Version:** `14.46.2-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.46.2-dev - The Server Names Its Reasons
+Third dedicated shakedown. The continuous bare shader warning was the OCEAN, not the sky: the procedural ocean shell re-entered its material factory every 0.05s while the material stayed null (four Shader.Find calls per tick on a stripped-shader server), with the liquid-mesh material cache on the same retry - both now retire headless, plus the last five cosmos visuals (grass, asteroid field, planet sky, nebula, starfield) and the avatar body builder; the fluid SIM keeps running. Punches-on-players and invites both die in silent server guard clauses, so every refusal now logs its reason (hit path: unknown connection, empty ids, unknown target with the known-id list, friendly fire, missing avatar, out of range with distances; team path: op/requester/target/verdict) and clients log sends, applied rosters and near-miss swings - one punch plus one invite yields a complete named trace.
+
 ### 14.46.1-dev - An Invite That Arrives, A Punch That Lands
 Second dedicated shakedown (identity + weather sync confirmed). Team invites were dying of clock skew: expiry stamped by the host's wall clock but judged by each client's own - clients now trust the roster as sent, and the host prunes expired invites on a five-second timer and rebroadcasts only on change. Punch reach 2.1m -> 2.8m (club 2.2m -> 2.6m): measured camera-to-replicated-capsule, the old reach only landed nose to nose. Cosmos visuals (distant-body/singularity beacons, quasar/singularity/solar-glare/space-dust/rain-fog renderers) retire themselves headless, same guard pattern as the 14.46.0 weather rigs.
 
@@ -40,9 +43,6 @@ Milestone 12, part 1: the headless dedicated-server boot path. One per-process a
 
 ### 14.44.0-dev - Shelves That Order Their Own Refills
 Storage-arc finale: auto-crafting goes ambient. The exporter gains a third upgrade slot for the Crafting Card (whitelist shortfalls become merge-guarded auto-craft orders, max four per pass) and a KEEP STOCKED target (fill each adjacent container to N of every whitelisted item, 0 = legacy fill-forever); delivery now extracts-then-refunds so neither side double-counts. The importer/exporter filter is finally editable (mode toggle, icon chips, catalog search) and finally persists - mode + ids + stock target ride the factory-runtime seam additively. The fullscreen terminal (and wireless handheld) reads the pattern bank: C chips on stocked craftables, dimmed CRAFT cells for out-of-stock patterns, RMB queues one batch / SHIFT+RMB ten, tooltip and hint bar teach it. Setup step 112 authors the card, recipe, catalog entry and refreshed descriptions.
-
-### 14.43.0-dev - The Network Learns to Craft
-Auto-crafting ships through the pattern system (closing the 14.40.0 deferral). Patterns are physical items: Blank Patterns (step 111) are encoded with any unlocked recipe at the Pattern Terminal and filed into the Server Controller's bank - capacity = installed RAM units (RAM 4 = 4, RAM 16 = 16, 64 ceiling), over-the-line patterns go inert instead of vanishing, eject to carry recipes between networks, and the encoded recipe rides the stack payload like a disk's ledger. The controller crafts one item at a time at CPU speed (+25 W while active), takes ingredients per craft with refund-on-cancel, and gates each recipe on its station tier being a network member - crafting stations now join by touch or Data Pipe like every other device. Full-chain recursion queues child jobs for missing intermediates that have filed patterns (tree-deep, cycle/depth guarded, pending production counted); both terminal panels are remade (encode bench with search, order desk with live queue, ETA, reasons and cancel); bank and queue ride the container and factory-runtime seams additively, so saves resume mid-batch and clients converge to the host's queue.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

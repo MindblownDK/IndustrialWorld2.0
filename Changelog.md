@@ -1,11 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.46.1-dev`
+**Current Version:** `14.46.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
-### [14.46.1-dev] An Invite That Arrives, A Punch That Lands
+### [14.46.2-dev] The Server Names Its Reasons
+
+**Type:** PATCH - third dedicated shakedown. 14.46.1 fixed what static analysis could prove; the two survivors (punches on players, team invites) reject silently somewhere on the server, so this round makes every rejection speak and kills the last shader-warning loop at its true source.
+
+**The shader spam was the ocean, not the sky.** The remaining bare one-line warning - no stack trace, printed continuously - matched exactly one signature: a visual that finds no shader, politely gives up, and retries next frame. The hunt found the real engine: the procedural ocean shell rebuilds every 0.05 seconds and re-entered its material factory each tick while the material was null, which on a stripped-shader server is four Shader.Find calls per tick forever. The liquid-surface mesh builder had the same retry in its material cache. Both now retire headless, along with the last five cosmos visuals on the same pattern (grass, asteroid field visuals, planet sky, nebula, starfield) and the avatar body builder - a dedicated server needs the avatar's transform, never its body. The fluid simulation itself keeps running on the server; only the pixels retire.
+
+**Every refusal now names itself.** Punching animals works (pure local damage), so the client's melee sweep is sound - which means punches on players and invites both die inside the server's silent guard clauses, and both share a shape: a client asks the server to act on a TARGET id. Every guard in that path now logs its decision. The server logs each hit intent it drops (unknown connection, empty ids, target not in session - with the full list of ids it DOES know, friendly-fire refusal, missing avatar, out of range - with the measured distances) and each hit it applies. Team intents log the operation, requester, target and the verdict - applied or the exact refusal. Clients log every intent they send and every roster they apply. And when a swing finds no avatar at all, the client says why: nearest avatar's name, id (or EMPTY), health, distance versus swing range - throttled, and silent during ordinary mining swings. One punch and one invite in a test session now produce a complete, named trace on both machines.
+
+
 
 **Type:** PATCH - second dedicated shakedown. Identity and weather sync confirmed working; this round retires the three leftovers.
 

@@ -467,6 +467,10 @@ namespace VoxelEngine.Networking
                 var previous = _state;
                 _state = incoming;
                 Version++;
+                // 14.46.2: confirms the roster actually crossed the wire -
+                // if this line never prints, the broadcast path is the fault.
+                Debug.Log($"[Teams] roster applied: {incoming.teams?.Count ?? 0} team(s), " +
+                          $"{incoming.invites?.Count ?? 0} invite(s).");
                 DiffForLocalPlayer(previous, incoming);
             }
             catch (Exception ex) { Debug.LogWarning("[TeamRegistry] ApplySnapshot: " + ex.Message); }
