@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.53.1-dev`
+**Current Version:** `14.53.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.53.2-dev] Glued to the Chest
+
+**Type:** PATCH - the last of the float: the skin calibration becomes a live cling.
+
+**Why one measurement was still a little off.** The 14.53.1 calibration ran five frames after spawn - while the animator was still cross-fading out of bind pose - so it measured a half-blended chest and kept a small residual float. And even a perfect single measurement goes stale the moment the pose changes: the chest breathes and leans relative to the spine bone the ink rides.
+
+**The calibrator now works in two phases.** First, ~0.6 seconds after spawn (the blend long over), a full scan bakes the skinned mesh in the settled idle, snaps the ink anchor flush at full strength, and REMEMBERS which mesh vertices make up the chest patch. From then on it re-measures every third frame - only those few hundred remembered vertices, not the whole body - and eases the anchor onto the live surface at half the error per pass, so it converges smoothly and tracks breathing, leaning and locomotion without ever popping. The crest rides along as before. Dedicated servers skip all of it; a failed bake keeps the current offset.
 
 ### [14.53.1-dev] Skin Tight
 

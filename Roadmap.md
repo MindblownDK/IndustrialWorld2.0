@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.53.1-dev`
-**Roadmap Version:** `14.53.1-dev`
+**Current Version:** `14.53.2-dev`
+**Roadmap Version:** `14.53.2-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,8 +29,8 @@
 
 ## 0. Recently Done
 
-### 14.53.1-dev - Skin Tight
-Chest ink floated because every offset was bind-pose math and the idle holds the chest elsewhere. New one-shot CrusaderInkCalibrator (added by the rigged-body builder): bakes the skinned mesh in the live animated pose a few frames after spawn, finds the outermost skin point in a chest patch around the ink anchor, shifts the anchor along its depth axis to 4 mm off the real surface (crest follows with its 12 mm standoff). One bake per avatar, self-disabling; failed calibration keeps build-time offsets.
+### 14.53.2-dev - Glued to the Chest
+CrusaderInkCalibrator upgraded from one-shot to live cling: full scan at ~0.6 s (after the bind-pose blend), remembering the chest-patch vertex indices, then a re-measure every 3rd frame over only those cached vertices, easing the ink anchor onto the live surface at half the error per pass. Tracks breathing/leaning/locomotion without popping; crest follows; dedicated servers skip it. (14.53.1 one-shot measured mid-blend five frames in - that was the residual float.)
 
 ### 14.53.0-dev - Ink, Skin and Sound
 Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default every launch; direct audio with per-track mute, label swaps in place). Crest fixes from the 14.52 live test: the brand rune hide now uses the deep search (the rune rides the spine bone, root.Find never saw it), and the icon quad moved flush - a finger above the motto, 1 cm off the skin, 10-degree chest-plane tilt, 0.16 scale, enforced every application; chest ink pulled from 8 mm to 4 mm off the skin.
