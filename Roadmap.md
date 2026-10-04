@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.55.1-dev`
-**Roadmap Version:** `14.55.1-dev`
+**Current Version:** `14.56.0-dev`
+**Roadmap Version:** `14.56.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.56.0-dev - Nobody Knows the Code
+Code-lock security hardening: combinations rest as salted SHA-256 (`sha256:salt:hash`), hashed on the typing machine; the wire and join snapshots carry a hash-stripped public form, so guests hold the salt but never the hash. Keypad attempts, code setting and lock toggles from guests are host-validated intents with an addressed verdict (CHECKING... state, 4 s timeout); guest-authored lock announces are accepted only as plain fits onto uncoded locks, removals checked against authorization, rejoin snapshot merges keep the host's secrets. Legacy plaintext saves canonicalize on first load. Remaining accepted gaps: door USE check and lock fit stay client-authored until the intent-conversion pass.
+
 ### 14.55.1-dev - Husks, Hushes and Healers
 Live-test fixes: enemy setup steps rebuild script-stripped prefabs in place (same GUID, scatter refs intact); banner step strips dead Missing Script slots before re-adding; EnemySpawner persists across the menu-to-game scene change (it died with the menu, taking ghoul spawns and the 14.55.0 hostile pump with it); world audio bootstrap is persistent and arms when a world appears, so menu-first launches get machine ambience and un-muted one-shots (stale vacuum duck reset in menus; ambience loop sources torn down cleanly).
 
@@ -41,8 +44,6 @@ Fauna replication: the host simulates all livestock and horses, streaming spawn/
 ### 14.53.2-dev - Glued to the Chest
 CrusaderInkCalibrator upgraded from one-shot to live cling: full scan at ~0.6 s (after the bind-pose blend), remembering the chest-patch vertex indices, then a re-measure every 3rd frame over only those cached vertices, easing the ink anchor onto the live surface at half the error per pass. Tracks breathing/leaning/locomotion without popping; crest follows; dedicated servers skip it. (14.53.1 one-shot measured mid-blend five frames in - that was the residual float.)
 
-### 14.53.0-dev - Ink, Skin and Sound
-Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default every launch; direct audio with per-track mute, label swaps in place). Crest fixes from the 14.52 live test: the brand rune hide now uses the deep search (the rune rides the spine bone, root.Find never saw it), and the icon quad moved flush - a finger above the motto, 1 cm off the skin, 10-degree chest-plane tilt, 0.16 scale, enforced every application; chest ink pulled from 8 mm to 4 mm off the skin.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -69,7 +70,7 @@ Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default ev
 
 11. **Teams:** ✅ DONE (14.33.0) - **Milestone COMPLETE.** Players found and name a team, invite players who accept or decline (invites lapse after 90 seconds), leave, and a leader removes members; leadership passes to the earliest-joined member when a leader leaves, and an emptied team dissolves. One team per player, joined only by own confirmation. The host owns the roster: clients send identity-free intents, the server stamps and validates them, and every accepted change rebroadcasts the whole roster (a late joiner is caught up in one message). Membership is keyed by stable player id - it survives a rename, a reconnect and a session restart - and the roster persists as a teams.json sidecar beside the world save, so resuming a world resumes its teams. Both limits (maximum members per team, maximum teams per session) are host-editable before and during a session and persist with the world; they gate new intents only, never breaking up an existing team. The beacon TEAM share rule is live through the same membership answer (SameTeam), opening markers, map contacts and warp rendezvous to teammates. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire, base permissions. *(14.34.0 extends the milestone: owner/leader ranks with promote/demote, owner-only rename, session-unique team names, and friendly fire resolved through SameTeam as a world rule.)*
 
-12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). Remaining: security hardening (part 2) and intent-RPC conversions. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
+12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). Remaining: security hardening (part 2) and intent-RPC conversions. **Security hardening (committed 14.6.0): code-lock half SHIPPED 14.56.0** - codes rest as salted hashes, guests never hold or receive a verifiable code, keypad/code-set/toggle/removal are host-validated intents, and the broadcast audit confirmed the lock code was the last secret in clear. Remaining for this milestone: intent-RPC conversions (importer/exporter/AutoCrafter host-echo), server-side storage security and door USE enforcement.
 
 ### Open Scope (named with the version that deferred it)
 - **Auto-craft queue convergence is host-echo, not intent-RPC** (accepted 14.43.0): queue and bank edits apply locally and replicate through the container/factory-runtime seams like every machine toggle; a client's request landing in the same instant as host convergence can be overwritten. The dedicated-server pass turns requests into intents like everything else.
@@ -84,7 +85,7 @@ Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default ev
 - **Same-instant double mount** (accepted 14.54.0): two players taking the same horse in the same wire instant - the later mount announce wins the glue; the earlier rider dismounts into a horse that is no longer theirs. Same vanishingly small window as the drop/loot races.
 - **Weather sampled at the host's frame** (accepted 14.46.0): the one true sky is rolled where the host stands (or at the world frame on a dedicated server); per-region weather is future work.
 - **Dedicated headless server** (milestone 12, part 1 shipped 14.45.0): boot path, config and save carry-forward are live; remaining are the security hardening pass and converting client requests to intents, plus hardening every system that still assumes a local player at runtime (surfaced by dedicated-session testing).
-- **Security hardening** (deferred 14.6.0): code-lock codes travel and rest in plain text; move validation server-side and audit every broadcast for data a client should not see.
+- **Security hardening** (deferred 14.6.0, code-lock half shipped 14.56.0): remaining items are server-side storage security, door USE enforcement, and the intent-RPC conversions for machine interactions.
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
 - **Mid-belt packet cosmetics** (accepted 14.12.0): conveyor packet visuals stay per-machine.
 - **Multi-planet join catch-up and fluid-sim state** (deferred 14.8.0): only the shared planet transfers on join.

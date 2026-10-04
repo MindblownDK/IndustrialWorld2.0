@@ -4238,7 +4238,9 @@ namespace VoxelEngine.Persistence
                     var codeLock = CodeLock.Attach(go);
                     if (codeLock != null)
                     {
-                        codeLock.code     = ps.lockCode ?? "";
+                        // 14.56.0 - legacy saves held the plain combination;
+                        // it becomes a salted hash the moment it is loaded.
+                        codeLock.code     = VoxelEngine.Building.Tiered.LockCodes.Canonicalize(ps.lockCode ?? "");
                         codeLock.isLocked = ps.lockLocked;
                         codeLock.authorizedIds = ps.lockAuthorizedIds != null
                             ? new List<string>(ps.lockAuthorizedIds)

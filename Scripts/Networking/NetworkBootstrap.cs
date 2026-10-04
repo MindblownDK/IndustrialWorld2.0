@@ -436,19 +436,61 @@ namespace VoxelEngine.Networking
     }
 
     /// <summary>Full code-lock state - fit, code, locked flag, guest list (14.6.0).</summary>
+    /// <summary>14.56.0 - carries the lock's PUBLIC face only: whether a code
+    /// exists, the salt (guests hash keypad attempts with it locally) and the
+    /// lists. The hash itself never travels host -> guest.</summary>
     public struct LockStateBroadcast : IBroadcast
     {
         public string Family;
         public Vector3 Position;
-        public string Code;
+        public bool HasCode;
+        public string Salt;
         public bool Locked;
         public List<string> AuthorizedIds;
+    }
+
+    /// <summary>Guest -> host: a new combination as salt+hash (packed). The
+    /// plain code never left the guest's machine (14.56.0).</summary>
+    public struct LockSetCodeBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public string Packed;
+        public string PlayerId;
+    }
+
+    /// <summary>Guest -> host: a keypad attempt, pre-hashed with the lock's
+    /// replicated salt. The host is the only verifier (14.56.0).</summary>
+    public struct LockEnterBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public string AttemptHash;
+        public string PlayerId;
+    }
+
+    /// <summary>Guest -> host: lock/unlock toggle; host checks authorization.</summary>
+    public struct LockToggleBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public bool Locked;
+        public string PlayerId;
+    }
+
+    /// <summary>Host -> one guest (addressed by PlayerId): keypad verdict.</summary>
+    public struct LockEnterResultBroadcast : IBroadcast
+    {
+        public Vector3 Position;
+        public string PlayerId;
+        public bool Granted;
     }
 
     public struct LockRemovedBroadcast : IBroadcast
     {
         public string Family;
         public Vector3 Position;
+        public string PlayerId;
     }
 
     /// <summary>Voxel brush op in integer voxel space (14.7.0) - deterministic
@@ -854,6 +896,10 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
             _networkManager.ServerManager.RegisterBroadcast<DoorStateBroadcast>(OnServerDoorState);
             _networkManager.ServerManager.RegisterBroadcast<LockStateBroadcast>(OnServerLockState);
+            _networkManager.ServerManager.RegisterBroadcast<LockSetCodeBroadcast>(OnServerLockSetCode);
+            _networkManager.ServerManager.RegisterBroadcast<LockEnterBroadcast>(OnServerLockEnter);
+            _networkManager.ServerManager.RegisterBroadcast<LockToggleBroadcast>(OnServerLockToggle);
+            _networkManager.ServerManager.RegisterBroadcast<LockEnterResultBroadcast>(OnServerLockEnterResult);
             _networkManager.ServerManager.RegisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.RegisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
             _networkManager.ServerManager.RegisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
@@ -906,6 +952,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
             _networkManager.ClientManager.RegisterBroadcast<DoorStateBroadcast>(OnClientDoorState);
             _networkManager.ClientManager.RegisterBroadcast<LockStateBroadcast>(OnClientLockState);
+            _networkManager.ClientManager.RegisterBroadcast<LockEnterResultBroadcast>(OnClientLockEnterResult);
             _networkManager.ClientManager.RegisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.RegisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
             _networkManager.ClientManager.RegisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
@@ -1011,6 +1058,10 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
             _networkManager.ServerManager.UnregisterBroadcast<DoorStateBroadcast>(OnServerDoorState);
             _networkManager.ServerManager.UnregisterBroadcast<LockStateBroadcast>(OnServerLockState);
+            _networkManager.ServerManager.UnregisterBroadcast<LockSetCodeBroadcast>(OnServerLockSetCode);
+            _networkManager.ServerManager.UnregisterBroadcast<LockEnterBroadcast>(OnServerLockEnter);
+            _networkManager.ServerManager.UnregisterBroadcast<LockToggleBroadcast>(OnServerLockToggle);
+            _networkManager.ServerManager.UnregisterBroadcast<LockEnterResultBroadcast>(OnServerLockEnterResult);
             _networkManager.ServerManager.UnregisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
             _networkManager.ServerManager.UnregisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
@@ -1063,6 +1114,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
             _networkManager.ClientManager.UnregisterBroadcast<DoorStateBroadcast>(OnClientDoorState);
             _networkManager.ClientManager.UnregisterBroadcast<LockStateBroadcast>(OnClientLockState);
+            _networkManager.ClientManager.UnregisterBroadcast<LockEnterResultBroadcast>(OnClientLockEnterResult);
             _networkManager.ClientManager.UnregisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
             _networkManager.ClientManager.UnregisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
@@ -1676,18 +1728,50 @@ namespace VoxelEngine.Networking
             { Family = family, Position = pos, Open = open, Side = side });
         }
 
-        public void SendLockState(string family, Vector3 pos, string code, bool locked, List<string> ids)
+        public void SendLockState(string family, Vector3 pos, bool hasCode, string salt,
+            bool locked, List<string> ids)
         {
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(new LockStateBroadcast
-            { Family = family, Position = pos, Code = code, Locked = locked, AuthorizedIds = ids });
+            { Family = family, Position = pos, HasCode = hasCode, Salt = salt ?? "",
+              Locked = locked, AuthorizedIds = ids });
         }
 
-        public void SendLockRemoved(string family, Vector3 pos)
+        public void SendLockRemoved(string family, Vector3 pos, string playerId)
         {
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(new LockRemovedBroadcast
-            { Family = family, Position = pos });
+            { Family = family, Position = pos, PlayerId = playerId });
+        }
+
+        // ── keypad intents + verdict (14.56.0) ──
+
+        public void SendLockSetCode(string family, Vector3 pos, string packed, string playerId)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new LockSetCodeBroadcast
+            { Family = family, Position = pos, Packed = packed, PlayerId = playerId });
+        }
+
+        public void SendLockEnter(string family, Vector3 pos, string attemptHash, string playerId)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new LockEnterBroadcast
+            { Family = family, Position = pos, AttemptHash = attemptHash, PlayerId = playerId });
+        }
+
+        public void SendLockToggle(string family, Vector3 pos, bool locked, string playerId)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new LockToggleBroadcast
+            { Family = family, Position = pos, Locked = locked, PlayerId = playerId });
+        }
+
+        public void SendLockEnterResult(Vector3 pos, string playerId, bool granted)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new LockEnterResultBroadcast
+            { Position = pos, PlayerId = playerId, Granted = granted });
         }
 
         public void SendTerrainBrush(string body, Vector3Int center, float radius,
@@ -1755,15 +1839,56 @@ namespace VoxelEngine.Networking
         private void OnServerLockState(NetworkConnection conn, LockStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient) BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.Code, msg.Locked, msg.AuthorizedIds);
+            if (!conn.IsLocalClient)
+            {
+                // 14.56.0 hardening: a guest may only announce a FIT (no code,
+                // onto an uncoded lock). Coded-lock changes go through the
+                // keypad intents below, where the host verifies. Anything else
+                // is dropped unrelayed.
+                if (!BuildingSync.HostAcceptsGuestLockState(msg.Family, msg.Position, msg.HasCode)) return;
+                BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.HasCode, msg.Salt, msg.Locked, msg.AuthorizedIds);
+            }
             RelayToOthers(conn, msg);
         }
 
         private void OnServerLockRemoved(NetworkConnection conn, LockRemovedBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient) BuildingSync.ApplyLockRemoved(msg.Family, msg.Position);
+            if (!conn.IsLocalClient)
+            {
+                // 14.56.0 hardening: only an authorized player strips a coded lock.
+                if (!BuildingSync.HostAcceptsLockRemove(msg.Family, msg.Position, msg.PlayerId)) return;
+                BuildingSync.ApplyLockRemoved(msg.Family, msg.Position);
+            }
             RelayToOthers(conn, msg);
+        }
+
+        private void OnServerLockSetCode(NetworkConnection conn, LockSetCodeBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                BuildingSync.HostApplyLockSetCode(msg.Family, msg.Position, msg.Packed, msg.PlayerId);
+            // No relay: the host's own AnnounceLockState fans the public form out.
+        }
+
+        private void OnServerLockEnter(NetworkConnection conn, LockEnterBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                BuildingSync.HostApplyLockEnter(msg.Family, msg.Position, msg.AttemptHash, msg.PlayerId);
+        }
+
+        private void OnServerLockToggle(NetworkConnection conn, LockToggleBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                BuildingSync.HostApplyLockToggle(msg.Family, msg.Position, msg.Locked, msg.PlayerId);
+        }
+
+        private void OnServerLockEnterResult(NetworkConnection conn, LockEnterResultBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);   // host-authored verdicts only
         }
 
         private void OnClientDoorState(DoorStateBroadcast msg, Channel channel)
@@ -1775,7 +1900,14 @@ namespace VoxelEngine.Networking
         private void OnClientLockState(LockStateBroadcast msg, Channel channel)
         {
             if (_serverStarted || WorldMismatch) return;
-            BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.Code, msg.Locked, msg.AuthorizedIds);
+            BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.HasCode, msg.Salt, msg.Locked, msg.AuthorizedIds);
+        }
+
+        private void OnClientLockEnterResult(LockEnterResultBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            if (msg.PlayerId != PlayerIdentity.LocalId) return;   // addressed, not broadcast
+            VoxelEngine.UI.CodeLockHud.ApplyRemoteEnterResult(msg.Position, msg.Granted);
         }
 
         private void OnClientLockRemoved(LockRemovedBroadcast msg, Channel channel)

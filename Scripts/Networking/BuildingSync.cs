@@ -95,15 +95,18 @@ namespace VoxelEngine.Networking
         }
 
         /// <summary>Full lock state (fit, code set, guest authorized, lock toggle) - one
-        /// idempotent message covers every keypad authority point (14.6.0).</summary>
+        /// idempotent message covers every keypad authority point (14.6.0).
+        /// 14.56.0: the wire carries the hash-stripped PUBLIC form only - a
+        /// guest learns the salt (needed to hash keypad attempts locally) and
+        /// never the hash, so no client memory ever holds a verifiable code.</summary>
         public static void AnnounceLockState(CodeLock codeLock)
         {
             if (codeLock == null || !ShouldAnnounce()) return;
             var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
             if (pb == null || pb.definition == null) return;
             NetworkBootstrap.Instance.SendLockState(pb.definition.family.ToString(),
-                pb.transform.position, codeLock.code ?? "", codeLock.isLocked,
-                new List<string>(codeLock.authorizedIds));
+                pb.transform.position, codeLock.HasCode, LockCodes.SaltOf(codeLock.code),
+                codeLock.isLocked, new List<string>(codeLock.authorizedIds));
         }
 
         public static void AnnounceLockRemoved(CodeLock codeLock)
@@ -112,7 +115,41 @@ namespace VoxelEngine.Networking
             var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
             if (pb == null || pb.definition == null) return;
             NetworkBootstrap.Instance.SendLockRemoved(pb.definition.family.ToString(),
-                pb.transform.position);
+                pb.transform.position, PlayerIdentity.LocalId);
+        }
+
+        // ─────────────── guest -> host keypad intents (14.56.0) ───────────────
+
+        /// <summary>Guest set a new combination: the salted hash (never the
+        /// plain code) goes to the host, which becomes the only verifier.</summary>
+        public static void RequestLockSetCode(CodeLock codeLock, string packed, string playerId)
+        {
+            if (codeLock == null || !ShouldAnnounce()) return;
+            var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
+            if (pb == null || pb.definition == null) return;
+            NetworkBootstrap.Instance.SendLockSetCode(pb.definition.family.ToString(),
+                pb.transform.position, packed, playerId);
+        }
+
+        /// <summary>Guest keypad attempt: hashed locally with the lock's
+        /// replicated salt. The host answers with an addressed verdict.</summary>
+        public static void RequestLockEnter(CodeLock codeLock, string attemptHash, string playerId)
+        {
+            if (codeLock == null || !ShouldAnnounce()) return;
+            var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
+            if (pb == null || pb.definition == null) return;
+            NetworkBootstrap.Instance.SendLockEnter(pb.definition.family.ToString(),
+                pb.transform.position, attemptHash, playerId);
+        }
+
+        /// <summary>Guest lock/unlock toggle: the host checks authorization.</summary>
+        public static void RequestLockToggle(CodeLock codeLock, bool locked, string playerId)
+        {
+            if (codeLock == null || !ShouldAnnounce()) return;
+            var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
+            if (pb == null || pb.definition == null) return;
+            NetworkBootstrap.Instance.SendLockToggle(pb.definition.family.ToString(),
+                pb.transform.position, locked, playerId);
         }
 
         private static bool ShouldAnnounce()
@@ -156,7 +193,18 @@ namespace VoxelEngine.Networking
                 }
                 if (piece == null) continue;
                 ApplyDoorStateTo(piece, p.DoorOpen, p.DoorSide);
-                if (p.HasLock) ApplyLockStateTo(piece, p.LockCode, p.LockLocked, p.LockAuthorized);
+                if (p.HasLock)
+                {
+                    // 14.56.0 - snapshots carry hash-stripped public forms. A
+                    // guest applying the host's snapshot takes them as-is, but
+                    // the HOST must never let a guest's rejoin upload replace
+                    // a coded lock's full hash (or its authorized list).
+                    var existingLock = piece.GetComponentInChildren<CodeLock>(true);
+                    bool hostKeepsOwn = NetworkSession.Mode != SessionMode.Client
+                        && existingLock != null && existingLock.HasCode;
+                    if (!hostKeepsOwn)
+                        ApplyLockStateTo(piece, p.LockCode, p.LockLocked, p.LockAuthorized);
+                }
             }
         }
 
@@ -194,7 +242,9 @@ namespace VoxelEngine.Networking
                 if (codeLock != null)
                 {
                     snap.HasLock = true;
-                    snap.LockCode = codeLock.code ?? "";
+                    // 14.56.0 - join snapshots carry the hash-stripped public
+                    // form: the joining guest gets the salt, never the hash.
+                    snap.LockCode = LockCodes.PublicForm(codeLock.code);
                     snap.LockLocked = codeLock.isLocked;
                     snap.LockAuthorized = new List<string>(codeLock.authorizedIds);
                 }
@@ -255,11 +305,82 @@ namespace VoxelEngine.Networking
             if (piece != null) ApplyDoorStateTo(piece, open, sideSign);
         }
 
-        public static void ApplyLockState(string family, Vector3 pos, string code,
-            bool locked, List<string> authorizedIds)
+        public static void ApplyLockState(string family, Vector3 pos, bool hasCode,
+            string salt, bool locked, List<string> authorizedIds)
         {
             var piece = FindPieceAt(family, pos);
-            if (piece != null) ApplyLockStateTo(piece, code, locked, authorizedIds);
+            if (piece != null)
+                ApplyLockStateTo(piece, hasCode ? LockCodes.Pack(salt, "") : "",
+                    locked, authorizedIds);
+        }
+
+        /// <summary>Host gate for guest-authored LockState announces (14.56.0):
+        /// a guest may only announce a FIT (no code). Anything touching a coded
+        /// lock must come through the keypad intents, where the host verifies.</summary>
+        public static bool HostAcceptsGuestLockState(string family, Vector3 pos, bool msgHasCode)
+        {
+            if (msgHasCode) return false;   // codes are set via RequestLockSetCode only
+            var piece = FindPieceAt(family, pos);
+            var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
+            return codeLock == null || !codeLock.HasCode;   // never wipe a coded lock
+        }
+
+        /// <summary>Host gate for lock removal: only an authorized player may
+        /// strip a coded lock (an uncoded lock is anyone's to take down).</summary>
+        public static bool HostAcceptsLockRemove(string family, Vector3 pos, string playerId)
+        {
+            var piece = FindPieceAt(family, pos);
+            var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
+            if (codeLock == null) return false;
+            return !codeLock.HasCode || codeLock.IsAuthorized(playerId);
+        }
+
+        // ─────────────── host-side keypad verdicts (14.56.0) ───────────────
+
+        /// <summary>Host: a guest set a combination. Accept only the packed
+        /// hash form, only onto a lock that player may configure.</summary>
+        public static void HostApplyLockSetCode(string family, Vector3 pos, string packed, string playerId)
+        {
+            if (!LockCodes.LooksPacked(packed)) return;   // plain or malformed: refuse
+            var piece = FindPieceAt(family, pos);
+            var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
+            if (codeLock == null) return;
+            // Re-coding a coded lock is for authorized players only.
+            if (codeLock.HasCode && !codeLock.IsAuthorized(playerId)) return;
+            codeLock.code = packed;
+            codeLock.isLocked = true;
+            codeLock.authorizedIds.Clear();
+            if (!string.IsNullOrEmpty(playerId)) codeLock.authorizedIds.Add(playerId);
+            codeLock.RefreshLed();
+            AnnounceLockState(codeLock);   // public form fans out to every guest
+        }
+
+        /// <summary>Host: a guest keypad attempt. The ONLY place a guest code
+        /// is ever verified. Always answers with an addressed verdict.</summary>
+        public static void HostApplyLockEnter(string family, Vector3 pos, string attemptHash, string playerId)
+        {
+            var piece = FindPieceAt(family, pos);
+            var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
+            bool granted = codeLock != null && LockCodes.MatchesHash(codeLock.code, attemptHash);
+            if (granted && !string.IsNullOrEmpty(playerId) && !codeLock.authorizedIds.Contains(playerId))
+            {
+                codeLock.authorizedIds.Add(playerId);
+                codeLock.RefreshLed();
+                AnnounceLockState(codeLock);
+            }
+            if (NetworkBootstrap.Instance != null)
+                NetworkBootstrap.Instance.SendLockEnterResult(pos, playerId, granted);
+        }
+
+        /// <summary>Host: a guest toggled lock/unlock - authorized players only.</summary>
+        public static void HostApplyLockToggle(string family, Vector3 pos, bool locked, string playerId)
+        {
+            var piece = FindPieceAt(family, pos);
+            var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
+            if (codeLock == null || !codeLock.HasCode || !codeLock.IsAuthorized(playerId)) return;
+            codeLock.isLocked = locked;
+            codeLock.RefreshLed();
+            AnnounceLockState(codeLock);
         }
 
         public static void ApplyLockRemoved(string family, Vector3 pos)

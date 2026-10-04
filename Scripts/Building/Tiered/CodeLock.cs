@@ -15,6 +15,11 @@ namespace VoxelEngine.Building.Tiered
     {
         public const string ItemId = "code_lock";
 
+        /// <summary>14.56.0 - no longer the plain combination. Stores the
+        /// LockCodes packed form: "sha256:salt:hash" on authority machines
+        /// (host/offline), the hash-stripped public form on guests. The field
+        /// name is kept for scene/save compatibility; legacy plaintext saves
+        /// are canonicalized to a salted hash on load.</summary>
         public string code = "";
         public bool isLocked;
         /// <summary>Player ids allowed through. Keyed per player (MP-readiness
@@ -34,22 +39,33 @@ namespace VoxelEngine.Building.Tiered
         public bool AllowsUse(string playerId)
             => !HasCode || !isLocked || IsAuthorized(playerId);
 
-        /// <summary>Authority entry point: sets (or replaces) the combination.
-        /// A new code wipes the guest list - only the setter stays authorized.</summary>
+        /// <summary>Sets (or replaces) the combination. The plain code is
+        /// hashed HERE, on the machine it was typed on - it never travels and
+        /// never rests (14.56.0). A new code wipes the guest list - only the
+        /// setter stays authorized. Guests ship the salted hash to the host
+        /// as an intent and predict the state locally.</summary>
         public void ApplyCode(string newCode, string playerId)
         {
-            code = newCode;
+            string salt = LockCodes.NewSalt();
+            string packed = LockCodes.Pack(salt, LockCodes.Hash(salt, newCode));
+            code = packed;
             isLocked = true;
             authorizedIds.Clear();
             if (!string.IsNullOrEmpty(playerId)) authorizedIds.Add(playerId);
             RefreshLed();
-            VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client)
+                VoxelEngine.Networking.BuildingSync.RequestLockSetCode(this, packed, playerId);
+            else
+                VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
         }
 
-        /// <summary>Authority entry point: a correct code authorizes the enterer permanently.</summary>
+        /// <summary>AUTHORITY entry point (host/offline, where the full hash
+        /// lives): a correct code authorizes the enterer permanently. On a
+        /// guest this is always false - the keypad goes through
+        /// BuildingSync.RequestLockEnter and the host's addressed verdict.</summary>
         public bool TryEnter(string attempt, string playerId)
         {
-            if (!HasCode || attempt != code) return false;
+            if (!HasCode || !LockCodes.Matches(code, attempt)) return false;
             if (!string.IsNullOrEmpty(playerId) && !authorizedIds.Contains(playerId))
                 authorizedIds.Add(playerId);
             RefreshLed();
@@ -61,7 +77,11 @@ namespace VoxelEngine.Building.Tiered
         {
             isLocked = locked;
             RefreshLed();
-            VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client)
+                VoxelEngine.Networking.BuildingSync.RequestLockToggle(this, locked,
+                    VoxelEngine.Networking.PlayerIdentity.LocalId);   // host validates authorization
+            else
+                VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
         }
 
         public void RefreshLed()

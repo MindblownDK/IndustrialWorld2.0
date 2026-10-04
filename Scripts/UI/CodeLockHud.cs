@@ -45,6 +45,11 @@ namespace VoxelEngine.UI
         private static string _digits = "";
         private static bool _setMode;
         private static bool _pushedBlock;
+        // 14.56.0 - guests cannot verify codes locally (they never hold the
+        // hash): the attempt goes to the host and the keypad waits for the
+        // addressed verdict, with a timeout so a dead host can't freeze it.
+        private static bool _awaitingVerdict;
+        private static float _verdictDeadline;
 
         public static bool IsOpen { get; private set; }
 
@@ -124,6 +129,7 @@ namespace VoxelEngine.UI
             if (_pushedBlock) { UIState.PopBlock(); _pushedBlock = false; }
             _target = null; _stats = null; _inventory = null;
             _onSuccess = null; _onSetDone = null;
+            _awaitingVerdict = false;
         }
 
         // ─────────────────────────── internals ───────────────────────────
@@ -149,6 +155,7 @@ namespace VoxelEngine.UI
 
         private static void Press(char digit)
         {
+            if (_awaitingVerdict) return;   // verdict pending - pad is frozen
             if (_digits.Length >= 4) return;
             _digits += digit;
             UpdateDisplay(false);
@@ -168,6 +175,20 @@ namespace VoxelEngine.UI
                 done?.Invoke();
                 return;
             }
+            // 14.56.0 - guests never hold the hash, so the attempt is hashed
+            // locally with the lock's replicated salt and judged by the host.
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client)
+            {
+                string salt = VoxelEngine.Building.Tiered.LockCodes.SaltOf(_target.code);
+                string attemptHash = VoxelEngine.Building.Tiered.LockCodes.Hash(salt, _digits);
+                VoxelEngine.Networking.BuildingSync.RequestLockEnter(_target, attemptHash,
+                    VoxelEngine.Networking.PlayerIdentity.LocalId);
+                _awaitingVerdict = true;
+                _verdictDeadline = Time.unscaledTime + 4f;
+                _header.text = "CHECKING...";
+                return;
+            }
+
             if (_target.TryEnter(_digits, VoxelEngine.Networking.PlayerIdentity.LocalId))
             {
                 BuildFeedbackHud.Show("Code Lock", "Access granted", null,
@@ -177,16 +198,55 @@ namespace VoxelEngine.UI
                 success?.Invoke();
                 return;
             }
-            // Wrong code: the pad bites back, Rust-style.
+            Deny();
+        }
+
+        /// <summary>Wrong code: the pad bites back, Rust-style.</summary>
+        private static void Deny()
+        {
             if (_stats != null) _stats.TakeDamage(5f);
             BuildFeedbackHud.Show("Code Lock", "Wrong code", null,
                 new Color(0.95f, 0.35f, 0.25f));
             _digits = "";
+            _awaitingVerdict = false;
+            if (_header != null && !_setMode) _header.text = "ENTER CODE";
             UpdateDisplay(true);
+        }
+
+        /// <summary>14.56.0 - the host's addressed keypad verdict landed.
+        /// Position-matched against the open pad; a stray verdict (pad closed,
+        /// different lock) is ignored.</summary>
+        public static void ApplyRemoteEnterResult(Vector3 lockPos, bool granted)
+        {
+            if (!IsOpen || _target == null || _setMode || !_awaitingVerdict) return;
+            var pb = _target.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+            if (pb == null || (pb.transform.position - lockPos).sqrMagnitude > 0.5f) return;
+
+            _awaitingVerdict = false;
+            if (granted)
+            {
+                BuildFeedbackHud.Show("Code Lock", "Access granted", null,
+                    new Color(0.55f, 0.80f, 0.35f));
+                var success = _onSuccess;
+                Hide();
+                success?.Invoke();
+                return;
+            }
+            Deny();
         }
 
         private static void PollKeyboard()
         {
+            // Verdict timeout: an unanswered attempt unfreezes the pad.
+            if (_awaitingVerdict && Time.unscaledTime >= _verdictDeadline)
+            {
+                _awaitingVerdict = false;
+                _digits = "";
+                if (_header != null && !_setMode) _header.text = "ENTER CODE";
+                UpdateDisplay(false);
+                BuildFeedbackHud.Show("Code Lock", "No answer from host", null,
+                    new Color(0.85f, 0.75f, 0.35f));
+            }
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             if (!IsOpen) return;
             var keyboard = Keyboard.current;
@@ -198,7 +258,7 @@ namespace VoxelEngine.UI
                 return;
             }
             if (_keypadPanel == null || _keypadPanel.resolvedStyle.display == DisplayStyle.None) return;
-            if (keyboard.backspaceKey.wasPressedThisFrame && _digits.Length > 0)
+            if (keyboard.backspaceKey.wasPressedThisFrame && _digits.Length > 0 && !_awaitingVerdict)
             {
                 _digits = _digits.Substring(0, _digits.Length - 1);
                 UpdateDisplay(false);

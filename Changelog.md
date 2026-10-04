@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.55.1-dev`
+**Current Version:** `14.56.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.56.0-dev] Nobody Knows the Code
+
+**Security hardening: code-lock combinations no longer exist in plain text - not on the wire, not in saves, not in any guest's memory.**
+
+- Lock combinations are now stored as salted SHA-256 hashes. The plain 4-digit code is hashed on the machine it is typed on and discarded; what rests in saves and host memory is `sha256:salt:hash`, never the code itself.
+- Guests never receive the hash. Lock state broadcasts and join snapshots now carry a hash-stripped public form (the salt only), so no packet sniffer and no modified client can read or offline-brute-force anyone's code. Previously every lock announce shipped the raw code to every connected machine.
+- Keypad attempts are judged by the host, nowhere else. A guest's keypad hashes the attempt with the lock's replicated salt and sends only that hash as an intent; the host verifies against its stored hash and answers with an addressed verdict. The pad shows CHECKING... while it waits, accepts the host's grant (door opens, permanent authorization) or denial (the usual 5 HP bite), and unfreezes after 4 seconds if the host never answers.
+- Setting or changing a code from a guest is an intent too: the salted hash travels guest to host, the host validates that the setter may configure that lock (re-coding requires authorization), applies it, and fans the public form out itself. Intents are never relayed raw to other guests.
+- Host-side validation on the old blind-trust handlers: a guest-authored lock state announce is now accepted only as a plain lock FIT onto an uncoded lock - a forged announce can no longer overwrite a coded lock's combination or authorization list. Lock removal announces are validated against the sender's authorization before they touch a coded lock.
+- Rejoin uploads can no longer clobber the host's lock secrets: when merging a guest's piece snapshot, the host keeps its own code hash and authorized list for any lock that already has a code.
+- Old saves migrate silently: a legacy plaintext code is converted to a salted hash the first time the save is loaded. Codes keep working; nothing to do.
+- Lock/unlock toggles from guests are validated host-side against the authorization list as well.
+- Broadcast audit for leaking secrets: the lock code was the last secret traveling in clear (server passwords were cleaned up in the 14.46-14.48 rounds). Known accepted gaps, unchanged this round: the door USE check and lock FIT remain client-authored, and storage security enforcement remains client-side until the dedicated-server intent-conversion pass.
 
 ### [14.55.1-dev] Husks, Hushes and Healers
 
