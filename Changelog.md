@@ -1,9 +1,22 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.54.0-dev`
+**Current Version:** `14.55.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.55.0-dev] One Horde
+
+**Hostile creatures are now synchronized in multiplayer - and they hunt everyone.**
+
+- New HostileSync layer: the host simulates every ghoul, basilisk, griffin, ifrit, karkadann, manticore and Roc, and streams spawn, pose, health and removal to all guests. Guests cull locally-born hostiles (spawner and biome scatter) and run kinematic replicas built from the same Enemies prefabs.
+- Enemies now hunt the NEAREST player, not just the machine they live on: target acquisition scans the local player and every remote avatar each tick, so a hostile can chase one player, switch to a closer one, and forget victims who disconnect.
+- All hostile damage is applied victim-side, like fall and collision damage: a local victim takes the hit directly; a remote victim's machine receives an addressed strike carrying damage, source name, death cause and any effect - poison (basilisk bite, manticore spikes), burn (fireballs, fire walls) and petrify (basilisk gaze) all land on the right player.
+- Guests can fight back: hitting a hostile replica files a damage intent the host applies authoritatively, including the hitter's position so the Karkadann's frontal armor judges the real attack angle. Deaths, loot (via drop replication) and boss relic drops happen for everyone.
+- Visible casts replay on guests as damage-free visuals built from the replica's own prefab fields: ifrit fireball volleys and fire walls, manticore spike volleys, and the Roc's wing-gust dust ring.
+- The Roc's wing gust now damages every player in the ring, not just the host's; fire walls burn remote players standing in them.
+- Late joiners receive the full horde automatically via the same self-healing spawn re-announce used for livestock; stale replicas are culled when their stream goes silent.
+- Known limits for this round: remote victims take gust damage without the gust knockback, and replayed volleys roll their own cosmetic spread.
 
 ### [14.54.0-dev] One Herd
 

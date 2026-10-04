@@ -633,6 +633,72 @@ namespace VoxelEngine.Networking
         public Quaternion Rotation;
     }
 
+    // ── hostiles on the wire (14.55.0) - host streams, guests puppet ──
+
+    /// <summary>A hostile exists. Re-sent every few seconds as a self-healing
+    /// late-join snapshot; a known id treats it as a pose/health correction.</summary>
+    public struct EnemySpawnBroadcast : IBroadcast
+    {
+        public int Id;
+        public byte Kind;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public float Health;
+        public float MaxHealth;
+    }
+
+    public struct EnemyPoseBroadcast : IBroadcast
+    {
+        public int Id;
+        public Vector3 Position;
+        public Quaternion Rotation;
+    }
+
+    public struct EnemyHealthBroadcast : IBroadcast
+    {
+        public int Id;
+        public float Health;
+    }
+
+    public struct EnemyRemovedBroadcast : IBroadcast
+    {
+        public int Id;
+        public bool Died;
+    }
+
+    /// <summary>Guest -> host intent: my weapon connected with hostile Id.
+    /// Carries the hitter so angle-sensitive defenses judge the direction.</summary>
+    public struct EnemyHitBroadcast : IBroadcast
+    {
+        public int Id;
+        public float Amount;
+        public Vector3 Point;
+        public Vector3 Direction;
+        public string HitterId;
+    }
+
+    /// <summary>Host -> victim: a hostile's attack connected with a player.
+    /// Applied victim-side like fall damage; Effect carries poison/burn/petrify.</summary>
+    public struct EnemyStrikeBroadcast : IBroadcast
+    {
+        public string VictimId;
+        public float Amount;
+        public string Source;
+        public byte Effect;
+        public float EffectA;
+        public float EffectB;
+    }
+
+    /// <summary>Host -> guests: a hostile cast something visible (fireball
+    /// volley, spike volley, fire wall, wing gust) - replay it as visuals.</summary>
+    public struct EnemyCastBroadcast : IBroadcast
+    {
+        public int Id;
+        public byte Kind;
+        public Vector3 From;
+        public Vector3 Direction;
+    }
+
     /// <summary>A death loot bag appeared (14.36.0). Payload is the bag's
     /// slot-indexed save-format JSON, so stacks arrive intact and in place.</summary>
     public struct BagSpawnedBroadcast : IBroadcast
@@ -815,6 +881,13 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<AnimalRemovedBroadcast>(OnServerAnimalRemoved);
             _networkManager.ServerManager.RegisterBroadcast<AnimalHitBroadcast>(OnServerAnimalHit);
             _networkManager.ServerManager.RegisterBroadcast<AnimalMountBroadcast>(OnServerAnimalMount);
+            _networkManager.ServerManager.RegisterBroadcast<EnemySpawnBroadcast>(OnServerEnemySpawn);
+            _networkManager.ServerManager.RegisterBroadcast<EnemyPoseBroadcast>(OnServerEnemyPose);
+            _networkManager.ServerManager.RegisterBroadcast<EnemyHealthBroadcast>(OnServerEnemyHealth);
+            _networkManager.ServerManager.RegisterBroadcast<EnemyRemovedBroadcast>(OnServerEnemyRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<EnemyHitBroadcast>(OnServerEnemyHit);
+            _networkManager.ServerManager.RegisterBroadcast<EnemyStrikeBroadcast>(OnServerEnemyStrike);
+            _networkManager.ServerManager.RegisterBroadcast<EnemyCastBroadcast>(OnServerEnemyCast);
             _networkManager.ServerManager.RegisterBroadcast<BagSpawnedBroadcast>(OnServerBagSpawned);
             _networkManager.ServerManager.RegisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
             _networkManager.ServerManager.RegisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
@@ -861,6 +934,12 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<AnimalHealthBroadcast>(OnClientAnimalHealth);
             _networkManager.ClientManager.RegisterBroadcast<AnimalRemovedBroadcast>(OnClientAnimalRemoved);
             _networkManager.ClientManager.RegisterBroadcast<AnimalMountBroadcast>(OnClientAnimalMount);
+            _networkManager.ClientManager.RegisterBroadcast<EnemySpawnBroadcast>(OnClientEnemySpawn);
+            _networkManager.ClientManager.RegisterBroadcast<EnemyPoseBroadcast>(OnClientEnemyPose);
+            _networkManager.ClientManager.RegisterBroadcast<EnemyHealthBroadcast>(OnClientEnemyHealth);
+            _networkManager.ClientManager.RegisterBroadcast<EnemyRemovedBroadcast>(OnClientEnemyRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<EnemyStrikeBroadcast>(OnClientEnemyStrike);
+            _networkManager.ClientManager.RegisterBroadcast<EnemyCastBroadcast>(OnClientEnemyCast);
             _networkManager.ClientManager.RegisterBroadcast<BagSpawnedBroadcast>(OnClientBagSpawned);
             _networkManager.ClientManager.RegisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
             _networkManager.ClientManager.RegisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
@@ -959,6 +1038,13 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<AnimalRemovedBroadcast>(OnServerAnimalRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<AnimalHitBroadcast>(OnServerAnimalHit);
             _networkManager.ServerManager.UnregisterBroadcast<AnimalMountBroadcast>(OnServerAnimalMount);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemySpawnBroadcast>(OnServerEnemySpawn);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemyPoseBroadcast>(OnServerEnemyPose);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemyHealthBroadcast>(OnServerEnemyHealth);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemyRemovedBroadcast>(OnServerEnemyRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemyHitBroadcast>(OnServerEnemyHit);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemyStrikeBroadcast>(OnServerEnemyStrike);
+            _networkManager.ServerManager.UnregisterBroadcast<EnemyCastBroadcast>(OnServerEnemyCast);
             _networkManager.ServerManager.UnregisterBroadcast<BagSpawnedBroadcast>(OnServerBagSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
             _networkManager.ServerManager.UnregisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
@@ -1005,6 +1091,12 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<AnimalHealthBroadcast>(OnClientAnimalHealth);
             _networkManager.ClientManager.UnregisterBroadcast<AnimalRemovedBroadcast>(OnClientAnimalRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<AnimalMountBroadcast>(OnClientAnimalMount);
+            _networkManager.ClientManager.UnregisterBroadcast<EnemySpawnBroadcast>(OnClientEnemySpawn);
+            _networkManager.ClientManager.UnregisterBroadcast<EnemyPoseBroadcast>(OnClientEnemyPose);
+            _networkManager.ClientManager.UnregisterBroadcast<EnemyHealthBroadcast>(OnClientEnemyHealth);
+            _networkManager.ClientManager.UnregisterBroadcast<EnemyRemovedBroadcast>(OnClientEnemyRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<EnemyStrikeBroadcast>(OnClientEnemyStrike);
+            _networkManager.ClientManager.UnregisterBroadcast<EnemyCastBroadcast>(OnClientEnemyCast);
             _networkManager.ClientManager.UnregisterBroadcast<BagSpawnedBroadcast>(OnClientBagSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
             _networkManager.ClientManager.UnregisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
@@ -3505,6 +3597,55 @@ namespace VoxelEngine.Networking
             { Id = id, RiderId = riderId, Mounted = mounted, Position = pos, Rotation = rot });
         }
 
+        // ── hostiles (14.55.0) ──
+
+        public void SendEnemySpawn(int id, byte kind, Vector3 pos, Quaternion rot, float health, float maxHealth)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemySpawnBroadcast
+            { Id = id, Kind = kind, Position = pos, Rotation = rot, Health = health, MaxHealth = maxHealth });
+        }
+
+        public void SendEnemyPose(int id, Vector3 pos, Quaternion rot)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemyPoseBroadcast
+            { Id = id, Position = pos, Rotation = rot });
+        }
+
+        public void SendEnemyHealth(int id, float health)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemyHealthBroadcast { Id = id, Health = health });
+        }
+
+        public void SendEnemyRemoved(int id, bool died)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemyRemovedBroadcast { Id = id, Died = died });
+        }
+
+        public void SendEnemyHit(int id, float amount, Vector3 point, Vector3 direction, string hitterId)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemyHitBroadcast
+            { Id = id, Amount = amount, Point = point, Direction = direction, HitterId = hitterId });
+        }
+
+        public void SendEnemyStrike(string victimId, float amount, string source, byte effect, float a, float b)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemyStrikeBroadcast
+            { VictimId = victimId, Amount = amount, Source = source, Effect = effect, EffectA = a, EffectB = b });
+        }
+
+        public void SendEnemyCast(int id, byte kind, Vector3 from, Vector3 dir)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new EnemyCastBroadcast
+            { Id = id, Kind = kind, From = from, Direction = dir });
+        }
+
         private void OnServerDropSpawned(NetworkConnection conn, DropSpawnedBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
@@ -3602,6 +3743,88 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted || WorldMismatch) return;
             AnimalSync.ApplyMountRemote(msg.Id, msg.RiderId, msg.Mounted, msg.Position, msg.Rotation);
+        }
+
+        // ── hostiles (14.55.0): state flows host->guests, intents guest->host ──
+
+        private void OnServerEnemySpawn(NetworkConnection conn, EnemySpawnBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);   // only the host authors state
+        }
+
+        private void OnServerEnemyPose(NetworkConnection conn, EnemyPoseBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnServerEnemyHealth(NetworkConnection conn, EnemyHealthBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnServerEnemyRemoved(NetworkConnection conn, EnemyRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnServerEnemyHit(NetworkConnection conn, EnemyHitBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                HostileSync.HostApplyHit(msg.Id, msg.Amount, msg.Point, msg.Direction, msg.HitterId);
+        }
+
+        private void OnServerEnemyStrike(NetworkConnection conn, EnemyStrikeBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);   // strikes are host-authored
+        }
+
+        private void OnServerEnemyCast(NetworkConnection conn, EnemyCastBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (conn.IsLocalClient) RelayToOthers(conn, msg);
+        }
+
+        private void OnClientEnemySpawn(EnemySpawnBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            HostileSync.ApplySpawned(msg.Id, msg.Kind, msg.Position, msg.Rotation, msg.Health, msg.MaxHealth);
+        }
+
+        private void OnClientEnemyPose(EnemyPoseBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            HostileSync.ApplyPose(msg.Id, msg.Position, msg.Rotation);
+        }
+
+        private void OnClientEnemyHealth(EnemyHealthBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            HostileSync.ApplyHealth(msg.Id, msg.Health);
+        }
+
+        private void OnClientEnemyRemoved(EnemyRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            HostileSync.ApplyRemoved(msg.Id, msg.Died);
+        }
+
+        private void OnClientEnemyStrike(EnemyStrikeBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            if (msg.VictimId != PlayerIdentity.LocalId) return;   // addressed, not broadcast
+            HostileSync.ApplyStrikeLocal(msg.Amount, msg.Source, msg.Effect, msg.EffectA, msg.EffectB);
+        }
+
+        private void OnClientEnemyCast(EnemyCastBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            HostileSync.ApplyCast(msg.Id, msg.Kind, msg.From, msg.Direction);
         }
 
         private void OnServerDropSnapshot(NetworkConnection conn, DropSnapshotBroadcast msg, Channel channel)
@@ -3923,6 +4146,7 @@ namespace VoxelEngine.Networking
             ServerAdminRegistry.ResetSession();   // 14.47.0 - mirror/reload on next session
             PlayerCosmeticsRegistry.ResetSession();   // 14.49.0 - next session re-uploads
             AnimalSync.ResetSession();   // 14.54.0 - the herd dies with the session
+            HostileSync.ResetSession();   // 14.55.0 - and so does the horde
             GridSync.Clear();
             GridStateSync.Clear();
             GridBuildSync.Clear();

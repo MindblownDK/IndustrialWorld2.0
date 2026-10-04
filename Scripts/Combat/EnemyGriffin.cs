@@ -52,6 +52,10 @@ namespace VoxelEngine.Combat
             _rb.useGravity = false;          // the griffin flies under its own control
             _rb.freezeRotation = true;
             PickWander();
+
+            // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
+            // cull locally-born ones here and keep only streamed replicas.
+            if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
         }
 
         private void FixedUpdate()
@@ -124,10 +128,8 @@ namespace VoxelEngine.Combat
 
         private void Attack()
         {
-            var ps = (_player != null) ? _player.GetComponent<VoxelEngine.Player.PlayerStats>() : null;
-            if (ps != null) ps.TakeDamage(attackDamage);
-            if (showHitFeedback)
-                VoxelEngine.UI.BuildFeedbackHud.Show("Griffin", "Dive-bombs you!", null, new Color(0.90f, 0.70f, 0.20f));
+            // 14.55.0 - victim-side strike funnel, local or remote.
+            VoxelEngine.Networking.HostileSync.StrikePlayer(_player, attackDamage, "Griffin");
         }
 
         // Drop feathers/talons (via base) plus a rare Griffin Heart.
@@ -152,11 +154,10 @@ namespace VoxelEngine.Combat
 
         private void EnsurePlayer()
         {
-            if (_player != null) return;
-            var ps = VoxelEngine.Player.PlayerStats.Instance;
-            if (ps != null) { _player = ps.transform; return; }
-            var go = GameObject.FindGameObjectWithTag("Player");
-            if (go != null) _player = go.transform;
+            // 14.55.0 - hunt the NEAREST player: the local one or any remote
+            // avatar. Re-evaluated every call, so the target can switch and
+            // a disconnected victim is forgotten.
+            VoxelEngine.Networking.HostileSync.AcquireTarget(transform.position, ref _player);
         }
     }
 }

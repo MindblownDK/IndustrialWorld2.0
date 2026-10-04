@@ -58,6 +58,10 @@ namespace VoxelEngine.Combat
             _rb.useGravity = false;
             _rb.freezeRotation = true;
             PickWander();
+
+            // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
+            // cull locally-born ones here and keep only streamed replicas.
+            if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
         }
 
         private void FixedUpdate()
@@ -149,16 +153,17 @@ namespace VoxelEngine.Combat
                 ManticoreSpike.Spawn(from, aim * spread, gameObject, spikeMaterial,
                     spikeDamage, spikePoisonDps, spikePoisonDuration);
             }
+            // 14.55.0 - guests replay the volley as visuals from the replica's own fields.
+            VoxelEngine.Networking.HostileSync.AnnounceCast(this,
+                VoxelEngine.Networking.HostileSync.CastSpikes, from, baseDir.normalized);
             if (showHitFeedback)
                 VoxelEngine.UI.BuildFeedbackHud.Show("Manticore", "Looses tail spikes!", null, new Color(0.55f, 0.85f, 0.25f));
         }
 
         private void MeleeAttack()
         {
-            var ps = (_player != null) ? _player.GetComponent<VoxelEngine.Player.PlayerStats>() : null;
-            if (ps != null) ps.TakeDamage(meleeDamage);
-            if (showHitFeedback)
-                VoxelEngine.UI.BuildFeedbackHud.Show("Manticore", "Claws you!", null, new Color(0.9f, 0.25f, 0.2f));
+            // 14.55.0 - victim-side strike funnel, local or remote.
+            VoxelEngine.Networking.HostileSync.StrikePlayer(_player, meleeDamage, "Manticore");
         }
 
         private void PickWander()
@@ -170,11 +175,10 @@ namespace VoxelEngine.Combat
 
         private void EnsurePlayer()
         {
-            if (_player != null) return;
-            var ps = VoxelEngine.Player.PlayerStats.Instance;
-            if (ps != null) { _player = ps.transform; return; }
-            var go = GameObject.FindGameObjectWithTag("Player");
-            if (go != null) _player = go.transform;
+            // 14.55.0 - hunt the NEAREST player: the local one or any remote
+            // avatar. Re-evaluated every call, so the target can switch and
+            // a disconnected victim is forgotten.
+            VoxelEngine.Networking.HostileSync.AcquireTarget(transform.position, ref _player);
         }
     }
 }

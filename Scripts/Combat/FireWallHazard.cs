@@ -19,7 +19,12 @@ namespace VoxelEngine.Combat
 
         private float _life, _tickTimer;
 
-        public static FireWallHazard Spawn(Vector3 pos, Vector3 up, Material mat, float dur, float dps, float radius)
+        /// <summary>14.55.0 - guest-side replay of a host cast: burns and
+        /// looks identical, but never applies damage or ignites terrain.</summary>
+        public bool visualOnly;
+
+        public static FireWallHazard Spawn(Vector3 pos, Vector3 up, Material mat, float dur, float dps, float radius,
+                                           bool visualOnly = false)
         {
             var go = new GameObject("FireWall");
             go.transform.position = pos;
@@ -32,12 +37,16 @@ namespace VoxelEngine.Combat
             var ren = disk.GetComponent<Renderer>(); if (mat != null) ren.sharedMaterial = mat;
 
             var hz = go.AddComponent<FireWallHazard>();
-            hz.duration = dur; hz.burnDps = dps; hz.radius = radius;
+            hz.duration = dur; hz.burnDps = dps; hz.radius = radius; hz.visualOnly = visualOnly;
 
             // 9.16.0 fire system — a fire wall raised over flammable liquid ignites it,
             // so an Ifrit ambush on an industrial world can torch whole fuel lakes.
-            var aw = VoxelEngine.Core.ActiveWorld.Current;
-            if (aw != null) VoxelEngine.Fire.FireManager.TryIgniteAt(aw.WorldToVoxel(pos));
+            // (Replayed visuals never ignite — the host's real wall already did.)
+            if (!visualOnly)
+            {
+                var aw = VoxelEngine.Core.ActiveWorld.Current;
+                if (aw != null) VoxelEngine.Fire.FireManager.TryIgniteAt(aw.WorldToVoxel(pos));
+            }
             return hz;
         }
 
@@ -51,12 +60,27 @@ namespace VoxelEngine.Combat
             if (_tickTimer >= tickInterval)
             {
                 _tickTimer = 0f;
-                var ps = PlayerStats.Instance;
-                if (ps == null) return;
+                if (visualOnly) return;   // 14.55.0 - replayed cast, host owns the damage
                 Vector3 up = GravityProvider.GetUp(transform.position);
-                Vector3 toPlayer = Vector3.ProjectOnPlane(ps.transform.position - transform.position, up);
-                if (toPlayer.magnitude <= radius)
-                    ps.ApplyBurn(burnDps, tickInterval + 0.5f);   // keep the burn alive while inside
+
+                var ps = PlayerStats.Instance;
+                if (ps != null)
+                {
+                    Vector3 toPlayer = Vector3.ProjectOnPlane(ps.transform.position - transform.position, up);
+                    if (toPlayer.magnitude <= radius)
+                        ps.ApplyBurn(burnDps, tickInterval + 0.5f);   // keep the burn alive while inside
+                }
+
+                // 14.55.0 - remote players standing in the host's real wall
+                // burn too: each tick routes a burn strike to their machine.
+                foreach (var av in VoxelEngine.Networking.PlayerAvatar.All)
+                {
+                    if (av == null) continue;
+                    Vector3 toAv = Vector3.ProjectOnPlane(av.transform.position - transform.position, up);
+                    if (toAv.magnitude <= radius)
+                        VoxelEngine.Networking.HostileSync.StrikeAvatar(av, 0f, "Ifrit",
+                            VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, tickInterval + 0.5f);
+                }
             }
         }
     }

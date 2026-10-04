@@ -35,6 +35,11 @@ namespace VoxelEngine.Combat
 
         public virtual void TakeDamage(DamageEvent e)
         {
+            // 14.55.0 - a hostile replica never bleeds locally: the hit becomes
+            // an intent to the host, whose health stream is the only outcome.
+            // No-op for everything that is not a registered hostile replica.
+            if (VoxelEngine.Networking.HostileSync.InterceptReplicaDamage(this, e)) return;
+
             if (!IsAlive) return;
             if (e.amount <= 0f) return;   // zero-damage events are noise, not hits (14.37.1)
             Health -= e.amount;
@@ -57,8 +62,26 @@ namespace VoxelEngine.Combat
 
         protected virtual void Die(DamageEvent e)
         {
+            // 14.55.0 - a registered hostile announces its death BEFORE the
+            // loot roll, so removal and DropSync spawns leave in order.
+            // No-op for everything else.
+            VoxelEngine.Networking.HostileSync.NotifyDied(this);
             RollDrops();
             Destroy(gameObject);
+        }
+
+        protected virtual void OnDestroy()
+        {
+            // 14.55.0 - host-side despawns (cull, scene change) announce a
+            // silent removal; replicas unhook. No-op for non-hostiles.
+            VoxelEngine.Networking.HostileSync.NotifyDestroyed(this);
+        }
+
+        /// <summary>Replicated health lands directly - no hit feedback, no
+        /// death roll. The authority's removal broadcast kills a replica.</summary>
+        public void SetReplicatedHealth(float health)
+        {
+            Health = Mathf.Clamp(health, 0f, Mathf.Max(1f, maxHealth));
         }
 
         protected void RollDrops()

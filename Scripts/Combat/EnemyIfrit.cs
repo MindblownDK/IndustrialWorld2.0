@@ -60,6 +60,10 @@ namespace VoxelEngine.Combat
             _rb.useGravity = false;
             _rb.freezeRotation = true;
             PickWander();
+
+            // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
+            // cull locally-born ones here and keep only streamed replicas.
+            if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
         }
 
         private void FixedUpdate()
@@ -128,6 +132,9 @@ namespace VoxelEngine.Combat
                 Fireball.Spawn(from, baseDir.normalized + spread, gameObject, fireballMaterial,
                     fireballDamage, fireballBurnDps, fireballBurnDuration);
             }
+            // 14.55.0 - guests replay the volley as visuals from the replica's own fields.
+            VoxelEngine.Networking.HostileSync.AnnounceCast(this,
+                VoxelEngine.Networking.HostileSync.CastFireballs, from, baseDir.normalized);
             if (showHitFeedback)
                 VoxelEngine.UI.BuildFeedbackHud.Show("Ifrit", "Hurls fireballs!", null, new Color(1.0f, 0.5f, 0.1f));
         }
@@ -154,6 +161,9 @@ namespace VoxelEngine.Combat
             if (_player == null) return;
             FireWallHazard.Spawn(_player.position + up * 0.05f, up, firewallMaterial,
                 firewallDuration, firewallBurnDps, firewallRadius);
+            // 14.55.0 - guests draw the same wall, visual-only.
+            VoxelEngine.Networking.HostileSync.AnnounceCast(this,
+                VoxelEngine.Networking.HostileSync.CastFirewall, _player.position + up * 0.05f, up);
             if (showHitFeedback)
                 VoxelEngine.UI.BuildFeedbackHud.Show("Ifrit", "Raises a wall of fire!", null, new Color(1.0f, 0.4f, 0.1f));
         }
@@ -167,11 +177,10 @@ namespace VoxelEngine.Combat
 
         private void EnsurePlayer()
         {
-            if (_player != null) return;
-            var ps = VoxelEngine.Player.PlayerStats.Instance;
-            if (ps != null) { _player = ps.transform; return; }
-            var go = GameObject.FindGameObjectWithTag("Player");
-            if (go != null) _player = go.transform;
+            // 14.55.0 - hunt the NEAREST player: the local one or any remote
+            // avatar. Re-evaluated every call, so the target can switch and
+            // a disconnected victim is forgotten.
+            VoxelEngine.Networking.HostileSync.AcquireTarget(transform.position, ref _player);
         }
     }
 }

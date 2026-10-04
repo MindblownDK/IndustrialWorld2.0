@@ -91,8 +91,9 @@ namespace VoxelEngine.Fauna
             Health = Mathf.Max(0f, health);
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
             AnimalSync.Unregister(this);
         }
 

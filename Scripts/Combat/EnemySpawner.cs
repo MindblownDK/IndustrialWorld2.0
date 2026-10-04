@@ -30,8 +30,17 @@ namespace VoxelEngine.Combat
 
         private void Update()
         {
+            // 14.55.0 - the hostile sync pump rides the spawner's heartbeat:
+            // hosts stream the horde, guests ease their replicas. Runs always.
+            VoxelEngine.Networking.HostileSync.Pump();
+
             var player = VoxelEngine.Player.PlayerStats.Instance;
             if (player == null) return;
+
+            // Guests never spawn, cull or despawn hostiles - the host's
+            // stream is the only horde that exists on this machine.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return;
             Vector3 ppos = player.transform.position;
 
             // Cull dead + despawn far

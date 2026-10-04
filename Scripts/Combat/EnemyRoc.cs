@@ -62,6 +62,10 @@ namespace VoxelEngine.Combat
             _rb.useGravity = false;
             _rb.freezeRotation = true;
             PickWander();
+
+            // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
+            // cull locally-born ones here and keep only streamed replicas.
+            if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
         }
 
         private bool Enraged
@@ -147,15 +151,13 @@ namespace VoxelEngine.Combat
 
         private void TalonStrike(Vector3 up)
         {
-            var ps = (_player != null) ? _player.GetComponent<VoxelEngine.Player.PlayerStats>() : null;
-            if (ps != null) ps.TakeDamage(diveDamage);
-            if (showHitFeedback)
-                VoxelEngine.UI.BuildFeedbackHud.Show("ROC", "Dive-bombs with massive talons!", null, new Color(0.95f, 0.5f, 0.15f));
+            // 14.55.0 - victim-side strike funnel, local or remote.
+            VoxelEngine.Networking.HostileSync.StrikePlayer(_player, diveDamage, "Roc");
         }
 
         private void WingGust(Vector3 pos, Vector3 up)
         {
-            // AoE damage + knockback if the player is within gustRadius (tangent distance).
+            // AoE damage + knockback if a player is within gustRadius (tangent distance).
             var ps = VoxelEngine.Player.PlayerStats.Instance;
             if (ps != null)
             {
@@ -167,8 +169,19 @@ namespace VoxelEngine.Combat
                     if (pc != null) pc.ApplyImpulse(toP.normalized * gustKnockback + up * 3f);
                 }
             }
-            // Dust ring visual at the Roc.
+            // 14.55.0 - the gust hits EVERY player in the ring: remote victims
+            // take the damage on their own machine (knockback stays local-only).
+            foreach (var av in VoxelEngine.Networking.PlayerAvatar.All)
+            {
+                if (av == null) continue;
+                Vector3 toAv = Vector3.ProjectOnPlane(av.transform.position - pos, up);
+                if (toAv.magnitude <= gustRadius)
+                    VoxelEngine.Networking.HostileSync.StrikeAvatar(av, gustDamage, "Roc");
+            }
+            // Dust ring visual at the Roc - and replayed on every guest.
             SpawnGustFlash(pos, up);
+            VoxelEngine.Networking.HostileSync.AnnounceCast(this,
+                VoxelEngine.Networking.HostileSync.CastGust, pos, up);
             if (showHitFeedback)
                 VoxelEngine.UI.BuildFeedbackHud.Show("ROC", "Beats its wings — gust!", null, new Color(0.8f, 0.7f, 0.5f));
         }
@@ -206,11 +219,10 @@ namespace VoxelEngine.Combat
 
         private void EnsurePlayer()
         {
-            if (_player != null) return;
-            var ps = VoxelEngine.Player.PlayerStats.Instance;
-            if (ps != null) { _player = ps.transform; return; }
-            var go = GameObject.FindGameObjectWithTag("Player");
-            if (go != null) _player = go.transform;
+            // 14.55.0 - hunt the NEAREST player: the local one or any remote
+            // avatar. Re-evaluated every call, so the target can switch and
+            // a disconnected victim is forgotten.
+            VoxelEngine.Networking.HostileSync.AcquireTarget(transform.position, ref _player);
         }
     }
 }

@@ -52,6 +52,10 @@ namespace VoxelEngine.Combat
             _rb.useGravity = false;
             _rb.freezeRotation = true;
             PickWander();
+
+            // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
+            // cull locally-born ones here and keep only streamed replicas.
+            if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
         }
 
         private void FixedUpdate()
@@ -123,22 +127,17 @@ namespace VoxelEngine.Combat
             if (dist > gazeRange) return;
             if (Vector3.Dot(forward, toP.normalized) < Mathf.Cos(gazeHalfAngle * Mathf.Deg2Rad)) return;
 
-            var pc = _player.GetComponent<VoxelEngine.Player.PlayerController>();
-            if (pc != null) pc.ApplyPetrify(petrifySlow, petrifyDuration);
-            if (showHitFeedback)
-                VoxelEngine.UI.BuildFeedbackHud.Show("Basilisk", "Petrifying gaze — you feel like stone!", null, new Color(0.6f, 0.8f, 0.4f));
+            // 14.55.0 - petrify through the strike funnel: the victim's
+            // own machine slows the victim, local or remote.
+            VoxelEngine.Networking.HostileSync.StrikePlayer(_player, 0f, "Basilisk",
+                VoxelEngine.Networking.HostileSync.EffectPetrify, petrifySlow, petrifyDuration);
         }
 
         private void VenomBite()
         {
-            var ps = (_player != null) ? _player.GetComponent<VoxelEngine.Player.PlayerStats>() : null;
-            if (ps != null)
-            {
-                ps.TakeDamage(biteDamage);
-                ps.ApplyPoison(bitePoisonDps, bitePoisonDuration);
-            }
-            if (showHitFeedback)
-                VoxelEngine.UI.BuildFeedbackHud.Show("Basilisk", "Venomous bite!", null, new Color(0.5f, 0.8f, 0.2f));
+            // 14.55.0 - damage + poison, victim-side, local or remote.
+            VoxelEngine.Networking.HostileSync.StrikePlayer(_player, biteDamage, "Basilisk",
+                VoxelEngine.Networking.HostileSync.EffectPoison, bitePoisonDps, bitePoisonDuration);
         }
 
         private void PickWander()
@@ -150,11 +149,10 @@ namespace VoxelEngine.Combat
 
         private void EnsurePlayer()
         {
-            if (_player != null) return;
-            var ps = VoxelEngine.Player.PlayerStats.Instance;
-            if (ps != null) { _player = ps.transform; return; }
-            var go = GameObject.FindGameObjectWithTag("Player");
-            if (go != null) _player = go.transform;
+            // 14.55.0 - hunt the NEAREST player: the local one or any remote
+            // avatar. Re-evaluated every call, so the target can switch and
+            // a disconnected victim is forgotten.
+            VoxelEngine.Networking.HostileSync.AcquireTarget(transform.position, ref _player);
         }
     }
 }

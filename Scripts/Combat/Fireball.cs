@@ -16,6 +16,9 @@ namespace VoxelEngine.Combat
         public float burnDps        = 6f;
         public float burnDuration   = 3f;
         public float maxLife        = 2.5f;
+        /// <summary>14.55.0 - guest-side replay of a host cast: fly and look
+        /// identical, but never apply damage, burns or ignition.</summary>
+        public bool visualOnly;
 
         private Vector3 _vel;
         private float _life;
@@ -53,18 +56,31 @@ namespace VoxelEngine.Combat
                     return;
                 }
 
+                if (visualOnly) { Destroy(gameObject); return; }   // 14.55.0 - replayed cast, host owns the damage
+
                 var ps = hit.collider.GetComponentInParent<PlayerStats>();
                 if (ps != null)
                 {
-                    ps.TakeDamage(damage);
-                    ps.ApplyBurn(burnDps, burnDuration);
+                    // Local player hit - victim-side funnel (death cause + burn + feedback).
+                    VoxelEngine.Networking.HostileSync.ApplyStrikeLocal(damage, "Ifrit",
+                        VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, burnDuration);
                 }
                 else
                 {
-                    var d = hit.collider.GetComponentInParent<IDamageable>();
-                    if (d != null && d.IsAlive)
-                        d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Fire,
-                            point = hit.point, direction = step.normalized, source = _owner });
+                    // 14.55.0 - a remote player's avatar: route the strike to its machine.
+                    var av = hit.collider.GetComponentInParent<VoxelEngine.Networking.PlayerAvatar>();
+                    if (av != null)
+                    {
+                        VoxelEngine.Networking.HostileSync.StrikeAvatar(av, damage, "Ifrit",
+                            VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, burnDuration);
+                    }
+                    else
+                    {
+                        var d = hit.collider.GetComponentInParent<IDamageable>();
+                        if (d != null && d.IsAlive)
+                            d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Fire,
+                                point = hit.point, direction = step.normalized, source = _owner });
+                    }
                 }
                 // 9.16.0 fire system — a fireball splashing into a flammable pool sets it alight.
                 var aw = VoxelEngine.Core.ActiveWorld.Current;
