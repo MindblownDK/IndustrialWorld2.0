@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.53.0-dev`
-**Roadmap Version:** `14.53.0-dev`
+**Current Version:** `14.53.1-dev`
+**Roadmap Version:** `14.53.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.53.1-dev - Skin Tight
+Chest ink floated because every offset was bind-pose math and the idle holds the chest elsewhere. New one-shot CrusaderInkCalibrator (added by the rigged-body builder): bakes the skinned mesh in the live animated pose a few frames after spawn, finds the outermost skin point in a chest patch around the ink anchor, shifts the anchor along its depth axis to 4 mm off the real surface (crest follows with its 12 mm standoff). One bake per avatar, self-disabling; failed calibration keeps build-time offsets.
+
 ### 14.53.0-dev - Ink, Skin and Sound
 Trailer theater gained a SOUND: OFF/ON button (bottom-right; muted by default every launch; direct audio with per-track mute, label swaps in place). Crest fixes from the 14.52 live test: the brand rune hide now uses the deep search (the rune rides the spine bone, root.Find never saw it), and the icon quad moved flush - a finger above the motto, 1 cm off the skin, 10-degree chest-plane tilt, 0.16 scale, enforced every application; chest ink pulled from 8 mm to 4 mm off the skin.
 
@@ -40,9 +43,6 @@ Real collision destruction: grids judge their own crashes on the simulating mach
 
 ### 14.51.0-dev - The Menu Puts On a Show
 Menus scale with screen size (UITheme.ApplyMenuScale, 1536x864 reference matched on height - bigger at 1080p, constant apparent size above). Front page only: right-half trailer theater (StreamingAssets/Trailer.mp4, muted loop, hint when absent) and a top-left LATEST CHANGES card (five newest Changelog.md titles); both vanish and the trailer pauses on every sub-page. Crests are per instance slot on one machine; an icon replaces the stock chest symbol and front cross, custom text replaces the default chest motto, defaults return when cleared, nameplate untouched. Keybind search split into SEARCH BY FUNCTION / SEARCH BY BUTTON modes. Scroller thumb size caps removed - the pill fills its rail everywhere, and the browser/player-editor scrollviews got the house style. Editor-load healer re-attaches ExternalStorageBlock to its prefab when the missing-meta GUID churn strips it.
-
-### 14.50.0-dev - The Menu Keeps Left
-Menu/UX round: main menu and pause menu panels anchor LEFT (one 64px gutter, vertically centered, every page) instead of screen-center; the six-tab settings bar wraps instead of overflowing, both menus. Keybind screen gained a search bar (shared SettingsUI.KeybindTab): filters by function name or bound button, toggles rows in place so typing never loses focus, filter survives rebinds, empty result says so.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

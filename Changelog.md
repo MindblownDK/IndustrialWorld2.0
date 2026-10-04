@@ -1,9 +1,15 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.53.0-dev`
+**Current Version:** `14.53.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.53.1-dev] Skin Tight
+
+**Type:** PATCH - one fix from the 14.53.0 live test: the chest ink still floated in front of the body, clearly visible from the side.
+
+**The tattoo now measures the skin it sits on.** Root cause: every offset so far was computed against the BIND pose at build time - but the body never stands in bind pose. The locomotion idle relaxes the spine and holds the chest a few centimeters back from where the bind pose had it, so an anchor that was flush at build floats in front of the animated chest, and no hand-tuned constant can be right for both poses. The fix is a one-shot calibration against the real thing: a few frames after the rigged body starts animating, the avatar bakes its skinned mesh in the current pose, finds the most outward skin point in a chest-sized patch around the ink anchor, and shifts the anchor along its own depth axis until the text plane sits 4 mm outside that actual surface - works in both directions, floating ink moves in, buried ink moves out. The crest rides the ink, so it snaps along with its own 12 mm standoff intact. One mesh bake per avatar, ever, then the calibrator switches itself off.
 
 ### [14.53.0-dev] Ink, Skin and Sound
 

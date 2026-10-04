@@ -562,6 +562,13 @@ namespace VoxelEngine.Networking
                 var runeT = root.Find("BrandRune");
                 if (runeT != null) runeT.SetParent(spine, true);
             }
+
+            // 14.53.1 - one-shot skin calibration: a few frames into the
+            // ANIMATED pose, the ink anchor (and the crest riding it) snaps
+            // to the real baked chest surface. Build-time offsets come from
+            // the bind pose, and the idle holds the chest somewhere else.
+            if (root.GetComponent<CrusaderInkCalibrator>() == null)
+                root.gameObject.AddComponent<CrusaderInkCalibrator>();
             return true;
         }
 
