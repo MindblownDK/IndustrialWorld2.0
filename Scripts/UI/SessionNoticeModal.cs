@@ -107,6 +107,18 @@ namespace VoxelEngine.UI
         {
             if (_pushedBlock) { UIState.PopBlock(); _pushedBlock = false; }
             if (_go != null) { Object.Destroy(_go); _go = null; }
+
+            // 14.48.0 - PopBlock's zero state re-locks and hides the cursor:
+            // the GAMEPLAY default, correct in a running world where the
+            // look controller owns the mouse. In a menu scene nothing ever
+            // re-frees it, which left the player a locked invisible cursor
+            // and an unclickable menu. No world persistence running = menu
+            // scene = the cursor stays free.
+            if (VoxelEngine.Persistence.WorldStatePersistence.Instance == null)
+            {
+                UnityEngine.Cursor.lockState = CursorLockMode.None;
+                UnityEngine.Cursor.visible = true;
+            }
         }
     }
 }

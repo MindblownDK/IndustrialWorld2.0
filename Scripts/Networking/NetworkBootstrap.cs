@@ -955,8 +955,55 @@ namespace VoxelEngine.Networking
         {
             if (IsOnline) return;
             address = string.IsNullOrWhiteSpace(address) ? "localhost" : address.Trim();
+
+            // 14.48.0 - an optional ":port" suffix. LAN scan results and
+            // saved browser entries carry the server's real port, and typing
+            // one by hand works everywhere an address does. Exactly one colon
+            // means host:port; more than one is a bare IPv6 address and is
+            // passed through untouched.
+            int colon = address.LastIndexOf(':');
+            if (colon > 0 && colon == address.IndexOf(':') &&
+                ushort.TryParse(address.Substring(colon + 1), out ushort port) && port > 0)
+            {
+                address = address.Substring(0, colon);
+                var transport = _networkManager.TransportManager != null
+                    ? _networkManager.TransportManager.Transport : null;
+                if (transport != null) transport.SetPort(port);
+            }
+
             _statusLine = $"Connecting to {address}...";
             _networkManager.ClientManager.StartConnection(address);
+        }
+
+        /// <summary>14.48.0 - what this machine tells the LAN it is. Name
+        /// comes from the dedicated config or the host player; the port is
+        /// whatever the transport is actually listening on.</summary>
+        private float _nextLanInfoAt;
+
+        private void RefreshLanInfo()
+        {
+            string serverName = NetworkSession.IsDedicated && DedicatedServer.Config != null
+                ? DedicatedServer.Config.serverName
+                : PlayerIdentity.LocalName + "'s world";
+
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            string world = session != null ? session.worldName : "";
+
+            int port = 7770;
+            int maxPlayers = 8;
+            var transport = _networkManager != null && _networkManager.TransportManager != null
+                ? _networkManager.TransportManager.Transport : null;
+            if (transport != null)
+            {
+                try
+                {
+                    port = transport.GetPort();
+                    maxPlayers = transport.GetMaximumClients();
+                }
+                catch { /* keep the defaults; discovery still works */ }
+            }
+
+            LanDiscovery.UpdateInfo(serverName, world, port, _avatarsByConnection.Count, maxPlayers);
         }
 
         /// <summary>Seconds to wait for the host's world card before giving up.
@@ -1002,6 +1049,14 @@ namespace VoxelEngine.Networking
             {
                 _nextInvitePruneAt = Time.unscaledTime + 5f;
                 if (TeamRegistry.PruneExpiredTick()) BroadcastTeamRoster("");
+            }
+
+            // 14.48.0 - keep the LAN discovery card current (player count
+            // moves). Same lazy five-second cadence as the prune above.
+            if (_serverStarted && Time.unscaledTime >= _nextLanInfoAt)
+            {
+                _nextLanInfoAt = Time.unscaledTime + 5f;
+                RefreshLanInfo();
             }
 
             // Guest -> host state upload. Offline and hosting both skip on the
@@ -1066,9 +1121,16 @@ namespace VoxelEngine.Networking
                 _serverStarted = true;
                 NetworkSession.SetMode(SessionMode.Host);
                 _statusLine = "Hosting";
+
+                // 14.48.0 - every hosting machine answers LAN probes so the
+                // server browser's scan can find it; the payload refreshes on
+                // a slow tick in LateUpdate as players come and go.
+                RefreshLanInfo();
+                LanDiscovery.StartResponder();
             }
             else if (args.ConnectionState == LocalConnectionState.Stopped)
             {
+                LanDiscovery.StopResponder();
                 _serverStarted = false;
                 _avatarsByConnection.Clear();
                 _playerIdByConnection.Clear();
@@ -1774,6 +1836,11 @@ namespace VoxelEngine.Networking
 
                 WorldMismatch = false;
                 HostWorldLine = $"Host world: '{session.hostWorldDisplayName}', seed {session.seed}";
+
+                // 14.48.0 - a join that got this far is real: the server
+                // browser's RECENT tab remembers the address, labeled with
+                // the world we just adopted unless the player named it.
+                VoxelEngine.Menu.ServerBrowserStore.NoteJoined(session.pendingJoinAddress, msg.WorldName);
                 VoxelEngine.Menu.WorldBootGate.Report("Building " + session.hostWorldDisplayName + "...");
                 Debug.Log($"[Join] 3/6 world card adopted: system '{session.chosenSystemName}', " +
                           $"seed {session.seed}, spawn planet {session.spawnPlanetIndex}, " +

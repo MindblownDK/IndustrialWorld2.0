@@ -67,6 +67,16 @@ namespace VoxelEngine.Menu
         // forbids PlayerPrefs, and the throw there kills every initializer
         // BELOW it (which is how this one nulled the planet-seed lists).
         private string _joinAddress = "";
+
+        // ── 14.48.0 server browser state ──────────────────────────────
+        // The tab survives rebuilds (star/remove clicks rebuild the page);
+        // the LAN results live here so a tab switch does not forget a scan.
+        private enum MpTab { Servers, Favorites, Recent, Lan }
+        private MpTab _mpTab = MpTab.Servers;
+        private string _addServerName = "";
+        private string _addServerAddress = "";
+        private readonly List<VoxelEngine.Networking.LanDiscovery.Found> _lanFound = new();
+        private bool _lanScanShown;
         private string _expandedAutosaveWorld = string.Empty;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
@@ -814,7 +824,7 @@ namespace VoxelEngine.Menu
         // handshake, and the client builds from that.
         private void BuildMultiplayerPage()
         {
-            var panel = MakePanel(520, 0);
+            var panel = MakePanel(640, 0);
             _root.Add(panel);
 
             panel.Add(PageHeader("MULTIPLAYER", "BACK", () => { _menuStatus = string.Empty; _page = Page.Main; BuildUI(); }));
@@ -825,23 +835,106 @@ namespace VoxelEngine.Menu
                                 "the world is sent to you when you connect.");
             blurb.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(blurb);
-            panel.Add(T.Spacer(14));
+            panel.Add(T.Spacer(12));
 
-            panel.Add(FormLabel("Host Address"));
+            // ── 14.48.0 server browser: tabs, list, add form ──────────
+            var tabs = new VisualElement();
+            tabs.style.flexDirection = FlexDirection.Row;
+            tabs.Add(MpTabBtn("SERVERS", MpTab.Servers));
+            tabs.Add(MpTabBtn("FAVORITES", MpTab.Favorites));
+            tabs.Add(MpTabBtn("RECENT", MpTab.Recent));
+            tabs.Add(MpTabBtn("LAN SCAN", MpTab.Lan));
+            panel.Add(tabs);
+            panel.Add(T.Spacer(8));
+
+            var listHost = new VisualElement();
+            panel.Add(listHost);
+            RebuildBrowserList(listHost);
+
+            // LAN results arrive on a background thread; this drain runs on
+            // the UI's clock and dies with the panel, so nothing leaks. Only
+            // the list is rebuilt - never the whole page - so typing in the
+            // fields below is never interrupted by a reply landing.
+            panel.schedule.Execute(() =>
+            {
+                bool changed = false;
+                while (VoxelEngine.Networking.LanDiscovery.TryTake(out var f))
+                {
+                    bool known = false;
+                    for (int i = 0; i < _lanFound.Count; i++)
+                        if (_lanFound[i].address == f.address && _lanFound[i].port == f.port)
+                        { _lanFound[i] = f; known = true; break; }
+                    if (!known) _lanFound.Add(f);
+                    changed = true;
+                }
+                bool scanning = VoxelEngine.Networking.LanDiscovery.Scanning;
+                if (scanning != _lanScanShown) { _lanScanShown = scanning; changed = true; }
+                if (changed && _mpTab == MpTab.Lan) RebuildBrowserList(listHost);
+            }).Every(250);
+
+            panel.Add(T.Spacer(10));
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(8));
+
+            panel.Add(FormLabel("Add Server"));
+            var addRow = new VisualElement();
+            addRow.style.flexDirection = FlexDirection.Row;
+            addRow.style.alignItems = Align.FlexEnd;
+
+            var nameCol = new VisualElement();
+            nameCol.style.flexGrow = 1; nameCol.style.flexBasis = 0; nameCol.style.marginRight = 6;
+            nameCol.Add(FormLabel("Name"));
+            var addNameField = new TextField { value = _addServerName, maxLength = 32 };
+            StyleField(addNameField);
+            addNameField.RegisterValueChangedCallback(e => _addServerName = e.newValue);
+            nameCol.Add(addNameField);
+            addRow.Add(nameCol);
+
+            var addrCol = new VisualElement();
+            addrCol.style.flexGrow = 1; addrCol.style.flexBasis = 0; addrCol.style.marginRight = 6;
+            addrCol.Add(FormLabel("Address"));
+            var addAddrField = new TextField { value = _addServerAddress, maxLength = 64 };
+            StyleField(addAddrField);
+            addAddrField.RegisterValueChangedCallback(e => _addServerAddress = e.newValue);
+            addrCol.Add(addAddrField);
+            addRow.Add(addrCol);
+
+            var addBtn = MiniBtn("ADD", () =>
+            {
+                string addr = (_addServerAddress ?? "").Trim();
+                if (string.IsNullOrEmpty(addr)) { _menuStatus = "Enter an address to add."; BuildUI(); return; }
+                ServerBrowserStore.AddOrUpdate(_addServerName, addr);
+                _addServerName = ""; _addServerAddress = "";
+                _menuStatus = string.Empty;
+                _mpTab = MpTab.Servers;
+                BuildUI();
+            }, T.AccentTeal, true);
+            addBtn.style.minHeight = 30;
+            addBtn.style.marginBottom = 4;
+            addRow.Add(addBtn);
+            panel.Add(addRow);
+
+            panel.Add(T.Spacer(10));
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(8));
+
+            panel.Add(FormLabel("Direct Connect"));
             var addrField = new TextField { value = _joinAddress };
             StyleField(addrField);
             addrField.RegisterValueChangedCallback(e => _joinAddress = e.newValue);
             panel.Add(addrField);
             panel.Add(T.Spacer(4));
 
-            var hint = T.Muted("IP address or hostname. Use localhost to join a game on this computer.");
+            var hint = T.Muted("IP address or hostname, with an optional :port. " +
+                               "Use localhost to join a game on this computer.");
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
             panel.Add(T.Spacer(10));
 
             // 14.47.0 - passworded servers. Blank is correct for open ones;
-            // a wrong password comes back as a named refusal.
-            panel.Add(FormLabel("Server Password (if any)"));
+            // a wrong password comes back as a named refusal. The same
+            // password is sent for browser-row joins too.
+            panel.Add(FormLabel("Server Password (if any - used for every join)"));
             var pwField = new TextField { value = VoxelEngine.Networking.NetworkBootstrap.JoinPassword };
             pwField.isPasswordField = true;
             StyleField(pwField);
@@ -878,6 +971,223 @@ namespace VoxelEngine.Menu
                 notice.style.whiteSpace = WhiteSpace.Normal;
                 panel.Add(notice);
             }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //                14.48.0 SERVER BROWSER HELPERS
+        // ════════════════════════════════════════════════════════════
+
+        private Button MpTabBtn(string text, MpTab tab)
+        {
+            bool active = _mpTab == tab;
+            var b = new Button(() =>
+            {
+                _mpTab = tab;
+                // Opening the LAN tab is itself the question - scan at once
+                // instead of making the player find the button first.
+                if (tab == MpTab.Lan && !VoxelEngine.Networking.LanDiscovery.Scanning)
+                {
+                    _lanFound.Clear();
+                    VoxelEngine.Networking.LanDiscovery.StartScan(3f);
+                    _lanScanShown = true;
+                }
+                BuildUI();
+            }) { text = text };
+            b.style.minHeight               = 30;
+            b.style.minWidth                = 100;
+            b.style.fontSize                = 11;
+            b.style.unityFontStyleAndWeight = FontStyle.Bold;
+            b.style.color = active ? Color.white : new StyleColor(T.TextSecondary).value;
+            b.style.backgroundColor = new StyleColor(active
+                ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f)
+                : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
+            T.Radius(b, T.ButtonRadius);
+            T.Border(b, 0, Color.clear);
+            b.style.marginRight = 5;
+            LcdHudTheme.AddMenuInteractions(b, T.AccentCyan,
+                active ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f)
+                       : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
+            return b;
+        }
+
+        /// <summary>Compact row action button for browser rows.</summary>
+        private static Button MiniBtn(string text, Action onClick, Color accent, bool filled = false)
+        {
+            var b = new Button(onClick) { text = text };
+            b.style.minHeight               = 24;
+            b.style.fontSize                = 10;
+            b.style.unityFontStyleAndWeight = FontStyle.Bold;
+            b.style.paddingLeft             = 9;
+            b.style.paddingRight            = 9;
+            b.style.marginLeft              = 4;
+            Color bg = filled
+                ? new Color(accent.r, accent.g, accent.b, 0.85f)
+                : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f);
+            b.style.color = filled ? Color.white : new StyleColor(accent).value;
+            b.style.backgroundColor = new StyleColor(bg);
+            T.Radius(b, T.ButtonRadius);
+            T.Border(b, 0, Color.clear);
+            LcdHudTheme.AddMenuInteractions(b, accent, bg);
+            return b;
+        }
+
+        private static readonly Color FavGold = new Color(0.95f, 0.78f, 0.25f);
+
+        /// <summary>Fills the browser list for the active tab. Rebuilds only
+        /// this container, so the form fields below keep their focus.</summary>
+        private void RebuildBrowserList(VisualElement host)
+        {
+            host.Clear();
+
+            var scroll = new ScrollView();
+            scroll.style.maxHeight = 236;
+
+            if (_mpTab == MpTab.Lan)
+            {
+                var headRow = new VisualElement();
+                headRow.style.flexDirection = FlexDirection.Row;
+                headRow.style.alignItems    = Align.Center;
+                headRow.style.marginBottom  = 6;
+
+                var scanBtn = MiniBtn("SCAN AGAIN", () =>
+                {
+                    _lanFound.Clear();
+                    VoxelEngine.Networking.LanDiscovery.StartScan(3f);
+                    _lanScanShown = true;
+                    RebuildBrowserList(host);
+                }, T.AccentCyan, true);
+                scanBtn.style.marginLeft = 0;
+                headRow.Add(scanBtn);
+
+                var scanState = T.Muted(_lanScanShown
+                    ? "Scanning the local network..."
+                    : _lanFound.Count == 0
+                        ? "No servers answered. The host must be on this network and in their world."
+                        : $"{_lanFound.Count} server{(_lanFound.Count == 1 ? "" : "s")} found.");
+                scanState.style.marginLeft = 8;
+                scanState.style.whiteSpace = WhiteSpace.Normal;
+                scanState.style.flexShrink = 1;
+                headRow.Add(scanState);
+                host.Add(headRow);
+
+                foreach (var f in _lanFound) scroll.Add(LanRow(f, host));
+                host.Add(scroll);
+                return;
+            }
+
+            IReadOnlyList<ServerBrowserEntry> entries =
+                _mpTab == MpTab.Favorites ? ServerBrowserStore.Favorites() :
+                _mpTab == MpTab.Recent    ? ServerBrowserStore.Recents() :
+                                            ServerBrowserStore.All;
+
+            if (entries.Count == 0)
+            {
+                var empty = T.Muted(
+                    _mpTab == MpTab.Favorites
+                        ? "No favorites yet. Press FAV on any server to pin it here."
+                    : _mpTab == MpTab.Recent
+                        ? "Nothing joined yet. Servers you successfully join appear here on their own."
+                        : "No saved servers yet. Add one below, star a LAN find, or just join - " +
+                          "every successful join is remembered under RECENT.");
+                empty.style.whiteSpace = WhiteSpace.Normal;
+                host.Add(empty);
+                return;
+            }
+
+            foreach (var e in entries) scroll.Add(BrowserEntryRow(e, host));
+            host.Add(scroll);
+        }
+
+        private VisualElement BrowserRowShell()
+        {
+            var row = new VisualElement();
+            row.style.flexDirection   = FlexDirection.Row;
+            row.style.alignItems      = Align.Center;
+            row.style.backgroundColor = new StyleColor(T.BgCard);
+            row.style.paddingLeft     = 8;
+            row.style.paddingRight    = 8;
+            row.style.paddingTop      = 6;
+            row.style.paddingBottom   = 6;
+            row.style.marginBottom    = 4;
+            T.Radius(row, 5f);
+            T.Border(row, 1, T.BorderDim);
+            return row;
+        }
+
+        private VisualElement BrowserRowInfo(string title, string sub)
+        {
+            var col = new VisualElement();
+            col.style.flexGrow   = 1;
+            col.style.flexShrink = 1;
+            col.style.overflow   = Overflow.Hidden;
+
+            var name = T.Body(string.IsNullOrEmpty(title) ? sub : title);
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            name.style.whiteSpace = WhiteSpace.NoWrap;
+            name.style.overflow   = Overflow.Hidden;
+            col.Add(name);
+
+            var addr = T.Muted(sub);
+            addr.style.fontSize   = 10;
+            addr.style.whiteSpace = WhiteSpace.NoWrap;
+            addr.style.overflow   = Overflow.Hidden;
+            col.Add(addr);
+            return col;
+        }
+
+        private VisualElement BrowserEntryRow(ServerBrowserEntry e, VisualElement host)
+        {
+            var row = BrowserRowShell();
+
+            var fav = MiniBtn("FAV", () =>
+            {
+                ServerBrowserStore.ToggleFavorite(e.address);
+                RebuildBrowserList(host);
+            }, e.favorite ? FavGold : T.TextSecondary, e.favorite);
+            fav.style.marginLeft  = 0;
+            fav.style.marginRight = 8;
+            row.Add(fav);
+
+            string sub = e.address;
+            if (e.lastJoinedTicks > 0)
+            {
+                var when = new DateTime(e.lastJoinedTicks, DateTimeKind.Utc).ToLocalTime();
+                sub += "   last joined " + when.ToString("dd MMM HH:mm");
+            }
+            row.Add(BrowserRowInfo(e.name, sub));
+
+            row.Add(MiniBtn("JOIN", () => JoinHostTo(e.address), T.AccentCyan, true));
+            row.Add(MiniBtn("DEL", () =>
+            {
+                ServerBrowserStore.Remove(e.address);
+                RebuildBrowserList(host);
+            }, T.AccentRed));
+            return row;
+        }
+
+        private VisualElement LanRow(VoxelEngine.Networking.LanDiscovery.Found f, VisualElement host)
+        {
+            var row = BrowserRowShell();
+            string address = f.port > 0 ? f.address + ":" + f.port : f.address;
+            var saved = ServerBrowserStore.Find(address);
+
+            var fav = MiniBtn("FAV", () =>
+            {
+                // Starring a LAN find saves it under its broadcast name, so
+                // it is still there when the server is offline.
+                if (ServerBrowserStore.Find(address) == null)
+                    ServerBrowserStore.AddOrUpdate(f.serverName, address);
+                ServerBrowserStore.ToggleFavorite(address);
+                RebuildBrowserList(host);
+            }, saved != null && saved.favorite ? FavGold : T.TextSecondary, saved != null && saved.favorite);
+            fav.style.marginLeft  = 0;
+            fav.style.marginRight = 8;
+            row.Add(fav);
+
+            string world = string.IsNullOrEmpty(f.worldName) ? "unknown world" : f.worldName;
+            row.Add(BrowserRowInfo(f.serverName, $"{world}   {f.players}/{f.maxPlayers} players   {address}"));
+            row.Add(MiniBtn("JOIN", () => JoinHostTo(address), T.AccentCyan, true));
+            return row;
         }
 
         // ════════════════════════════════════════════════════════════
@@ -1011,9 +1321,13 @@ namespace VoxelEngine.Menu
         /// No world is generated here and no save is touched: the scene comes
         /// up with world generation held, NetworkBootstrap connects, and the
         /// host's world card releases the gate.</summary>
-        private void JoinHost()
+        private void JoinHost() => JoinHostTo(_joinAddress);
+
+        /// <summary>14.48.0 - one join path for the direct-connect field,
+        /// browser rows and LAN finds. The address may carry a ":port".</summary>
+        private void JoinHostTo(string rawAddress)
         {
-            string address = (_joinAddress ?? "").Trim();
+            string address = (rawAddress ?? "").Trim();
             if (string.IsNullOrEmpty(address))
             {
                 _menuStatus = "Enter the host's address first.";

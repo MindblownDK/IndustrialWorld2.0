@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.47.2-dev`
+**Current Version:** `14.48.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.48.0-dev] The Menu Learns Your Friends' Addresses
+
+**Type:** MINOR - the multiplayer page grew a real server browser. Save-compatible: one new machine-wide JSON, zero changes to any world or network schema.
+
+**A server browser without a master server.** By locked decision there is no central list - the browser is this machine's own memory plus one look around the room. The multiplayer page now opens with four tabs. SERVERS is every address this machine knows, added by hand through the new Add Server form (a name and an address, nothing else). FAVORITES is any of them you press FAV on - the button turns gold and the entry is pinned to its own tab. RECENT fills itself: every join that actually reaches a world stamps the address with the time, labeled with the world's own name unless you named it yourself, newest first, capped at ten. Everything lives in one server_browser.json in the machine's persistent data - it is the player's address book, not a world's, so it survives every world and every update.
+
+**LAN SCAN finds the room.** Every hosting machine - listen host and dedicated server alike - now answers discovery probes on its own UDP port (47788, beside the game port, never on it). The LAN tab fires a scan the moment you open it: one broadcast, three seconds of listening, and every server on the local network appears as a row with its name, world, player count and address. The listing refreshes itself every few seconds on the hosting side, so the player counts are live, not the ones from boot. A LAN find can be starred straight into your favorites under its broadcast name, so it is still in your book when the server is offline. The responder thread starts with the server, dies with the server, and a machine that is hosting and browsing at once correctly finds itself.
+
+**Addresses carry ports now.** Joining accepts an optional :port suffix everywhere an address goes - the direct-connect field, saved entries, and LAN rows (which bring the server's real port with them automatically). Plain addresses behave exactly as before, and bare IPv6 addresses pass through untouched. One join path serves the direct field, every browser row and every LAN find, so the password field and the refusal reasons work identically for all of them.
+
+**The menu gets its cursor back.** Dismissing the kicked/banned/refused modal in the main menu left the mouse locked to the center of the screen and invisible - the gameplay default, which is the wrong default in a menu. The modal now frees the cursor whenever it closes outside a running world, so OK means back to clicking, not back to nothing.
 
 ### [14.47.2-dev] Text That Lives on the Cloth
 

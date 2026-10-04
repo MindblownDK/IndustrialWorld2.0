@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.47.2-dev`
-**Roadmap Version:** `14.47.2-dev`
-**Date:** 2026-10-03
+**Current Version:** `14.48.0-dev`
+**Roadmap Version:** `14.48.0-dev`
+**Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.48.0-dev - The Menu Learns Your Friends' Addresses
+Server browser on the main menu's multiplayer page: SERVERS / FAVORITES / RECENT / LAN SCAN tabs over one machine-wide server_browser.json (manual add form, FAV pinning, successful joins self-record newest-first capped at ten). LAN discovery: every hosting machine answers UDP probes on 47788 with name/world/port/players; the LAN tab scans on open, rows join or star straight into the book. Join addresses accept an optional :port everywhere; one join path serves the direct field and every row. The kicked/banned/refused modal now frees the cursor when dismissed outside a running world (main-menu mouse-lock fix).
+
 ### 14.47.2-dev - Text That Lives on the Cloth
 Banner text auto-fits the cloth: line width measured from the font's own glyph advances (fallback estimate when no font answers), anything wider than the banner shrinks to fit with a margin - never overhangs, never cut off; refits always start from the designed size recorded at build time. Banner editor fields show the 24-char server cap while typing. Fixed CS0104: UnityEngine.Cursor fully qualified in SessionNoticeModal (UIElements has its own Cursor type). Pre-existing CS0618 sync-file warnings left for the one-sweep polish round by rule.
 
@@ -40,9 +43,6 @@ Server administration ships. Ownership is a property of the WORLD (server_admin.
 
 ### 14.46.2-dev - The Server Names Its Reasons
 Third dedicated shakedown. The continuous bare shader warning was the OCEAN, not the sky: the procedural ocean shell re-entered its material factory every 0.05s while the material stayed null (four Shader.Find calls per tick on a stripped-shader server), with the liquid-mesh material cache on the same retry - both now retire headless, plus the last five cosmos visuals (grass, asteroid field, planet sky, nebula, starfield) and the avatar body builder; the fluid SIM keeps running. Punches-on-players and invites both die in silent server guard clauses, so every refusal now logs its reason (hit path: unknown connection, empty ids, unknown target with the known-id list, friendly fire, missing avatar, out of range with distances; team path: op/requester/target/verdict) and clients log sends, applied rosters and near-miss swings - one punch plus one invite yields a complete named trace.
-
-### 14.46.1-dev - An Invite That Arrives, A Punch That Lands
-Second dedicated shakedown (identity + weather sync confirmed). Team invites were dying of clock skew: expiry stamped by the host's wall clock but judged by each client's own - clients now trust the roster as sent, and the host prunes expired invites on a five-second timer and rebroadcasts only on change. Punch reach 2.1m -> 2.8m (club 2.2m -> 2.6m): measured camera-to-replicated-capsule, the old reach only landed nose to nose. Cosmos visuals (distant-body/singularity beacons, quasar/singularity/solar-glare/space-dust/rain-fog renderers) retire themselves headless, same guard pattern as the 14.46.0 weather rigs.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
