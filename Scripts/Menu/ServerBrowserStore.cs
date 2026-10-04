@@ -24,6 +24,10 @@ namespace VoxelEngine.Menu
         public bool favorite;
         /// <summary>UTC ticks of the last successful join; 0 = never.</summary>
         public long lastJoinedTicks;
+        /// <summary>14.48.1 - the server's join password, autofilled on JOIN.
+        /// Stored as typed (same plaintext posture as the rest of the
+        /// pre-release files); empty means the server is open.</summary>
+        public string password = "";
     }
 
     public static class ServerBrowserStore
@@ -73,9 +77,11 @@ namespace VoxelEngine.Menu
             return null;
         }
 
-        /// <summary>Manual add, or a rename of an existing entry. The
-        /// address is the identity; the name is a label.</summary>
-        public static void AddOrUpdate(string name, string address)
+        /// <summary>Manual add, or a rename/re-key of an existing entry. The
+        /// address is the identity; the name is a label. A null password
+        /// means "leave it alone" (LAN stars never clear a saved one);
+        /// non-null - including empty - is stored as the autofill.</summary>
+        public static void AddOrUpdate(string name, string address, string password = null)
         {
             address = Normalize(address);
             if (string.IsNullOrEmpty(address)) return;
@@ -87,6 +93,7 @@ namespace VoxelEngine.Menu
             }
             if (!string.IsNullOrWhiteSpace(name)) entry.name = name.Trim();
             if (string.IsNullOrEmpty(entry.name)) entry.name = address;
+            if (password != null) entry.password = password;
             Touch();
         }
 
@@ -109,7 +116,7 @@ namespace VoxelEngine.Menu
         /// <summary>A successful join stamps the clock (creating the entry
         /// when the address was typed by hand), and adopts the server's own
         /// name unless the player labeled it themselves.</summary>
-        public static void NoteJoined(string address, string nameHint)
+        public static void NoteJoined(string address, string nameHint, string passwordUsed = null)
         {
             address = Normalize(address);
             if (string.IsNullOrEmpty(address)) return;
@@ -122,6 +129,10 @@ namespace VoxelEngine.Menu
             if (!string.IsNullOrWhiteSpace(nameHint) &&
                 (string.IsNullOrEmpty(entry.name) || entry.name == entry.address))
                 entry.name = nameHint.Trim();
+            // 14.48.1 - this password just WORKED (an admitted join is the
+            // only caller), so it is by definition the right autofill -
+            // including an empty one, which records "this server is open".
+            if (passwordUsed != null) entry.password = passwordUsed;
             entry.lastJoinedTicks = DateTime.UtcNow.Ticks;
             Touch();
         }

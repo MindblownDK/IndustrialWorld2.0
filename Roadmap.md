@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.48.0-dev`
-**Roadmap Version:** `14.48.0-dev`
+**Current Version:** `14.49.0-dev`
+**Roadmap Version:** `14.49.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 14.49.0-dev - The Crusader Gets a Face
+Player cosmetics: EDIT PLAYER page on the main menu's multiplayer page - name (20 cap), chest text (24 cap, server-sanitized), personal icon (PlayerIcons folder gallery or painting board, canonical 128x128 PNG, 300KB ceiling, NO ICON honest). Avatars wear the crest on the chest plane in front of the tabard (reads with or without armor; world-text material, no wall bleed); icons also ride the pause menu PLAYERS rows and the Administration player cards, live via registry version. Cosmetics are per-MACHINE (PlayerPrefs + player_icon.png), upload behind the identity handshake every join (empty clears), host validates and rebroadcasts, late joiners replayed behind team banners; nothing persists on the host; dedicated renders none of it.
+
+### 14.48.1-dev - The Book Remembers the Keys
+Server browser polish: saved/favorited entries carry an optional password (Add Server box) autofilled on their JOIN; accepted joins write the working password back to the entry (blank = open recorded too); rows show "password saved"; blank re-adds never wipe a key. JOIN GAME plus its fields removed from the pause menu's multiplayer tab - joining is main-menu only now, a note points there; HOST THIS WORLD stays.
+
 ### 14.48.0-dev - The Menu Learns Your Friends' Addresses
 Server browser on the main menu's multiplayer page: SERVERS / FAVORITES / RECENT / LAN SCAN tabs over one machine-wide server_browser.json (manual add form, FAV pinning, successful joins self-record newest-first capped at ten). LAN discovery: every hosting machine answers UDP probes on 47788 with name/world/port/players; the LAN tab scans on open, rows join or star straight into the book. Join addresses accept an optional :port everywhere; one join path serves the direct field and every row. The kicked/banned/refused modal now frees the cursor when dismissed outside a running world (main-menu mouse-lock fix).
 
@@ -37,12 +43,6 @@ Banner text auto-fits the cloth: line width measured from the font's own glyph a
 
 ### 14.47.1-dev - A Goodbye You Cannot Miss
 Administration polish from the first live test. The page rebuilds on a composite live signature (admin state, team limits, player presence, ban-countdown minute) instead of its own version alone, so joins/leaves and remote admins' changes show up at once without interrupting typing. Kick/ban/refusal now raise a DontDestroyOnLoad modal (dimmed screen, OK button) that survives the return to the main menu; the boot overlay and menu status line repeat the named reason. Password refusals split: no password offered -> "password protected, please enter it", wrong password -> says so. KICK and BAN open an optional parting-message box (40 chars, server-clamped; stored on ban entries) with explicit confirmation. Player names capped at 20 characters in the fields, at the identity source, and server-side at the handshake.
-
-### 14.47.0-dev - The Owner Holds the Keys
-Server administration ships. Ownership is a property of the WORLD (server_admin.json sidecar, keyed by stable player id - one player can own many servers): a listen host is always owner, a fresh dedicated world adopts its first ever player, and the config's adminPassword claims/recovers ownership from the new SERVER ADMINISTRATION page (pause menu -> multiplayer). Owner promotes admins; owner/admins kick, ban (1h/24h/7d/permanent, host-clock expiry), run the whitelist (name pins to id on first join) and edit all world rules live (friendly fire, loot respawn, banner painting, drop warning, weights, drop cap, team limits) - one WorldRuleBroadcast per change, same parser both sides. Admission (ban/whitelist/password) is judged at the identity handshake before an avatar exists, with named refusals delivered to the door, the HUD and the main menu. server_config.json gained join password, whitelist switch and tri-state world-rule overrides, and in-game edits write back so the file always shows live values. Both join forms gained a password field.
-
-### 14.46.2-dev - The Server Names Its Reasons
-Third dedicated shakedown. The continuous bare shader warning was the OCEAN, not the sky: the procedural ocean shell re-entered its material factory every 0.05s while the material stayed null (four Shader.Find calls per tick on a stripped-shader server), with the liquid-mesh material cache on the same retry - both now retire headless, plus the last five cosmos visuals (grass, asteroid field, planet sky, nebula, starfield) and the avatar body builder; the fluid SIM keeps running. Punches-on-players and invites both die in silent server guard clauses, so every refusal now logs its reason (hit path: unknown connection, empty ids, unknown target with the known-id list, friendly fire, missing avatar, out of range with distances; team path: op/requester/target/verdict) and clients log sends, applied rosters and near-miss swings - one punch plus one invite yields a complete named trace.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

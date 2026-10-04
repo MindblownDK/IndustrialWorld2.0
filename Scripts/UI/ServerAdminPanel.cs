@@ -51,6 +51,9 @@ namespace VoxelEngine.UI
             unchecked
             {
                 int sig = ServerAdminRegistry.Version * 31 + TeamRegistry.Version;
+                // 14.49.0 - player icons show on the cards, so a crest change
+                // redraws the page like any other live fact.
+                sig = sig * 31 + VoxelEngine.Networking.PlayerCosmeticsRegistry.Version;
                 foreach (var p in NetworkSession.Players)
                 {
                     sig = sig * 31 + (p.playerId != null ? p.playerId.GetHashCode() : 0);
@@ -163,11 +166,26 @@ namespace VoxelEngine.UI
                 int theirRank = RankShown(p.playerId);
                 var card = Card(null);
 
+                // 14.49.0 - the player's custom icon rides the name line.
+                var head = Row();
+                head.style.alignItems = Align.Center;
+                var crest = VoxelEngine.Networking.PlayerCosmeticsRegistry.TextureOf(p.playerId);
+                if (crest != null)
+                {
+                    var img = new Image { image = crest, scaleMode = ScaleMode.ScaleToFit };
+                    img.style.width = 20;
+                    img.style.height = 20;
+                    img.style.marginRight = 6;
+                    T.Radius(img, 3);
+                    head.Add(img);
+                }
                 var line = T.Body(p.displayName
                     + (theirRank == ServerAdminRegistry.RankOwner ? "  (owner)"
                      : theirRank == ServerAdminRegistry.RankAdmin ? "  (admin)" : ""));
                 line.style.whiteSpace = WhiteSpace.Normal;
-                card.Add(line);
+                line.style.flexShrink = 1;
+                head.Add(line);
+                card.Add(head);
 
                 bool actionable = theirRank < myRank;
                 var row = Row();

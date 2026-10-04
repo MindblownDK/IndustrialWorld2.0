@@ -33,7 +33,7 @@ namespace VoxelEngine.Menu
         private VisualElement _root;
         private WorldSession  _session;
 
-        private enum Page { Main, Saves, NewWorld, EditWorld, Multiplayer, Settings }
+        private enum Page { Main, Saves, NewWorld, EditWorld, Multiplayer, EditPlayer, Settings }
         private Page _page = Page.Main;
         private Page _lastBuiltPage = (Page)(-1);
 
@@ -75,8 +75,22 @@ namespace VoxelEngine.Menu
         private MpTab _mpTab = MpTab.Servers;
         private string _addServerName = "";
         private string _addServerAddress = "";
+        private string _addServerPassword = "";
         private readonly List<VoxelEngine.Networking.LanDiscovery.Found> _lanFound = new();
         private bool _lanScanShown;
+
+        // ── 14.49.0 edit-player drafts ────────────────────────────────
+        // Seeded once from the local store, kept across rebuilds, written
+        // back only by SAVE - the same draft discipline as the banner editor.
+        private bool _editPlayerSeeded;
+        private string _chestTextDraft = "";
+        private Texture2D _iconDraft;
+        private Color32[] _iconDraftPixels;
+        private bool _iconDraftHasImage;
+        private bool _iconPainting;
+        private Color32 _iconBrush = new Color32(168, 24, 28, 255);
+        private int _iconBrushRadius = 6;
+        private readonly Dictionary<string, Texture2D> _iconGalleryCache = new();
         private string _expandedAutosaveWorld = string.Empty;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
@@ -268,6 +282,7 @@ namespace VoxelEngine.Menu
                 case Page.NewWorld: BuildNewWorldPage(); break;
                 case Page.EditWorld: BuildEditWorldPage(); break;
                 case Page.Multiplayer: BuildMultiplayerPage(); break;
+                case Page.EditPlayer: BuildEditPlayerPage(); break;
                 case Page.Settings: BuildSettingsPage(); break;
             }
         }
@@ -835,6 +850,15 @@ namespace VoxelEngine.Menu
                                 "the world is sent to you when you connect.");
             blurb.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(blurb);
+            panel.Add(T.Spacer(10));
+
+            // 14.49.0 - who you ARE in multiplayer: name, chest text, icon.
+            panel.Add(PrimaryBtn("EDIT PLAYER", () =>
+            {
+                _menuStatus = string.Empty;
+                _page = Page.EditPlayer;
+                BuildUI();
+            }, T.AccentTeal, LucideIcons.UserPlus));
             panel.Add(T.Spacer(12));
 
             // ── 14.48.0 server browser: tabs, list, add form ──────────
@@ -899,12 +923,29 @@ namespace VoxelEngine.Menu
             addrCol.Add(addAddrField);
             addRow.Add(addrCol);
 
+            // 14.48.1 - a saved server can carry its own password, autofilled
+            // the moment JOIN is pressed on its row. Optional; blank = open.
+            var pwCol = new VisualElement();
+            pwCol.style.flexGrow = 1; pwCol.style.flexBasis = 0; pwCol.style.marginRight = 6;
+            pwCol.Add(FormLabel("Password (optional)"));
+            var addPwField = new TextField { value = _addServerPassword, maxLength = 64 };
+            addPwField.isPasswordField = true;
+            StyleField(addPwField);
+            addPwField.RegisterValueChangedCallback(e => _addServerPassword = e.newValue);
+            pwCol.Add(addPwField);
+            addRow.Add(pwCol);
+
             var addBtn = MiniBtn("ADD", () =>
             {
                 string addr = (_addServerAddress ?? "").Trim();
                 if (string.IsNullOrEmpty(addr)) { _menuStatus = "Enter an address to add."; BuildUI(); return; }
-                ServerBrowserStore.AddOrUpdate(_addServerName, addr);
-                _addServerName = ""; _addServerAddress = "";
+                // Blank password = "leave as is", so re-adding to rename an
+                // entry never wipes a stored password. A wrong one is fixed
+                // by typing the right one here, or simply by joining once
+                // via direct connect - the accepted password writes back.
+                ServerBrowserStore.AddOrUpdate(_addServerName, addr,
+                    string.IsNullOrEmpty(_addServerPassword) ? null : _addServerPassword);
+                _addServerName = ""; _addServerAddress = ""; _addServerPassword = "";
                 _menuStatus = string.Empty;
                 _mpTab = MpTab.Servers;
                 BuildUI();
@@ -1154,9 +1195,17 @@ namespace VoxelEngine.Menu
                 var when = new DateTime(e.lastJoinedTicks, DateTimeKind.Utc).ToLocalTime();
                 sub += "   last joined " + when.ToString("dd MMM HH:mm");
             }
+            if (!string.IsNullOrEmpty(e.password)) sub += "   password saved";
             row.Add(BrowserRowInfo(e.name, sub));
 
-            row.Add(MiniBtn("JOIN", () => JoinHostTo(e.address), T.AccentCyan, true));
+            row.Add(MiniBtn("JOIN", () =>
+            {
+                // 14.48.1 - the saved entry speaks for itself: its stored
+                // password is applied whole (empty included - a saved OPEN
+                // server must not inherit whatever was typed below).
+                VoxelEngine.Networking.NetworkBootstrap.JoinPassword = e.password ?? "";
+                JoinHostTo(e.address);
+            }, T.AccentCyan, true));
             row.Add(MiniBtn("DEL", () =>
             {
                 ServerBrowserStore.Remove(e.address);
@@ -1185,10 +1234,349 @@ namespace VoxelEngine.Menu
             row.Add(fav);
 
             string world = string.IsNullOrEmpty(f.worldName) ? "unknown world" : f.worldName;
-            row.Add(BrowserRowInfo(f.serverName, $"{world}   {f.players}/{f.maxPlayers} players   {address}"));
-            row.Add(MiniBtn("JOIN", () => JoinHostTo(address), T.AccentCyan, true));
+            string lanSub = $"{world}   {f.players}/{f.maxPlayers} players   {address}";
+            if (saved != null && !string.IsNullOrEmpty(saved.password)) lanSub += "   password saved";
+            row.Add(BrowserRowInfo(f.serverName, lanSub));
+            row.Add(MiniBtn("JOIN", () =>
+            {
+                // 14.48.1 - a LAN find whose address is already in the book
+                // joins with the book's password; an unknown one keeps
+                // whatever is typed in the field below.
+                var known = ServerBrowserStore.Find(address);
+                if (known != null)
+                    VoxelEngine.Networking.NetworkBootstrap.JoinPassword = known.password ?? "";
+                JoinHostTo(address);
+            }, T.AccentCyan, true));
             return row;
         }
+
+        // ════════════════════════════════════════════════════════════
+        //                14.49.0 EDIT PLAYER PAGE
+        // ════════════════════════════════════════════════════════════
+
+        private void BuildEditPlayerPage()
+        {
+            var panel = MakePanel(560, 0);
+            _root.Add(panel);
+
+            panel.Add(PageHeader("EDIT PLAYER", "BACK",
+                () => { _menuStatus = string.Empty; _page = Page.Multiplayer; BuildUI(); }));
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(10));
+
+            EnsurePlayerDrafts();
+
+            var scroll = new ScrollView();
+            scroll.style.maxHeight = 640;
+            panel.Add(scroll);
+
+            scroll.Add(FormLabel("Player Name"));
+            var nameField = new TextField { value = VoxelEngine.Networking.PlayerIdentity.LocalName, maxLength = 20 };
+            StyleField(nameField);
+            nameField.RegisterValueChangedCallback(e => VoxelEngine.Networking.PlayerIdentity.LocalName = e.newValue);
+            scroll.Add(nameField);
+            scroll.Add(T.Spacer(8));
+
+            scroll.Add(FormLabel("Chest Text (worn on your chest - blank for none)"));
+            var chestField = new TextField
+            { value = _chestTextDraft, maxLength = PlayerCosmeticsRegistry.MaxChestTextLength };
+            StyleField(chestField);
+            chestField.RegisterValueChangedCallback(e => _chestTextDraft = e.newValue);
+            scroll.Add(chestField);
+            scroll.Add(T.Spacer(10));
+
+            // ── icon preview, which doubles as the painting board ─────
+            scroll.Add(FormLabel("Icon"));
+            int previewSize = _iconPainting ? 280 : 140;
+            var preview = new Image { image = _iconDraft, scaleMode = ScaleMode.StretchToFill };
+            preview.style.width = previewSize;
+            preview.style.height = previewSize;
+            preview.style.alignSelf = Align.Center;
+            preview.style.marginBottom = 6;
+            T.Border(preview, 2, new Color(0.85f, 0.68f, 0.21f, 0.8f));
+            scroll.Add(preview);
+
+            preview.RegisterCallback<PointerDownEvent>(e =>
+            {
+                if (!_iconPainting) return;
+                preview.CapturePointer(e.pointerId);
+                PaintIconAt(preview, e.localPosition);
+                e.StopPropagation();
+            });
+            preview.RegisterCallback<PointerMoveEvent>(e =>
+            {
+                if (!_iconPainting || !preview.HasPointerCapture(e.pointerId)) return;
+                PaintIconAt(preview, e.localPosition);
+            });
+            preview.RegisterCallback<PointerUpEvent>(e =>
+            {
+                if (preview.HasPointerCapture(e.pointerId)) preview.ReleasePointer(e.pointerId);
+            });
+
+            if (!_iconDraftHasImage)
+            {
+                var none = T.Muted("No icon right now - paint one, or pick an image below.");
+                none.style.alignSelf = Align.Center;
+                scroll.Add(none);
+            }
+
+            // ── sources ───────────────────────────────────────────────
+            var srcRow = new VisualElement();
+            srcRow.style.flexDirection = FlexDirection.Row;
+            srcRow.style.flexWrap = Wrap.Wrap;
+            srcRow.Add(MiniBtn("BLANK", () =>
+            {
+                FillIconDraft(new Color32(242, 238, 228, 255));
+                _iconDraftHasImage = true;
+                preview.MarkDirtyRepaint();
+                BuildUI();
+            }, T.BgSlot));
+            srcRow.Add(MiniBtn("NO ICON", () =>
+            {
+                FillIconDraft(new Color32(242, 238, 228, 255));
+                _iconDraftHasImage = false;
+                BuildUI();
+            }, T.BgSlot));
+            srcRow.Add(MiniBtn("OPEN FOLDER", () =>
+            {
+                string dir = PlayerCosmeticsRegistry.IconsFolder;
+                Application.OpenURL("file:///" + dir.Replace('\\', '/'));
+            }, T.BgSlot));
+            srcRow.Add(MiniBtn("RESCAN", () =>
+            {
+                foreach (var tex in _iconGalleryCache.Values)
+                    if (tex != null) Destroy(tex);
+                _iconGalleryCache.Clear();
+                BuildUI();
+            }, T.BgSlot));
+            scroll.Add(srcRow);
+            var dropHint = T.Muted("Drop PNG or JPG images into the PlayerIcons folder and RESCAN - square works best.");
+            dropHint.style.whiteSpace = WhiteSpace.Normal;
+            scroll.Add(dropHint);
+
+            // ── gallery ───────────────────────────────────────────────
+            var gallery = new VisualElement();
+            gallery.style.flexDirection = FlexDirection.Row;
+            gallery.style.flexWrap = Wrap.Wrap;
+            gallery.style.marginTop = 4;
+            int shown = 0;
+            foreach (var path in PlayerIconFiles())
+            {
+                if (shown >= 24) break;
+                var thumbTex = LoadPlayerIconTexture(path);
+                if (thumbTex == null) continue;
+                shown++;
+                var thumb = new Image { image = thumbTex, scaleMode = ScaleMode.StretchToFill };
+                thumb.style.width = 44;
+                thumb.style.height = 44;
+                thumb.style.marginRight = 4;
+                thumb.style.marginBottom = 4;
+                T.Border(thumb, 1, T.BorderDim);
+                var captured = thumbTex;
+                thumb.RegisterCallback<ClickEvent>(_ =>
+                {
+                    LoadIconDraftFrom(captured);
+                    _iconDraftHasImage = true;
+                    preview.MarkDirtyRepaint();
+                    BuildUI();
+                });
+                gallery.Add(thumb);
+            }
+            if (shown > 0) scroll.Add(gallery);
+
+            // ── painting board ────────────────────────────────────────
+            scroll.Add(T.Spacer(6));
+            var paintRow = new VisualElement();
+            paintRow.style.flexDirection = FlexDirection.Row;
+            paintRow.Add(MiniBtn(_iconPainting ? "PAINTING: ON" : "PAINTING: OFF", () =>
+            {
+                _iconPainting = !_iconPainting;
+                BuildUI();
+            }, _iconPainting ? T.AccentGreen : T.TextSecondary, _iconPainting));
+            scroll.Add(paintRow);
+
+            if (_iconPainting)
+            {
+                var paintHint = T.Muted("Click and drag on the icon above to paint.");
+                scroll.Add(paintHint);
+                var swatches = new VisualElement();
+                swatches.style.flexDirection = FlexDirection.Row;
+                swatches.style.flexWrap = Wrap.Wrap;
+                foreach (var swatch in IconBrushPalette())
+                {
+                    var c = swatch;
+                    var b = new Button(() => { _iconBrush = c; BuildUI(); }) { text = "" };
+                    b.style.width = 24; b.style.height = 24;
+                    b.style.marginRight = 4; b.style.marginBottom = 4;
+                    b.style.backgroundColor = new StyleColor((Color)c);
+                    T.Radius(b, 4);
+                    bool selected = c.r == _iconBrush.r && c.g == _iconBrush.g
+                        && c.b == _iconBrush.b && c.a == _iconBrush.a;
+                    T.Border(b, selected ? 2 : 1, selected ? Color.white : T.BorderDim);
+                    swatches.Add(b);
+                }
+                scroll.Add(swatches);
+                var sizeRow = new VisualElement();
+                sizeRow.style.flexDirection = FlexDirection.Row;
+                sizeRow.style.alignItems = Align.Center;
+                sizeRow.Add(T.Muted("BRUSH "));
+                foreach (var (label, radius) in new[] { ("S", 3), ("M", 6), ("L", 12) })
+                {
+                    int r = radius;
+                    sizeRow.Add(MiniBtn(label, () => { _iconBrushRadius = r; BuildUI(); },
+                        _iconBrushRadius == r ? T.AccentCyan : T.TextSecondary, _iconBrushRadius == r));
+                }
+                scroll.Add(sizeRow);
+            }
+
+            // ── save ──────────────────────────────────────────────────
+            scroll.Add(T.Spacer(12));
+            scroll.Add(PrimaryBtn("SAVE PLAYER", () =>
+            {
+                byte[] png = _iconDraftHasImage && _iconDraft != null ? _iconDraft.EncodeToPNG() : null;
+                PlayerCosmeticsRegistry.SaveLocal(png, _chestTextDraft);
+                _menuStatus = "Saved. Your crest is worn the next time you join or host.";
+                BuildUI();
+            }, T.AccentGreen, LucideIcons.Save));
+
+            if (!string.IsNullOrEmpty(_menuStatus))
+            {
+                scroll.Add(T.Spacer(8));
+                var status = T.Body(_menuStatus);
+                status.style.color = new StyleColor(T.AccentTeal);
+                status.style.whiteSpace = WhiteSpace.Normal;
+                scroll.Add(status);
+            }
+        }
+
+        /// <summary>Seed the drafts from the local store, once per menu life.</summary>
+        private void EnsurePlayerDrafts()
+        {
+            if (_editPlayerSeeded && _iconDraft != null) return;
+            _editPlayerSeeded = true;
+            _chestTextDraft = PlayerCosmeticsRegistry.LocalChestText;
+            if (_iconDraft == null)
+            {
+                _iconDraft = new Texture2D(PlayerCosmeticsRegistry.IconSize,
+                    PlayerCosmeticsRegistry.IconSize, TextureFormat.RGBA32, false)
+                { name = "PlayerIconDraft", wrapMode = TextureWrapMode.Clamp };
+            }
+            var png = PlayerCosmeticsRegistry.LoadLocalIconPng();
+            if (png != null)
+            {
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (tex.LoadImage(png)) { LoadIconDraftFrom(tex); _iconDraftHasImage = true; }
+                else _iconDraftHasImage = false;
+                Destroy(tex);
+            }
+            else
+            {
+                FillIconDraft(new Color32(242, 238, 228, 255));
+                _iconDraftHasImage = false;
+            }
+        }
+
+        private void FillIconDraft(Color32 color)
+        {
+            if (_iconDraft == null) return;
+            int w = _iconDraft.width, h = _iconDraft.height;
+            if (_iconDraftPixels == null || _iconDraftPixels.Length != w * h)
+                _iconDraftPixels = new Color32[w * h];
+            for (int i = 0; i < _iconDraftPixels.Length; i++) _iconDraftPixels[i] = color;
+            _iconDraft.SetPixels32(_iconDraftPixels);
+            _iconDraft.Apply(false, false);
+        }
+
+        /// <summary>Nearest-neighbor resample of any readable texture into
+        /// the canonical square draft.</summary>
+        private void LoadIconDraftFrom(Texture2D source)
+        {
+            if (_iconDraft == null || source == null) return;
+            int w = _iconDraft.width, h = _iconDraft.height;
+            var src = source.GetPixels32();
+            int sw = source.width, sh = source.height;
+            _iconDraftPixels = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                int sy = Mathf.Clamp(y * sh / h, 0, sh - 1);
+                for (int x = 0; x < w; x++)
+                {
+                    int sx = Mathf.Clamp(x * sw / w, 0, sw - 1);
+                    var px = src[sy * sw + sx];
+                    px.a = 255;   // the crest quad is opaque
+                    _iconDraftPixels[y * w + x] = px;
+                }
+            }
+            _iconDraft.SetPixels32(_iconDraftPixels);
+            _iconDraft.Apply(false, false);
+        }
+
+        /// <summary>Stamp one brush circle in icon pixel space.</summary>
+        private void PaintIconAt(Image preview, Vector2 local)
+        {
+            if (_iconDraft == null || _iconDraftPixels == null) return;
+            float uiW = preview.resolvedStyle.width, uiH = preview.resolvedStyle.height;
+            if (uiW <= 1f || uiH <= 1f) return;
+            int w = _iconDraft.width, h = _iconDraft.height;
+            int cx = Mathf.RoundToInt(local.x / uiW * w);
+            int cy = Mathf.RoundToInt((1f - local.y / uiH) * h);
+            int r = Mathf.Max(1, _iconBrushRadius);
+            int r2 = r * r;
+            for (int y = Mathf.Max(0, cy - r); y <= Mathf.Min(h - 1, cy + r); y++)
+            {
+                int dy = y - cy;
+                for (int x = Mathf.Max(0, cx - r); x <= Mathf.Min(w - 1, cx + r); x++)
+                {
+                    int dx = x - cx;
+                    if (dx * dx + dy * dy > r2) continue;
+                    _iconDraftPixels[y * w + x] = _iconBrush;
+                }
+            }
+            _iconDraft.SetPixels32(_iconDraftPixels);
+            _iconDraft.Apply(false, false);
+            _iconDraftHasImage = true;
+            preview.MarkDirtyRepaint();
+        }
+
+        private static IEnumerable<string> PlayerIconFiles()
+        {
+            string dir = PlayerCosmeticsRegistry.IconsFolder;
+            List<string> files = new();
+            try
+            {
+                foreach (var f in Directory.GetFiles(dir))
+                {
+                    string ext = Path.GetExtension(f).ToLowerInvariant();
+                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") files.Add(f);
+                }
+                files.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+            catch { }
+            return files;
+        }
+
+        private Texture2D LoadPlayerIconTexture(string path)
+        {
+            if (_iconGalleryCache.TryGetValue(path, out var cached) && cached != null) return cached;
+            try
+            {
+                var bytes = File.ReadAllBytes(path);
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+                { name = "IconGallery_" + Path.GetFileName(path), wrapMode = TextureWrapMode.Clamp };
+                if (!tex.LoadImage(bytes)) { Destroy(tex); return null; }
+                _iconGalleryCache[path] = tex;
+                return tex;
+            }
+            catch { return null; }
+        }
+
+        private static IEnumerable<Color32> IconBrushPalette() => new Color32[]
+        {
+            new(168, 24, 28, 255),  new(222, 158, 28, 255), new(32, 90, 167, 255),
+            new(34, 120, 54, 255),  new(94, 56, 29, 255),   new(104, 36, 128, 255),
+            new(220, 220, 214, 255), new(242, 238, 228, 255), new(24, 24, 26, 255),
+            new(120, 124, 130, 255), new(206, 96, 44, 255),  new(64, 160, 164, 255)
+        };
 
         // ════════════════════════════════════════════════════════════
         //                     SETTINGS PAGE

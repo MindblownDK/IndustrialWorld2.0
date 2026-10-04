@@ -40,7 +40,7 @@ namespace VoxelEngine.Menu
         private float _savedScrollY = 0f;
         private bool _hasSavedScroll = false;
         private bool _frozeTime = false;          // time only freezes offline
-        private string _mpAddress = "localhost";  // last join address typed
+
 
         // ── Unity Lifecycle ────────────────────────────────────────
         private void Awake()
@@ -298,7 +298,8 @@ namespace VoxelEngine.Menu
             panel.Add(skinRow);
             panel.Add(T.Spacer(14));
 
-            Label playersLabel = null;
+            VisualElement playersBox = null;
+            string playersSig = "";
             if (!online)
             {
                 panel.Add(PrimaryBtn("◈   HOST THIS WORLD", () =>
@@ -309,35 +310,23 @@ namespace VoxelEngine.Menu
                 }, T.AccentGreen));
                 panel.Add(T.Spacer(14));
 
-                panel.Add(T.Muted("HOST ADDRESS"));
-                var addrField = MpField(_mpAddress);
-                addrField.RegisterValueChangedCallback(evt => _mpAddress = evt.newValue);
-                panel.Add(addrField);
-                panel.Add(T.Spacer(6));
-
-                // 14.47.0 - passworded servers. Blank is correct for open
-                // ones; a wrong password comes back as a named refusal.
-                panel.Add(T.Muted("SERVER PASSWORD (IF ANY)"));
-                var pwField = MpField(VoxelEngine.Networking.NetworkBootstrap.JoinPassword);
-                pwField.isPasswordField = true;
-                pwField.RegisterValueChangedCallback(evt =>
-                    VoxelEngine.Networking.NetworkBootstrap.JoinPassword = evt.newValue);
-                panel.Add(pwField);
-                panel.Add(T.Spacer(6));
-
-                panel.Add(PrimaryBtn("→   JOIN GAME", () =>
-                {
-                    ReleaseFreezeForSession();
-                    bootstrap.StartClient(_mpAddress);
-                    BuildUI();
-                }, T.AccentCyan));
+                // 14.48.1 - joining LEFT this menu by design. Joining is a
+                // main-menu act now (server browser, favorites, recents, LAN
+                // scan all live there); joining mid-world silently discarded
+                // the world you were standing in, which was a trap. Hosting
+                // stays: hosting is something you do TO the loaded world.
+                var joinNote = T.Muted("To join another game, return to the main menu - " +
+                                       "the MULTIPLAYER page holds your servers, favorites and LAN scan.");
+                joinNote.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(joinNote);
             }
             else
             {
                 panel.Add(T.Muted("PLAYERS"));
-                playersLabel = T.Body(PlayerListText());
-                playersLabel.style.whiteSpace = WhiteSpace.Normal;
-                panel.Add(playersLabel);
+                playersBox = new VisualElement();
+                panel.Add(playersBox);
+                playersSig = PlayerListSignature();
+                FillPlayerRows(playersBox);
                 panel.Add(T.Spacer(14));
 
                 // 14.47.0 - the server's door, for those allowed to hold the
@@ -362,7 +351,13 @@ namespace VoxelEngine.Menu
                 if (bootstrap.IsOnline != online) { BuildUI(); return; }
                 if (bootstrap.WorldMismatch != mismatchShown) { BuildUI(); return; }
                 status.text = bootstrap.StatusLine;
-                if (playersLabel != null) playersLabel.text = PlayerListText();
+                // 14.49.0 - the list carries icons now, so it rebuilds as
+                // rows, and only when a name or a crest actually changed.
+                if (playersBox != null)
+                {
+                    string sig = PlayerListSignature();
+                    if (sig != playersSig) { playersSig = sig; FillPlayerRows(playersBox); }
+                }
             }).Every(400);
         }
 
@@ -395,16 +390,56 @@ namespace VoxelEngine.Menu
             return f;
         }
 
-        private static string PlayerListText()
+        /// <summary>One line per player: changes when anyone joins, leaves,
+        /// renames, or changes their icon/chest text (registry version).</summary>
+        private static string PlayerListSignature()
         {
             var sb = new System.Text.StringBuilder();
+            sb.Append(VoxelEngine.Networking.PlayerCosmeticsRegistry.Version).Append('|');
+            foreach (var p in VoxelEngine.Networking.NetworkSession.Players)
+                sb.Append(p.playerId).Append('=').Append(p.displayName).Append(';');
+            return sb.ToString();
+        }
+
+        /// <summary>14.49.0 - the PLAYERS list as rows: custom icon (when the
+        /// player set one) plus name, replacing the old bullet text.</summary>
+        private static void FillPlayerRows(VisualElement box)
+        {
+            box.Clear();
+            bool any = false;
             foreach (var p in VoxelEngine.Networking.NetworkSession.Players)
             {
-                if (sb.Length > 0) sb.Append('\n');
-                sb.Append("•  ").Append(string.IsNullOrEmpty(p.displayName) ? p.playerId : p.displayName);
-                if (p.playerId == VoxelEngine.Networking.NetworkSession.LocalPlayerId) sb.Append("   (you)");
+                any = true;
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginBottom = 2;
+
+                var icon = VoxelEngine.Networking.PlayerCosmeticsRegistry.TextureOf(p.playerId);
+                if (icon != null)
+                {
+                    var img = new Image { image = icon, scaleMode = ScaleMode.ScaleToFit };
+                    img.style.width = 18;
+                    img.style.height = 18;
+                    img.style.marginRight = 6;
+                    T.Radius(img, 3);
+                    row.Add(img);
+                }
+                else
+                {
+                    var dot = T.Body("•");
+                    dot.style.marginRight = 6;
+                    row.Add(dot);
+                }
+
+                string nameText = string.IsNullOrEmpty(p.displayName) ? p.playerId : p.displayName;
+                if (p.playerId == VoxelEngine.Networking.NetworkSession.LocalPlayerId) nameText += "   (you)";
+                var nm = T.Body(nameText);
+                nm.style.whiteSpace = WhiteSpace.Normal;
+                row.Add(nm);
+                box.Add(row);
             }
-            return sb.Length > 0 ? sb.ToString() : "—";
+            if (!any) box.Add(T.Body("—"));
         }
 
         // ── Teams Page (14.33.0, milestone 11; 14.34.0 widened so long

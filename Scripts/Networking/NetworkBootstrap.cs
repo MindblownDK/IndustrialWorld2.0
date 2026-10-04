@@ -222,6 +222,27 @@ namespace VoxelEngine.Networking
         public byte[] Png;
     }
 
+    // ── Player cosmetics (14.49.0). ──
+    //
+    // Client -> server: "MY chest text and icon". Identity-free like every
+    // other intent - the server stamps the owner from its connection table.
+    public struct PlayerCosmeticsIntentBroadcast : IBroadcast
+    {
+        public string ChestText;
+        public bool HasIcon;
+        public byte[] Png;        // canonical 128x128 icon; empty = none
+    }
+
+    /// <summary>Server -> client: one player's current cosmetics. Sent to
+    /// everyone on change and replayed per-player to a joining connection.</summary>
+    public struct PlayerCosmeticsStateBroadcast : IBroadcast
+    {
+        public string PlayerId;
+        public string ChestText;
+        public bool HasIcon;
+        public byte[] Png;
+    }
+
     // ── Player combat (14.34.0). ──
     //
     // Client -> server: "my weapon hit THAT player". Identity-free like every
@@ -726,6 +747,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.RegisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
+            _networkManager.ServerManager.RegisterBroadcast<PlayerCosmeticsIntentBroadcast>(OnServerPlayerCosmeticsIntent);
             _networkManager.ServerManager.RegisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.RegisterBroadcast<AdminIntentBroadcast>(OnServerAdminIntent);
             _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
@@ -767,6 +789,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<AdminNoticeBroadcast>(OnClientAdminNotice);
             _networkManager.ClientManager.RegisterBroadcast<WorldRuleBroadcast>(OnClientWorldRule);
             _networkManager.ClientManager.RegisterBroadcast<TeamBannerStateBroadcast>(OnClientBannerState);
+            _networkManager.ClientManager.RegisterBroadcast<PlayerCosmeticsStateBroadcast>(OnClientPlayerCosmeticsState);
             _networkManager.ClientManager.RegisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
@@ -857,6 +880,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.UnregisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
+            _networkManager.ServerManager.UnregisterBroadcast<PlayerCosmeticsIntentBroadcast>(OnServerPlayerCosmeticsIntent);
             _networkManager.ServerManager.UnregisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.UnregisterBroadcast<AdminIntentBroadcast>(OnServerAdminIntent);
             _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
@@ -898,6 +922,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<AdminNoticeBroadcast>(OnClientAdminNotice);
             _networkManager.ClientManager.UnregisterBroadcast<WorldRuleBroadcast>(OnClientWorldRule);
             _networkManager.ClientManager.UnregisterBroadcast<TeamBannerStateBroadcast>(OnClientBannerState);
+            _networkManager.ClientManager.UnregisterBroadcast<PlayerCosmeticsStateBroadcast>(OnClientPlayerCosmeticsState);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
@@ -1218,6 +1243,11 @@ namespace VoxelEngine.Networking
                 PlayerName = PlayerIdentity.LocalName,
                 Password = JoinPassword ?? ""
             });
+
+            // 14.49.0 - cosmetics follow the identity: this machine's chest
+            // text and icon ride into every session right behind the
+            // handshake (also sent when empty - that clears an old icon).
+            PlayerCosmeticsRegistry.UploadLocal();
         }
 
         /// <summary>14.47.0 - the join password the player typed, handed to
@@ -1373,6 +1403,10 @@ namespace VoxelEngine.Networking
                 // roster, so the joiner's banner blocks, shields and screens
                 // fly the right colours from the first frame.
                 SendTeamBannersTo(connection);
+
+                // 14.49.0 - and every known player's chest text and icon,
+                // so the joiner sees everyone dressed from the first frame.
+                SendPlayerCosmeticsTo(connection);
 
                 // 14.47.0 - a fresh dedicated world adopts its first player
                 // as owner; everyone is then told their rank (and the
@@ -1840,7 +1874,10 @@ namespace VoxelEngine.Networking
                 // 14.48.0 - a join that got this far is real: the server
                 // browser's RECENT tab remembers the address, labeled with
                 // the world we just adopted unless the player named it.
-                VoxelEngine.Menu.ServerBrowserStore.NoteJoined(session.pendingJoinAddress, msg.WorldName);
+                // 14.48.1 - it also remembers the password that was accepted,
+                // so JOIN on the saved entry autofills it next time.
+                VoxelEngine.Menu.ServerBrowserStore.NoteJoined(
+                    session.pendingJoinAddress, msg.WorldName, JoinPassword);
                 VoxelEngine.Menu.WorldBootGate.Report("Building " + session.hostWorldDisplayName + "...");
                 Debug.Log($"[Join] 3/6 world card adopted: system '{session.chosenSystemName}', " +
                           $"seed {session.seed}, spawn planet {session.spawnPlanetIndex}, " +
@@ -3100,6 +3137,72 @@ namespace VoxelEngine.Networking
                 msg.TextTop, msg.TextMiddle, msg.TextBottom);
         }
 
+        // ── Player cosmetics (14.49.0) - same wire shape as banners,
+        //    scoped to a player id instead of a team id. ──
+
+        public void SendPlayerCosmeticsIntent(byte[] png, string chestText)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new PlayerCosmeticsIntentBroadcast
+            {
+                ChestText = chestText ?? "",
+                HasIcon = png != null && png.Length > 0,
+                Png = png ?? System.Array.Empty<byte>()
+            });
+        }
+
+        private void OnServerPlayerCosmeticsIntent(NetworkConnection conn, PlayerCosmeticsIntentBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string ownerId)
+                || string.IsNullOrEmpty(ownerId)) return;
+
+            byte[] png = msg.HasIcon && msg.Png != null && msg.Png.Length > 0 ? msg.Png : null;
+            string error = PlayerCosmeticsRegistry.HostApply(ownerId, png, msg.ChestText);
+            if (!string.IsNullOrEmpty(error))
+                Debug.LogWarning($"[Cosmetics] refused from {ownerId}: {error}");
+        }
+
+        /// <summary>Server: one player's cosmetics to every remote client.</summary>
+        public void BroadcastPlayerCosmeticsState(PlayerCosmeticsState state)
+        {
+            if (!_serverStarted || state == null) return;
+            var msg = CosmeticsMessageFor(state);
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                _networkManager.ServerManager.Broadcast(client, msg, true);
+            }
+        }
+
+        /// <summary>Server: replay every known player's cosmetics to a
+        /// joining connection, right behind the team banners.</summary>
+        private void SendPlayerCosmeticsTo(NetworkConnection conn)
+        {
+            if (!_serverStarted || conn == null || conn.IsLocalClient) return;
+            foreach (var state in PlayerCosmeticsRegistry.All)
+            {
+                if (state == null || string.IsNullOrEmpty(state.playerId)) continue;
+                _networkManager.ServerManager.Broadcast(conn, CosmeticsMessageFor(state), true);
+            }
+        }
+
+        private static PlayerCosmeticsStateBroadcast CosmeticsMessageFor(PlayerCosmeticsState state) => new()
+        {
+            PlayerId = state.playerId,
+            ChestText = state.chestText ?? "",
+            HasIcon = state.iconPng != null && state.iconPng.Length > 0,
+            Png = state.iconPng ?? System.Array.Empty<byte>()
+        };
+
+        /// <summary>Client: mirror one player's cosmetics from the host.</summary>
+        private void OnClientPlayerCosmeticsState(PlayerCosmeticsStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host owns the truth already
+            PlayerCosmeticsRegistry.ApplyRemote(msg.PlayerId, msg.HasIcon ? msg.Png : null, msg.ChestText);
+        }
+
         // ── Player combat (14.34.0) ───────────────────────────────────────
         //
         // One intent channel in, one approval channel out - and the approval
@@ -3628,6 +3731,7 @@ namespace VoxelEngine.Networking
             VoxelEngine.Persistence.PlayerRecords.ClearLocal();
             TeamRegistry.ClearMirror(wasGuest);
             ServerAdminRegistry.ResetSession();   // 14.47.0 - mirror/reload on next session
+            PlayerCosmeticsRegistry.ResetSession();   // 14.49.0 - next session re-uploads
             GridSync.Clear();
             GridStateSync.Clear();
             GridBuildSync.Clear();

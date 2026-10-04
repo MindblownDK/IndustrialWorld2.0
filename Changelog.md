@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.48.0-dev`
+**Current Version:** `14.49.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.49.0-dev] The Crusader Gets a Face
+
+**Type:** MINOR - player cosmetics: name, chest text and a personal icon, edited in one place and worn everywhere. Save-compatible: cosmetics never touch a world save - they live on the player's own machine and ride the wire per session.
+
+**EDIT PLAYER, one page for who you are.** The main menu's multiplayer page gained an EDIT PLAYER button: your player name (same 20-character cap as everywhere), a chest text line, and your personal icon. The icon editor is the banner editor's little sibling, built from the same pieces: a PlayerIcons folder you drop PNG or JPG files into (with OPEN FOLDER and RESCAN and a thumbnail gallery), a BLANK canvas, and a painting board - twelve colors, three brush sizes, the canvas grows while the brush is active. No text boxes on the icon, exactly as specified: text belongs to the chest line. One SAVE PLAYER writes everything to this machine - a canonical 128x128 PNG and the chest text - and NO ICON takes you honestly back to nothing.
+
+**Worn on the chest, read in the lists.** In a session, every avatar wears its owner's crest: the icon sits on the upper chest just in front of the tabard plane - so it reads the same bare-skinned or in full plate - and the chest text runs beneath it, one line, the banner cap of 24 characters enforced server-side, drawn with the world-text material so it never shines through walls. The same icon appears beside names in the pause menu's PLAYERS list (now proper rows instead of bullet text) and on the Administration page's player cards, both refreshing live the moment anyone's crest changes.
+
+**Cosmetics follow the player, not the world.** Your crest uploads right behind the identity handshake on every join - including an empty one, which is how clearing your icon reaches everyone else - the server validates (300 KB icon ceiling, text sanitation) and rebroadcasts, and late joiners are replayed everyone's crest right behind the team banners. Nothing persists on the host: wherever you join, you bring your own face. Editing mid-session works too - a save goes out live. Dedicated servers wear and render none of it, as always.
+
+### [14.48.1-dev] The Book Remembers the Keys
+
+**Type:** PATCH - server browser polish from the first live test.
+
+**Saved servers carry their own password.** The Add Server form gained an optional password box, and pressing JOIN on any saved or favorited entry autofills that stored password for the connection - no retyping, no switching to the direct-connect field first. The browser writes the book both ways: every join that a server actually ACCEPTS stores the password that worked on the entry (an accepted blank is recorded too, which is how the book learns a server is open), so even a server you only ever joined by hand autofills correctly from the RECENT tab forever after. Rows with a stored password say "password saved" so you can see which doors already have keys. Re-adding an entry with the password box blank leaves the stored password alone - renaming never wipes a key - and a wrong one is corrected by typing the right one in the form, or simply by joining once via direct connect. A LAN find whose address is already in the book joins with the book's password; an unknown one keeps whatever is typed below. Stored as typed in server_browser.json, the same plaintext posture as the rest of the pre-release files.
+
+**Joining left the pause menu.** JOIN GAME, its address field and its password field are gone from the in-game multiplayer tab, by design: joining is a main-menu act now, where the browser, favorites, recents and LAN scan live - and joining mid-world silently discarded the world you were standing in, which was a trap dressed as a button. A short note points the way back. HOST THIS WORLD stays, because hosting is something you do TO the world you have loaded.
 
 ### [14.48.0-dev] The Menu Learns Your Friends' Addresses
 

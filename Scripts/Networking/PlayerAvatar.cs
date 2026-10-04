@@ -460,6 +460,7 @@ namespace VoxelEngine.Networking
 
         private void LateUpdate()
         {
+            PollCrest();
             if (IsOwner || nameplate == null) return;
             var cam = Camera.main;
             if (cam == null) return;
@@ -471,6 +472,29 @@ namespace VoxelEngine.Networking
             // keeps the text horizontal on screen. (Health bar is a child
             // of the plate and inherits this.)
             plate.rotation = Quaternion.LookRotation(toPlate, cam.transform.up);
+        }
+
+        // ─────────────────────── personal crest (14.49.0) ───────────────────────
+
+        private int _crestVersion = -1;
+        private string _crestId = "";
+
+        /// <summary>Wears the player's chest text and icon from the cosmetics
+        /// registry. Registry-version polling, the cheap pattern every panel
+        /// uses: two field compares a frame until something actually changes.
+        /// Runs on every machine - owners wear their own crest too, that is
+        /// what everyone else is looking at.</summary>
+        private void PollCrest()
+        {
+            if (NetworkSession.IsDedicated) return;   // headless wears nothing
+            string id = PlayerId;
+            if (string.IsNullOrEmpty(id)) return;
+            if (_crestVersion == PlayerCosmeticsRegistry.Version && _crestId == id) return;
+            _crestVersion = PlayerCosmeticsRegistry.Version;
+            _crestId = id;
+            CrusaderModel.SetCrest(transform,
+                PlayerCosmeticsRegistry.TextureOf(id),
+                PlayerCosmeticsRegistry.ChestTextOf(id));
         }
 
         // ─────────────────────────── presence ───────────────────────────
