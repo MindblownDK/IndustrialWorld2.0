@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.49.0-dev`
-**Roadmap Version:** `14.49.0-dev`
+**Current Version:** `14.50.0-dev`
+**Roadmap Version:** `14.50.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 14.50.0-dev - The Menu Keeps Left
+Menu/UX round: main menu and pause menu panels anchor LEFT (one 64px gutter, vertically centered, every page) instead of screen-center; the six-tab settings bar wraps instead of overflowing, both menus. Keybind screen gained a search bar (shared SettingsUI.KeybindTab): filters by function name or bound button, toggles rows in place so typing never loses focus, filter survives rebinds, empty result says so.
+
+### 14.49.1-dev - Labels That Tell the Truth
+Icon editor's BLANK / NO ICON / OPEN FOLDER / RESCAN labels were printed in the slot background's own dark color - invisible but clickable; bright now (MiniBtn accent IS the label color when unfilled). Pause menu quit button reads DISCONNECT for guests (anyone not hosting) and skips the world-state and research write-outs on the way home - a guest's copy is a discarded cache; hosts and singleplayer keep SAVE & QUIT.
+
 ### 14.49.0-dev - The Crusader Gets a Face
 Player cosmetics: EDIT PLAYER page on the main menu's multiplayer page - name (20 cap), chest text (24 cap, server-sanitized), personal icon (PlayerIcons folder gallery or painting board, canonical 128x128 PNG, 300KB ceiling, NO ICON honest). Avatars wear the crest on the chest plane in front of the tabard (reads with or without armor; world-text material, no wall bleed); icons also ride the pause menu PLAYERS rows and the Administration player cards, live via registry version. Cosmetics are per-MACHINE (PlayerPrefs + player_icon.png), upload behind the identity handshake every join (empty clears), host validates and rebroadcasts, late joiners replayed behind team banners; nothing persists on the host; dedicated renders none of it.
 
@@ -37,12 +43,6 @@ Server browser polish: saved/favorited entries carry an optional password (Add S
 
 ### 14.48.0-dev - The Menu Learns Your Friends' Addresses
 Server browser on the main menu's multiplayer page: SERVERS / FAVORITES / RECENT / LAN SCAN tabs over one machine-wide server_browser.json (manual add form, FAV pinning, successful joins self-record newest-first capped at ten). LAN discovery: every hosting machine answers UDP probes on 47788 with name/world/port/players; the LAN tab scans on open, rows join or star straight into the book. Join addresses accept an optional :port everywhere; one join path serves the direct field and every row. The kicked/banned/refused modal now frees the cursor when dismissed outside a running world (main-menu mouse-lock fix).
-
-### 14.47.2-dev - Text That Lives on the Cloth
-Banner text auto-fits the cloth: line width measured from the font's own glyph advances (fallback estimate when no font answers), anything wider than the banner shrinks to fit with a margin - never overhangs, never cut off; refits always start from the designed size recorded at build time. Banner editor fields show the 24-char server cap while typing. Fixed CS0104: UnityEngine.Cursor fully qualified in SessionNoticeModal (UIElements has its own Cursor type). Pre-existing CS0618 sync-file warnings left for the one-sweep polish round by rule.
-
-### 14.47.1-dev - A Goodbye You Cannot Miss
-Administration polish from the first live test. The page rebuilds on a composite live signature (admin state, team limits, player presence, ban-countdown minute) instead of its own version alone, so joins/leaves and remote admins' changes show up at once without interrupting typing. Kick/ban/refusal now raise a DontDestroyOnLoad modal (dimmed screen, OK button) that survives the return to the main menu; the boot overlay and menu status line repeat the named reason. Password refusals split: no password offered -> "password protected, please enter it", wrong password -> says so. KICK and BAN open an optional parting-message box (40 chars, server-clamped; stored on ban entries) with explicit confirmation. Player names capped at 20 characters in the fields, at the identity source, and server-side at the handshake.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

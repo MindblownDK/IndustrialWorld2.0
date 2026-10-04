@@ -265,8 +265,12 @@ namespace VoxelEngine.Menu
             _root.style.bottom = 0;
             _root.style.flexGrow        = 1;
             _root.style.backgroundColor = new StyleColor(T.BgBase);
-            _root.style.alignItems      = Align.Center;
+            // 14.50.0 - menus live LEFT: panels anchor to the left edge with
+            // a fixed gutter, vertically centered. One rule for every page,
+            // so main menu and pause menu agree on where a menu IS.
+            _root.style.alignItems      = Align.FlexStart;
             _root.style.justifyContent  = Justify.Center;
+            _root.style.paddingLeft     = 64;
 
             // GUARANTEED FONT — without this, a missing TSS theme means every
             // Label/Button renders only its background colour (no glyphs).
@@ -1330,25 +1334,25 @@ namespace VoxelEngine.Menu
                 _iconDraftHasImage = true;
                 preview.MarkDirtyRepaint();
                 BuildUI();
-            }, T.BgSlot));
+            }, T.TextPrimary));
             srcRow.Add(MiniBtn("NO ICON", () =>
             {
                 FillIconDraft(new Color32(242, 238, 228, 255));
                 _iconDraftHasImage = false;
                 BuildUI();
-            }, T.BgSlot));
+            }, T.TextPrimary));
             srcRow.Add(MiniBtn("OPEN FOLDER", () =>
             {
                 string dir = PlayerCosmeticsRegistry.IconsFolder;
                 Application.OpenURL("file:///" + dir.Replace('\\', '/'));
-            }, T.BgSlot));
+            }, T.TextPrimary));
             srcRow.Add(MiniBtn("RESCAN", () =>
             {
                 foreach (var tex in _iconGalleryCache.Values)
                     if (tex != null) Destroy(tex);
                 _iconGalleryCache.Clear();
                 BuildUI();
-            }, T.BgSlot));
+            }, T.TextPrimary));
             scroll.Add(srcRow);
             var dropHint = T.Muted("Drop PNG or JPG images into the PlayerIcons folder and RESCAN - square works best.");
             dropHint.style.whiteSpace = WhiteSpace.Normal;
@@ -1592,6 +1596,7 @@ namespace VoxelEngine.Menu
             // Tab bar.
             var tabs = new VisualElement();
             tabs.style.flexDirection = FlexDirection.Row;
+            tabs.style.flexWrap      = Wrap.Wrap;   // 14.50.0 - deep tabs wrap, never overflow
             tabs.style.marginBottom  = 12;
             tabs.Add(TabBtn("Display",  STab.Display));
             tabs.Add(TabBtn("Camera",   STab.Camera));

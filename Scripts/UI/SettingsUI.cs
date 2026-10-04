@@ -615,8 +615,49 @@ namespace VoxelEngine.UI
         }
 
         /// <summary>Keybinds — one rebindable row per action.</summary>
+        /// <summary>14.50.0 - the keybind search text. Static so a rebuild
+        /// after a rebind (or switching menus) keeps the filter you typed.</summary>
+        private static string _keybindFilter = "";
+
         public static void KeybindTab(VisualElement p, MonoBehaviour host, Action rebuild)
         {
+            // ── search bar: by function OR by the bound button ────────
+            // Filtering toggles row visibility in place - no rebuild while
+            // typing, so the field never loses focus mid-word.
+            var search = new TextField { value = _keybindFilter };
+            search.style.minHeight       = 30;
+            search.style.marginBottom    = 4;
+            search.style.backgroundColor = new StyleColor(T.BgCard);
+            search.style.color           = new StyleColor(T.TextPrimary);
+            search.style.fontSize        = 13;
+            T.Radius(search, 5f);
+            T.Border(search, 1, T.BorderDim);
+            p.Add(search);
+
+            var searchHint = Hint("Search by function (jump, inventory...) or by button (F, Mouse1, Tab...). Blank shows everything.");
+            searchHint.style.marginBottom = 8;
+            p.Add(searchHint);
+
+            var rows = new List<(VisualElement row, string haystack)>();
+            var nothing = Hint("No keybind matches that search.");
+            nothing.style.display = DisplayStyle.None;
+            p.Add(nothing);
+
+            void ApplyFilter()
+            {
+                string f = (_keybindFilter ?? "").Trim().ToLowerInvariant();
+                int visible = 0;
+                foreach (var (row, haystack) in rows)
+                {
+                    bool show = string.IsNullOrEmpty(f) || haystack.Contains(f);
+                    row.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+                    if (show) visible++;
+                }
+                nothing.style.display = visible == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            search.RegisterValueChangedCallback(e => { _keybindFilter = e.newValue; ApplyFilter(); });
+
             foreach (InputAction a in Enum.GetValues(typeof(InputAction)))
             {
                 var row = new VisualElement();
@@ -649,7 +690,11 @@ namespace VoxelEngine.UI
                 };
                 row.Add(btn);
                 p.Add(row);
+
+                rows.Add((row, (Prettify(a.ToString()) + " " + GameSettings.GetKey(a)).ToLowerInvariant()));
             }
+
+            ApplyFilter();
         }
 
         // ════════════════════════════════════════════════════════════

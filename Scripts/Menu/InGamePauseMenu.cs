@@ -147,8 +147,11 @@ namespace VoxelEngine.Menu
             _root.Clear();
             // Frosted dark backdrop.
             _root.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.62f));
-            _root.style.alignItems      = Align.Center;
+            // 14.50.0 - same left anchoring as the main menu: one gutter,
+            // vertically centered, so pausing never recenters your eyes.
+            _root.style.alignItems      = Align.FlexStart;
             _root.style.justifyContent  = Justify.Center;
+            _root.style.paddingLeft     = 64;
             _root.pickingMode           = PickingMode.Position;
 
             if      (_page == Page.Pause)       BuildPause();
@@ -196,7 +199,12 @@ namespace VoxelEngine.Menu
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("TEAMS",            () => { _page = Page.Teams; BuildUI(); },       T.BgSlot, VoxelEngine.UI.LucideIcons.Flag));
             panel.Add(T.Spacer(8));
-            panel.Add(PrimaryBtn("⬅   SAVE & QUIT", QuitToMenu,                           T.AccentRed));
+            // 14.49.1 - say what the button DOES: a guest in someone else's
+            // world saves nothing (the host owns the save, the guest's copy
+            // is a discarded cache), so for them this is a disconnect.
+            bool guest = VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client;
+            panel.Add(PrimaryBtn(guest ? "⬅   DISCONNECT" : "⬅   SAVE & QUIT", QuitToMenu, T.AccentRed));
         }
 
         // ── Multiplayer Page ───────────────────────────────────────
@@ -553,6 +561,7 @@ namespace VoxelEngine.Menu
             // Tab bar.
             var tabs = new VisualElement();
             tabs.style.flexDirection = FlexDirection.Row;
+            tabs.style.flexWrap      = Wrap.Wrap;   // 14.50.0 - deep tabs wrap, never overflow
             tabs.style.marginBottom  = 12;
             tabs.Add(TabBtn("Display",  STab.Display));
             tabs.Add(TabBtn("Camera",   STab.Camera));
@@ -683,12 +692,24 @@ namespace VoxelEngine.Menu
 
         private void QuitToMenu()
         {
+            // 14.49.1 - read the role BEFORE hanging up: StopSession drops
+            // the mode to Offline, which would make every quitter look local.
+            bool guest = VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client;
+
             // Leave the session cleanly before tearing the world down.
             VoxelEngine.Networking.NetworkBootstrap.Instance?.StopSession();
             Time.timeScale = 1f;
             VoxelEngine.UI.UIState.ClearSceneBlocks();
-            VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
-            VoxelEngine.Research.ResearchManager.Instance?.SaveToDisk();
+
+            // A guest saves nothing on the way out - the world belongs to the
+            // host and the local copy is a session cache headed for the bin.
+            // The button says DISCONNECT, so disconnecting is all it does.
+            if (!guest)
+            {
+                VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
+                VoxelEngine.Research.ResearchManager.Instance?.SaveToDisk();
+            }
             try { SceneManager.LoadScene(mainMenuScene); }
             catch (Exception ex) { Debug.LogError("[PauseMenu] Scene load failed: " + ex.Message); }
         }

@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.49.0-dev`
+**Current Version:** `14.50.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.50.0-dev] The Menu Keeps Left
+
+**Type:** MINOR - the menu and UX round: both menus anchor left, deep tabs behave, and the keybind screen learned to search.
+
+**Menus live on the left now.** The main menu and the pause menu both anchor their panels to the left edge of the screen - one fixed gutter, vertically centered, the same rule in both places - instead of floating in the middle. Pausing no longer recenters your eyes, and the world you are standing in stays visible beside the menu instead of hiding behind it. Every page follows: saves, multiplayer, settings, teams, administration.
+
+**Deep tabs wrap instead of overflowing.** The six-tab settings bar (Display / Camera / Interface / Audio / Saving / Keybinds) wraps onto a second line when it runs out of width rather than pushing tabs off the panel - same fix in both menus, and any tab added later inherits it.
+
+**The keybind screen has a search bar.** Type a function (jump, inventory, screenshot) or a button (F, Tab, Mouse1) and the list narrows to matching rows as you type - shared by the main menu and pause menu keybind tabs, since they are the same screen. Filtering toggles rows in place rather than rebuilding, so the field never loses focus mid-word; the filter survives a rebind, and a search with no hits says so instead of showing a silent empty page.
+
+### [14.49.1-dev] Labels That Tell the Truth
+
+**Type:** PATCH - two fixes from the first live test of 14.49.0.
+
+**The icon editor's buttons say their names again.** BLANK, NO ICON, OPEN FOLDER and RESCAN were printed in the button background's own dark color - dark on dark, invisible but clickable, exactly as reported. They are bright text now.
+
+**A guest's quit button stops lying.** In someone else's world the pause menu offered SAVE & QUIT - but a guest saves nothing: the host owns the save and the guest's local copy is a session cache headed for the bin. For anyone who is not the host the button now reads DISCONNECT, and it does exactly that - the world-state and research write-outs are skipped on the way to the menu, because there is nothing of yours to write. Hosts and singleplayer keep SAVE & QUIT, which was always the truth for them.
 
 ### [14.49.0-dev] The Crusader Gets a Face
 
