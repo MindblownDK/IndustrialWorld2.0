@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.47.0-dev`
+**Current Version:** `14.47.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.47.2-dev] Text That Lives on the Cloth
+
+**Type:** PATCH - one compile error, one banner polish.
+
+**Banner text fits the banner.** A long line used to march straight off the cloth's edges. Every banner text line now auto-fits: its rendered width is measured from the font's own glyph advances, and anything wider than the cloth shrinks to sit inside it with a small margin - long words get smaller, they never overhang and never get cut off. Short lines keep their designed size, and every refit starts from that designed size, so repeated edits cannot shrink a line into oblivion. The three editor fields now also show the server's 24-character cap while typing instead of silently truncating on save.
+
+**The modal compiles everywhere.** UnityEngine.UIElements carries its own Cursor type, which made the goodbye modal's cursor-unlock ambiguous in the full build. Fully qualified now. The CS0618 warnings in the sync files are the known pre-existing call sites reserved for the one-sweep polish round - untouched by rule.
+
+### [14.47.1-dev] A Goodbye You Cannot Miss
+
+**Type:** PATCH - administration round polish from the first live test.
+
+**The page is actually live now.** The Administration page refreshed only when the admin state's own version moved - so players joining or leaving, team-limit changes and ticking ban countdowns never redrew it. It now watches one composite signature (admin state, team limits, every player's id and name, and the countdown minute) and rebuilds the moment anything it shows changes, on any machine. Watching a signature instead of a timer means an admin typing into a field is never interrupted without cause.
+
+**A goodbye you cannot miss.** Kicked, banned or refused at the door now raises a real MODAL - dimmed screen, one card, one OK button - on its own always-on-top document that survives the trip back to the main menu, so the player reads it wherever they land. The boot overlay and the menu's red status line now carry the same named reason as backups. Password refusals split into their two honest cases: joining with no password says "This server is password protected. Please enter the server password and join again." while a wrong one says so plainly.
+
+**Parting words.** KICK and BAN both open a message box first (optional, 40 characters, server-enforced): the message rides the goodbye modal, and for bans it is also stored on the ban entry so the whole staff can see why. Kick needs an explicit CONFIRM now - no more one-click ejections.
+
+**Names have a size.** Player names are capped at 20 characters in the name fields, at the identity source, and - where it actually counts - on the server when the handshake lands, so a modified client cannot smuggle a banner-length name past the cap.
 
 ### [14.47.0-dev] The Owner Holds the Keys
 

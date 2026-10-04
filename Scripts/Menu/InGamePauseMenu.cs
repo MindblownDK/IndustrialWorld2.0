@@ -254,6 +254,7 @@ namespace VoxelEngine.Menu
             // Renames apply live: locally at once, to everyone via the server.
             panel.Add(T.Muted("YOUR NAME"));
             var nameField = MpField(VoxelEngine.Networking.PlayerIdentity.LocalName);
+            nameField.maxLength = 20;     // 14.47.1 - the cap the server enforces
             nameField.isDelayed = true;   // commit on Enter/blur, not every keystroke
             nameField.RegisterValueChangedCallback(evt =>
                 VoxelEngine.Networking.PlayerIdentity.LocalName = evt.newValue);
@@ -472,9 +473,12 @@ namespace VoxelEngine.Menu
             // chrome and the live refresh - the TeamsPanel division of labour.
             panel.Add(VoxelEngine.UI.ServerAdminPanel.Build(BuildUI));
 
-            // Live refresh: the state moves when ANY admin touches it, and a
-            // session that drops must not leave a dead admin page open.
-            int builtVersion = VoxelEngine.Networking.ServerAdminRegistry.Version;
+            // Live refresh (14.47.1): the page tracks a composite signature -
+            // admin state, team limits, players joining/leaving/renaming and
+            // the ban-countdown minute - so it moves when ANYTHING it shows
+            // moves, not only on this machine's own actions. A session that
+            // drops must not leave a dead admin page open.
+            int builtSignature = VoxelEngine.UI.ServerAdminPanel.LiveSignature();
             bool wasOnline = VoxelEngine.Networking.NetworkBootstrap.Instance != null
                 && VoxelEngine.Networking.NetworkBootstrap.Instance.IsOnline;
             panel.schedule.Execute(() =>
@@ -483,7 +487,7 @@ namespace VoxelEngine.Menu
                 var bootstrap = VoxelEngine.Networking.NetworkBootstrap.Instance;
                 bool online = bootstrap != null && bootstrap.IsOnline;
                 if (online != wasOnline) { _page = Page.Multiplayer; BuildUI(); return; }
-                if (VoxelEngine.Networking.ServerAdminRegistry.Version != builtVersion) BuildUI();
+                if (VoxelEngine.UI.ServerAdminPanel.LiveSignature() != builtSignature) BuildUI();
             }).Every(500);
         }
 

@@ -416,12 +416,15 @@ namespace VoxelEngine.UI
             // ── text lines ────────────────────────────────────────────────
             card.Add(T.Muted("TEXTS (top / middle / bottom - leave empty for none)"));
             var topField = ThemedField(_bannerDraftTop);
+            topField.maxLength = 24;   // 14.47.2 - the server's own cap, visible while typing
             topField.RegisterValueChangedCallback(evt => _bannerDraftTop = evt.newValue);
             card.Add(topField);
             var middleField = ThemedField(_bannerDraftMiddle);
+            middleField.maxLength = 24;
             middleField.RegisterValueChangedCallback(evt => _bannerDraftMiddle = evt.newValue);
             card.Add(middleField);
             var bottomField = ThemedField(_bannerDraftBottom);
+            bottomField.maxLength = 24;
             bottomField.RegisterValueChangedCallback(evt => _bannerDraftBottom = evt.newValue);
             card.Add(bottomField);
 

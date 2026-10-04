@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.47.0-dev`
-**Roadmap Version:** `14.47.0-dev`
+**Current Version:** `14.47.2-dev`
+**Roadmap Version:** `14.47.2-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 14.47.2-dev - Text That Lives on the Cloth
+Banner text auto-fits the cloth: line width measured from the font's own glyph advances (fallback estimate when no font answers), anything wider than the banner shrinks to fit with a margin - never overhangs, never cut off; refits always start from the designed size recorded at build time. Banner editor fields show the 24-char server cap while typing. Fixed CS0104: UnityEngine.Cursor fully qualified in SessionNoticeModal (UIElements has its own Cursor type). Pre-existing CS0618 sync-file warnings left for the one-sweep polish round by rule.
+
+### 14.47.1-dev - A Goodbye You Cannot Miss
+Administration polish from the first live test. The page rebuilds on a composite live signature (admin state, team limits, player presence, ban-countdown minute) instead of its own version alone, so joins/leaves and remote admins' changes show up at once without interrupting typing. Kick/ban/refusal now raise a DontDestroyOnLoad modal (dimmed screen, OK button) that survives the return to the main menu; the boot overlay and menu status line repeat the named reason. Password refusals split: no password offered -> "password protected, please enter it", wrong password -> says so. KICK and BAN open an optional parting-message box (40 chars, server-clamped; stored on ban entries) with explicit confirmation. Player names capped at 20 characters in the fields, at the identity source, and server-side at the handshake.
+
 ### 14.47.0-dev - The Owner Holds the Keys
 Server administration ships. Ownership is a property of the WORLD (server_admin.json sidecar, keyed by stable player id - one player can own many servers): a listen host is always owner, a fresh dedicated world adopts its first ever player, and the config's adminPassword claims/recovers ownership from the new SERVER ADMINISTRATION page (pause menu -> multiplayer). Owner promotes admins; owner/admins kick, ban (1h/24h/7d/permanent, host-clock expiry), run the whitelist (name pins to id on first join) and edit all world rules live (friendly fire, loot respawn, banner painting, drop warning, weights, drop cap, team limits) - one WorldRuleBroadcast per change, same parser both sides. Admission (ban/whitelist/password) is judged at the identity handshake before an avatar exists, with named refusals delivered to the door, the HUD and the main menu. server_config.json gained join password, whitelist switch and tri-state world-rule overrides, and in-game edits write back so the file always shows live values. Both join forms gained a password field.
 
@@ -37,12 +43,6 @@ Third dedicated shakedown. The continuous bare shader warning was the OCEAN, not
 
 ### 14.46.1-dev - An Invite That Arrives, A Punch That Lands
 Second dedicated shakedown (identity + weather sync confirmed). Team invites were dying of clock skew: expiry stamped by the host's wall clock but judged by each client's own - clients now trust the roster as sent, and the host prunes expired invites on a five-second timer and rebroadcasts only on change. Punch reach 2.1m -> 2.8m (club 2.2m -> 2.6m): measured camera-to-replicated-capsule, the old reach only landed nose to nose. Cosmos visuals (distant-body/singularity beacons, quasar/singularity/solar-glare/space-dust/rain-fog renderers) retire themselves headless, same guard pattern as the 14.46.0 weather rigs.
-
-### 14.46.0-dev - Same Sky, Same Names
-Dedicated-session shakedown fixes. Root cause of the guest-to-guest failures (no hits, no invites, unnameable team members): avatar identity SyncVars are one-shot writes and the initial delivery proved lossy, leaving bodies without ids. Fix is a server-side identity announce broadcast (at spawn, on rename, per existing avatar to every joiner) keyed by network object id, with a client-side pending cache for announces that outrun their spawn; SyncVars stay the fast path and outrank the fallback. Weather is now host-authoritative: only the host rolls states, clients adopt them (join + change + 15s keepalive) and keep blend/intensity/thunder local; debug hotkeys refuse on clients. All weather visual rigs (particles, clouds, lighting, audio, sea state) retire themselves on a dedicated server - fixes the WeatherParticles NRE and shader-stripping spam. Remaining shakedown items queued: fauna sync, server administration, server browser (favorites + LAN), player customization, menu layout + keybind search.
-
-### 14.45.0-dev - The Server Stands Alone
-Milestone 12, part 1: the headless dedicated-server boot path. One per-process answer (NetworkSession.IsDedicated) covers detection via the Dedicated Server build target, a -server launch flag, or the editor test hook (Tools -> Voxel Engine -> Dedicated Server). server_config.json next to the executable (template written on first run) plus command-line overrides picks world, port, player cap, autosave cadence and new-world seed. The menu never renders: an existing world loads like a click, a missing one is created like NEW WORLD, and the runner strips the client-side scene (local player asleep before its first Start, cameras/audio off) then opens a server-only FishNet connection with port and cap set on the transport. The save pipeline carries the local-player block forward verbatim when no player exists (additive localPlayerAbsent flag for worlds born dedicated), so saves move freely between singleplayer, listen-server and dedicated hosting. 60 fps headless cap and a one-minute heartbeat log. Part 2 (security hardening + intent-RPC conversions) is next.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

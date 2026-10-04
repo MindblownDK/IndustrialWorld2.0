@@ -34,9 +34,32 @@ namespace VoxelEngine.UI
         private static string _draftWhitelist = "";
         private static string _draftPassword = "";
         private static string _draftServerName;
-        private static string _banTargetId;   // player whose duration row is open
+        private static string _actionTargetId;   // player whose kick/ban row is open
+        private static bool _actionIsBan;        // which of the two rows it is
+        private static string _draftReason = ""; // the parting words, max 40 chars
 
         private static float _savedScroll;
+
+        /// <summary>14.47.1 - everything this page draws, folded into one
+        /// number. The pause menu rebuilds when it moves: admin state and
+        /// team limits (versions), players joining/leaving/renaming (the
+        /// presence fold), and the minute bucket so ban countdowns tick.
+        /// Watching a signature instead of rebuilding on a timer means an
+        /// admin mid-typing is never interrupted without cause.</summary>
+        public static int LiveSignature()
+        {
+            unchecked
+            {
+                int sig = ServerAdminRegistry.Version * 31 + TeamRegistry.Version;
+                foreach (var p in NetworkSession.Players)
+                {
+                    sig = sig * 31 + (p.playerId != null ? p.playerId.GetHashCode() : 0);
+                    sig = sig * 31 + (p.displayName != null ? p.displayName.GetHashCode() : 0);
+                }
+                sig = sig * 31 + (int)(DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute % 100000);
+                return sig;
+            }
+        }
 
         public static VisualElement Build(Action rebuild)
         {
@@ -154,11 +177,18 @@ namespace VoxelEngine.UI
                 if (actionable)
                 {
                     string id = p.playerId;
-                    row.Add(SmallBtn("KICK", () =>
-                        ServerAdminRegistry.Route(ServerAdminRegistry.OpKick, id, "", 0), T.AccentRed));
+                    row.Add(SmallBtn("KICK...", () =>
+                    {
+                        bool wasOpen = _actionTargetId == id && !_actionIsBan;
+                        _actionTargetId = wasOpen ? null : id;
+                        _actionIsBan = false;
+                        rebuild();
+                    }, T.AccentRed));
                     row.Add(SmallBtn("BAN...", () =>
                     {
-                        _banTargetId = _banTargetId == id ? null : id;
+                        bool wasOpen = _actionTargetId == id && _actionIsBan;
+                        _actionTargetId = wasOpen ? null : id;
+                        _actionIsBan = true;
                         rebuild();
                     }, T.AccentRed));
 
@@ -179,18 +209,33 @@ namespace VoxelEngine.UI
                 }
                 card.Add(row);
 
-                // The open ban-duration row, right under its player.
-                if (_banTargetId == p.playerId && actionable)
+                // The open kick/ban row, right under its player: the parting
+                // words (max 40 characters, shown in their goodbye modal and
+                // stored on the ban), then the confirmation.
+                if (_actionTargetId == p.playerId && actionable)
                 {
                     string id = p.playerId;
-                    var durations = Row();
-                    durations.style.justifyContent = Justify.FlexEnd;
-                    durations.style.marginTop = 4;
-                    durations.Add(SmallBtn("1 HOUR", () => Ban(id, 3600), T.AccentRed));
-                    durations.Add(SmallBtn("24 HOURS", () => Ban(id, 86400), T.AccentRed));
-                    durations.Add(SmallBtn("7 DAYS", () => Ban(id, 604800), T.AccentRed));
-                    durations.Add(SmallBtn("PERMANENT", () => Ban(id, 0), T.AccentRed));
-                    card.Add(durations);
+                    var reasonField = ThemedField(_draftReason);
+                    reasonField.maxLength = 40;
+                    reasonField.RegisterValueChangedCallback(e => _draftReason = e.newValue);
+                    card.Add(T.Muted(_actionIsBan ? "BAN MESSAGE (OPTIONAL, MAX 40)" : "KICK MESSAGE (OPTIONAL, MAX 40)"));
+                    card.Add(reasonField);
+
+                    var confirm = Row();
+                    confirm.style.justifyContent = Justify.FlexEnd;
+                    confirm.style.marginTop = 4;
+                    if (_actionIsBan)
+                    {
+                        confirm.Add(SmallBtn("1 HOUR", () => Act(id, true, 3600), T.AccentRed));
+                        confirm.Add(SmallBtn("24 HOURS", () => Act(id, true, 86400), T.AccentRed));
+                        confirm.Add(SmallBtn("7 DAYS", () => Act(id, true, 604800), T.AccentRed));
+                        confirm.Add(SmallBtn("PERMANENT", () => Act(id, true, 0), T.AccentRed));
+                    }
+                    else
+                    {
+                        confirm.Add(SmallBtn("CONFIRM KICK", () => Act(id, false, 0), T.AccentRed));
+                    }
+                    card.Add(confirm);
                 }
 
                 content.Add(card);
@@ -205,10 +250,14 @@ namespace VoxelEngine.UI
             content.Add(T.Spacer(12));
         }
 
-        private static void Ban(string playerId, long seconds)
+        private static void Act(string playerId, bool ban, long seconds)
         {
-            _banTargetId = null;
-            ServerAdminRegistry.Route(ServerAdminRegistry.OpBan, playerId, "", seconds);
+            _actionTargetId = null;
+            string reason = (_draftReason ?? "").Trim();
+            _draftReason = "";
+            ServerAdminRegistry.Route(
+                ban ? ServerAdminRegistry.OpBan : ServerAdminRegistry.OpKick,
+                playerId, reason, seconds);
         }
 
         /// <summary>Rank as this machine can see it: the host asks the

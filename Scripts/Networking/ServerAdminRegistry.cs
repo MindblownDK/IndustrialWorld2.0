@@ -159,8 +159,12 @@ namespace VoxelEngine.Networking
             if (!privileged && _state.whitelistEnabled && !OnWhitelist(playerId, playerName))
                 return "This server runs a whitelist and you are not on it.";
 
+            // 14.47.1 - two different doors closed: no password offered at
+            // all gets the invitation to type one, a wrong one gets told so.
             if (!privileged && !string.IsNullOrEmpty(_state.password) && _state.password != (password ?? ""))
-                return "Wrong server password.";
+                return string.IsNullOrEmpty(password)
+                    ? "This server is password protected. Please enter the server password and join again."
+                    : "Wrong server password.";
 
             return null;
         }
@@ -240,6 +244,10 @@ namespace VoxelEngine.Networking
                         return "You cannot act on a player of equal or higher rank.";
 
                     string name = DisplayName(targetId);
+                    // 14.47.1 - the admin's parting words ride along, capped
+                    // at 40 characters no matter what the client claimed.
+                    string reason = (text ?? "").Trim();
+                    if (reason.Length > 40) reason = reason.Substring(0, 40).Trim();
                     if (op == OpBan)
                     {
                         PruneExpiredBans();
@@ -248,17 +256,19 @@ namespace VoxelEngine.Networking
                         {
                             id = targetId,
                             name = name,
-                            reason = text ?? "",
+                            reason = reason,
                             untilTicks = number <= 0 ? 0 : DateTime.UtcNow.Ticks + TimeSpan.FromSeconds(number).Ticks
                         });
                     }
+                    string goodbye = op == OpKick
+                        ? "You were kicked from the server."
+                        : "You were banned from the server" +
+                          (number <= 0 ? "." : $" for {Describe(TimeSpan.FromSeconds(number))}.");
+                    if (!string.IsNullOrEmpty(reason)) goodbye += $"\n\n\"{reason}\"";
                     bool online = NetworkBootstrap.Instance != null
                         && NetworkBootstrap.Instance.DisconnectPlayer(targetId,
                             op == OpKick ? NetworkBootstrap.NoticeKicked : NetworkBootstrap.NoticeBanned,
-                            op == OpKick
-                                ? "You were kicked from the server."
-                                : "You were banned from the server" +
-                                  (number <= 0 ? "." : $" for {Describe(TimeSpan.FromSeconds(number))}."));
+                            goodbye);
                     if (op == OpKick && !online) return $"{name} is not online.";
                     Touch();
                     Debug.Log($"[Admin] {(op == OpKick ? "kick" : "ban")} applied to '{name}' ({targetId}) " +

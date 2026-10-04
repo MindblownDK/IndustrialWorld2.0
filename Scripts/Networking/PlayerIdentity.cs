@@ -67,6 +67,10 @@ namespace VoxelEngine.Networking
             set
             {
                 _localName = string.IsNullOrEmpty(value) ? "Crusader" : value.Trim();
+                // 14.47.1 - names are capped at 20 characters everywhere:
+                // here at the source, in the fields, and on the server.
+                if (_localName.Length > 20) _localName = _localName.Substring(0, 20).Trim();
+                if (_localName.Length == 0) _localName = "Crusader";
                 PlayerPrefs.SetString(NameStoreKey, _localName);
                 PlayerPrefs.Save();
                 // The roster entry is live, not a snapshot - and when online,

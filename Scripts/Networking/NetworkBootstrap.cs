@@ -1171,10 +1171,21 @@ namespace VoxelEngine.Networking
 
         // ─────────────────────────── server: identity -> avatar ───────────────────────────
 
+        /// <summary>14.47.1 - names are capped at 20 characters, enforced
+        /// where authority lives. The client-side field caps match, so this
+        /// only ever bites a modified client.</summary>
+        private static string SanitizePlayerName(string name)
+        {
+            name = (name ?? "").Trim();
+            if (name.Length == 0) return "Crusader";
+            return name.Length <= 20 ? name : name.Substring(0, 20).Trim();
+        }
+
         private void OnIdentityReceived(NetworkConnection connection, IdentityBroadcast msg, Channel channel)
         {
             if (!_serverStarted || connection == null) return;
             if (string.IsNullOrEmpty(msg.PlayerId)) return;
+            string safeName = SanitizePlayerName(msg.PlayerName);
 
             // Already spawned? Then this is a rename - update for everyone.
             if (_avatarsByConnection.TryGetValue(connection.ClientId, out var existing))
@@ -1182,7 +1193,7 @@ namespace VoxelEngine.Networking
                 var existingAvatar = existing != null ? existing.GetComponent<PlayerAvatar>() : null;
                 if (existingAvatar != null)
                 {
-                    existingAvatar.ServerSetName(msg.PlayerName);
+                    existingAvatar.ServerSetName(safeName);
                     AnnounceIdentity(existing, null);   // rename: re-announce to everyone
                 }
                 return;
@@ -1195,7 +1206,7 @@ namespace VoxelEngine.Networking
             // that holds the save cannot be locked out of it.
             if (!connection.IsLocalClient)
             {
-                string refusal = ServerAdminRegistry.AdmissionCheck(msg.PlayerId, msg.PlayerName, msg.Password);
+                string refusal = ServerAdminRegistry.AdmissionCheck(msg.PlayerId, safeName, msg.Password);
                 if (refusal != null)
                 {
                     Debug.Log($"[Admin] join refused for '{msg.PlayerName}' ({msg.PlayerId}): {refusal}");
@@ -1241,7 +1252,7 @@ namespace VoxelEngine.Networking
             // Spawn can be treated as defaults and never delivered - that was
             // the 14.1.0 missing-names bug.
             var avatar = nob.GetComponent<PlayerAvatar>();
-            if (avatar != null) avatar.SetIdentity(playerId, msg.PlayerName);
+            if (avatar != null) avatar.SetIdentity(playerId, safeName);
 
             // 14.46.0 - the identity guarantee. The SyncVar write above is
             // the fast path; these announces are the delivery that cannot be
@@ -1305,7 +1316,7 @@ namespace VoxelEngine.Networking
                 // as owner; everyone is then told their rank (and the
                 // privileged also get the roster) so the Administration tab
                 // renders honestly from the first open.
-                if (ServerAdminRegistry.HostMaybeAutoClaim(playerId, msg.PlayerName))
+                if (ServerAdminRegistry.HostMaybeAutoClaim(playerId, safeName))
                     _networkManager.ServerManager.Broadcast(connection, new AdminNoticeBroadcast
                     {
                         Kind = NoticeInfo,
@@ -2903,12 +2914,15 @@ namespace VoxelEngine.Networking
                 return;
             }
             // Kicked, banned or refused at the door: the disconnect is right
-            // behind this message. Remember why, so the menu can say it - and
-            // say it on the HUD too, for a guest who keeps their own world.
+            // behind this message. Remember why for the menu's red line, and
+            // raise the modal the player cannot miss - it survives the trip
+            // back to the main menu on its own DontDestroyOnLoad document.
             LastSessionNotice = msg.Text ?? "";
             _lastNoticeAt = Time.unscaledTime;
-            VoxelEngine.UI.BuildFeedbackHud.Show("Server", msg.Text ?? "",
-                null, new Color(0.82f, 0.22f, 0.18f));
+            string title = msg.Kind == NoticeKicked ? "KICKED FROM SERVER"
+                         : msg.Kind == NoticeBanned ? "BANNED FROM SERVER"
+                         : "CONNECTION REFUSED";
+            VoxelEngine.UI.SessionNoticeModal.Show(title, msg.Text ?? "");
             Debug.Log($"[Admin] server notice (kind {msg.Kind}): {msg.Text}");
         }
 
@@ -3530,8 +3544,13 @@ namespace VoxelEngine.Networking
 
             // Dropped before the world arrived: say so instead of leaving the
             // join overlay spinning on a connection that no longer exists.
+            // 14.47.1 - a refusal at the door (ban, whitelist, password) that
+            // just landed is the real reason; the generic line is the fallback.
             if (VoxelEngine.Menu.WorldBootGate.IsPending)
-                VoxelEngine.Menu.WorldBootGate.Fail("Lost the connection to the host before the world arrived.");
+                VoxelEngine.Menu.WorldBootGate.Fail(
+                    Time.unscaledTime - _lastNoticeAt < 15f && !string.IsNullOrEmpty(LastSessionNotice)
+                        ? LastSessionNotice
+                        : "Lost the connection to the host before the world arrived.");
 
             // Captured BEFORE the mode drops to Offline: a guest dropping
             // the host's session must drop the host's roster mirror too,

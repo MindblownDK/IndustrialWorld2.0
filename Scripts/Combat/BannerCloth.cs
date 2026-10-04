@@ -130,9 +130,64 @@ namespace VoxelEngine.Combat
                 if (_clothMaterial.HasProperty("_MainTex")) _clothMaterial.SetTexture("_MainTex", tex);
             }
             TeamBannerRegistry.TextsOf(_teamId, out string top, out string middle, out string bottom);
-            foreach (var tm in _topTexts) if (tm != null) tm.text = top;
-            foreach (var tm in _middleTexts) if (tm != null) tm.text = middle;
-            foreach (var tm in _bottomTexts) if (tm != null) tm.text = bottom;
+            foreach (var tm in _topTexts) if (tm != null) { tm.text = top; FitToCloth(tm); }
+            foreach (var tm in _middleTexts) if (tm != null) { tm.text = middle; FitToCloth(tm); }
+            foreach (var tm in _bottomTexts) if (tm != null) { tm.text = bottom; FitToCloth(tm); }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  Text fitting (14.47.2)
+        // ─────────────────────────────────────────────────────────────────
+
+        /// <summary>Base character size per line, recorded at build time so
+        /// every refit starts from the designed size, never from a previous
+        /// shrink.</summary>
+        private readonly Dictionary<TextMesh, float> _baseCharSize = new();
+
+        /// <summary>14.47.2 - a line must LIVE on the cloth: text wider than
+        /// the banner shrinks to fit instead of sticking out past the edges
+        /// or being cut off. Short lines keep their designed size.</summary>
+        private void FitToCloth(TextMesh tm)
+        {
+            if (tm == null) return;
+            if (!_baseCharSize.TryGetValue(tm, out float baseSize) || baseSize <= 0f)
+                baseSize = tm.characterSize;
+            tm.characterSize = baseSize;
+            if (string.IsNullOrEmpty(tm.text)) return;
+
+            float maxWidth = clothWidth * 0.92f;   // a whisper of margin each side
+            float width = MeasureWidth(tm);
+            if (width > maxWidth && width > 0.0001f)
+                tm.characterSize = baseSize * (maxWidth / width);
+        }
+
+        /// <summary>Rendered width of a TextMesh line in local units,
+        /// measured from the font's own glyph advances (TextMesh draws at
+        /// advance x characterSize x 0.1). Falls back to a bold-glyph
+        /// estimate when no font can be asked.</summary>
+        private static float MeasureWidth(TextMesh tm)
+        {
+            int size = tm.fontSize > 0 ? tm.fontSize : 13;
+            var font = tm.font;
+            if (font == null)
+            {
+                try { font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); }
+                catch (System.Exception) { font = null; }
+            }
+            if (font != null)
+            {
+                font.RequestCharactersInTexture(tm.text, size, tm.fontStyle);
+                float advance = 0f;
+                bool complete = true;
+                foreach (char c in tm.text)
+                {
+                    if (font.GetCharacterInfo(c, out var info, size, tm.fontStyle)) advance += info.advance;
+                    else { complete = false; break; }
+                }
+                if (complete) return advance * tm.characterSize * 0.1f;
+            }
+            // No font to ask: a bold glyph averages about 55% of its point size.
+            return tm.text.Length * size * 0.55f * tm.characterSize * 0.1f;
         }
 
         // ─────────────────────────────────────────────────────────────────
@@ -307,6 +362,7 @@ namespace VoxelEngine.Combat
             tm.alignment = TextAlignment.Center;
             tm.fontStyle = FontStyle.Bold;
             tm.color = new Color(0.14f, 0.10f, 0.08f);
+            _baseCharSize[tm] = tm.characterSize;   // 14.47.2 - the refit baseline
             var renderer = go.GetComponent<MeshRenderer>();
             if (renderer != null)
             {
