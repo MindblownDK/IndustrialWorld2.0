@@ -380,7 +380,7 @@ namespace VoxelEngine.Cosmos
                 var holdInst = FindInstanceOf(proximityHoldBody);
                 if (holdInst != null)
                 {
-                    double holdCenter = math.length(holdInst.positionKmD - ViewerCosmicKm);
+                    double holdCenter = math.length(reg.CosmicPositionOf(holdInst) - ViewerCosmicKm); // absolute (14.60.2)
                     double holdRadius = holdInst.settings != null ? holdInst.settings.radiusKm : 0d;
                     double holdDist = holdCenter - holdRadius;
                     if (holdDist < 0d) holdDist = 0d;
@@ -418,7 +418,7 @@ namespace VoxelEngine.Cosmos
                 var curInst = FindInstanceOf(FrameBody);
                 if (curInst != null)
                 {
-                    double3 toCur = curInst.positionKmD - ViewerCosmicKm;
+                    double3 toCur = reg.CosmicPositionOf(curInst) - ViewerCosmicKm; // absolute (14.60.2)
                     double dCur = math.length(toCur);
                     double rKm = curInst.settings != null ? curInst.settings.radiusKm : 1d;
                     if (dCur < rKm) dCur = rKm;

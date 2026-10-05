@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.1-dev`
+**Current Version:** `14.60.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.2-dev] Where the Moon Actually Is
+
+**The real root cause of every moon problem, found and fixed: the physics read moons at their parent-relative offset as if it were an absolute solar position. Plus: the autopilot now brakes with its big engines.**
+
+- Root cause: a moon's stored position is its offset from its parent planet (the orbital elements orbit the parent), and the canonical accessor sums the parent chain to get the absolute position. But the N-body gravity solver, the gravity-dominance query, the frame-velocity blend, the nearest-body query and the proximity-hold distance check all read the RAW field - so the Moon's gravity was simulated at a phantom point near the solar origin. That is why the Moon never pulled, never won frame dominance, why the hold self-released (and re-armed) every tick, and why the flight HUD reported Earth as the nearest body while you were parked 200 m off the lunar surface. Planets were immune: no parent, offset equals absolute - which is exactly why only moons ever misbehaved.
+- All raw reads converted to absolute positions: gravity solver, dominance pick, frame-velocity blend (which now also sums the moon's velocity with its planet's orbital velocity), nearest-body query, the proximity-hold range check, the current-frame release check and the save-restore altitude check. The warp drive's planet lock already used the absolute accessor and needed no change.
+- Autopilot flip-and-burn: while the ship is meaningfully faster than the brake curve allows, the autopilot now points its STRONGEST thrust axis against the velocity error and brakes with the main engines - the same axis selection it already used for acceleration - instead of flying the whole deceleration leg on the weak retro laterals. Hysteresis on the flip keeps the nose from flapping at the speed boundary.
+---
 
 ### [14.60.1-dev] The Hold That Holds
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.1-dev`
-**Roadmap Version:** `14.60.1-dev`
+**Current Version:** `14.60.2-dev`
+**Roadmap Version:** `14.60.2-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.2-dev - Where the Moon Actually Is
+Moon physics root cause: raw parent-relative body positions were read as absolute by the gravity solver, dominance query, frame-velocity blend, nearest-body query and hold checks - moons were simulated at a phantom point near the solar origin (planets immune: no parent). All sites now use the absolute parent-chain accessor; frame-velocity blend also uses parent-chained velocities. Autopilot flip-and-burn: overspeed on the brake curve steers the strongest thrust axis onto the velocity error (main-engine braking) with hysteresis.
 
 ### 14.60.1-dev - The Hold That Holds
 Moon capture fixed at the root: the proximity hold now overrides frame-switch dominance - it uses the hold body's own pull, bypasses the release rule and hysteresis, and switches the frame while armed and in range (previously the parent planet's dominance vetoed the switch every tick and the moon drifted away). Frame evaluator no longer early-outs past the hold when the dominant body's scene proxy is missing; hold log fires once per armed body.

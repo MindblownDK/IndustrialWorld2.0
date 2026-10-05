@@ -530,7 +530,12 @@ namespace VoxelEngine.Cosmos
             {
                 var b = _bodies[i];
                 if (b == null || b.gravitationalParamKm3S2 <= 0d) continue;
-                double3 toB = b.positionKmD - posKm;
+                // 14.60.2 - ABSOLUTE position, not the raw parent-relative field:
+                // a moon's positionKmD is its offset from its planet, so its gravity
+                // was being simulated at a phantom spot near the solar origin. Only
+                // moons were affected (planets have no parent) - this is why the
+                // Moon never pulled, never won dominance and never captured ships.
+                double3 toB = CosmicPositionOf(b) - posKm;
                 double d2 = math.lengthsq(toB);
                 if (d2 < 1e-12) continue;
 
@@ -596,7 +601,7 @@ namespace VoxelEngine.Cosmos
             {
                 var b = _bodies[i];
                 if (b == null || b.gravitationalParamKm3S2 <= 0d) continue;
-                double3 toB = b.positionKmD - posKm;
+                double3 toB = CosmicPositionOf(b) - posKm; // absolute (14.60.2)
                 double d2 = math.lengthsq(toB);
                 if (d2 < 1e-12) continue;
                 double d = math.sqrt(d2);
@@ -634,11 +639,11 @@ namespace VoxelEngine.Cosmos
             {
                 var b = _bodies[i];
                 if (b == null || b.gravitationalParamKm3S2 <= 0d) continue;
-                double3 toB = b.positionKmD - posKm;
+                double3 toB = CosmicPositionOf(b) - posKm; // absolute (14.60.2)
                 double d2 = math.lengthsq(toB);
                 if (d2 < 1e-9) continue;
                 double w = b.gravitationalParamKm3S2 / math.max(d2, 4d);
-                acc += w * b.velocityKmS;
+                acc += w * VelocityOf(b); // absolute: moon velocity includes its planet's
                 wSum += w;
             }
 
@@ -725,7 +730,7 @@ namespace VoxelEngine.Cosmos
             double bestD = double.MaxValue;
             for (int i = 0; i < _bodies.Count; i++)
             {
-                double d = math.lengthsq(_bodies[i].positionKmD - posKm);
+                double d = math.lengthsq(CosmicPositionOf(_bodies[i]) - posKm); // absolute (14.60.2)
                 if (d < bestD) { bestD = d; best = _bodies[i]; }
             }
             return best;

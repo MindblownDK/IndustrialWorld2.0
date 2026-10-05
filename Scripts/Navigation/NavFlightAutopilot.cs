@@ -523,6 +523,10 @@ namespace VoxelEngine.Navigation
         /// <summary>Cruise: swing the strongest thrust axis onto the commanded
         /// velocity (or the remaining line to the target when holding still).
         /// A ship with no gyros still translates; it just keeps its current heading.</summary>
+        // Flip-and-burn latch (14.60.2): true while the ship is overspeed on the
+        // brake curve and should point its STRONG side against the velocity error.
+        private bool _retroFlip;
+
         private void SteerCruise(Vector3 desired, Vector3 rel)
         {
             if (!HasGyroAuthority())
@@ -530,7 +534,23 @@ namespace VoxelEngine.Navigation
                 _grid.SetAutonomousRotation(0f, 0f, 0f);
                 return;
             }
-            Vector3 point = desired.sqrMagnitude > 1f ? desired : rel;
+
+            // 14.60.2 - brake with the big engines, same as accelerating. The old
+            // steer always pointed the strongest axis AT the destination, so the
+            // whole deceleration leg was flown on the weak retro laterals. While
+            // the ship is meaningfully faster than the brake curve allows, flip:
+            // steer the strongest axis onto the velocity ERROR (retrograde burn
+            // direction). Hysteresis keeps the nose from flapping at the boundary.
+            Vector3 vel = _grid.Body != null ? _grid.Body.linearVelocity : Vector3.zero;
+            Vector3 vErr = desired - vel;
+            float speed = vel.magnitude;
+            float want = desired.magnitude;
+            if (!_retroFlip) { if (speed > want + Mathf.Max(8f, want * 0.15f)) _retroFlip = true; }
+            else             { if (speed < want + Mathf.Max(3f, want * 0.05f)) _retroFlip = false; }
+
+            Vector3 point = _retroFlip && vErr.sqrMagnitude > 1f
+                ? vErr
+                : (desired.sqrMagnitude > 1f ? desired : rel);
             if (point.sqrMagnitude < 1f)
             {
                 _grid.SetAutonomousRotation(0f, 0f, 0f);

@@ -857,7 +857,7 @@ namespace VoxelEngine.Cosmos
             foreach (var kv in registry.SceneBodies)
             {
                 if (kv.Key == null || kv.Key.settings == null) continue;
-                double altitude = math.distance(kv.Key.positionKmD, savedPosKm) - kv.Key.settings.radiusKm;
+                double altitude = math.distance(registry.CosmicPositionOf(kv.Key), savedPosKm) - kv.Key.settings.radiusKm; // absolute (14.60.2)
                 if (altitude < nearestAltitudeKm) nearestAltitudeKm = altitude;
             }
 
