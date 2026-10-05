@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.4-dev`
+**Current Version:** `14.60.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.5-dev] Planets Move
+
+**The real fix for cross-planet teleport and bed respawn: positions are now stored and replicated RELATIVE TO THEIR PLANET, resolved against the planet's live position at the moment of use. Absolute points rot - planets move on their orbits, and host/guest orbital clocks drift.**
+
+- Why 14.60.4 was not enough, twice over. First, the death-screen respawn runs a different route (RespawnRoutine) than the session-start spawn the bed fix patched - the cosmic record was never consulted when actually dying. Second and deeper: an absolute cosmic point is only true for an instant. Each machine advances its own orbital clock, so by the time a guest resolves the host's absolute coordinates - or yesterday's bed record - the planet has moved along its orbit and the point is empty space. That is "teleported into space, no planet in sight" and the drowning-next-to-the-bed respawn, exactly.
+- Avatars now report "near body X, offset D km" (body name + double offset) instead of absolute km; the reader anchors the offset to body X's position in ITS OWN registry, so the resolved point is on the planet no matter how far the two orbital clocks have drifted. Deep-space players still report absolute. Teleport-to-player consumes this and refuses (with a notice) rather than guessing when the record cannot be resolved.
+- Beds store body name + offset the same way (persisted in the spawn sidecar); the shared resolver turns the record into a live cosmic point at use time. The DEATH SCREEN now routes bed choices through a new cosmic respawn path: revive, re-anchor the origin onto the live bed point (frame + voxel streaming re-target - the planet loads), then the normal wait-for-chunks landing.
+- The death screen's bed sanity checks (bed still exists? cryobed out of O2?) scan scene colliders around the stored scene point - meaningless for a bed on another world, and they silently CLEARED healthy cross-world links. They now run only when the bed is on the currently streamed world; cross-world beds show "Linked spawn - on <planet>" and ride the cosmic record.
+- Migration: relink cross-planet beds once on this build (old records lack the body name); both machines need this build for avatar body-relative reports.
+---
 
 ### [14.60.4-dev] Coordinates That Travel
 

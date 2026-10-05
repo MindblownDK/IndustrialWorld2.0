@@ -723,6 +723,23 @@ namespace VoxelEngine.Cosmos
         /// <summary>Nearest body (by cosmic distance) to a km-space position.</summary>
         public BodyInstance FindNearestBody(Vector3 worldPositionKm) => FindNearestBodyKm(ToDouble3(worldPositionKm));
 
+        /// <summary>Body instance by its settings bodyName (null when absent).
+        /// The stable key for body-relative coordinates (14.60.5): absolute cosmic
+        /// points rot - planets move on their orbits and host/guest orbital clocks
+        /// drift - but "this planet + this offset" stays true on every machine.</summary>
+        public BodyInstance FindBodyByName(string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return null;
+            for (int i = 0; i < _bodies.Count; i++)
+            {
+                var b = _bodies[i];
+                if (b != null && b.settings != null &&
+                    string.Equals(b.settings.bodyName, bodyName, System.StringComparison.OrdinalIgnoreCase))
+                    return b;
+            }
+            return null;
+        }
+
         /// <summary>Nearest body (by cosmic distance) to a cosmic position.</summary>
         public BodyInstance FindNearestBodyKm(double3 posKm)
         {

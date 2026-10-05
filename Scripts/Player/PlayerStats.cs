@@ -538,6 +538,24 @@ namespace VoxelEngine.Player
             OnStatsChanged?.Invoke();
         }
 
+        /// <summary>Revive + respawn at a frame-independent cosmic point (14.60.5):
+        /// same stat restore as RespawnAt, but the destination is cosmic km - the
+        /// death screen's path for beds on other planets.</summary>
+        public void RespawnAtCosmic(double xKm, double yKm, double zKm)
+        {
+            IsDead = false;
+            Health  = MaxHealth;
+            Stamina = MaxStamina;
+            MaxHunger = baseMaxHunger;
+            Hunger = MaxHunger;
+            MaxOxygen = baseMaxOxygen;
+            Oxygen = MaxOxygen;
+
+            var spawner = GetComponent<PlayerSpawner>();
+            if (spawner != null) spawner.RespawnAtCosmic(xKm, yKm, zKm);
+            OnStatsChanged?.Invoke();
+        }
+
         // ============================================================
         //                       Stamina hooks
         // ============================================================

@@ -67,6 +67,10 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<double> _cosmicXKm = new SyncVar<double>();
         private readonly SyncVar<double> _cosmicYKm = new SyncVar<double>();
         private readonly SyncVar<double> _cosmicZKm = new SyncVar<double>();
+        // 14.60.5: when set, X/Y/Z are an OFFSET from this body's live centre -
+        // planets move on their orbits and host/guest orbital clocks drift, so an
+        // absolute point is stale the moment it is read. "" = absolute (deep space).
+        private readonly SyncVar<string> _cosmicBody = new SyncVar<string>("");
         private readonly SyncVar<bool> _cosmicValid = new SyncVar<bool>(false);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
@@ -351,27 +355,55 @@ namespace VoxelEngine.Networking
         {
             if (Time.unscaledTime < _nextCosmicSend) return;
             var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
             if (origin == null) return;
             _nextCosmicSend = Time.unscaledTime + 0.5f;
             Unity.Mathematics.double3 km = origin.GetCosmicKm(transform.position);
-            RpcUpdateCosmic(km.x, km.y, km.z);
+            // Prefer a body-relative report: "near planet X, offset D" is true on
+            // every machine regardless of where X sits on ITS orbit over there.
+            string bodyName = "";
+            if (registry != null && registry.IsReady)
+            {
+                var near = registry.FindNearestBodyKm(km);
+                if (near != null && near.settings != null)
+                {
+                    var off = km - registry.CosmicPositionOf(near);
+                    if (Unity.Mathematics.math.length(off) < near.settings.radiusKm + 5000d)
+                    {
+                        bodyName = near.settings.bodyName;
+                        km = off;
+                    }
+                }
+            }
+            RpcUpdateCosmic(bodyName, km.x, km.y, km.z);
         }
 
         [ServerRpc]
-        private void RpcUpdateCosmic(double x, double y, double z)
+        private void RpcUpdateCosmic(string bodyName, double x, double y, double z)
         {
+            _cosmicBody.Value = bodyName ?? "";
             _cosmicXKm.Value = x;
             _cosmicYKm.Value = y;
             _cosmicZKm.Value = z;
             _cosmicValid.Value = true;
         }
 
-        /// <summary>Frame-independent position of this player, when the owner has
-        /// reported one this session (false on legacy/early frames).</summary>
+        /// <summary>Frame-independent position of this player, resolved against the
+        /// LOCAL cosmos: body-relative reports anchor to the named planet's live
+        /// position here. False until the owner has reported (or when the named
+        /// body does not exist in this machine's registry).</summary>
         public bool TryGetCosmicKm(out Unity.Mathematics.double3 km)
         {
             km = new Unity.Mathematics.double3(_cosmicXKm.Value, _cosmicYKm.Value, _cosmicZKm.Value);
-            return _cosmicValid.Value;
+            if (!_cosmicValid.Value) return false;
+            string bodyName = _cosmicBody.Value;
+            if (string.IsNullOrEmpty(bodyName)) return true; // absolute (deep space)
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry == null || !registry.IsReady) return false;
+            var body = registry.FindBodyByName(bodyName);
+            if (body == null) return false;
+            km = registry.CosmicPositionOf(body) + km;
+            return true;
         }
 
         /// <summary>Owner-side: watch the local hotbar, stance and health, and

@@ -79,9 +79,28 @@ namespace VoxelEngine.Building
             // scene Vector3 is only meaningful in TODAY'S reference frame, and a
             // respawn from another planet needs the TRUE absolute location.
             var bedOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var bedRegistry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
             if (bedOrigin != null)
             {
                 var km = bedOrigin.GetCosmicKm(session.bedSpawnPoint);
+                // Body-relative when a body is near (14.60.5): an absolute point is
+                // stale the moment the planet moves on its orbit - and host/guest
+                // orbital clocks drift, so absolute km sent a respawning player to
+                // where the planet USED to be. The offset from the body is forever.
+                session.bedSpawnBodyName = "";
+                if (bedRegistry != null && bedRegistry.IsReady)
+                {
+                    var near = bedRegistry.FindNearestBodyKm(km);
+                    if (near != null && near.settings != null)
+                    {
+                        var off = km - bedRegistry.CosmicPositionOf(near);
+                        if (Unity.Mathematics.math.length(off) < near.settings.radiusKm + 5000d)
+                        {
+                            session.bedSpawnBodyName = near.settings.bodyName;
+                            km = off;
+                        }
+                    }
+                }
                 session.bedSpawnCosmicX = km.x;
                 session.bedSpawnCosmicY = km.y;
                 session.bedSpawnCosmicZ = km.z;

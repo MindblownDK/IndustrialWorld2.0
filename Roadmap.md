@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.4-dev`
-**Roadmap Version:** `14.60.4-dev`
+**Current Version:** `14.60.5-dev`
+**Roadmap Version:** `14.60.5-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.5-dev - Planets Move
+Body-relative coordinates for everything cross-planet: avatars replicate (body name + double offset km) resolved against the reader's live registry (orbital clock drift immune; absolute only in deep space); beds store the same record in the spawn sidecar with a shared live resolver; death screen routes bed choices through the new cosmic respawn (PlayerStats.RespawnAtCosmic -> PlayerSpawner.RespawnAtCosmic: re-anchor origin, frame + streaming re-target, then normal landing) - the death path (RespawnRoutine) was previously unpatched; bed exists/cryobed-O2 scene scans gated to same-world beds (they cleared healthy cross-world links). CosmicRegistry.FindBodyByName added. Relink cross-planet beds once.
 
 ### 14.60.4-dev - Coordinates That Travel
 Cross-planet teleport + bed respawn fixed at the root: scene positions are frame-local, so remote-avatar transforms and stored bed points meant nothing across planets. Avatars now replicate owner cosmic km (SyncVar doubles, 2 Hz); teleport-to-player uses them through the portal-grade cosmic teleport (frame + streaming re-pick on arrival, legacy beside-the-avatar fallback). Beds record cosmic km at link time (persisted in the spawn sidecar); cosmic respawns re-anchor the origin onto the bed before the landing flow, so the bed planet streams. Pre-existing bed links upgrade on next sleep.

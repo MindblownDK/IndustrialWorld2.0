@@ -30,6 +30,10 @@ namespace VoxelEngine.UI
             /// <summary>World-spawn choices route through PlayerSpawner.Respawn() —
             /// the body-anchored, self-healing path (raw scene points go stale).</summary>
             public bool isWorldSpawn;
+            /// <summary>14.60.5 - frame-independent bed: route through the cosmic
+            /// respawn (re-anchors origin + streaming) instead of the scene point.</summary>
+            public bool isCosmic;
+            public double cosmicXKm, cosmicYKm, cosmicZKm;
         }
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -180,6 +184,11 @@ namespace VoxelEngine.UI
                 player.RespawnAtWorldSpawn();
                 return;
             }
+            if (choice.isCosmic)
+            {
+                player.RespawnAtCosmic(choice.cosmicXKm, choice.cosmicYKm, choice.cosmicZKm);
+                return;
+            }
             player.RespawnAt(choice.position);
         }
 
@@ -208,23 +217,44 @@ namespace VoxelEngine.UI
             // while the player was offline, cryobed ground to scrap) is healed
             // here rather than offered: the stale point is cleared and the
             // player falls back to the honest choices below.
-            if (session != null && session.hasBedSpawn && !LinkedSpawnStillExists(session.bedSpawnPoint))
+            // 14.60.5 - the scene-object sanity checks (does the bed still exist?
+            // is the cryobed out of O2?) scan colliders around the stored SCENE
+            // point. That point is only meaningful when the bed is on the planet
+            // currently streamed here - for a bed on another world the scan found
+            // nothing and CLEARED a perfectly healthy link. Those checks now run
+            // only for same-world beds; cross-world beds ride the cosmic record.
+            bool bedIsLocalWorld = true;
+            if (session != null && !string.IsNullOrEmpty(session.bedSpawnBodyName))
+            {
+                var activeBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+                string here = activeBody != null && activeBody.settings != null ? activeBody.settings.bodyName : "";
+                bedIsLocalWorld = string.Equals(here, session.bedSpawnBodyName, System.StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (session != null && session.hasBedSpawn && bedIsLocalWorld && !LinkedSpawnStillExists(session.bedSpawnPoint))
             {
                 session.hasBedSpawn = false;
                 session.SaveSpawnSidecar();
                 Debug.Log("[DeathScreen] Linked spawn structure no longer exists — cleared.");
             }
 
-            if (session != null && session.hasBedSpawn && !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint))
+            if (session != null && session.hasBedSpawn
+                && (!bedIsLocalWorld || !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint)))
             {
+                bool cosmicBed = VoxelEngine.Player.PlayerSpawner.TryResolveBedCosmicKm(session, out var bedKm);
                 // Resolve the actual name of the linked spawn instead of generic "Linked Spawn".
-                string linkedName = ResolveLinkedSpawnName(session.bedSpawnPoint);
+                string linkedName = bedIsLocalWorld ? ResolveLinkedSpawnName(session.bedSpawnPoint) : "Linked Spawn";
+                string where = bedIsLocalWorld
+                    ? FormatPosition(session.bedSpawnPoint)
+                    : "on " + session.bedSpawnBodyName;
                 AddUnique(list, new RespawnChoice
                 {
                     title = linkedName,
-                    detail = "Linked spawn · " + FormatPosition(session.bedSpawnPoint),
+                    detail = "Linked spawn · " + where,
                     position = session.bedSpawnPoint,
-                    accent = new Color(0.30f, 0.95f, 0.62f)
+                    accent = new Color(0.30f, 0.95f, 0.62f),
+                    isCosmic = cosmicBed,
+                    cosmicXKm = bedKm.x, cosmicYKm = bedKm.y, cosmicZKm = bedKm.z
                 });
             }
 

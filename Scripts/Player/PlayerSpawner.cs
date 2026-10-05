@@ -173,14 +173,12 @@ namespace VoxelEngine.Player
                 // the planet never streaming. The cosmic record is converted to a
                 // live scene position AFTER the origin is re-anchored onto the bed
                 // (below) - here it just marks the spawn as cosmic.
-                bedCosmic = session.bedSpawnHasCosmic
-                            && VoxelEngine.Cosmos.SpaceOrigin.Instance != null
-                            && VoxelEngine.Cosmos.CosmicRegistry.Instance != null
-                            && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady;
+                bedCosmic = VoxelEngine.Cosmos.SpaceOrigin.Instance != null
+                            && TryResolveBedCosmicKm(session, out bedKm);
                 if (bedCosmic)
                 {
-                    bedKm = new double3(session.bedSpawnCosmicX, session.bedSpawnCosmicY, session.bedSpawnCosmicZ);
-                    Debug.Log($"[PlayerSpawner] Bed spawn (cosmic): {bedKm.x:0.###}, {bedKm.y:0.###}, {bedKm.z:0.###} km");
+                    Debug.Log($"[PlayerSpawner] Bed spawn (cosmic): {bedKm.x:0.###}, {bedKm.y:0.###}, {bedKm.z:0.###} km"
+                              + (string.IsNullOrEmpty(session.bedSpawnBodyName) ? "" : $" (on {session.bedSpawnBodyName})"));
                 }
                 else
                 {
@@ -457,6 +455,18 @@ namespace VoxelEngine.Player
         public void Respawn()
         {
             var session = Menu.WorldSession.Instance;
+
+            // 14.60.5 — a linked bed rides its COSMIC record whenever one resolves:
+            // the scene point below is only true in the frame (and at the orbital
+            // instant) the bed was linked in. The cosmic path re-anchors the origin
+            // onto the live bed position first, so it is honest on any planet.
+            if (session != null && session.hasBedSpawn &&
+                TryResolveBedCosmicKm(session, out var cosmicBedKm))
+            {
+                RespawnAtCosmic(cosmicBedKm.x, cosmicBedKm.y, cosmicBedKm.z);
+                return;
+            }
+
             Vector3 dest;
             if (session != null)
             {
@@ -582,10 +592,58 @@ namespace VoxelEngine.Player
             StartCoroutine(RespawnRoutine(destination, allowSpaceDestination: true));
         }
 
-        private IEnumerator RespawnRoutine(Vector3 dest, bool allowSpaceDestination = false)
+        /// <summary>Respawn at a frame-independent cosmic point (14.60.5): the
+        /// origin is re-anchored onto the point FIRST, which picks the right
+        /// planet frame and re-targets streaming, then the normal landing runs.
+        /// This is the path the death screen uses for cross-planet beds.</summary>
+        public void RespawnAtCosmic(double xKm, double yKm, double zKm)
+        {
+            StartCoroutine(RespawnRoutine(Vector3.zero, allowSpaceDestination: true,
+                cosmic: true, destKm: new double3(xKm, yKm, zKm)));
+        }
+
+        /// <summary>Resolve the session's linked bed to a LIVE cosmic point.
+        /// Body-relative records are resolved against the planet's position NOW -
+        /// absolute points rot as planets move on their orbits. False when there
+        /// is no cosmic record or the named body cannot be found.</summary>
+        public static bool TryResolveBedCosmicKm(VoxelEngine.Menu.WorldSession session, out double3 km)
+        {
+            km = default;
+            if (session == null || !session.hasBedSpawn || !session.bedSpawnHasCosmic) return false;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry == null || !registry.IsReady) return false;
+            var stored = new double3(session.bedSpawnCosmicX, session.bedSpawnCosmicY, session.bedSpawnCosmicZ);
+            if (string.IsNullOrEmpty(session.bedSpawnBodyName))
+            {
+                km = stored; // deep-space bed: absolute is all there is
+                return true;
+            }
+            var body = registry.FindBodyByName(session.bedSpawnBodyName);
+            if (body == null) return false;
+            km = registry.CosmicPositionOf(body) + stored;
+            return true;
+        }
+
+        private IEnumerator RespawnRoutine(Vector3 dest, bool allowSpaceDestination = false,
+                                           bool cosmic = false, double3 destKm = default)
         {
             ReadyForPlayerControl = false;
             DisableController();
+
+            // 14.60.5 - cosmic destination: slide the universe so the player IS at
+            // the point, pick the dominant body's frame and re-target streaming.
+            // Everything below then operates on an honest local scene position.
+            if (cosmic)
+            {
+                var cosmicOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+                var cosmicReg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (cosmicOrigin != null && cosmicReg != null && cosmicReg.IsReady)
+                {
+                    cosmicOrigin.RegisterRoot(transform);
+                    cosmicOrigin.TeleportSubjectToCosmic(transform, destKm);
+                    dest = transform.position;
+                }
+            }
 
             // Death-loop breaker: only destinations INSIDE a planet are rejected (a save
             // written mid-launch). Spawns in space are intentional — a bed / cryobed in

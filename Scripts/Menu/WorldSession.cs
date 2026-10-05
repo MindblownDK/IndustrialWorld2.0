@@ -72,8 +72,12 @@ namespace VoxelEngine.Menu
         // 14.60.4 - the bed's frame-independent truth. The scene Vector3 above is
         // only valid in the reference frame where the bed was linked; a bed on
         // another planet respawned players into empty space. Doubles, in km.
+        // When bedSpawnBodyName is set, X/Y/Z are a BODY-RELATIVE offset (km) from
+        // that body's live centre; when empty they are absolute cosmic km (a bed in
+        // deep space). Body-relative survives orbital motion and clock drift.
         public double  bedSpawnCosmicX, bedSpawnCosmicY, bedSpawnCosmicZ;
         public bool    bedSpawnHasCosmic = false;
+        public string  bedSpawnBodyName = "";
 
         // ── Body-anchored world spawn (9.2.0) ─────────────────────────────
         // Scene positions go stale the moment the floating origin re-anchors (orbital
@@ -382,7 +386,8 @@ namespace VoxelEngine.Menu
                     bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn,
                     spawnBody  = worldSpawnBodyName, spawnLocal = worldSpawnLocalPos,
                     bedCosmicX = bedSpawnCosmicX, bedCosmicY = bedSpawnCosmicY,
-                    bedCosmicZ = bedSpawnCosmicZ, bedHasCosmic = bedSpawnHasCosmic
+                    bedCosmicZ = bedSpawnCosmicZ, bedHasCosmic = bedSpawnHasCosmic,
+                    bedBodyName = bedSpawnBodyName ?? ""
                 };
                 System.IO.File.WriteAllText(SpawnSidecarPath, UnityEngine.JsonUtility.ToJson(data, true));
             }
@@ -404,6 +409,7 @@ namespace VoxelEngine.Menu
                 bedSpawnCosmicY       = data.bedCosmicY;
                 bedSpawnCosmicZ       = data.bedCosmicZ;
                 bedSpawnHasCosmic     = data.bedHasCosmic;
+                bedSpawnBodyName      = data.bedBodyName ?? "";
                 worldSpawnBodyName    = data.spawnBody ?? "";
                 worldSpawnLocalPos    = data.spawnLocal;
             }
@@ -419,6 +425,7 @@ namespace VoxelEngine.Menu
             public bool    hasBed;
             public double  bedCosmicX, bedCosmicY, bedCosmicZ;
             public bool    bedHasCosmic;
+            public string  bedBodyName;
             public string  spawnBody;
             public Vector3 spawnLocal;
         }
