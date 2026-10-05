@@ -46,31 +46,50 @@ namespace VoxelEngine.Player
                 return false;
             }
 
-            // Arrive BESIDE the teammate, not inside them: half a metre up for
-            // ground clearance, a body's width to the side.
-            Vector3 targetPos = avatar.transform.position;
-            Vector3 up = Cosmos.GravityProvider.GetUp(targetPos);
-            Vector3 side = Vector3.Cross(up, avatar.transform.forward);
-            if (side.sqrMagnitude < 0.01f) side = avatar.transform.right;
-            Vector3 dest = targetPos + up * 0.5f + side.normalized * 1.2f;
-
             var origin = Cosmos.SpaceOrigin.Instance;
             var registry = Cosmos.CosmicRegistry.Instance;
-            if (origin != null && registry != null && registry.IsReady)
+            bool cosmosReady = origin != null && registry != null && registry.IsReady;
+
+            // 14.60.4 - teleport by COSMIC position, never by the avatar's scene
+            // transform. The avatar transform is a scene position in the TARGET'S
+            // reference frame: with the target on another planet it pointed at
+            // empty space here, and every click compounded the error ("deeper and
+            // deeper into space"). The avatar now replicates its owner's cosmic
+            // km; the move lands there, and frame + streaming re-pick on arrival.
+            if (cosmosReady && avatar.TryGetCosmicKm(out double3 targetKm))
             {
-                // The portal path: re-anchors the cosmos around the subject, so a
-                // long move re-picks frame and streaming instead of breaking floats.
                 var subject = pc.transform;
                 origin.RegisterRoot(subject);
-                origin.TeleportSubjectToCosmic(subject, origin.GetCosmicKm(dest));
+                origin.TeleportSubjectToCosmic(subject, targetKm);
+                // Step off the exact spot: half a metre up along the LOCAL up so
+                // two controllers never interpenetrate on arrival.
+                var cc = pc.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                pc.transform.position += Cosmos.GravityProvider.GetUp(pc.transform.position) * 0.6f;
+                if (cc != null) cc.enabled = true;
             }
             else
             {
-                // Flat/bootstrap fallback: plain controller-safe move.
-                var cc = pc.GetComponent<CharacterController>();
-                if (cc != null) cc.enabled = false;
-                pc.transform.position = dest;
-                if (cc != null) cc.enabled = true;
+                // Legacy path (owner has not reported a cosmic position yet, or no
+                // cosmos): arrive beside the avatar's scene transform.
+                Vector3 targetPos = avatar.transform.position;
+                Vector3 up = Cosmos.GravityProvider.GetUp(targetPos);
+                Vector3 side = Vector3.Cross(up, avatar.transform.forward);
+                if (side.sqrMagnitude < 0.01f) side = avatar.transform.right;
+                Vector3 dest = targetPos + up * 0.5f + side.normalized * 1.2f;
+                if (cosmosReady)
+                {
+                    var subject = pc.transform;
+                    origin.RegisterRoot(subject);
+                    origin.TeleportSubjectToCosmic(subject, origin.GetCosmicKm(dest));
+                }
+                else
+                {
+                    var cc = pc.GetComponent<CharacterController>();
+                    if (cc != null) cc.enabled = false;
+                    pc.transform.position = dest;
+                    if (cc != null) cc.enabled = true;
+                }
             }
             pc.ResetVelocity();
 

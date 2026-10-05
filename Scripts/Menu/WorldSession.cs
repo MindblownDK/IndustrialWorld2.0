@@ -69,6 +69,11 @@ namespace VoxelEngine.Menu
         public bool    worldSpawnInitialized = false;
         public Vector3 bedSpawnPoint = Vector3.zero;
         public bool    hasBedSpawn = false;
+        // 14.60.4 - the bed's frame-independent truth. The scene Vector3 above is
+        // only valid in the reference frame where the bed was linked; a bed on
+        // another planet respawned players into empty space. Doubles, in km.
+        public double  bedSpawnCosmicX, bedSpawnCosmicY, bedSpawnCosmicZ;
+        public bool    bedSpawnHasCosmic = false;
 
         // ── Body-anchored world spawn (9.2.0) ─────────────────────────────
         // Scene positions go stale the moment the floating origin re-anchors (orbital
@@ -375,7 +380,9 @@ namespace VoxelEngine.Menu
                 {
                     worldSpawn = worldSpawnPoint, worldInit = worldSpawnInitialized,
                     bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn,
-                    spawnBody  = worldSpawnBodyName, spawnLocal = worldSpawnLocalPos
+                    spawnBody  = worldSpawnBodyName, spawnLocal = worldSpawnLocalPos,
+                    bedCosmicX = bedSpawnCosmicX, bedCosmicY = bedSpawnCosmicY,
+                    bedCosmicZ = bedSpawnCosmicZ, bedHasCosmic = bedSpawnHasCosmic
                 };
                 System.IO.File.WriteAllText(SpawnSidecarPath, UnityEngine.JsonUtility.ToJson(data, true));
             }
@@ -393,6 +400,10 @@ namespace VoxelEngine.Menu
                 worldSpawnInitialized = data.worldInit;
                 bedSpawnPoint         = data.bedSpawn;
                 hasBedSpawn           = data.hasBed;
+                bedSpawnCosmicX       = data.bedCosmicX;
+                bedSpawnCosmicY       = data.bedCosmicY;
+                bedSpawnCosmicZ       = data.bedCosmicZ;
+                bedSpawnHasCosmic     = data.bedHasCosmic;
                 worldSpawnBodyName    = data.spawnBody ?? "";
                 worldSpawnLocalPos    = data.spawnLocal;
             }
@@ -406,6 +417,8 @@ namespace VoxelEngine.Menu
             public bool    worldInit;
             public Vector3 bedSpawn;
             public bool    hasBed;
+            public double  bedCosmicX, bedCosmicY, bedCosmicZ;
+            public bool    bedHasCosmic;
             public string  spawnBody;
             public Vector3 spawnLocal;
         }

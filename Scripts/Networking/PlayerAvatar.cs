@@ -59,6 +59,15 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<int> _motionFlags = new SyncVar<int>(0);
         // 14.18.0: attack counter - every increment is one visible swing.
         private readonly SyncVar<int> _attackCount = new SyncVar<int>(0);
+        // 14.60.4: the owner's COSMIC position (km). The avatar transform is a
+        // SCENE position in the OWNER'S reference frame - meaningless on a
+        // machine streaming another planet. Teleport-to-player needs the frame-
+        // independent truth. Doubles: float km loses tens of metres at planet
+        // distances, which is the difference between a landing and open space.
+        private readonly SyncVar<double> _cosmicXKm = new SyncVar<double>();
+        private readonly SyncVar<double> _cosmicYKm = new SyncVar<double>();
+        private readonly SyncVar<double> _cosmicZKm = new SyncVar<double>();
+        private readonly SyncVar<bool> _cosmicValid = new SyncVar<bool>(false);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -332,6 +341,37 @@ namespace VoxelEngine.Networking
 
             MirrorPose(stats);
             MirrorGhost();
+            MirrorCosmic();
+        }
+
+        // ── cosmic-position mirror (14.60.4) ─────────────────────────────
+        private float _nextCosmicSend;
+
+        private void MirrorCosmic()
+        {
+            if (Time.unscaledTime < _nextCosmicSend) return;
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (origin == null) return;
+            _nextCosmicSend = Time.unscaledTime + 0.5f;
+            Unity.Mathematics.double3 km = origin.GetCosmicKm(transform.position);
+            RpcUpdateCosmic(km.x, km.y, km.z);
+        }
+
+        [ServerRpc]
+        private void RpcUpdateCosmic(double x, double y, double z)
+        {
+            _cosmicXKm.Value = x;
+            _cosmicYKm.Value = y;
+            _cosmicZKm.Value = z;
+            _cosmicValid.Value = true;
+        }
+
+        /// <summary>Frame-independent position of this player, when the owner has
+        /// reported one this session (false on legacy/early frames).</summary>
+        public bool TryGetCosmicKm(out Unity.Mathematics.double3 km)
+        {
+            km = new Unity.Mathematics.double3(_cosmicXKm.Value, _cosmicYKm.Value, _cosmicZKm.Value);
+            return _cosmicValid.Value;
         }
 
         /// <summary>Owner-side: watch the local hotbar, stance and health, and

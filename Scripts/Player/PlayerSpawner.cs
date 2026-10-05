@@ -155,6 +155,8 @@ namespace VoxelEngine.Player
             // Determine the target position.
             Vector3 target;
             bool isFreshWorld = false;
+            bool bedCosmic = false;
+            double3 bedKm = default;
 
             if (hasSavedPos)
             {
@@ -164,13 +166,32 @@ namespace VoxelEngine.Player
             else if (session != null && session.hasBedSpawn)
             {
                 target = session.bedSpawnPoint;
-                Debug.Log("[PlayerSpawner] Bed spawn: " + target);
-                // A bed saved during the launch-era can also be a stale space coordinate.
-                if (!IsValidSurfaceDestination(target, out Vector3 safeBed))
+                // 14.60.4 - a bed records its COSMIC position at link time. The scene
+                // Vector3 is only valid in the frame where the bed was linked: dying
+                // on Earth with a bed on another planet used to interpret that stale
+                // Vector3 in Earth's frame and wake the player in empty space, with
+                // the planet never streaming. The cosmic record is converted to a
+                // live scene position AFTER the origin is re-anchored onto the bed
+                // (below) - here it just marks the spawn as cosmic.
+                bedCosmic = session.bedSpawnHasCosmic
+                            && VoxelEngine.Cosmos.SpaceOrigin.Instance != null
+                            && VoxelEngine.Cosmos.CosmicRegistry.Instance != null
+                            && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady;
+                if (bedCosmic)
                 {
-                    Debug.LogWarning("[PlayerSpawner] Bed spawn invalid (in space / inside planet) — using a fresh surface point instead.");
-                    target = safeBed;
-                    session.hasBedSpawn = false;   // don't loop back to the poisoned bed
+                    bedKm = new double3(session.bedSpawnCosmicX, session.bedSpawnCosmicY, session.bedSpawnCosmicZ);
+                    Debug.Log($"[PlayerSpawner] Bed spawn (cosmic): {bedKm.x:0.###}, {bedKm.y:0.###}, {bedKm.z:0.###} km");
+                }
+                else
+                {
+                    Debug.Log("[PlayerSpawner] Bed spawn: " + target);
+                    // A bed saved during the launch-era can also be a stale space coordinate.
+                    if (!IsValidSurfaceDestination(target, out Vector3 safeBed))
+                    {
+                        Debug.LogWarning("[PlayerSpawner] Bed spawn invalid (in space / inside planet) — using a fresh surface point instead.");
+                        target = safeBed;
+                        session.hasBedSpawn = false;   // don't loop back to the poisoned bed
+                    }
                 }
             }
             else
@@ -234,6 +255,15 @@ namespace VoxelEngine.Player
             // player is at rest and in control. Prevents any spawn-time sideways kick.
             var spawnOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
             if (spawnOrigin != null) spawnOrigin.suppressAutoFrameSwitches = true;
+            if (bedCosmic && spawnOrigin != null)
+            {
+                // Re-anchor the cosmos around the player AT the bed's cosmic point:
+                // this slides the world, picks the bed planet's frame, and fires the
+                // frame change that re-targets voxel streaming - the planet LOADS.
+                spawnOrigin.RegisterRoot(transform);
+                spawnOrigin.TeleportSubjectToCosmic(transform, bedKm);
+                target = transform.position;
+            }
             PrepareRespawnFrame(target);
             // On a sphere, DON'T force Y to 250 — that would park the player far above the
             // body's surface (which could be at Y=700+). Use the target Y directly so chunks

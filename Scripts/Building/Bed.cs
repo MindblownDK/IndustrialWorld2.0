@@ -75,6 +75,19 @@ namespace VoxelEngine.Building
             // World coords of this bed; player spawns slightly above to drop in.
             session.bedSpawnPoint   = transform.position + Vector3.up * 1.2f;
             session.hasBedSpawn     = true;
+            // 14.60.4 - also record the frame-independent cosmic position: the
+            // scene Vector3 is only meaningful in TODAY'S reference frame, and a
+            // respawn from another planet needs the TRUE absolute location.
+            var bedOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (bedOrigin != null)
+            {
+                var km = bedOrigin.GetCosmicKm(session.bedSpawnPoint);
+                session.bedSpawnCosmicX = km.x;
+                session.bedSpawnCosmicY = km.y;
+                session.bedSpawnCosmicZ = km.z;
+                session.bedSpawnHasCosmic = true;
+            }
+            else session.bedSpawnHasCosmic = false;
             session.SaveSpawnSidecar();
             UI.BuildFeedbackHud.Show("Bed Linked",
                 "Respawn point updated - you will wake up here.",

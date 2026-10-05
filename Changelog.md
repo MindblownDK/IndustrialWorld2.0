@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.3-dev`
+**Current Version:** `14.60.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.4-dev] Coordinates That Travel
+
+**Cross-planet truth for players: teleport and bed respawn now run on frame-independent cosmic coordinates instead of scene positions that only mean something on the machine that wrote them.**
+
+- Root cause, both reports: a scene position is only valid in the reference frame it was written in. A remote player's avatar transform is a scene position in THAT player's frame - on a machine streaming a different planet it points into empty space, and every teleport click compounded the error (re-anchoring moved the goalposts: "deeper and deeper into space"). A bed's stored spawn point had the same flaw: linked on one planet, interpreted in another planet's frame at respawn - the player woke floating in space next to the replicated bed visuals while the planet never streamed.
+- Player avatars now replicate their owner's COSMIC position (double precision, km - float kilometres lose tens of metres at planetary distances) at 2 Hz through the same owner-to-server SyncVar path as the rest of the pose. Teleport-to-player lands on that truth via the portal-grade cosmic teleport, which re-anchors the origin, picks the destination planet's frame and re-targets voxel streaming - arriving on a teammate's planet now loads it. Falls back to the old beside-the-avatar move when the target has not reported a cosmic position yet.
+- Beds record their cosmic position at link time (persisted in the spawn sidecar). A respawn with a cosmic record re-anchors the cosmos onto the bed BEFORE the landing flow runs: the bed planet's frame engages, streaming re-targets, and the normal wait-for-chunks landing proceeds on solid ground. Beds linked before this build have no cosmic record and keep the old behavior - sleep in them once to upgrade the link.
+---
 
 ### [14.60.3-dev] Teleport, Impact and the Honest Map
 

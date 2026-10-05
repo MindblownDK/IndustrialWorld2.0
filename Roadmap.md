@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.3-dev`
-**Roadmap Version:** `14.60.3-dev`
+**Current Version:** `14.60.4-dev`
+**Roadmap Version:** `14.60.4-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.4-dev - Coordinates That Travel
+Cross-planet teleport + bed respawn fixed at the root: scene positions are frame-local, so remote-avatar transforms and stored bed points meant nothing across planets. Avatars now replicate owner cosmic km (SyncVar doubles, 2 Hz); teleport-to-player uses them through the portal-grade cosmic teleport (frame + streaming re-pick on arrival, legacy beside-the-avatar fallback). Beds record cosmic km at link time (persisted in the spawn sidecar); cosmic respawns re-anchor the origin onto the bed before the landing flow, so the bed planet streams. Pre-existing bed links upgrade on next sleep.
 
 ### 14.60.3-dev - Teleport, Impact and the Honest Map
 Teammate teleport (Teams tab button, allowTeammateTeleport world rule default ON, owner's rule-free TELEPORT per player card in Server Administration; portal-path cosmic move, refused while piloting); player impact damage vs terrain/buildings/static blocks (closing-speed-into-surface, landings stay fall damage's, no terrain craters from players); orbital map pushes airborne craft markers out of body-disc minimum radii; GPU planet engines track the live camera always (colliders + LOD refinement before frame entry - no more flying through rendered planets).
