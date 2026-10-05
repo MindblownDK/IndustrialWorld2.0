@@ -186,7 +186,7 @@ namespace VoxelEngine.Maritime
             }
 
             if (VPressed) ToggleCameraMode();
-            if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
+            if (GridInput.ZPressed && !GridInput.Ctrl) Grid.DampenersOn = !Grid.DampenersOn;
             if (GridInput.PPressed) ToggleAllLandingGear();
 
             ReadFlightInput();

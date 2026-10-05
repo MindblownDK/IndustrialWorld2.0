@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.61.0-dev`
-**Roadmap Version:** `14.61.0-dev`
+**Current Version:** `14.62.0-dev`
+**Roadmap Version:** `14.62.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.62.0-dev - Relative Rest
+Mining yield honesty: VoxelEditor credits drops ONLY on fully removed voxels (the old per-graze credit flooded stone and buried ore; one-shot log warning when a mineable material has no dropItem). Jetpack dampener now damps in REFERENCE space (subtract ref velocity, damp relative, add back) - accelerating ships no longer pull away from hovering crew. Personal inertia dampeners (InputAction.Dampeners, default Z, auto-listed in keybinds): OFF = Newtonian drift (thrust integrates, no braking) and the MagneticBoots deck carry obeys the PLAYER's switch, never the ship's. Relative dampeners via Ctrl+Z: on foot, MagneticBoots.LockedReference overrides the proximity scan at any range (linear velocity reference); piloted, GridEntity.DampenerReferenceGrid makes ApplyAutonomousDampenerThrust brake toward the target grid's velocity (GridCockpit.ToggleDampenerReference; helm console ignores Ctrl+Z). PlayerMotionHud (MON-02): on-foot LCD instrument beside the gravity monitor - measured world speed, dampener reference + relative speed, dampener state.
 
 ### 14.61.0-dev - Boots On The Hull
 Ship-exit velocity inheritance (GridCockpit.Exit -> PlayerController.SetVelocity with the hull's point velocity); MagneticBoots component (auto-added by PlayerController): grid carry (linear + yaw) while jetpack off and feet on a grid, low-g hull-stick (contact normal becomes up via PlayerController UpVec/GravVec override, boot force replaces gravity), release on step-off; jetpack dampeners null velocity relative to the nearest grid within 14 m (world rest otherwise). WelderTool (grinder's twin): hold-LMB repair at repairHPPerSecond, pay-as-you-weld material cost (hpPerMaterialUnit), full repair cost on the top-left look-at card while held; setup step 113 (non-destructive, Assembler recipe). ItemScriptHealer: editor-load YAML m_Script GUID re-point for Item_WirelessTerminal + Item_CrusaderShield (data preserved).

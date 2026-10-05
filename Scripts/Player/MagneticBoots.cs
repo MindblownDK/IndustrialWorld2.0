@@ -52,6 +52,22 @@ namespace VoxelEngine.Player
         public Vector3 GravityOverride { get; private set; }
         public VoxelEngine.GridSystem.GridEntity AttachedGrid { get; private set; }
 
+        /// <summary>14.62.0 — explicit relative-dampener target (Ctrl+dampener key on a
+        /// grid under the crosshair). Overrides the proximity scan at ANY range: the
+        /// jetpack treats THAT grid's velocity as "at rest" until the lock is cleared.</summary>
+        public VoxelEngine.GridSystem.GridEntity LockedReference { get; private set; }
+
+        /// <summary>Grid currently serving as the dampener reference (locked target
+        /// first, else the proximity grid), or null at world rest. For the motion HUD.</summary>
+        public VoxelEngine.GridSystem.GridEntity ActiveReferenceGrid
+        {
+            get
+            {
+                if (LockedReference != null && LockedReference.Body != null) return LockedReference;
+                return _refGrid;
+            }
+        }
+
         private CharacterController _cc;
         private PlayerController _pc;
 
@@ -62,6 +78,7 @@ namespace VoxelEngine.Player
 
         // Fly-reference cache (OverlapSphere is not free - refresh at 4 Hz).
         private Rigidbody _refGridBody;
+        private VoxelEngine.GridSystem.GridEntity _refGrid;
         private float _nextRefScan;
 
         private void Awake()
@@ -74,6 +91,16 @@ namespace VoxelEngine.Player
         public void Tick(float dt)
         {
             if (_cc == null || !_cc.enabled || GameSettings.FlyMode)
+            {
+                Release();
+                return;
+            }
+
+            // 14.62.0 — the PLAYER's own dampener switch decides whether the boots
+            // follow a deck. The ship's dampener state is irrelevant here: a crewman
+            // on a drifting, dampener-less freighter still rides it. Only turning
+            // YOUR dampeners off cuts you loose.
+            if (_pc != null && !_pc.DampenersOn)
             {
                 Release();
                 return;
@@ -152,13 +179,20 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>Velocity the jetpack dampeners should treat as "at rest": the
-        /// nearest grid's point velocity when one is close, else zero (world rest).</summary>
+        /// locked relative target when one is set (any range), else the nearest grid's
+        /// point velocity when one is close, else zero (world rest).</summary>
         public Vector3 FlyReferenceVelocity(Vector3 position)
         {
+            // Explicit lock wins — linear velocity, not point velocity: at hundreds of
+            // metres the rotation lever arm would turn a slow tumble into nonsense.
+            if (LockedReference != null && LockedReference.Body != null)
+                return LockedReference.Body.linearVelocity;
+
             if (Time.unscaledTime >= _nextRefScan)
             {
                 _nextRefScan = Time.unscaledTime + 0.25f;
                 _refGridBody = null;
+                _refGrid = null;
                 float best = float.MaxValue;
                 var hits = Physics.OverlapSphere(position, flyReferenceRange, ~0, QueryTriggerInteraction.Ignore);
                 for (int i = 0; i < hits.Length; i++)
@@ -166,10 +200,50 @@ namespace VoxelEngine.Player
                     var g = hits[i].GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
                     if (g == null || g.Body == null) continue;
                     float d = (hits[i].bounds.ClosestPoint(position) - position).sqrMagnitude;
-                    if (d < best) { best = d; _refGridBody = g.Body; }
+                    if (d < best) { best = d; _refGridBody = g.Body; _refGrid = g; }
                 }
             }
             return _refGridBody != null ? _refGridBody.GetPointVelocity(position) : Vector3.zero;
+        }
+
+        /// <summary>Ctrl+dampener key — lock/unlock the grid under the crosshair as the
+        /// relative dampener target. Locking a moving grid makes the jetpack match ITS
+        /// velocity ("relative dampeners"); pressing again, or with nothing in sight,
+        /// clears the lock back to world rest.</summary>
+        public void ToggleReferenceLock()
+        {
+            var cam = Camera.main;
+            Transform eye = cam != null ? cam.transform : transform;
+
+            VoxelEngine.GridSystem.GridEntity target = null;
+            float best = float.MaxValue;
+            var hits = Physics.RaycastAll(eye.position, eye.forward, 2500f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                // Never lock yourself: skip anything that is part of this player.
+                if (hits[i].collider.GetComponentInParent<PlayerController>() == _pc && _pc != null) continue;
+                var g = hits[i].collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
+                if (g == null || g.Body == null) continue;
+                if (hits[i].distance < best) { best = hits[i].distance; target = g; }
+            }
+
+            if (target != null && target != LockedReference)
+            {
+                LockedReference = target;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    $"Matching velocity: {target.name}", null, new Color(0.35f, 0.90f, 0.80f));
+            }
+            else if (LockedReference != null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    $"Lock cleared: {LockedReference.name}", null, new Color(1f, 0.70f, 0.25f));
+                LockedReference = null;
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    "No grid under the crosshair", null, new Color(1f, 0.70f, 0.25f));
+            }
         }
     }
 }

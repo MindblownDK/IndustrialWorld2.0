@@ -12,6 +12,9 @@ namespace VoxelEngine.Modification
     /// </summary>
     public static class VoxelEditor
     {
+        // One warning per material per session when a mineable material has no drop item.
+        private static readonly bool[] _warnedNoDrop = new bool[256];
+
         public struct EditResult
         {
             public bool changed;
@@ -112,8 +115,27 @@ namespace VoxelEngine.Modification
                     int newDensity = v.density - delta;
                     bool fullyRemoved = newDensity <= 0;
 
-                    if (def != null && def.dropItem != null)
-                        drops[v.material] += def.dropAmount; // simple: 1 drop per "hit voxel"
+                    // 14.62.0 — yield is credited ONLY when a voxel is FULLY removed.
+                    // The old per-hit credit paid dropAmount for every voxel the brush
+                    // merely grazed, every swing: the stone rim of the brush re-dropped
+                    // endlessly while the ore pocket at the centre credited once, so a
+                    // mined vein read as "it just gives stone". Yield now equals voxels
+                    // actually destroyed, per material — ore pockets pay in ore.
+                    if (fullyRemoved && def != null)
+                    {
+                        if (def.dropItem != null)
+                        {
+                            drops[v.material] += def.dropAmount;
+                        }
+                        else if (def.isMineable && !_warnedNoDrop[v.material])
+                        {
+                            // One honest line per material per session: if an ore asset
+                            // ever loses its drop item reference, the log says so instead
+                            // of the vein silently mining to nothing.
+                            _warnedNoDrop[v.material] = true;
+                            Debug.LogWarning($"[VoxelEditor] Material '{def.displayName}' (id {v.material}) is mineable but has NO dropItem — it mines to nothing. Check its VoxelMaterialDefinition asset.");
+                        }
+                    }
 
                     if (fullyRemoved)
                     {

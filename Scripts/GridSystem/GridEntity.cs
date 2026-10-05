@@ -102,6 +102,18 @@ namespace VoxelEngine.GridSystem
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
 
+        /// <summary>14.62.0 — relative dampeners: when set, the dampeners brake toward
+        /// THIS grid's velocity instead of world rest (pilot Ctrl+Z on a grid in
+        /// sight). Cleared by Ctrl+Z again; dies silently with the target.</summary>
+        [System.NonSerialized] public GridEntity DampenerReferenceGrid;
+
+        /// <summary>Velocity the dampeners treat as "at rest" — the locked reference
+        /// grid's linear velocity, or zero (world rest) when no lock is set.</summary>
+        public Vector3 DampenerRestVelocity =>
+            DampenerReferenceGrid != null && DampenerReferenceGrid != this && DampenerReferenceGrid.Body != null
+                ? DampenerReferenceGrid.Body.linearVelocity
+                : Vector3.zero;
+
         // Dedicated wheel channel: no synthetic cockpit input and no thruster commands.
         public IndustrialWorld.Navigation.RoadWheelAutopilot WheelAutopilot { get; set; }
         public bool WheelParkingBrake { get; private set; }
@@ -1635,7 +1647,10 @@ namespace VoxelEngine.GridSystem
             AutonomousDampenersActive = false;
             if (_rb == null || !DampenersOn || HasStationaryLock() || !HasAutonomousDampenerEnergy()) return;
 
-            Vector3 velocity = _rb.linearVelocity;
+            // 14.62.0 — "at rest" can mean "matching that grid": every brake below
+            // works on the velocity RELATIVE to the dampener reference, so a locked
+            // ship station-keeps alongside a moving target instead of world-stopping.
+            Vector3 velocity = _rb.linearVelocity - DampenerRestVelocity;
             Vector3 gravity = CurrentGravityAcceleration();
             // Unmanned ships fall. A seated/autopilot hold fights the full velocity
             // with thrusters, including the gravity axis — if they have no downward

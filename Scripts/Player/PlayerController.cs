@@ -208,6 +208,14 @@ namespace VoxelEngine.Player
         /// under the player, so the player's heading turns with it.</summary>
         public void AddExternalYaw(float degrees) => _yaw += degrees;
 
+        /// <summary>14.62.0 — the player's PERSONAL inertia dampeners (default ON).
+        /// ON: the jetpack brakes toward its reference (world rest or a grid) and the
+        /// magnetic boots carry you with a deck you stand on. OFF: pure Newtonian
+        /// drift — thrust only ADDS velocity, nothing brakes, and the boot carry
+        /// disengages. Whether you follow a ship is decided by THIS switch, never by
+        /// the ship's own dampener state.</summary>
+        public bool DampenersOn { get; private set; } = true;
+
         /// <summary>Apply an external velocity impulse (e.g. a Karkadann charge knockback). Decays via normal friction.</summary>
         public void ApplyImpulse(Vector3 worldImpulse) => _velocity += worldImpulse;
 
@@ -367,6 +375,7 @@ namespace VoxelEngine.Player
 
                 // Boots first: the hull's motion lands in the same frame as the
                 // player's own move, so a walking crewman never slides on deck.
+                HandleDampenerInput();
                 _boots?.Tick(Time.deltaTime);
 
                 if (GameSettings.FlyMode) FlyUpdate();
@@ -861,6 +870,27 @@ namespace VoxelEngine.Player
         // Rate-limit for jetpack offline toasts so a dry pack doesn't spam every frame.
         private float _nextJetpackFeedbackTime;
 
+        /// <summary>Personal dampener key (Z by default, rebindable): tap toggles the
+        /// player's own dampeners; Ctrl+tap locks/unlocks the grid under the crosshair
+        /// as the RELATIVE dampener target — match ITS velocity instead of braking
+        /// toward world rest (works at any range, not just the 14 m proximity scan).</summary>
+        private void HandleDampenerInput()
+        {
+            if (VoxelEngine.UI.UIState.IsBlocking || VoxelEngine.UI.UIState.TextInputActive) return;
+            if (!GameSettings.WasPressed(InputAction.Dampeners)) return;
+
+            if (VoxelEngine.GridSystem.GridInput.Ctrl)
+            {
+                _boots?.ToggleReferenceLock();
+                return;
+            }
+
+            DampenersOn = !DampenersOn;
+            VoxelEngine.UI.BuildFeedbackHud.Show("Dampeners",
+                DampenersOn ? "Personal dampeners ON" : "Personal dampeners OFF — Newtonian drift",
+                null, DampenersOn ? new Color(0.35f, 0.90f, 0.80f) : new Color(1f, 0.70f, 0.25f));
+        }
+
         private void FlyUpdate()
         {
             float dt = Time.deltaTime;
@@ -930,7 +960,29 @@ namespace VoxelEngine.Player
             // speed. Far from any grid the reference is zero (world rest), which
             // is exactly the old behaviour.
             Vector3 dampRef = _boots != null ? _boots.FlyReferenceVelocity(transform.position) : Vector3.zero;
-            _velocity = Vector3.Lerp(_velocity, wishVel + dampRef, 1f - Mathf.Exp(-12f * dt));
+            if (DampenersOn)
+            {
+                // 14.62.0 — damp in REFERENCE space. The old form lerped toward
+                // (wishVel + dampRef), which chases an ACCELERATING reference with
+                // first-order lag — a ship under thrust slowly pulled away from the
+                // hovering player. Subtract the reference, damp the RELATIVE velocity
+                // toward the stick input, add the reference back: the reference is
+                // tracked exactly, with zero lag, while control feel inside that
+                // frame is unchanged.
+                Vector3 relative = _velocity - dampRef;
+                relative = Vector3.Lerp(relative, wishVel, 1f - Mathf.Exp(-12f * dt));
+                _velocity = relative + dampRef;
+            }
+            else
+            {
+                // Dampeners OFF: Newtonian drift. Thrust only ADDS velocity and
+                // nothing ever brakes — cut the throttle and you coast forever.
+                // Capped only to keep the character controller sane.
+                if (wishDir.sqrMagnitude > 0.0001f)
+                    _velocity += wishDir.normalized * (spd * 2.2f) * dt;
+                if (_velocity.sqrMagnitude > 240f * 240f)
+                    _velocity = _velocity.normalized * 240f;
+            }
             _cc.Move(_velocity * dt);
         }
 

@@ -33,7 +33,8 @@ namespace VoxelEngine.Settings
         ConstructRegistry, // name/classify the piloted construct and commit it to orbit (11.13.0-dev)
         GridInspector,  // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
         Autopilot,      // fly-to-nav-target cruise control (12.22.0-dev)
-        PushToTalk      // hold to speak on proximity voice (14.20.0-dev)
+        PushToTalk,     // hold to speak on proximity voice (14.20.0-dev)
+        Dampeners       // personal inertia dampeners; Ctrl+key locks a relative target (14.62.0-dev)
     }
 
     /// <summary>How the microphone decides it is your turn to speak.
@@ -80,7 +81,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 21;
+        private const int    CURRENT_VERSION = 22;   // v22: Dampeners action added (14.62.0)
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -316,6 +317,9 @@ namespace VoxelEngine.Settings
             // no vehicle, build or map hotkey already claims. Rebindable like
             // everything else, in Settings - Keybinds.
             InputAction.PushToTalk      => "Backquote",
+            // Z mirrors the cockpit dampener key: one muscle memory, two contexts —
+            // seated it is the SHIP's switch (GridCockpit), on foot it is YOURS.
+            InputAction.Dampeners       => "Z",
             _ => "None"
         };
 

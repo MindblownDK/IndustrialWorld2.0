@@ -166,7 +166,14 @@ namespace VoxelEngine.GridSystem
             if (VPressed) ToggleCameraMode();
 
             // Z toggles inertia dampeners (auto-brake to a stop when not thrusting).
-            if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
+            // Ctrl+Z (14.62.0) locks the grid under the crosshair as the RELATIVE
+            // dampener target: the ship brakes toward matching ITS velocity instead
+            // of world rest. Ctrl+Z again (or on empty space) clears the lock.
+            if (GridInput.ZPressed)
+            {
+                if (GridInput.Ctrl) ToggleDampenerReference();
+                else Grid.DampenersOn = !Grid.DampenersOn;
+            }
 
             // Third-person Alt orbit is persistent. A quick second Alt press returns
             // the camera to the home/chase position without changing ship controls.
@@ -218,6 +225,43 @@ namespace VoxelEngine.GridSystem
                 drive.BeginCharge();
             else
                 drive.TryWarp(); // shows the charge % toast while charging
+        }
+
+        /// <summary>Ctrl+Z — lock/unlock the grid in the pilot's sight as the ship's
+        /// relative dampener target (match its velocity instead of braking to rest).</summary>
+        private void ToggleDampenerReference()
+        {
+            if (Grid == null) return;
+            var cam = Camera.main;
+            Transform eye = cam != null ? cam.transform : transform;
+
+            GridEntity target = null;
+            float best = float.MaxValue;
+            var hits = Physics.RaycastAll(eye.position, eye.forward, 3000f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var g = hits[i].collider.GetComponentInParent<GridEntity>();
+                if (g == null || g == Grid || g.Body == null) continue;
+                if (hits[i].distance < best) { best = hits[i].distance; target = g; }
+            }
+
+            if (target != null && target != Grid.DampenerReferenceGrid)
+            {
+                Grid.DampenerReferenceGrid = target;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    $"Matching velocity: {target.name}", null, new Color(0.35f, 0.90f, 0.80f));
+            }
+            else if (Grid.DampenerReferenceGrid != null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    $"Lock cleared: {Grid.DampenerReferenceGrid.name}", null, new Color(1f, 0.70f, 0.25f));
+                Grid.DampenerReferenceGrid = null;
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    "No grid under the crosshair", null, new Color(1f, 0.70f, 0.25f));
+            }
         }
 
         private bool IsThirdPerson => _cameraDistance > THIRD_PERSON_THRESHOLD;

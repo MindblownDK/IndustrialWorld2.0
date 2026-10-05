@@ -1,9 +1,22 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.61.0-dev`
+**Current Version:** `14.62.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.62.0-dev] Relative Rest
+
+**Fix/feature round on the 14.61 space-legs work: mining yield honesty, zero-lag ship following, a personal dampener switch, SE-style relative dampeners for crew AND ships, and an on-foot motion instrument.**
+
+- FIXED - ore veins paid out in stone. The terrain brush credited a drop for EVERY voxel it merely grazed, every swing: the stone rim of the brush re-dropped endlessly while the ore pocket at the centre credited once, so a mined vein read as "it just gives stone". Yield is now credited ONLY when a voxel is fully destroyed - mine ore, get ore, in honest proportion. (If a mineable material asset ever loses its drop item reference, the log now says so explicitly instead of the vein silently mining to nothing.)
+- FIXED - an accelerating ship pulled away from a hovering crewman. The jetpack dampener lerped toward (input + reference velocity), which chases an ACCELERATING reference with first-order lag. It now damps in REFERENCE space - subtract the reference, damp the relative velocity, add the reference back - so the reference is tracked exactly, with zero lag, while control feel is unchanged.
+- NEW - personal inertia dampeners (Z on foot, rebindable as DAMPENERS). ON (default): exactly the flight feel you know. OFF: pure Newtonian drift - thrust only adds velocity, nothing brakes, cut the throttle and coast forever. The magnetic-boot deck carry obeys YOUR switch, never the ship's: a crewman on a drifting, dampener-less freighter still rides it; only turning your own dampeners off cuts you loose.
+- NEW - relative dampeners, on foot (Ctrl+Z). Look at any grid and press Ctrl+Z: your dampeners now treat THAT grid's velocity as "at rest", at any range - not just the 14 m proximity scan. Ctrl+Z again (or on empty space) clears the lock back to world rest.
+- NEW - relative dampeners, piloted (Ctrl+Z in the cockpit). Lock the grid under the crosshair and the ship's dampeners brake toward matching ITS velocity instead of world-stopping - station-keep alongside a moving freighter hands-off. Plain Z still toggles the ship's dampeners; the helm console ignores Ctrl+Z so boats cannot flip their dampeners by accident.
+- NEW - MOTION instrument (MON-02). A second LCD card beside the gravity monitor, on foot only: true speed in m/s, the current dampener reference (WORLD REST, the nearby grid, or your Ctrl+Z lock) with your speed RELATIVE to it, and the dampener state - phosphor when holding, blue when referenced to a grid, amber when drifting.
+- Keybinds: the new DAMPENERS action appears in Settings - Keybinds automatically (default Z, same muscle memory as the cockpit switch).
+---
 
 ### [14.61.0-dev] Boots On The Hull
 
