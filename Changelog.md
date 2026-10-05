@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.6-dev`
+**Current Version:** `14.60.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.7-dev] Waking Up On Time
+
+**Fixes the last cross-planet spawn case: on world LOAD the host spawned kilometres away from the linked bed, while every later respawn was exact.**
+
+- Root cause one: the spawn coroutine can outrun CosmosBootstrap at scene load. The bed's cosmic record resolves against the live registry, and with the registry not ready yet the resolver silently failed - the spawn degraded to LAST SESSION'S scene Vector3, which sits kilometres away in today's placement of the planet. The spawn now waits (bounded, 12 s) for the cosmos to be ready before deciding a bed target.
+- Root cause two: the saved orbital-clock restore was silently SKIPPED when the registry was not ready at the moment the save was applied, leaving the whole session at t = 0 - every body at the wrong orbital phase, so every scene coordinate written last session resolved to the wrong place. The restore now defers itself until the registry is ready instead of giving up.
+- Safety net: after the chunk wait, a bed spawn re-resolves the record against the settled universe and re-anchors once if the resolved point moved while settling (late clock restore mid-wait). The landing always runs against the final placement.
+- No migration, no wire change - a host-side load-order fix.
+---
 
 ### [14.60.6-dev] One Writer, One Frame
 

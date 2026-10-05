@@ -152,6 +152,23 @@ namespace VoxelEngine.Player
                 hasSavedPos = false;
             }
 
+            // 14.60.7 - the bed's cosmic record resolves against the LIVE registry,
+            // and at scene load this coroutine can outrun CosmosBootstrap: with the
+            // registry not ready yet the resolver silently failed and the spawn
+            // degraded to LAST SESSION'S scene Vector3 - kilometres off in today's
+            // placement of the planet. Wait (bounded) for the cosmos first.
+            if (!hasSavedPos && session != null && session.hasBedSpawn)
+            {
+                float cosmosDeadline = Time.unscaledTime + 12f;
+                while (Time.unscaledTime < cosmosDeadline)
+                {
+                    var waitReg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                    if (VoxelEngine.Cosmos.SpaceOrigin.Instance != null &&
+                        waitReg != null && waitReg.IsReady) break;
+                    yield return null;
+                }
+            }
+
             // Determine the target position.
             Vector3 target;
             bool isFreshWorld = false;
@@ -288,6 +305,25 @@ namespace VoxelEngine.Player
             {
                 target = LiftSavedPositionOutOfGround(target);
                 SetPosition(target);
+            }
+
+            // 14.60.7 - bed spawns re-resolve the record AFTER the chunk wait: the
+            // saved orbital clock can be restored while we waited, moving every
+            // body. Body-relative records absorb that through the frame anchor,
+            // but if the settled universe left the resolved point away from where
+            // we parked (late clock restore, legacy record upgrade), re-teleport
+            // once so the landing runs against the final placement.
+            if (bedCosmic && spawnOrigin != null &&
+                TryResolveBedCosmicKm(session, out var settledBedKm))
+            {
+                Vector3 settledScene = spawnOrigin.GetScenePos(settledBedKm);
+                if ((settledScene - transform.position).sqrMagnitude > 4f)
+                {
+                    Debug.Log($"[PlayerSpawner] Bed point moved while settling ({(settledScene - transform.position).magnitude:0.#} m) — re-anchoring onto the settled bed.");
+                    spawnOrigin.TeleportSubjectToCosmic(transform, settledBedKm);
+                    target = transform.position;
+                    yield return WaitForChunkAt(VoxelCoordOf(target), 8f);
+                }
             }
 
             // For flat fresh worlds, find the actual top-of-ground position.

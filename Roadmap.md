@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.6-dev`
-**Roadmap Version:** `14.60.6-dev`
+**Current Version:** `14.60.7-dev`
+**Roadmap Version:** `14.60.7-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.7-dev - Waking Up On Time
+Load-order fixes for bed spawns at world load: SpawnRoutine waits (bounded) for SpaceOrigin + CosmicRegistry readiness before resolving the bed record (previously degraded silently to last session's stale scene Vector3 - the "11 km from the bed" host spawn); WorldStatePersistence defers the orbital-clock restore until the registry is ready instead of silently skipping it (session no longer stuck at t=0 phase); bed spawns re-resolve and re-anchor once after the chunk wait if the settled universe moved the point.
 
 ### 14.60.6-dev - One Writer, One Frame
 Same-planet bed/cryobed respawn regression fixed: WorldSession.RefreshBedCosmic is the single writer of the bed cosmic record (bed, cryobed, grid cryobed, dry-spawn relocation all call it - cryobeds previously left a stale record behind); resolver refuses legacy absolute records near a planet; cosmic respawn reserved for cross-world beds (same-world uses the classic scene path, re-derived from the live body-relative record); death screen self-heals missing/unresolvable records from the verified scene point. Guest scene-frame alignment: avatar mirror also reports the owner's frame body + its scene position; pure guests shift their world so a shared planet sits exactly where the host holds it (SpaceOrigin.AlignFrameScene, translation only) - fixes the offset ghost surface after cross-planet teleports.

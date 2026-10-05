@@ -3013,6 +3013,25 @@ namespace VoxelEngine.Persistence
 
         private void RestorePlayer(SaveData save) => RestorePlayer(save.player, save.cosmicSimulationSeconds);
 
+        /// <summary>14.60.7 - deferred orbital-clock restore for loads where the
+        /// cosmos registry finishes building after the save is applied.</summary>
+        private System.Collections.IEnumerator RestoreCosmicClockWhenReady(double seconds)
+        {
+            float deadline = Time.unscaledTime + 20f;
+            while (Time.unscaledTime < deadline)
+            {
+                var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (reg != null && reg.IsReady)
+                {
+                    reg.RestoreSimulationSeconds(seconds);
+                    Debug.Log($"[WorldState] Cosmic clock restored (deferred) to t={seconds:0.#}s once the registry was ready.");
+                    yield break;
+                }
+                yield return null;
+            }
+            Debug.LogWarning("[WorldState] Cosmic clock restore timed out waiting for the registry — session stays at t=0.");
+        }
+
         /// <summary>Puts one player back: pose, inventory, equipment, hotbar.
         /// <paramref name="cosmicSimulationSeconds"/> is 0 for a record that did
         /// not come from this machine's own save - a guest must never wind the
@@ -3047,6 +3066,12 @@ namespace VoxelEngine.Persistence
             var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
             if (registry != null && registry.IsReady && save.cosmicSimulationSeconds > 0d)
                 registry.RestoreSimulationSeconds(save.cosmicSimulationSeconds);
+            else if (save.cosmicSimulationSeconds > 0d)
+                // 14.60.7 - the registry can lag this restore at scene load. The old
+                // silent skip left the session at t = 0: every body at the wrong
+                // orbital phase, so last session's scene coordinates (player saves,
+                // bed points) resolved kilometres away. Defer until it is ready.
+                StartCoroutine(RestoreCosmicClockWhenReady(save.cosmicSimulationSeconds));
 
             bool deepSpaceRestored = false;
             if (hasRestorePosition)
