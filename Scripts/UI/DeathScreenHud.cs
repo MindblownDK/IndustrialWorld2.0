@@ -241,21 +241,42 @@ namespace VoxelEngine.UI
             if (session != null && session.hasBedSpawn
                 && (!bedIsLocalWorld || !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint)))
             {
-                bool cosmicBed = VoxelEngine.Player.PlayerSpawner.TryResolveBedCosmicKm(session, out var bedKm);
-                // Resolve the actual name of the linked spawn instead of generic "Linked Spawn".
-                string linkedName = bedIsLocalWorld ? ResolveLinkedSpawnName(session.bedSpawnPoint) : "Linked Spawn";
-                string where = bedIsLocalWorld
-                    ? FormatPosition(session.bedSpawnPoint)
-                    : "on " + session.bedSpawnBodyName;
-                AddUnique(list, new RespawnChoice
+                // 14.60.6 - SELF-HEAL: the structure scan just verified the scene
+                // point, so a missing/rotted cosmic record (pre-body-relative links,
+                // cryobed links that never wrote one) is refreshed from it here -
+                // no re-sleeping required.
+                if (bedIsLocalWorld &&
+                    (string.IsNullOrEmpty(session.bedSpawnBodyName) ||
+                     !VoxelEngine.Player.PlayerSpawner.TryResolveBedCosmicKm(session, out _)))
                 {
-                    title = linkedName,
-                    detail = "Linked spawn · " + where,
-                    position = session.bedSpawnPoint,
-                    accent = new Color(0.30f, 0.95f, 0.62f),
-                    isCosmic = cosmicBed,
-                    cosmicXKm = bedKm.x, cosmicYKm = bedKm.y, cosmicZKm = bedKm.z
-                });
+                    session.RefreshBedCosmic();
+                    session.SaveSpawnSidecar();
+                }
+
+                // 14.60.6 - the cosmic respawn is for CROSS-WORLD beds only; a bed
+                // on the planet under your feet uses the verified scene point (the
+                // classic path - routing it through the cosmic teleport turned any
+                // imperfect record into a random healed surface point).
+                Unity.Mathematics.double3 bedKm = default;
+                bool cosmicBed = !bedIsLocalWorld &&
+                    VoxelEngine.Player.PlayerSpawner.TryResolveBedCosmicKm(session, out bedKm);
+                if (bedIsLocalWorld || cosmicBed)
+                {
+                    // Resolve the actual name of the linked spawn instead of generic "Linked Spawn".
+                    string linkedName = bedIsLocalWorld ? ResolveLinkedSpawnName(session.bedSpawnPoint) : "Linked Spawn";
+                    string where = bedIsLocalWorld
+                        ? FormatPosition(session.bedSpawnPoint)
+                        : "on " + session.bedSpawnBodyName;
+                    AddUnique(list, new RespawnChoice
+                    {
+                        title = linkedName,
+                        detail = "Linked spawn · " + where,
+                        position = session.bedSpawnPoint,
+                        accent = new Color(0.30f, 0.95f, 0.62f),
+                        isCosmic = cosmicBed,
+                        cosmicXKm = bedKm.x, cosmicYKm = bedKm.y, cosmicZKm = bedKm.z
+                    });
+                }
             }
 
             string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";

@@ -456,11 +456,13 @@ namespace VoxelEngine.Player
         {
             var session = Menu.WorldSession.Instance;
 
-            // 14.60.5 — a linked bed rides its COSMIC record whenever one resolves:
-            // the scene point below is only true in the frame (and at the orbital
-            // instant) the bed was linked in. The cosmic path re-anchors the origin
-            // onto the live bed position first, so it is honest on any planet.
-            if (session != null && session.hasBedSpawn &&
+            // 14.60.6 — the cosmic respawn (origin re-anchor + frame/streaming
+            // re-target) is for CROSS-WORLD beds only. A bed on the planet you are
+            // already standing on uses the classic scene path: the frame is held on
+            // this body, so the scene point is honest - and routing it through the
+            // cosmic teleport turned any imperfect record into a random healed
+            // surface point (the 14.60.5 offline regression).
+            if (session != null && session.hasBedSpawn && !BedOnActiveWorld(session) &&
                 TryResolveBedCosmicKm(session, out var cosmicBedKm))
             {
                 RespawnAtCosmic(cosmicBedKm.x, cosmicBedKm.y, cosmicBedKm.z);
@@ -475,7 +477,18 @@ namespace VoxelEngine.Player
                 // stale whenever the floating origin re-anchors (orbits, planet hops),
                 // which used to respawn the player in empty space. The body-local offset
                 // is transformed by the body's CURRENT transform instead.
-                if (session.hasBedSpawn) dest = session.bedSpawnPoint;
+                if (session.hasBedSpawn)
+                {
+                    dest = session.bedSpawnPoint;
+                    // Same-world bed with a live body-relative record: re-derive the
+                    // scene point from the planet's CURRENT placement (survives any
+                    // origin re-anchor since the link was made).
+                    if (BedOnActiveWorld(session) && TryResolveBedCosmicKm(session, out var localBedKm))
+                    {
+                        var liveOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+                        if (liveOrigin != null) dest = liveOrigin.GetScenePos(localBedKm);
+                    }
+                }
                 else if (session.TryResolveWorldSpawn(out Vector3 resolvedSpawn)) dest = resolvedSpawn;
                 else dest = transform.position;
 
@@ -602,6 +615,18 @@ namespace VoxelEngine.Player
                 cosmic: true, destKm: new double3(xKm, yKm, zKm)));
         }
 
+        /// <summary>True when the linked bed's recorded body IS the currently
+        /// streamed world (name match). Legacy records without a body name are
+        /// never claimed as local - the resolver decides what they are.</summary>
+        public static bool BedOnActiveWorld(VoxelEngine.Menu.WorldSession session)
+        {
+            if (session == null || !session.hasBedSpawn || string.IsNullOrEmpty(session.bedSpawnBodyName)) return false;
+            var active = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            return active != null && active.settings != null &&
+                   string.Equals(active.settings.bodyName, session.bedSpawnBodyName,
+                                 System.StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Resolve the session's linked bed to a LIVE cosmic point.
         /// Body-relative records are resolved against the planet's position NOW -
         /// absolute points rot as planets move on their orbits. False when there
@@ -615,7 +640,16 @@ namespace VoxelEngine.Player
             var stored = new double3(session.bedSpawnCosmicX, session.bedSpawnCosmicY, session.bedSpawnCosmicZ);
             if (string.IsNullOrEmpty(session.bedSpawnBodyName))
             {
-                km = stored; // deep-space bed: absolute is all there is
+                // 14.60.6 - an ABSOLUTE record that sits near a planet is a rotted
+                // pre-body-relative record (planets move; the point is where the
+                // planet USED to be). Current builds always store near-body beds
+                // body-relative, so absolute-near-a-body can only be legacy: refuse
+                // it and let callers fall back to the scene point / self-heal.
+                var nearLegacy = registry.FindNearestBodyKm(stored);
+                if (nearLegacy != null && nearLegacy.settings != null &&
+                    math.length(stored - registry.CosmicPositionOf(nearLegacy)) < nearLegacy.settings.radiusKm + 5000d)
+                    return false;
+                km = stored; // genuine deep-space bed: absolute is all there is
                 return true;
             }
             var body = registry.FindBodyByName(session.bedSpawnBodyName);
@@ -1106,6 +1140,7 @@ namespace VoxelEngine.Player
             if (session.hasBedSpawn && Vector3.Distance(session.bedSpawnPoint, previousSpawn) <= MatchDistance)
             {
                 session.bedSpawnPoint = drySpawn;
+                session.RefreshBedCosmic(); // keep the cosmic record on the moved point
                 changed = true;
             }
             else if (session.worldSpawnInitialized && Vector3.Distance(session.worldSpawnPoint, previousSpawn) <= MatchDistance)

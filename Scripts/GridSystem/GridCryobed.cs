@@ -110,6 +110,10 @@ namespace VoxelEngine.GridSystem
             claimedByLocalPlayer = true;
             session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
+            // 14.60.6 - refresh the cosmic record: without this, the record from a
+            // PREVIOUS link (possibly another planet) stayed in the sidecar and the
+            // death screen teleported respawns toward that stale point.
+            session.RefreshBedCosmic();
             session.SaveSpawnSidecar();
             VoxelEngine.UI.BuildFeedbackHud.Show("Cryobed Linked", "Respawn/offline safety point updated", null, new Color(0.45f, 0.85f, 1f));
             Debug.Log($"[GridCryobed] Spawn point set to {session.bedSpawnPoint}");

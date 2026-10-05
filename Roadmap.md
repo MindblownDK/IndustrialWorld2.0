@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.5-dev`
-**Roadmap Version:** `14.60.5-dev`
+**Current Version:** `14.60.6-dev`
+**Roadmap Version:** `14.60.6-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.6-dev - One Writer, One Frame
+Same-planet bed/cryobed respawn regression fixed: WorldSession.RefreshBedCosmic is the single writer of the bed cosmic record (bed, cryobed, grid cryobed, dry-spawn relocation all call it - cryobeds previously left a stale record behind); resolver refuses legacy absolute records near a planet; cosmic respawn reserved for cross-world beds (same-world uses the classic scene path, re-derived from the live body-relative record); death screen self-heals missing/unresolvable records from the verified scene point. Guest scene-frame alignment: avatar mirror also reports the owner's frame body + its scene position; pure guests shift their world so a shared planet sits exactly where the host holds it (SpaceOrigin.AlignFrameScene, translation only) - fixes the offset ghost surface after cross-planet teleports.
 
 ### 14.60.5-dev - Planets Move
 Body-relative coordinates for everything cross-planet: avatars replicate (body name + double offset km) resolved against the reader's live registry (orbital clock drift immune; absolute only in deep space); beds store the same record in the spawn sidecar with a shared live resolver; death screen routes bed choices through the new cosmic respawn (PlayerStats.RespawnAtCosmic -> PlayerSpawner.RespawnAtCosmic: re-anchor origin, frame + streaming re-target, then normal landing) - the death path (RespawnRoutine) was previously unpatched; bed exists/cryobed-O2 scene scans gated to same-world beds (they cleared healthy cross-world links). CosmicRegistry.FindBodyByName added. Relink cross-planet beds once.

@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.5-dev`
+**Current Version:** `14.60.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.6-dev] One Writer, One Frame
+
+**Two follow-up fixes: same-planet bed/cryobed respawns went to a random surface point (offline and host), and after a cross-planet teleport the other player walked on a vertically offset ghost surface.**
+
+- Random respawn, root cause one: cryobed links (static and grid) never wrote the cosmic record - they updated the scene point and left the PREVIOUS link's cosmic record in the sidecar. The new cosmic-first death routing trusted that stale record, resolved a point inside the planet, and the "fresh surface point" heal fired: random location. There is now exactly ONE writer of the bed cosmic record (WorldSession.RefreshBedCosmic) and every link path calls it - bed, cryobed, grid cryobed, dry-spawn relocation.
+- Random respawn, root cause two: records from before body-relative storage are absolute points that rot as the planet orbits. The resolver now refuses an absolute record that sits near a planet (current builds always store those body-relative, so absolute-near-a-planet can only be legacy) instead of trusting it.
+- Routing: the cosmic respawn (origin re-anchor + frame/streaming re-target) is now reserved for CROSS-WORLD beds. A bed on the planet under your feet uses the classic verified scene path again - same-planet respawns can no longer be hijacked by an imperfect cosmic record. Same-world beds with a live body-relative record re-derive the scene point from the planet's current placement, so they also survive origin re-anchors.
+- Self-heal: when the death screen verifies a same-world bed actually exists at its scene point, it refreshes a missing or unresolvable cosmic record from that verified point. No re-sleeping required to upgrade old links.
+- Offset ghost surface, root cause: avatar movement replicates RAW scene coordinates, and after a cosmic teleport the guest's world is re-anchored around the guest - the two machines held the same planet at different scene positions, so the other player rendered offset by exactly that difference ("his surface is lower than mine"). The avatar mirror now also reports which body the owner's frame is pinned to and where that body sits in the owner's scene; pure guests slide their whole world so the shared planet sits exactly where it sits on the host (translation only, invisible, converges in one shot, no-op once aligned). The host never follows a guest.
+- Both machines need this build (the avatar mirror message changed shape). Old bed links upgrade themselves at the first death screen.
+---
 
 ### [14.60.5-dev] Planets Move
 

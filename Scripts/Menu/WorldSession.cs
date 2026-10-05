@@ -376,6 +376,38 @@ namespace VoxelEngine.Menu
             }
         }
 
+        /// <summary>14.60.6 - THE one writer of the bed's cosmic record. Every
+        /// spawn-link path (bed, cryobed, grid cryobed, dry-spawn relocation) must
+        /// call this after setting bedSpawnPoint: a stale record left behind by an
+        /// earlier link resolved to where a planet USED to be and sent death-screen
+        /// respawns to a random healed surface point. Body-relative when a body is
+        /// near, absolute only in true deep space.</summary>
+        public void RefreshBedCosmic()
+        {
+            bedSpawnBodyName = "";
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (origin == null || !hasBedSpawn) { bedSpawnHasCosmic = false; return; }
+            var km = origin.GetCosmicKm(bedSpawnPoint);
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry != null && registry.IsReady)
+            {
+                var near = registry.FindNearestBodyKm(km);
+                if (near != null && near.settings != null)
+                {
+                    var off = km - registry.CosmicPositionOf(near);
+                    if (Unity.Mathematics.math.length(off) < near.settings.radiusKm + 5000d)
+                    {
+                        bedSpawnBodyName = near.settings.bodyName;
+                        km = off;
+                    }
+                }
+            }
+            bedSpawnCosmicX = km.x;
+            bedSpawnCosmicY = km.y;
+            bedSpawnCosmicZ = km.z;
+            bedSpawnHasCosmic = true;
+        }
+
         public void SaveSpawnSidecar()
         {
             try

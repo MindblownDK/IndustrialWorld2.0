@@ -164,6 +164,28 @@ namespace VoxelEngine.Cosmos
         /// <summary>Cosmic position (km) for a scene position (m).</summary>
         public double3 GetCosmicKm(Vector3 scenePos) => AnchorKm + CosmicRegistry.ToDouble3(scenePos) / 1000d;
 
+        /// <summary>14.60.6 - align this machine's scene placement of the CURRENT
+        /// frame body to the given scene position (the host's placement of it).
+        /// Networked transforms replicate raw scene coordinates, so machines that
+        /// share a planet must agree where that planet sits in the scene. This is a
+        /// pure whole-world translation: cosmic positions, the frame choice and
+        /// relative geometry are untouched, exactly like any origin rebase.</summary>
+        public void AlignFrameScene(Vector3 targetBodyScenePos)
+        {
+            if (FrameBody == null) return;
+            Vector3 delta = targetBodyScenePos - FrameBody.transform.position;
+            if (delta.sqrMagnitude < 0.0025f) return; // < 5 cm: already aligned
+            var reg = CosmicRegistry.Instance;
+            var inst = reg != null ? FindInstanceOf(FrameBody) : null;
+            ShiftWorld(delta);
+            if (reg != null && inst != null)
+                AnchorKm = reg.CosmicPositionOf(inst) - CosmicRegistry.ToDouble3(targetBodyScenePos) / 1000d;
+            else
+                AnchorKm -= CosmicRegistry.ToDouble3(delta) / 1000d;
+            PlaceBodies();
+            if (viewer != null) ViewerCosmicKm = GetCosmicKm(viewer.position);
+        }
+
         /// <summary>
         /// Teleport the origin so the viewer's cosmic position equals the given value.
         /// Used by save/load (logging out in deep space) and by the warp drive.

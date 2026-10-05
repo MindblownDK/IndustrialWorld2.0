@@ -72,6 +72,14 @@ namespace VoxelEngine.Networking
         // absolute point is stale the moment it is read. "" = absolute (deep space).
         private readonly SyncVar<string> _cosmicBody = new SyncVar<string>("");
         private readonly SyncVar<bool> _cosmicValid = new SyncVar<bool>(false);
+        // 14.60.6 - scene-frame agreement. FishNet replicates RAW scene coordinates,
+        // so two machines sharing a planet must hold that planet at the SAME scene
+        // position or every replicated transform renders offset ("his surface is
+        // lower than mine"). The owner mirrors WHICH body its frame is pinned to and
+        // WHERE that body sits in its scene; pure guests align to the host's values.
+        private readonly SyncVar<string> _frameBodyName = new SyncVar<string>("");
+        private readonly SyncVar<Vector3> _frameBodyScene = new SyncVar<Vector3>(Vector3.zero);
+        private readonly SyncVar<bool> _ownerIsHost = new SyncVar<bool>(false);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -318,6 +326,10 @@ namespace VoxelEngine.Networking
         public override void OnStartServer()
         {
             base.OnStartServer();
+            // Ownership is assigned at Spawn, so it is readable here: guests align
+            // their scene frame to the HOST player's avatar only (one authority,
+            // no client-to-client alignment cycles).
+            _ownerIsHost.Value = base.Owner != null && base.Owner.IsLocalClient;
             TryRegister();
         }
 
@@ -331,7 +343,7 @@ namespace VoxelEngine.Networking
 
         private void Update()
         {
-            if (!IsOwner) return;
+            if (!IsOwner) { MaybeAlignFrameToOwner(); return; }
             var stats = VoxelEngine.Player.PlayerStats.Instance;
             if (stats == null) return;
             var rig = stats.transform;
@@ -375,17 +387,53 @@ namespace VoxelEngine.Networking
                     }
                 }
             }
-            RpcUpdateCosmic(bodyName, km.x, km.y, km.z);
+            // Frame placement for scene alignment (see field comment): which body
+            // this machine's frame is pinned to, and where it sits in THIS scene.
+            string frameName = "";
+            Vector3 frameScene = Vector3.zero;
+            if (origin.FrameBody != null && origin.FrameBody.settings != null)
+            {
+                frameName = origin.FrameBody.settings.bodyName;
+                frameScene = origin.FrameBody.transform.position;
+            }
+            RpcUpdateCosmic(bodyName, km.x, km.y, km.z, frameName, frameScene);
         }
 
         [ServerRpc]
-        private void RpcUpdateCosmic(string bodyName, double x, double y, double z)
+        private void RpcUpdateCosmic(string bodyName, double x, double y, double z,
+                                     string frameBodyName, Vector3 frameBodyScene)
         {
             _cosmicBody.Value = bodyName ?? "";
             _cosmicXKm.Value = x;
             _cosmicYKm.Value = y;
             _cosmicZKm.Value = z;
+            _frameBodyName.Value = frameBodyName ?? "";
+            _frameBodyScene.Value = frameBodyScene;
             _cosmicValid.Value = true;
+        }
+
+        // ── scene-frame alignment (14.60.6) ──────────────────────────────
+        private float _nextFrameAlign;
+
+        /// <summary>On pure guests, when the HOST's frame is pinned to the same
+        /// planet as ours, slide our whole scene so the planet sits exactly where
+        /// it sits on the host. Translation only - nothing cosmic changes - and a
+        /// no-op once aligned, so this is cheap and converges in one shot.</summary>
+        private void MaybeAlignFrameToOwner()
+        {
+            if (base.IsServerInitialized) return;          // the host never follows
+            if (!_ownerIsHost.Value || !_cosmicValid.Value) return;
+            if (Time.unscaledTime < _nextFrameAlign) return;
+            string frameName = _frameBodyName.Value;
+            if (string.IsNullOrEmpty(frameName)) return;   // host in deep space
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (origin == null || origin.FrameBody == null) return;
+            if (origin.suppressAutoFrameSwitches) return;  // mid-respawn grace
+            var settings = origin.FrameBody.settings;
+            if (settings == null || !string.Equals(settings.bodyName, frameName,
+                                                   System.StringComparison.OrdinalIgnoreCase)) return;
+            _nextFrameAlign = Time.unscaledTime + 2f;
+            origin.AlignFrameScene(_frameBodyScene.Value);
         }
 
         /// <summary>Frame-independent position of this player, resolved against the
