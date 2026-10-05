@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.0-dev`
-**Roadmap Version:** `14.60.0-dev`
+**Current Version:** `14.60.1-dev`
+**Roadmap Version:** `14.60.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.1-dev - The Hold That Holds
+Moon capture fixed at the root: the proximity hold now overrides frame-switch dominance - it uses the hold body's own pull, bypasses the release rule and hysteresis, and switches the frame while armed and in range (previously the parent planet's dominance vetoed the switch every tick and the moon drifted away). Frame evaluator no longer early-outs past the hold when the dominant body's scene proxy is missing; hold log fires once per armed body.
 
 ### 14.60.0-dev - Live-Test Bug Round
 Nine live-test fixes: true-3D melee gates on ground enemies (no more sky-strikes); spawner requires world + gravity + terrain footing (no ghouls in space, never on hulls); locked warp arrivals computed on the NEAR side from the planet's live position at fire time (far-side overshoot and stale-confirm drift both fixed); planet lock allowed anywhere outside the arrival shell (no more can't-jump-back trap); proximity capture engages at max(hold range, 2.5x body radius) with a fixed 50 km leave-guard (moons now take over); grid impacts ignore LOD helper colliders and hold fire 1.5 s after origin/frame jolts (no phantom deep-space damage); block removal prunes disconnected hull islands (kept part = cockpit's, else largest); look-at card hidden while piloting.

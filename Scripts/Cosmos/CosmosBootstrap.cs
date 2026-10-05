@@ -1260,12 +1260,14 @@ namespace VoxelEngine.Cosmos
             // bigger engage range cannot deadlock the handover between two worlds.
             if (bestSurfaceDist < engageM && nearest != _streamingBody && streamingSurfaceDist > 50_000f)
             {
+                bool alreadyArmed = _spaceOrigin.proximityHoldBody == nearest;
                 _spaceOrigin.proximityHoldBody = nearest;
                 // Hold range must cover the engage distance or SpaceOrigin would
                 // release the hold again on the very next tick.
                 _spaceOrigin.proximityHoldRangeKm = Mathf.Max(_spaceOrigin.proximityHoldRangeKm, engageM / 1000f);
-                Debug.Log($"[CosmosBootstrap] Proximity hold armed for '{nearest.DisplayName}' " +
-                          $"(surface {bestSurfaceDist:0} m) — real voxel streaming will engage on arrival.");
+                if (!alreadyArmed)
+                    Debug.Log($"[CosmosBootstrap] Proximity hold armed for '{nearest.DisplayName}' " +
+                              $"(surface {bestSurfaceDist:0} m) — real voxel streaming will engage on arrival.");
             }
         }
 

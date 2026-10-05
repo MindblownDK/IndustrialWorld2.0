@@ -362,8 +362,11 @@ namespace VoxelEngine.Cosmos
             if (dominant != null)
             {
                 reg.SceneBodies.TryGetValue(dominant, out candidateBody);
-                if (candidateBody == null) return; // body factory not ready yet
+                // Body factory not ready yet - but an armed proximity hold must still
+                // get its shot below (14.60.1), so only bail when there is no hold.
+                if (candidateBody == null && proximityHoldBody == null) return;
             }
+            bool holdForced = false;
 
             // ── PROXIMITY HOLD (7.20.0) ───────────────────────────────
             // Small moons and low-gravity bodies may NEVER win gravity dominance over the
@@ -383,8 +386,19 @@ namespace VoxelEngine.Cosmos
                     if (holdDist < 0d) holdDist = 0d;
                     if (holdDist < proximityHoldRangeKm)
                     {
+                        // 14.60.1 - the hold is an OVERRIDE, not a suggestion. The old
+                        // code kept the DOMINANT body's accel (near a small moon that is
+                        // usually the parent planet), so the hysteresis below compared
+                        // Earth against Earth x1.05 and refused the switch every tick -
+                        // the hold re-armed forever while the moon sailed away on its
+                        // orbit. Use the hold body's own pull and bypass the dominance
+                        // gates entirely: capturing bodies that can never win dominance
+                        // is the hold's whole reason to exist.
                         candidateBody = proximityHoldBody;
-                        candidateAccel = math.max(candidateAccel, frameEligibilityGravityMps2);
+                        double dKm = math.max(holdCenter, math.max(0.05d, holdRadius));
+                        double holdAccel = holdInst.gravitationalParamKm3S2 * 1000d / (dKm * dKm);
+                        candidateAccel = math.max(holdAccel, frameEligibilityGravityMps2);
+                        holdForced = true;
                     }
                     else if (holdDist > proximityHoldRangeKm * 1.6d)
                     {
@@ -422,13 +436,14 @@ namespace VoxelEngine.Cosmos
             // the player back. Releasing is the physically correct free-fall handoff.
             bool currentWeak = currentAccel < releaseGravityMps2;
             bool newEligible = candidateBody != null && candidateAccel >= frameEligibilityGravityMps2;
-            if (!force && currentWeak && !newEligible && FrameBody != null)
+            if (!force && !holdForced && currentWeak && !newEligible && FrameBody != null)
                 candidateBody = null; // release to deep space
 
             if (candidateBody == FrameBody) return;
 
             // Hysteresis: only switch when the new candidate meaningfully wins.
-            if (!force)
+            // A proximity-hold capture skips it - see the hold block above (14.60.1).
+            if (!force && !holdForced)
             {
                 if (FrameBody == null)
                 {

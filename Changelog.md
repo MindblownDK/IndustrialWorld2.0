@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.0-dev`
+**Current Version:** `14.60.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.1-dev] The Hold That Holds
+
+**Live-test follow-up: the moon now actually captures your ship - the proximity hold overrides gravity dominance instead of asking it for permission.**
+
+- Root cause found in the frame-switch rule: near a small moon the parent planet usually stays gravity-dominant, so the dominance pass returned the planet and its pull as the candidate acceleration. The proximity hold then swapped the candidate BODY to the moon but kept the PLANET'S acceleration - and the switch hysteresis compared that value against the current frame's (the same planet's) pull times 1.05. Planet never beats planet by 5 percent: the switch was refused every tick, the hold re-armed every tick (the log spam), and the moon sailed away on its orbit in your old reference frame with you outside it.
+- The hold is now a true override: while armed and in range it computes the HOLD body's own pull at the viewer, bypasses the deep-space release rule and the dominance hysteresis, and switches the frame directly - capturing bodies that can never win dominance is the hold's entire purpose. On capture the moon freezes in the scene, your ship keeps its real relative velocity (brake with dampeners as usual), gravity pulls toward the moon and real voxel streaming engages.
+- The frame evaluator no longer bails out before the hold gets its turn when the dominant body's scene proxy is not built yet, and the hold-armed log only fires when the held body actually changes instead of every half second.
+---
 
 ### [14.60.0-dev] Live-Test Bug Round
 
