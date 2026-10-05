@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.7-dev`
-**Roadmap Version:** `14.60.7-dev`
+**Current Version:** `14.61.0-dev`
+**Roadmap Version:** `14.61.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.61.0-dev - Boots On The Hull
+Ship-exit velocity inheritance (GridCockpit.Exit -> PlayerController.SetVelocity with the hull's point velocity); MagneticBoots component (auto-added by PlayerController): grid carry (linear + yaw) while jetpack off and feet on a grid, low-g hull-stick (contact normal becomes up via PlayerController UpVec/GravVec override, boot force replaces gravity), release on step-off; jetpack dampeners null velocity relative to the nearest grid within 14 m (world rest otherwise). WelderTool (grinder's twin): hold-LMB repair at repairHPPerSecond, pay-as-you-weld material cost (hpPerMaterialUnit), full repair cost on the top-left look-at card while held; setup step 113 (non-destructive, Assembler recipe). ItemScriptHealer: editor-load YAML m_Script GUID re-point for Item_WirelessTerminal + Item_CrusaderShield (data preserved).
 
 ### 14.60.7-dev - Waking Up On Time
 Load-order fixes for bed spawns at world load: SpawnRoutine waits (bounded) for SpaceOrigin + CosmicRegistry readiness before resolving the bed record (previously degraded silently to last session's stale scene Vector3 - the "11 km from the bed" host spawn); WorldStatePersistence defers the orbital-clock restore until the registry is ready instead of silently skipping it (session no longer stuck at t=0 phase); bed spawns re-resolve and re-anchor once after the chunk wait if the settled universe moved the point.

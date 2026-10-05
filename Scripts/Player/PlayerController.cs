@@ -148,6 +148,7 @@ namespace VoxelEngine.Player
         // Walk mode ignores this and uses (_yaw, radial-up) as before.
         private Quaternion _flyRotation = Quaternion.identity;
         private Vector3 _velocity;          // includes Y in walk mode; in fly mode XYZ
+        private MagneticBoots _boots;       // 14.61.0 - grid carry/stick/reference
         private bool   _grounded;
         private bool   _wasGrounded;
         private bool   _onIce;
@@ -198,6 +199,15 @@ namespace VoxelEngine.Player
         /// <summary>Zero the internal velocity (used when mounting / dismounting a mount).</summary>
         public void ResetVelocity() => _velocity = Vector3.zero;
 
+        /// <summary>14.61.0 - overwrite the internal velocity. Used when leaving a
+        /// cockpit so the player inherits the ship's velocity instead of stopping
+        /// dead in space while the hull sails on.</summary>
+        public void SetVelocity(Vector3 worldVelocity) => _velocity = worldVelocity;
+
+        /// <summary>14.61.0 - external yaw carry (magnetic boots): the deck turned
+        /// under the player, so the player's heading turns with it.</summary>
+        public void AddExternalYaw(float degrees) => _yaw += degrees;
+
         /// <summary>Apply an external velocity impulse (e.g. a Karkadann charge knockback). Decays via normal friction.</summary>
         public void ApplyImpulse(Vector3 worldImpulse) => _velocity += worldImpulse;
 
@@ -232,6 +242,10 @@ namespace VoxelEngine.Player
             if (GetComponent<PlayerEquipment>() == null) gameObject.AddComponent<PlayerEquipment>();
             // 14.52.0 - collisions hurt: grids and other players, victim-side.
             if (GetComponent<PlayerImpactDamage>() == null) gameObject.AddComponent<PlayerImpactDamage>();
+            // 14.61.0 - magnetic boots: ride grids while walking, hull-stick in
+            // low-g, and the jetpack dampeners' moving reference frame.
+            if (GetComponent<MagneticBoots>() == null) gameObject.AddComponent<MagneticBoots>();
+            _boots = GetComponent<MagneticBoots>();
             if (GetComponent<LiquidContactEffects>() == null) gameObject.AddComponent<LiquidContactEffects>();
             _smoothedEyeHeight = standEyeHeight;
 
@@ -350,6 +364,10 @@ namespace VoxelEngine.Player
                         : "No jetpack equipped";
                     VoxelEngine.UI.BuildFeedbackHud.Show("Flight Offline", why, null, Color.yellow);
                 }
+
+                // Boots first: the hull's motion lands in the same frame as the
+                // player's own move, so a walking crewman never slides on deck.
+                _boots?.Tick(Time.deltaTime);
 
                 if (GameSettings.FlyMode) FlyUpdate();
                 else                      WalkUpdate();
@@ -907,7 +925,12 @@ namespace VoxelEngine.Player
             Vector3 wishVel = wishDir.sqrMagnitude > 0.0001f ? wishDir.normalized * spd : Vector3.zero;
 
             // Inertial-dampener feel: smooth toward target, no gravity in fly mode.
-            _velocity = Vector3.Lerp(_velocity, wishVel, 1f - Mathf.Exp(-12f * dt));
+            // 14.61.0 - the dampeners null velocity RELATIVE TO THE NEAREST GRID,
+            // not the world: hovering beside a cruising ship means matching its
+            // speed. Far from any grid the reference is zero (world rest), which
+            // is exactly the old behaviour.
+            Vector3 dampRef = _boots != null ? _boots.FlyReferenceVelocity(transform.position) : Vector3.zero;
+            _velocity = Vector3.Lerp(_velocity, wishVel + dampRef, 1f - Mathf.Exp(-12f * dt));
             _cc.Move(_velocity * dt);
         }
 
@@ -962,12 +985,16 @@ namespace VoxelEngine.Player
         // When a CelestialBody is active, "up" becomes the radial surface normal and the
         // player reorients to stand upright on the sphere — gravity, jump and horizontal
         // movement all operate on the local ground plane (perpendicular to `up`).
-        private Vector3 UpVec => GravityProvider.GetUp(transform.position);
+        private Vector3 UpVec => _boots != null && _boots.OverrideActive
+            ? _boots.UpDirection
+            : GravityProvider.GetUp(transform.position);
 
         // Real-space N-body gravity: inverse-square pulls from the star + every body.
         // On a planet it behaves exactly like the old radial gravity; in deep space it
         // is ~0 so the player floats (the jetpack / a ship is required to move out there).
-        private Vector3 GravVec => GravityProvider.GetGravity(transform.position);
+        private Vector3 GravVec => _boots != null && _boots.OverrideActive
+            ? _boots.GravityOverride
+            : GravityProvider.GetGravity(transform.position);
 
         /// <summary>
         /// Re-express this controller's velocity when the scene reference frame changes

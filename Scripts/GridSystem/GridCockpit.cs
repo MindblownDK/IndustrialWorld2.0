@@ -643,6 +643,15 @@ namespace VoxelEngine.GridSystem
             if (cc != null) cc.enabled = true;
             var rb = Pilot.GetComponent<Rigidbody>();
             if (rb != null) rb.isKinematic = false;
+
+            // 14.61.0 - leaving the seat INHERITS the ship's velocity: stepping out
+            // of a cruising ship used to zero the player against the world, so the
+            // hull instantly sailed away (or slammed into you). The player now
+            // leaves the seat co-moving with the hull; the magnetic boots grab on
+            // touch, and the jetpack dampeners null velocity relative to the grid.
+            var hullBody = Grid != null ? Grid.Body : null;
+            if (hullBody != null)
+                Pilot.SetVelocity(hullBody.GetPointVelocity(Pilot.transform.position));
             VoxelEngine.Networking.GridSync.ReleaseControl();
             Pilot = null;
             if (Grid != null && Grid.ActiveCockpit == this) Grid.ActiveCockpit = null;

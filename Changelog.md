@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.7-dev`
+**Current Version:** `14.61.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.61.0-dev] Boots On The Hull
+
+**Feature round: leaving a ship now behaves like it should in space, and grid blocks can finally be REPAIRED - a welder tool to mirror the grinder, plus self-healing for two more script-loss victims.**
+
+- Ship exit inherits velocity. Stepping out of a cockpit used to zero the player against the WORLD: the cruising hull instantly sailed away (or slammed into you). The player now leaves the seat co-moving with the ship.
+- Magnetic boots (automatic, no new equipment). While the jetpack is OFF and your feet touch a grid, you ride it: the hull's linear and rotational motion is applied to you every frame - walk the deck of a flying ship, stay put through turns. In low gravity the boots provide the "down": the hull contact normal becomes your up and a boot force replaces gravity, so you can walk the plating of a ship in deep space. Step off the edge and the boots release - zero-g drift as designed. Jetpack on = boots off.
+- Grid-relative inertial dampeners. While flying near a grid, the jetpack's dampeners null your velocity RELATIVE TO THAT GRID instead of the world - hovering beside a cruising ship means matching its speed. Far from any grid nothing changes.
+- Welder tool. The grinder's constructive twin: hold LMB on a damaged grid block to restore hit points. Repairs are paid for in material as HP flows back (pay-as-you-weld; welding stops honestly when the material runs out). The top-left look-at card shows the FULL repair cost of the block under the crosshair while a welder is in hand. Crack visuals heal as HP returns. Setup step 113 authors the tool + Assembler recipe non-destructively (default material: Iron Ingot; 4 Iron + 2 Copper to craft).
+- Item script healer. The Wireless Terminal and Crusader Shield item assets joined the External Storage script-loss club (uncommitted .meta GUID churn). A new editor-load healer re-points ONLY the dead script reference in the asset's YAML - every tuned field survives byte for byte. Silent when healthy; committing script .meta files remains the lasting cure.
+---
 
 ### [14.60.7-dev] Waking Up On Time
 

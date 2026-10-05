@@ -30,6 +30,7 @@ namespace VoxelEngine.UI
         private static VisualElement _card;
         private static Label _title;
         private static Label _detail;
+        private static Inventory _repairInventory;   // 14.61.0 - welder cost readout
         private static Label _status;
         private static VisualElement _healthRow;
         private static VisualElement _healthFill;
@@ -426,6 +427,23 @@ namespace VoxelEngine.UI
                 info.showHealth = gridBlock.maxHP > 0f;
                 info.health01 = gridBlock.maxHP > 0f ? Mathf.Clamp01(gridBlock.currentHP / gridBlock.maxHP) : 0f;
                 info.healthText = $"{Mathf.Max(0f, gridBlock.currentHP):0}/{gridBlock.maxHP:0}";
+
+                // 14.61.0 - repair cost while a WELDER is in hand: how much material
+                // a full repair of this block takes, priced by the held welder.
+                if (gridBlock.maxHP > 0f && gridBlock.currentHP < gridBlock.maxHP - 0.5f)
+                {
+                    var weldInv = _repairInventory != null ? _repairInventory
+                        : (_repairInventory = UnityEngine.Object.FindAnyObjectByType<Inventory>());
+                    var heldWelder = weldInv != null && !weldInv.ActiveStack.IsEmpty
+                        ? weldInv.ActiveStack.item as WelderTool : null;
+                    if (heldWelder != null && heldWelder.repairMaterial != null && heldWelder.hpPerMaterialUnit > 0f)
+                    {
+                        int units = Mathf.Max(1, Mathf.CeilToInt(
+                            (gridBlock.maxHP - gridBlock.currentHP) / heldWelder.hpPerMaterialUnit));
+                        string cost = $"REPAIR: {units} × {heldWelder.repairMaterial.displayName}";
+                        info.status = string.IsNullOrEmpty(info.status) ? cost : $"{info.status} · {cost}";
+                    }
+                }
 
                 // Live temperature once the plate is warm (9.30.0): lets the crew read
                 // a landing pad or hull section before touching it.

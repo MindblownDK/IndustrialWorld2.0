@@ -591,6 +591,12 @@ namespace VoxelEngine.Player
                 if (gridBlock != null)
                 {
                     var grindStack = inventory.ActiveStack;
+                    // 14.61.0 - welder first: the constructive twin of the grinder.
+                    if (!grindStack.IsEmpty && grindStack.item is VoxelEngine.GridSystem.WelderTool welder)
+                    {
+                        HandleWeld(gridBlock, welder, hit);
+                        return;
+                    }
                     if (!grindStack.IsEmpty && grindStack.item is VoxelEngine.GridSystem.GrinderTool grinder)
                     {
                         HandleGrind(gridBlock, grinder, hit);
@@ -3025,6 +3031,68 @@ namespace VoxelEngine.Player
                 ConsumeDurability(inventory.ActiveStack);
                 _nextHit = Time.time + 0.3f;
             }
+        }
+
+        // ── Welding (14.61.0) ────────────────────────────────────────
+
+        private float _weldMaterialDebt;   // fractional material owed for HP already restored
+        private float _nextWeldNotice;
+
+        /// <summary>Hold-LMB repair of a grid block: HP flows back at the welder's
+        /// rate and is paid for in repair material as it accrues ("pay as you
+        /// weld"). Welding stops the moment the material runs out, keeping every
+        /// restored hit point honestly paid for.</summary>
+        private void HandleWeld(VoxelEngine.GridSystem.GridBlock block,
+            VoxelEngine.GridSystem.WelderTool welder, RaycastHit hit)
+        {
+            if (block == null || block.maxHP <= 0f) return;
+
+            if (block.currentHP >= block.maxHP - 0.01f)
+            {
+                if (Time.time >= _nextWeldNotice)
+                {
+                    _nextWeldNotice = Time.time + 1.5f;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Welder",
+                        $"{block.blockName} is fully repaired.", null, new Color(0.30f, 0.90f, 1f));
+                }
+                return;
+            }
+
+            float missing = block.maxHP - block.currentHP;
+            float amount = Mathf.Min(welder.repairHPPerSecond * Time.deltaTime, missing);
+            if (amount <= 0f) return;
+
+            // Material gate: accrue fractional debt; settle whole units from the
+            // inventory the moment they come due. No material - no weld.
+            if (welder.repairMaterial != null && welder.hpPerMaterialUnit > 0f)
+            {
+                float debtAfter = _weldMaterialDebt + amount / welder.hpPerMaterialUnit;
+                int unitsDue = Mathf.FloorToInt(debtAfter);
+                if (unitsDue > 0)
+                {
+                    if (inventory.CountOf(welder.repairMaterial) < unitsDue)
+                    {
+                        if (Time.time >= _nextWeldNotice)
+                        {
+                            _nextWeldNotice = Time.time + 1.5f;
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Welder",
+                                $"Out of {welder.repairMaterial.displayName} — repairs need material.",
+                                null, new Color(1f, 0.6f, 0.2f));
+                        }
+                        return;
+                    }
+                    inventory.container.Remove(welder.repairMaterial, unitsDue);
+                    ConsumeDurability(inventory.ActiveStack);
+                    debtAfter -= unitsDue;
+                }
+                _weldMaterialDebt = debtAfter;
+            }
+
+            block.Repair(amount);
+
+            // Weld sparks every 0.2s - teal, so repair reads differently from grinding.
+            if (Mathf.Repeat(Time.time, 0.2f) < Time.deltaTime)
+                _feedback?.Trigger(hit.point, hit.normal, new Color(0.25f, 0.95f, 1f));
         }
 
         // ── Grid block breaking / item recovery ─────────────────────

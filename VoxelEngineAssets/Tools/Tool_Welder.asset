@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48254a76894e0ae4ea4e7548a2d1e40e, type: 3}
+  m_Name: Tool_Welder
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.WelderTool
+  itemId: welder_tool
+  displayName: Welder
+  description: Repairs grid (ship/vehicle) blocks. Hold LMB on a damaged block to
+    restore hit points - repairs consume material as they go, and the look-at card
+    shows the full cost of the block under the crosshair.
+  icon: {fileID: 0}
+  iconTint: {r: 0.25, g: 0.85, b: 1, a: 1}
+  maxStack: 1
+  massPerUnit: 1
+  category: Tools
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  toolType: 4
+  miningTier: 3
+  strength: 60
+  brushRadius: 1.4
+  fireRate: 5
+  maxDurability: 800
+  repairHPPerSecond: 45
+  repairMaterial: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+  hpPerMaterialUnit: 60

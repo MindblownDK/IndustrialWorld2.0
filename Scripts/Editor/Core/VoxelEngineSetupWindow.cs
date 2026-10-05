@@ -982,6 +982,8 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "111. Network Auto-Crafting\n(Blank Pattern item + recipe + controller crafter - Non-Destructive)",
                 () => VoxelEngine.EditorTools.AutoCraftingSetup.RunStep111(), 56);
 
+            AddWizardButton(scroll, "113. Welder Tool\n(Repair tool + recipe, pays HP in material - Non-Destructive)",
+                VoxelEngine.EditorTools.WelderSetup.Run, 48);
             AddWizardButton(scroll, "112. Keep-Stocked Logistics\n(Crafting Card upgrade + editable filters - Non-Destructive)",
                 () => VoxelEngine.EditorTools.CraftingCardSetup.RunStep112(), 56);
 
