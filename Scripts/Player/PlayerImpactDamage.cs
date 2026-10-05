@@ -38,8 +38,12 @@ namespace VoxelEngine.Player
         private const float ContactRange = 1.15f;   // chest-to-chest distance for a body hit
         private const float SpawnGraceSeconds = 3f;
 
+        private const float WorldMinSpeed = 11f;   // m/s into a wall before it hurts (same start as fall damage)
+        private const float WorldLethalSpeed = 30f;
+
         private PlayerController _player;
         private float _liveAt;
+        private float _worldCooldownUntil;
         private readonly Dictionary<GridEntity, float> _gridCooldown = new();
         private readonly Dictionary<string, float> _avatarCooldown = new();
 
@@ -58,7 +62,31 @@ namespace VoxelEngine.Player
         {
             if (_player == null || Time.time < _liveAt) return;
             var grid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
-            if (grid == null) return;
+            if (grid == null)
+            {
+                // 14.60.3 - the world hits back: flying into terrain, a building or
+                // any static block at speed hurts, exactly like hitting a hull. Only
+                // the closing speed INTO the surface counts, and ground landings
+                // (surface normal near local up) stay fall damage's domain so a hard
+                // landing is never billed twice. Players never crater terrain - the
+                // only impact here is on the player.
+                if (hit.collider == null || Time.time < _worldCooldownUntil) return;
+                var rbHit = hit.collider.attachedRigidbody;
+                if (rbHit != null && !rbHit.isKinematic) return; // dynamic props push, not hurt
+                if (hit.collider.GetComponentInParent<PlayerController>() != null) return;
+
+                Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
+                if (Vector3.Angle(hit.normal, up) < 50f) return; // landing, not a crash
+
+                float into = Vector3.Dot(_player.Velocity, -hit.normal);
+                if (into < WorldMinSpeed) return;
+                _worldCooldownUntil = Time.time + 1f;
+
+                Hurt(into, WorldMinSpeed, WorldLethalSpeed, 0.85f,
+                     "FLEW INTO THE SCENERY",
+                     $"-{{0:0}} HP · hit the world at {into:0.0} m/s");
+                return;
+            }
 
             // Keyed by the entity itself - GetInstanceID is obsolete in this
             // Unity, and a reference key needs no id at all (14.52.1).

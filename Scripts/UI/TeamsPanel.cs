@@ -180,6 +180,18 @@ namespace VoxelEngine.UI
                         }, targetIsLeader ? T.BgSlot : T.AccentCyan));
                     }
 
+                    // 14.60.3 - teammate teleport: jump to any ONLINE teammate,
+                    // when the world rule allows it (host flips it in Server
+                    // Administration). The avatar must be in the scene - a
+                    // teammate on an unloaded far world cannot be resolved.
+                    var tpSession = VoxelEngine.Menu.WorldSession.Instance;
+                    if (!isMe && online && tpSession != null && tpSession.allowTeammateTeleport)
+                    {
+                        string tpId = memberId;
+                        memberRow.Add(SmallBtn("TELEPORT", () =>
+                            VoxelEngine.Player.PlayerTeleport.ToPlayer(tpId), T.AccentCyan));
+                    }
+
                     // Removal: the owner removes anyone; a leader removes
                     // plain members only. Nobody removes the owner.
                     bool canRemove = !isMe && !targetIsOwner && (amOwner || (amLeader && !targetIsLeader));

@@ -225,6 +225,15 @@ namespace VoxelEngine.UI
                     var note = T.Muted("equal or higher rank");
                     row.Add(note);
                 }
+
+                // 14.60.3 - the owner's house key: teleport to any player,
+                // regardless of the teammate-teleport world rule.
+                if (myRank >= ServerAdminRegistry.RankOwner)
+                {
+                    string tpId = p.playerId;
+                    row.Add(SmallBtn("TELEPORT", () =>
+                        VoxelEngine.Player.PlayerTeleport.ToPlayer(tpId), T.AccentCyan));
+                }
                 card.Add(row);
 
                 // The open kick/ban row, right under its player: the parting
@@ -437,6 +446,7 @@ namespace VoxelEngine.UI
             content.Add(RuleToggle("Friendly fire", session.friendlyFire, "friendlyFire"));
             content.Add(RuleToggle("Ruin loot respawn", session.allowRuinLootRespawn, "allowRuinLootRespawn"));
             content.Add(RuleToggle("Banner painting", session.allowBannerPainting, "allowBannerPainting"));
+            content.Add(RuleToggle("Teammate teleport", session.allowTeammateTeleport, "allowTeammateTeleport"));
             content.Add(RuleToggle("Drop-void warning", session.showDropVoidWarning, "showDropVoidWarning"));
             content.Add(RuleStepper("Max dropped items", session.maxDroppedItems, 50, 10000, 100, "maxDroppedItems"));
             content.Add(RuleStepper("Inventory weight %", session.inventoryWeightPercent, 25, 1000, 25, "inventoryWeightPercent"));

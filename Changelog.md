@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.2-dev`
+**Current Version:** `14.60.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.60.3-dev] Teleport, Impact and the Honest Map
+
+**Live-test round: teammate teleport with an admin switch, the world hits back at reckless flyers, craft markers stop hiding under planet discs, and rendered planets are solid for everyone.**
+
+- Teammate teleport: the Teams tab shows a TELEPORT button next to every online teammate. It moves YOU to THEM, arriving beside the avatar, through the same cosmic-teleport path portals use - so long moves re-pick the reference frame and streaming correctly. Refused while piloting (leave the seat first) and when the target's avatar is not loaded on this machine.
+- New world rule "Teammate teleport" (default ON) in Server Administration, replicated to every client like the other world rules and persisted with the world. The server owner additionally gets a TELEPORT button on every player card in Server Administration that ignores the rule - the owner's house key.
+- The world hits back: flying into terrain, a building or any static block at speed now hurts, on the same curve as hitting a hull. Only the closing speed INTO the surface counts, ground landings stay fall damage's domain (no double billing), dynamic props push instead of hurt, and players never crater terrain - the only impact is on the player.
+- Orbital map honesty: body discs keep a minimum painted radius for clickability, and that disc swallowed any craft hovering a few hundred metres off a small moon - the marker projected INSIDE the disc and read as "landed". A craft that is actually above the surface is now pushed out to the disc rim, so parked-in-orbit and landed look different at every zoom.
+- Planets are solid before their frame is entered: each planet's GPU surface engine used to receive its viewer only on frame ENTRY, so a planet approached before (or without) a frame switch ran blind - no LOD refinement and no node colliders, letting ships fly straight through the rendered surface. Every planet engine now tracks the live camera, so colliders and refinement work on approach to any world, and real voxel streaming takes over on capture as before.
+---
 
 ### [14.60.2-dev] Where the Moon Actually Is
 

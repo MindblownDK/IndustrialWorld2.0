@@ -282,6 +282,15 @@ namespace VoxelEngine.GpuVoxel
         {
             if (!ResolveContext()) return;
 
+            // 14.60.3 - every planet tracks the live viewer, not just the one whose
+            // reference frame was entered. The viewer used to be assigned only by
+            // HandleFrameChange on frame ENTRY, so a planet approached before (or
+            // without) a frame switch ran with viewer == null: no LOD refinement
+            // and - far worse - no node colliders. That is how a ship flew straight
+            // through a rendered planet. The main camera rides the player on foot
+            // and in every seat, so it is always the right eye to track.
+            if (viewer == null && Camera.main != null) viewer = Camera.main.transform;
+
             if (IsFarFromViewer())
             {
                 if (!_farSleep)

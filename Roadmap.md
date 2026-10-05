@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.60.2-dev`
-**Roadmap Version:** `14.60.2-dev`
+**Current Version:** `14.60.3-dev`
+**Roadmap Version:** `14.60.3-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.60.3-dev - Teleport, Impact and the Honest Map
+Teammate teleport (Teams tab button, allowTeammateTeleport world rule default ON, owner's rule-free TELEPORT per player card in Server Administration; portal-path cosmic move, refused while piloting); player impact damage vs terrain/buildings/static blocks (closing-speed-into-surface, landings stay fall damage's, no terrain craters from players); orbital map pushes airborne craft markers out of body-disc minimum radii; GPU planet engines track the live camera always (colliders + LOD refinement before frame entry - no more flying through rendered planets).
 
 ### 14.60.2-dev - Where the Moon Actually Is
 Moon physics root cause: raw parent-relative body positions were read as absolute by the gravity solver, dominance query, frame-velocity blend, nearest-body query and hold checks - moons were simulated at a phantom point near the solar origin (planets immune: no parent). All sites now use the absolute parent-chain accessor; frame-velocity blend also uses parent-chained velocities. Autopilot flip-and-burn: overspeed on the brake curve steers the strongest thrust axis onto the velocity error (main-engine braking) with hysteresis.

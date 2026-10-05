@@ -624,6 +624,7 @@ namespace VoxelEngine.UI
             }
 
             // Bodies and contacts.
+            _bodyDiscs.Clear();
             for (int i = 0; i < entries.Count; i++)
             {
                 var e = entries[i];
@@ -658,9 +659,29 @@ namespace VoxelEngine.UI
                     painter.BeginPath();
                     painter.Arc(p, radius, 0f, 360f);
                     painter.Stroke();
+                    _bodyDiscs.Add((p, radius, e.PositionKm, e.RadiusKm));
                 }
                 else
                 {
+                    // 14.60.3 - the clickability floor on body discs (a 1.5 km moon
+                    // still paints ~a dozen pixels) swallowed any craft hovering a few
+                    // hundred metres off the surface: the marker projected INSIDE the
+                    // disc and read as "landed on the moon". A craft that is actually
+                    // above the surface is pushed radially out to the disc rim.
+                    for (int bd = 0; bd < _bodyDiscs.Count; bd++)
+                    {
+                        var disc = _bodyDiscs[bd];
+                        Vector2 away = p - disc.p;
+                        if (away.magnitude >= disc.rPx + 3f) continue;
+                        double altKm = math.length(e.PositionKm - disc.posKm) - disc.radKm;
+                        if (altKm > 0.05d)
+                        {
+                            Vector2 dir = away.sqrMagnitude > 0.01f ? away.normalized : Vector2.up;
+                            p = disc.p + dir * (disc.rPx + 6f);
+                        }
+                        break;
+                    }
+
                     // Craft are drawn as a fixed-size marker: a station is never to scale
                     // against a planet, and pretending otherwise makes it invisible.
                     float s = e.Kind == MapEntryKind.Station ? 5f : 4f;
@@ -684,6 +705,10 @@ namespace VoxelEngine.UI
                     PaintReticle(painter, np);
             }
         }
+
+        // Painted body discs this frame: projected centre, drawn pixel radius,
+        // cosmic position and true radius (14.60.3 craft de-overlap).
+        private static readonly List<(Vector2 p, float rPx, double3 posKm, double radKm)> _bodyDiscs = new();
 
         // ── Name labels ──────────────────────────────────────────────────────────
         // Drawn as pooled Labels in an overlay rather than via MeshGenerationContext.DrawText,

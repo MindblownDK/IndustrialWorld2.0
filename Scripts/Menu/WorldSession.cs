@@ -55,6 +55,12 @@ namespace VoxelEngine.Menu
         /// to curated gallery images. Default ON; gallery, texts and the
         /// default emblem are always available either way.</summary>
         public bool allowBannerPainting = true;
+
+        /// <summary>World rule (14.60.3): may players teleport to their
+        /// teammates from the Teams tab? A WORLD setting the host flips in
+        /// Server Administration. The server owner's admin-tab teleport
+        /// ignores this switch. Default ON.</summary>
+        public bool allowTeammateTeleport = true;
         public float PlayerInventoryWeightLimitKg => DefaultPlayerInventoryWeightKg * Mathf.Clamp(inventoryWeightPercent, 25, 1000) / 100f;
         public float ContainerWeightLimitKg => DefaultContainerWeightKg * Mathf.Clamp(containerWeightPercent, 25, 1000) / 100f;
 
@@ -222,6 +228,7 @@ namespace VoxelEngine.Menu
             public bool friendlyFire;
             // Class initializer = the answer a legacy host's card gives.
             public bool allowBannerPainting = true;
+            public bool allowTeammateTeleport = true;
         }
 
         /// <summary>Host side: describe this world for a joining client.</summary>
@@ -240,6 +247,7 @@ namespace VoxelEngine.Menu
                 fullVoxelRadiusKm = fullVoxelRadiusKm,
                 friendlyFire = friendlyFire,
                 allowBannerPainting = allowBannerPainting,
+                allowTeammateTeleport = allowTeammateTeleport,
             };
             try { return JsonUtility.ToJson(card); }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] ExportWorldCardJson: " + ex.Message); return ""; }
@@ -266,6 +274,7 @@ namespace VoxelEngine.Menu
             allowRuinLootRespawn = card.allowRuinLootRespawn;
             friendlyFire = card.friendlyFire;
             allowBannerPainting = card.allowBannerPainting;
+            allowTeammateTeleport = card.allowTeammateTeleport;
             if (card.fullVoxelRadiusKm > 0f) fullVoxelRadiusKm = card.fullVoxelRadiusKm;
 
             worldName = JoinedCacheFolderName(hostWorldDisplayName);
@@ -501,6 +510,8 @@ namespace VoxelEngine.Menu
             public int friendlyFire = 0;
             // Tri-state; legacy 0 reads as the default (ON).
             public int allowBannerPainting = 0;
+            // Tri-state; legacy 0 reads as the default (ON).
+            public int allowTeammateTeleport = 0;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -520,7 +531,8 @@ namespace VoxelEngine.Menu
                     allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1,
                     fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f),
                     friendlyFire = this.friendlyFire ? 1 : -1,
-                    allowBannerPainting = this.allowBannerPainting ? 1 : -1
+                    allowBannerPainting = this.allowBannerPainting ? 1 : -1,
+                    allowTeammateTeleport = this.allowTeammateTeleport ? 1 : -1
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -536,6 +548,7 @@ namespace VoxelEngine.Menu
             fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
             friendlyFire = DefaultFriendlyFire;
             allowBannerPainting = true;
+            allowTeammateTeleport = true;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
@@ -550,6 +563,7 @@ namespace VoxelEngine.Menu
                     fullVoxelRadiusKm = data.fullVoxelRadiusKm <= 0f ? DefaultFullVoxelRadiusKm : Mathf.Clamp(data.fullVoxelRadiusKm, 0f, 500f);
                     friendlyFire = data.friendlyFire == 1;
                     allowBannerPainting = data.allowBannerPainting != -1;
+                    allowTeammateTeleport = data.allowTeammateTeleport != -1;
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }
@@ -698,7 +712,8 @@ namespace VoxelEngine.Menu
                     allowRuinLootRespawn = newAllowRuinLootRespawn ? 1 : -1,
                     fullVoxelRadiusKm = keepFullVoxelRadiusKm,
                     friendlyFire = newFriendlyFire ? 1 : -1,
-                    allowBannerPainting = newAllowBannerPainting ? 1 : -1
+                    allowBannerPainting = newAllowBannerPainting ? 1 : -1,
+                    allowTeammateTeleport = this.allowTeammateTeleport ? 1 : -1
                 };
                 File.WriteAllText(WorldSettingsPathFor(name), JsonUtility.ToJson(data, true));
                 if (SanitizeWorldFolderName(name) == SanitizeWorldFolderName(worldName))
@@ -710,6 +725,7 @@ namespace VoxelEngine.Menu
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
                     friendlyFire = data.friendlyFire == 1;
                     allowBannerPainting = data.allowBannerPainting != -1;
+                    allowTeammateTeleport = data.allowTeammateTeleport != -1;
                 }
                 return true;
             }

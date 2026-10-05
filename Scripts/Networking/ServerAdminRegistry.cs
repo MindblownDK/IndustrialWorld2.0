@@ -440,6 +440,7 @@ namespace VoxelEngine.Networking
                 case "friendlyFire": session.friendlyFire = on; break;
                 case "allowRuinLootRespawn": session.allowRuinLootRespawn = on; break;
                 case "allowBannerPainting": session.allowBannerPainting = on; break;
+                case "allowTeammateTeleport": session.allowTeammateTeleport = on; break;
                 case "showDropVoidWarning": session.showDropVoidWarning = on; break;
                 case "maxDroppedItems":
                     if (!int.TryParse(value, out int drops)) return false;
