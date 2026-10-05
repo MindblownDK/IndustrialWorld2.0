@@ -354,7 +354,6 @@ namespace VoxelEngine.UI
             WorldInspectionHud.Tick();
             GridInspectorHud.Tick();
             GravityPullHud.Tick();
-            PlayerMotionHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
             OrbitalMapScreen.Tick();
             VoxelEngine.Navigation.NavFlightAutopilot.Tick();
@@ -1354,7 +1353,6 @@ namespace VoxelEngine.UI
             CargoPadHud.EnsureMounted(_topLayer);
             LogisticsMapScreen.EnsureMounted(_topLayer);
             GravityPullHud.EnsureMounted(_hudLayer);
-            PlayerMotionHud.EnsureMounted(_hudLayer);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);
             GrinderHud.EnsureMounted(_hudLayer);
             BuildCostHud.EnsureMounted(_hudLayer);

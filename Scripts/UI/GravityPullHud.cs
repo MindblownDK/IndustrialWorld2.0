@@ -15,33 +15,40 @@ namespace VoxelEngine.UI
 {
     public static class GravityPullHud
     {
-        private const int SurfaceSegmentCount = 8;
-
         // Muted phosphor palette: old practical instrumentation, not a neon hologram.
         private static readonly Color LcdGlass = new(0.105f, 0.125f, 0.075f, 0.98f);
         private static readonly Color LcdFrame = new(0.31f, 0.37f, 0.21f, 0.88f);
         private static readonly Color LcdInk = new(0.72f, 0.84f, 0.42f, 1f);
-        private static readonly Color LcdOff = new(0.085f, 0.10f, 0.07f, 0.98f);
+
+        // Motion/dampener accents (14.62.1): blue = referenced to a grid, amber = drifting.
+        private static readonly Color InkRelative = new(0.45f, 0.74f, 0.90f, 1f);
+        private static readonly Color InkWarning = new(0.98f, 0.71f, 0.24f, 1f);
 
         private static VisualElement _root;
         private static VisualElement _card;
         private static VisualElement _lcdScreen;
         private static VisualElement _lcdBorder;
-        private static VisualElement[] _surfaceSegments;
         private static Label _bodyLabel;
         private static Label _lcdGLabel;
         private static Label _lcdAccelerationLabel;
-        private static Label _vectorLabel;
-        private static Label _surfaceValueLabel;
-        private static Label _surfaceStateLabel;
+        private static Label _speedLabel;
+        private static Label _relativeLabel;
+        private static Label _dampenerLabel;
+        private static Label _referenceLabel;
         private static Label _tempLabel;
         private static Label _climateLabel;
 
         private static PlayerController _player;
         private static float _nextPlayerSearchAt;
         private static float _smoothedGees;
-        private static float _smoothedSurfacePull;
         private static bool _visible;
+
+        // Motion telemetry (14.62.1): measured from the transform itself, so walking,
+        // jetpack flight and the magnetic-boot carry all read equally truthfully.
+        private static bool _hasLastPos;
+        private static Vector3 _lastPos;
+        private static Vector3 _measuredVelocity;
+        private static float _smoothedSpeed;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -55,7 +62,7 @@ namespace VoxelEngine.UI
             _card.style.position = Position.Absolute;
             _card.style.left = 18;
             _card.style.bottom = 18;
-            _card.style.width = 196;
+            _card.style.width = 184;   // 14.62.1 - one compact instrument, more screen
             _card.style.paddingLeft = 6;
             _card.style.paddingRight = 6;
             _card.style.paddingTop = 6;
@@ -75,6 +82,7 @@ namespace VoxelEngine.UI
             BuildHeader();
             BuildInstrumentFace();
             _visible = false;
+            _hasLastPos = false;
         }
 
         private static void BuildHeader()
@@ -121,7 +129,7 @@ namespace VoxelEngine.UI
         {
             _lcdBorder = new VisualElement { name = "GravityLcdBezel" };
             _lcdBorder.style.width = 84;
-            _lcdBorder.style.height = 50;
+            _lcdBorder.style.height = 76;   // 14.62.1 - speed/REL lines under the pull
             _lcdBorder.style.paddingLeft = 4;
             _lcdBorder.style.paddingRight = 4;
             _lcdBorder.style.paddingTop = 3;
@@ -142,7 +150,7 @@ namespace VoxelEngine.UI
 
             // Subtle horizontal scan lines make this look like a physical LCD without
             // relying on an external texture or a generic glow effect.
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 7; i++)
             {
                 var line = new VisualElement();
                 line.style.position = Position.Absolute;
@@ -184,10 +192,34 @@ namespace VoxelEngine.UI
             _lcdAccelerationLabel.style.color = new StyleColor(new Color(LcdInk.r, LcdInk.g, LcdInk.b, 0.82f));
             _lcdAccelerationLabel.pickingMode = PickingMode.Ignore;
             _lcdScreen.Add(_lcdAccelerationLabel);
+
+            // ── motion, under the local pull — same glass (14.62.1) ──
+            _speedLabel = new Label("0.0 m/s");
+            _speedLabel.style.marginLeft = 3;
+            _speedLabel.style.marginTop = 3;
+            _speedLabel.style.fontSize = 10;
+            _speedLabel.style.letterSpacing = 0.6f;
+            _speedLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _speedLabel.style.color = new StyleColor(LcdInk);
+            _speedLabel.pickingMode = PickingMode.Ignore;
+            _lcdScreen.Add(_speedLabel);
+
+            _relativeLabel = new Label("");   // "REL x.x m/s" only while referenced
+            _relativeLabel.style.marginLeft = 3;
+            _relativeLabel.style.marginTop = -1;
+            _relativeLabel.style.fontSize = 7;
+            _relativeLabel.style.letterSpacing = 0.6f;
+            _relativeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _relativeLabel.style.color = new StyleColor(InkRelative);
+            _relativeLabel.pickingMode = PickingMode.Ignore;
+            _lcdScreen.Add(_relativeLabel);
         }
 
         private static void BuildReferenceColumn(VisualElement parent)
         {
+            // 14.62.1 — the surface-reference meter is gone; this column now carries
+            // the body name, the personal DAMPENER state and the dampener REFERENCE
+            // (world rest, the nearby grid, or an explicit Ctrl+Z lock).
             var column = new VisualElement { name = "GravityReferenceColumn" };
             column.style.flexGrow = 1;
             column.style.marginLeft = 6;
@@ -208,74 +240,32 @@ namespace VoxelEngine.UI
             _bodyLabel.pickingMode = PickingMode.Ignore;
             column.Add(_bodyLabel);
 
-            // VECTOR row removed in 7.13.5 — wasted vertical space on screen; the
-            // surface-reference segments below carry the useful information.
-            var vectorCaption = SmallCaption("VECTOR");
-            vectorCaption.style.marginTop = 3;
-            vectorCaption.style.display = DisplayStyle.None;
-            column.Add(vectorCaption);
+            var dampCaption = SmallCaption("DAMPENERS");
+            dampCaption.style.marginTop = 3;
+            column.Add(dampCaption);
 
-            _vectorLabel = new Label("COREWARD");
-            _vectorLabel.style.fontSize = 9;
-            _vectorLabel.style.letterSpacing = 0.7f;
-            _vectorLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _vectorLabel.style.color = new StyleColor(T.TextSecondary);
-            _vectorLabel.style.display = DisplayStyle.None;
-            _vectorLabel.pickingMode = PickingMode.Ignore;
-            column.Add(_vectorLabel);
+            _dampenerLabel = new Label("ON");
+            _dampenerLabel.style.fontSize = 9;
+            _dampenerLabel.style.letterSpacing = 0.8f;
+            _dampenerLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _dampenerLabel.style.color = new StyleColor(LcdInk);
+            _dampenerLabel.pickingMode = PickingMode.Ignore;
+            column.Add(_dampenerLabel);
 
-            var surfaceRow = new VisualElement { name = "GravitySurfaceReference" };
-            surfaceRow.style.flexDirection = FlexDirection.Row;
-            surfaceRow.style.alignItems = Align.Center;
-            surfaceRow.style.marginTop = 3;
-            surfaceRow.pickingMode = PickingMode.Ignore;
-            column.Add(surfaceRow);
+            var refCaption = SmallCaption("REF");
+            refCaption.style.marginTop = 3;
+            column.Add(refCaption);
 
-            var surfaceCaption = SmallCaption("SFC REF");
-            surfaceCaption.style.flexGrow = 1;
-            surfaceRow.Add(surfaceCaption);
-
-            _surfaceValueLabel = new Label("100%");
-            _surfaceValueLabel.style.fontSize = 10;
-            _surfaceValueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _surfaceValueLabel.style.color = new StyleColor(LcdInk);
-            _surfaceValueLabel.pickingMode = PickingMode.Ignore;
-            surfaceRow.Add(_surfaceValueLabel);
-
-            var segmentTrack = new VisualElement { name = "GravitySurfaceSegments" };
-            segmentTrack.style.flexDirection = FlexDirection.Row;
-            segmentTrack.style.height = 8;
-            segmentTrack.style.marginTop = 2;
-            segmentTrack.style.paddingLeft = 1;
-            segmentTrack.style.paddingRight = 1;
-            segmentTrack.style.paddingTop = 1;
-            segmentTrack.style.paddingBottom = 1;
-            segmentTrack.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
-            segmentTrack.pickingMode = PickingMode.Ignore;
-            T.Radius(segmentTrack, 1f);
-            T.Border(segmentTrack, 1f, new Color(LcdFrame.r, LcdFrame.g, LcdFrame.b, 0.72f));
-            column.Add(segmentTrack);
-
-            _surfaceSegments = new VisualElement[SurfaceSegmentCount];
-            for (int i = 0; i < SurfaceSegmentCount; i++)
-            {
-                var segment = new VisualElement { name = "GravitySegment" + i };
-                segment.style.flexGrow = 1;
-                segment.style.marginRight = i < SurfaceSegmentCount - 1 ? 1 : 0;
-                segment.style.backgroundColor = new StyleColor(LcdOff);
-                segment.pickingMode = PickingMode.Ignore;
-                T.Radius(segment, 1f);
-                _surfaceSegments[i] = segment;
-                segmentTrack.Add(segment);
-            }
-
-            _surfaceStateLabel = new Label("AT SURFACE REFERENCE");
-            _surfaceStateLabel.style.marginTop = 2;
-            _surfaceStateLabel.style.fontSize = 6;
-            _surfaceStateLabel.style.letterSpacing = 0.65f;
-            _surfaceStateLabel.style.color = new StyleColor(T.TextMuted);
-            _surfaceStateLabel.pickingMode = PickingMode.Ignore;
-            column.Add(_surfaceStateLabel);
+            _referenceLabel = new Label("WORLD REST");
+            _referenceLabel.style.fontSize = 8;
+            _referenceLabel.style.letterSpacing = 0.6f;
+            _referenceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _referenceLabel.style.color = new StyleColor(T.TextMuted);
+            _referenceLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            _referenceLabel.style.overflow = Overflow.Hidden;
+            _referenceLabel.style.textOverflow = TextOverflow.Ellipsis;
+            _referenceLabel.pickingMode = PickingMode.Ignore;
+            column.Add(_referenceLabel);
         }
 
         private static void BuildClimateRow()
@@ -325,6 +315,7 @@ namespace VoxelEngine.UI
             if (UIState.IsBlocking || GridCockpit.AnyPilotSeatActive)
             {
                 SetVisible(false);
+                _hasLastPos = false;     // never measure speed across a seat/menu gap
                 return;
             }
 
@@ -332,16 +323,30 @@ namespace VoxelEngine.UI
             if (player == null)
             {
                 SetVisible(false);
+                _hasLastPos = false;
                 return;
             }
 
             GravityFieldSample gravity = GravityProvider.Sample(player.transform.position);
             float smooth = 1f - Mathf.Exp(-9f * Time.unscaledDeltaTime);
             _smoothedGees = Mathf.Lerp(_smoothedGees, gravity.Gees, smooth);
-            _smoothedSurfacePull = Mathf.Lerp(_smoothedSurfacePull, gravity.SurfaceFraction, smooth);
+
+            // ── measure true world velocity from the transform itself (14.62.1) ──
+            float dt = Time.deltaTime;
+            Vector3 pos = player.transform.position;
+            if (dt > 1e-5f && _hasLastPos)
+            {
+                Vector3 delta = pos - _lastPos;
+                // A teleport / respawn / floating-origin shift is not motion.
+                _measuredVelocity = delta.sqrMagnitude < 80f * 80f ? delta / dt : Vector3.zero;
+            }
+            _lastPos = pos;
+            _hasLastPos = true;
+            _smoothedSpeed = Mathf.Lerp(_smoothedSpeed, _measuredVelocity.magnitude,
+                1f - Mathf.Exp(-10f * Time.unscaledDeltaTime));
 
             if (!_visible) SetVisible(true);
-            ApplyReadout(gravity, _smoothedGees, _smoothedSurfacePull);
+            ApplyReadout(player, gravity, _smoothedGees);
         }
 
         private static PlayerController ResolvePlayer()
@@ -353,26 +358,49 @@ namespace VoxelEngine.UI
             return _player;
         }
 
-        private static void ApplyReadout(GravityFieldSample gravity, float gees, float surfacePull)
+        private static void ApplyReadout(PlayerController player, GravityFieldSample gravity, float gees)
         {
             Color ink = ResolveLcdInk(gravity);
             var body = GravityProvider.ActiveBody;
             string bodyName = body != null ? body.DisplayName.ToUpperInvariant() : "LOCAL FIELD";
-            string direction = gravity.IsRadial ? "COREWARD" : "DOWNWARD";
-            int litSegments = Mathf.Clamp(Mathf.RoundToInt(surfacePull * SurfaceSegmentCount), 0, SurfaceSegmentCount);
 
             _bodyLabel.text = bodyName;
             _lcdGLabel.text = $"{gees:0.00}G";
             _lcdAccelerationLabel.text = $"{gravity.Magnitude:00.00} m/s²";
-            _vectorLabel.text = direction;
-            _surfaceValueLabel.text = gravity.IsRadial ? $"{surfacePull * 100f:0}%" : "100%";
-            _surfaceStateLabel.text = gravity.IsRadial
-                ? (surfacePull >= 0.995f ? "AT SURFACE REFERENCE" : "RELATIVE SURFACE PULL")
-                : "FLAT FIELD REFERENCE";
+
+            // ── motion + dampener state (14.62.1) ──
+            var boots = player.GetComponent<MagneticBoots>();
+            GridEntity reference = boots != null ? boots.ActiveReferenceGrid : null;
+            bool locked = boots != null && boots.LockedReference != null && reference == boots.LockedReference;
+            bool dampeners = player.DampenersOn;
+
+            _speedLabel.text = _smoothedSpeed >= 100f ? $"{_smoothedSpeed:0} m/s" : $"{_smoothedSpeed:0.0} m/s";
+
+            if (reference != null && reference.Body != null)
+            {
+                Vector3 refVel = locked
+                    ? reference.Body.linearVelocity
+                    : reference.Body.GetPointVelocity(player.transform.position);
+                float rel = (_measuredVelocity - refVel).magnitude;
+                _relativeLabel.text = rel >= 100f ? $"REL {rel:0} m/s" : $"REL {rel:0.0} m/s";
+                string refName = reference.name.ToUpperInvariant();
+                _referenceLabel.text = locked ? "LOCK " + refName : refName;
+                _referenceLabel.style.color = new StyleColor(InkRelative);
+            }
+            else
+            {
+                _relativeLabel.text = "";
+                _referenceLabel.text = "WORLD REST";
+                _referenceLabel.style.color = new StyleColor(T.TextMuted);
+            }
+
+            Color dampInk = dampeners ? (reference != null ? InkRelative : ink) : InkWarning;
+            _dampenerLabel.text = dampeners ? (locked ? "REL LOCK" : "ON") : "OFF · DRIFT";
+            _dampenerLabel.style.color = new StyleColor(dampInk);
 
             _lcdGLabel.style.color = new StyleColor(ink);
             _lcdAccelerationLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.84f));
-            _surfaceValueLabel.style.color = new StyleColor(ink);
+            _speedLabel.style.color = new StyleColor(dampeners ? ink : InkWarning);
             T.Border(_lcdBorder, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
             T.Border(_card, 1f, new Color(ink.r, ink.g, ink.b, 0.35f));
 
@@ -392,14 +420,6 @@ namespace VoxelEngine.UI
                 _climateLabel.text = $"{season.SeasonIcon} {season.SeasonName.ToUpperInvariant()} · {weatherStr}";
             }
 
-            for (int i = 0; i < _surfaceSegments.Length; i++)
-            {
-                var segment = _surfaceSegments[i];
-                if (segment == null) continue;
-                segment.style.backgroundColor = new StyleColor(i < litSegments
-                    ? new Color(ink.r, ink.g, ink.b, 0.90f)
-                    : LcdOff);
-            }
         }
 
         private static Color ResolveLcdInk(GravityFieldSample gravity)

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.62.0-dev`
-**Roadmap Version:** `14.62.0-dev`
+**Current Version:** `14.62.1-dev`
+**Roadmap Version:** `14.62.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.62.1-dev - One Instrument
+Motion telemetry merged into GravityPullHud (PlayerMotionHud.cs deleted): speed + REL line on the gravity LCD glass under the LOCAL PULL readout; surface-reference meter removed, its column now shows BODY / DAMPENERS (phosphor-amber-blue state) / REF (WORLD REST, grid name, or LOCK name); card narrowed to 184 px - one compact bottom-left instrument.
 
 ### 14.62.0-dev - Relative Rest
 Mining yield honesty: VoxelEditor credits drops ONLY on fully removed voxels (the old per-graze credit flooded stone and buried ore; one-shot log warning when a mineable material has no dropItem). Jetpack dampener now damps in REFERENCE space (subtract ref velocity, damp relative, add back) - accelerating ships no longer pull away from hovering crew. Personal inertia dampeners (InputAction.Dampeners, default Z, auto-listed in keybinds): OFF = Newtonian drift (thrust integrates, no braking) and the MagneticBoots deck carry obeys the PLAYER's switch, never the ship's. Relative dampeners via Ctrl+Z: on foot, MagneticBoots.LockedReference overrides the proximity scan at any range (linear velocity reference); piloted, GridEntity.DampenerReferenceGrid makes ApplyAutonomousDampenerThrust brake toward the target grid's velocity (GridCockpit.ToggleDampenerReference; helm console ignores Ctrl+Z). PlayerMotionHud (MON-02): on-foot LCD instrument beside the gravity monitor - measured world speed, dampener reference + relative speed, dampener state.

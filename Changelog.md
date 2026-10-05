@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.62.0-dev`
+**Current Version:** `14.62.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.62.1-dev] One Instrument
+
+**HUD polish on 14.62.0: the motion telemetry folds INTO the gravity monitor - one compact bottom-left instrument instead of a rack of two.**
+
+- Motion under the local pull: speed (and the REL line while referenced to a grid) now renders on the SAME LCD glass, directly under the G / m/s² readout - one glance covers field and motion.
+- The SFC REF meter (surface-reference segments + percentage) is retired; its column now carries what you actually act on: BODY, DAMPENERS (ON / OFF - DRIFT / REL LOCK, colour-coded phosphor / amber / blue) and REF - which always reads something honest, "WORLD REST" when free, the grid's name when referenced, "LOCK name" under a Ctrl+Z lock.
+- Compact: one card, slightly narrower (184 px), no second MON-02 module - net screen space returned to the game. The separate PlayerMotionHud file is deleted.
+---
 
 ### [14.62.0-dev] Relative Rest
 
