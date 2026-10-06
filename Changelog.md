@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.62.1-dev`
+**Current Version:** `14.63.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.63.0-dev] Clean Break
+
+**Live-test round: severed hull sections become their own ships, dampeners-off flight respects gravity, and the telemetry card got one long legible glass.**
+
+- Grid splitting. Removing a block that held two hull sections together no longer DISMANTLES the disconnected part - it breaks off as its OWN grid: same blocks, same world pose (no popping or re-snapping), its own physics from that moment on. The severed piece leaves with the exact velocity it had as part of the hull (velocity at its centre of mass, spin included) - cut the bow off a cruising ship and the bow keeps sailing. The part that keeps the original grid's identity is the one holding a cockpit; without one, the largest. The Structural Integrity toast now reports "broke off as its own grid" instead of counting demolished blocks. Multiplayer: clients never split locally (their hulls are kinematic copies) - the authoritative split happens on the host and arrives as the usual structure records.
+- Realistic dampeners-off flight. With your personal dampeners OFF, nothing fights gravity anymore: there is no automatic hover, so near a planet you FALL unless you thrust against the pull yourself. Thrust still only adds velocity; in deep space it remains pure Newtonian drift.
+- Telemetry card, third pass. One LONG LCD glass across the full card: LOCAL PULL on the left, SPEED big and clearly readable on the right. The REF / WORLD REST row is gone - reference info only exists when a reference exists: while your dampeners track a grid, a blue REL line (relative speed + grid name, LOCK-prefixed for a Ctrl+Z lock) appears under the speed. Below the glass one compact row: BODY left, DAMPENERS state right (phosphor ON / amber OFF - DRIFT / blue REL LOCK). Climate strip unchanged.
+---
 
 ### [14.62.1-dev] One Instrument
 

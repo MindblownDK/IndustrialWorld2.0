@@ -829,8 +829,8 @@ namespace VoxelEngine.GridSystem
             }
 
             // 14.60.0 - structural integrity: a removal may have cut blocks loose
-            // from the hull. Disconnected islands break off and are dismantled -
-            // a ship can no longer carry free-floating armor two meters off deck.
+            // from the hull. 14.63.0 - disconnected islands no longer get dismantled:
+            // they BREAK OFF as their own grid, keeping their blocks and momentum.
             if (!_pruningIslands) PruneDisconnectedIslands();
         }
 
@@ -843,12 +843,19 @@ namespace VoxelEngine.GridSystem
             new(0, -1, 0), new(0, 0, 1), new(0, 0, -1)
         };
 
-        /// <summary>Flood-fills the block lattice (6-neighbour) and removes every
-        /// component not connected to the main hull. The kept component is the one
-        /// holding a cockpit; without one, the largest survives (14.60.0).</summary>
+        /// <summary>Flood-fills the block lattice (6-neighbour) after a removal.
+        /// Every component not connected to the main hull BREAKS OFF AS ITS OWN GRID
+        /// (14.63.0) - cut a bridge block and both halves keep existing, each with its
+        /// own physics, the severed piece leaving with the velocity it had as part of
+        /// the hull. The component that keeps THIS grid's identity is the one holding
+        /// a cockpit; without one, the largest. Clients never split locally: their
+        /// hulls are kinematic copies of the host's - the authoritative split happens
+        /// on the host and arrives as the usual structure records (the changed
+        /// original plus a brand-new hull).</summary>
         private void PruneDisconnectedIslands()
         {
             if (_blocks.Count <= 1) return;
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client) return;
 
             var remaining = new HashSet<Vector3Int>(_blocks.Keys);
             var components = new List<List<Vector3Int>>();
@@ -891,23 +898,73 @@ namespace VoxelEngine.GridSystem
                     if (components[c].Count > best) { best = components[c].Count; keep = c; }
             }
 
-            int dropped = 0;
+            int broken = 0;
+            int newGrids = 0;
             _pruningIslands = true;
             try
             {
                 for (int c = 0; c < components.Count; c++)
                 {
                     if (c == keep) continue;
-                    var comp = components[c];
-                    for (int i = 0; i < comp.Count; i++) { RemoveBlock(comp[i]); dropped++; }
+                    var island = SplitIslandIntoGrid(components[c]);
+                    if (island != null) { newGrids++; broken += island.BlockCount; }
                 }
             }
             finally { _pruningIslands = false; }
 
-            if (dropped > 0 && !VoxelEngine.Networking.NetworkSession.IsDedicated)
-                VoxelEngine.UI.BuildFeedbackHud.Show("Structural Integrity",
-                    dropped == 1 ? "1 disconnected block broke off" : $"{dropped} disconnected blocks broke off",
-                    null, new Color(1f, 0.7f, 0.25f));
+            if (newGrids > 0)
+            {
+                RecalculateMass();
+                if (!VoxelEngine.Networking.NetworkSession.IsDedicated)
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Structural Integrity",
+                        newGrids == 1
+                            ? (broken == 1 ? "1 block broke off as its own grid"
+                                           : $"{broken} blocks broke off as their own grid")
+                            : $"{broken} blocks broke off as {newGrids} separate grids",
+                        null, new Color(1f, 0.7f, 0.25f));
+            }
+        }
+
+        /// <summary>Moves one disconnected component of blocks onto a brand-new
+        /// GridEntity that shares this grid's frame (same origin, same rotation, same
+        /// cell coordinates), so every block keeps its exact world pose - no popping,
+        /// no re-snapping. The new hull inherits velocity at its own centre of mass
+        /// (spin lever arm included) plus the hull's angular velocity: a severed bow
+        /// keeps sailing, it does not freeze in space.</summary>
+        private GridEntity SplitIslandIntoGrid(List<Vector3Int> cells)
+        {
+            var island = Create(transform.position, gridSize);
+            island.transform.rotation = transform.rotation;
+
+            int moved = 0;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                if (!_blocks.TryGetValue(cells[i], out var block) || block == null) continue;
+                _blocks.Remove(cells[i]);
+                island._blocks[cells[i]] = block;
+                block.Grid = island;
+                block.transform.SetParent(island.transform, true);
+                moved++;
+            }
+            if (moved == 0) { Destroy(island.gameObject); return null; }
+
+            island.RecalculateMass();
+
+            // The same subsystem notifications any topology change performs, on BOTH hulls.
+            NotifyMaritimeDirty();
+            island.NotifyMaritimeDirty();
+            GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
+            GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
+            island.GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(island.transform.position);
+
+            // Conservation of motion across the cut.
+            if (_rb != null && !_rb.isKinematic && island.Body != null)
+            {
+                island.Body.linearVelocity = _rb.GetPointVelocity(island.Body.worldCenterOfMass);
+                island.Body.angularVelocity = _rb.angularVelocity;
+            }
+            return island;
         }
 
         public GridBlock GetBlock(Vector3Int gridPos)

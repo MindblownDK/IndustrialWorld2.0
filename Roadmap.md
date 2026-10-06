@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.62.1-dev`
-**Roadmap Version:** `14.62.1-dev`
+**Current Version:** `14.63.0-dev`
+**Roadmap Version:** `14.63.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.63.0-dev - Clean Break
+Grid splitting: PruneDisconnectedIslands now moves each disconnected component onto a new GridEntity (SplitIslandIntoGrid: same origin/rotation/cells, blocks reparented, RecalculateMass both, velocity inherited via GetPointVelocity at the island's centre of mass + angular velocity; cockpit-first/largest keeps the original identity; host/offline only - clients converge via host structure records). Dampeners-off jetpack integrates GravVec (no free hover; falls in gravity). GravityPullHud third pass: single full-width LCD glass (LOCAL PULL left, SPEED right, blue REL line only while referenced), BODY + DAMPENERS status row, REF/WORLD REST row removed.
 
 ### 14.62.1-dev - One Instrument
 Motion telemetry merged into GravityPullHud (PlayerMotionHud.cs deleted): speed + REL line on the gravity LCD glass under the LOCAL PULL readout; surface-reference meter removed, its column now shows BODY / DAMPENERS (phosphor-amber-blue state) / REF (WORLD REST, grid name, or LOCK name); card narrowed to 184 px - one compact bottom-left instrument.

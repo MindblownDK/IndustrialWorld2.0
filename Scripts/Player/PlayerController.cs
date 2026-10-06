@@ -975,9 +975,11 @@ namespace VoxelEngine.Player
             }
             else
             {
-                // Dampeners OFF: Newtonian drift. Thrust only ADDS velocity and
-                // nothing ever brakes — cut the throttle and you coast forever.
-                // Capped only to keep the character controller sane.
+                // Dampeners OFF: honest Newtonian flight. Thrust only ADDS velocity,
+                // nothing ever brakes — and NOTHING fights gravity either (14.63.0):
+                // with the dampeners dead there is no automatic hover, so near a
+                // planet you fall unless you thrust against the pull yourself.
+                _velocity += GravVec * dt;
                 if (wishDir.sqrMagnitude > 0.0001f)
                     _velocity += wishDir.normalized * (spd * 2.2f) * dt;
                 if (_velocity.sqrMagnitude > 240f * 240f)
