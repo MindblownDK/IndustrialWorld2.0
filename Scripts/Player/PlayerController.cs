@@ -559,7 +559,18 @@ namespace VoxelEngine.Player
                 float accel = _grounded ? groundAcceleration : airAcceleration;
                 if (_grounded && _onIce) accel *= iceAccelerationMultiplier;
 
-                if (_grounded && wishDir.sqrMagnitude < 0.01f)
+                // 14.64.1 — WEIGHTLESS ON FOOT: no meaningful gravity, no boots on a
+                // hull, no ground — there is nothing to push against, so walking
+                // input must not steer you through open space. You coast (Newtonian)
+                // until the jetpack, a hull underfoot or gravity takes over.
+                bool weightlessDrift = !_grounded
+                    && GravVec.magnitude < 0.5f
+                    && (_boots == null || !_boots.Engaged);
+                if (weightlessDrift)
+                {
+                    // keep coasting — no input authority, no air friction
+                }
+                else if (_grounded && wishDir.sqrMagnitude < 0.01f)
                 {
                     // Apply ground friction: glide toward 0 horizontal velocity.
                     float activeFriction = _onIce ? iceGroundFriction : groundFriction;

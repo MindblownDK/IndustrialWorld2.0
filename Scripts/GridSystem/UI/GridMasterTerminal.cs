@@ -1214,9 +1214,15 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (b == null) return false;
             if (b is GridArmorBlock) return false;
+            // 14.64.1 — pipes are infrastructure, not controls: neither liquid nor
+            // gas pipe segments belong in the block index or the Grid Control HUD.
             if (b.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null) return false;
+            if (b.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null) return false;
             return true;
         }
+
+        /// <summary>Grid Control HUD bridge — the same listing filter the terminal uses.</summary>
+        public static bool IsListedBlock(GridBlock b) => IsTerminalBlock(b);
 
         private static bool MatchesSearch(GridBlock block, string query)
         {

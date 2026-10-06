@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.64.0-dev`
-**Roadmap Version:** `14.64.0-dev`
+**Current Version:** `14.64.1-dev`
+**Roadmap Version:** `14.64.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.64.1-dev - Wake On Deck
+Grid-cryobed live wake: PlayerSpawner.TryFindClaimedGridBed (prefers an online claimed GridCryobed) + WakeAtGridBed coroutine (no chunk wait, no ground snap, no altitude pull-down; re-pins to the moving hull over 5 settle frames, inherits hull point velocity, MagneticBoots.LockReference to the ship, heals bedSpawnPoint + sidecar) - used by BOTH the load path (before the stored-record branch, with the offline-death tail preserved) and Respawn(). Weightless-on-foot: WalkUpdate gives zero input authority and no friction when !_grounded, gravity < 0.5 and boots disengaged. Landing jitter: MagneticBoots smooths UpDirection (snap on first contact, exp slerp, ignore <1.5 deg). Zero-g split rotation: StabilizeGroundAlignment requires HasSupportBelow (non-self hit within max(6 m, 4 cells) along gravity) unless gear-locked/wheel-grounded; SplitIslandIntoGrid zeroes island velocity when the parent is at rest. Seat exit: GridCockpit.Exit relative-locks the pilot's boots to the grid (announce toast). Grid Control editor: mounts on the HUD layer, card absolute insets (14/14/8/9%), ESC/Inventory key close + auto-close when UIState stops blocking + GameUIController.CloseAll hook; slot cells 108x64 with fixed-height rows and a backgrounded state chip; GridMasterTerminal.IsListedBlock (armor + water/gas pipe filter) shared by the terminal list, editor tabs and category resolution.
 
 ### 14.64.0-dev - Grid Control
 Grid Control HUD: GridControlHud.cs (toolbar + editor) - per-grid 9-slot action bar keyed by entity id, rendered bottom-centre while a control seat is active, digits 1-9 fire slots (GameUIController.CheckHotbarKey yields digits while piloting unless the inventory is open); EDIT HUD button in the terminal opens the slot editor (ALL BLOCKS / CATEGORIES / GROUPS tabs, live search filter, pointer-drag with ghost OR click-source-then-slot, per-drop action picker); actions resolve members at press time, convergent toggles; per-type actions for landing gear (lock/unlock/autolock), batteries (mode cycle), tanks (mode cycle). Terminal renamed GRID CONTROL/GCC-01; GridMasterTerminal exposes CategoryLabel + PlayerGroups; ShipToolHud lifted to bottom 96. Fix batch: kinematic reference bodies count as zero velocity (MagneticBoots.FlyReferenceVelocity, GridEntity.DampenerRestVelocity, GravityPullHud REL line) - kills the REL-lock drift-away; relative lock auto-releases >200 m from the locked grid's closest block (TickLockLeash, 2 Hz); boots are zero-g-only (release when field gravity >= lowGravityThreshold) and re-anchor AFTER movement (CaptureAnchor from PlayerController), legacy deck carry disabled while boots engaged - single-carry rule ends the on-grid jitter; SplitIslandIntoGrid rebases the island origin to its min cell (cells + GridPos re-keyed, exact world pose preserved, body woken); PassiveAnimalSpawner gains the EnemySpawner 14.60.0 surface gates (world + gravity >= 0.5 + ground raycast, never on grid hulls, snap to ground); WorldInspectionHud drops stuck inventory hovers when no UI is blocking; cockpit orbit camera: yaw seamless 360, total elevation clamped +-85 (no more pole flip).

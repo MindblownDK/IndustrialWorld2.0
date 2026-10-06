@@ -114,6 +114,12 @@ namespace VoxelEngine.GridSystem.UI
             // editor, its panel died - drop the stale references.
             if (_editorOverlay != null && _editorOverlay.panel == null)
                 CloseEditor();
+            // 14.64.1 — the editor closes like any screen: ESC or the inventory key
+            // dismisses it, and when the terminal underneath is gone (another UI
+            // took over, the seat closed everything) it never lingers on its own.
+            if (_editorOverlay != null &&
+                (EditorClosePressed() || !VoxelEngine.UI.UIState.IsBlocking))
+                CloseEditor();
 
             if (_bar == null) return;
 
@@ -176,18 +182,23 @@ namespace VoxelEngine.GridSystem.UI
                 bool flash = i == _flashSlot;
 
                 var cell = new VisualElement();
-                cell.style.width = 96; cell.style.height = 54;
+                cell.style.width = 108; cell.style.height = 64;
                 cell.style.marginLeft = 2; cell.style.marginRight = 2;
-                cell.style.paddingLeft = 5; cell.style.paddingRight = 5;
-                cell.style.paddingTop = 3; cell.style.paddingBottom = 3;
+                cell.style.paddingLeft = 6; cell.style.paddingRight = 6;
+                cell.style.paddingTop = 4; cell.style.paddingBottom = 4;
+                cell.style.justifyContent = Justify.SpaceBetween;
                 cell.style.backgroundColor = new StyleColor(a != null ? L.GlassDark : new Color(0f, 0f, 0f, 0.35f));
                 T.Border(cell, 1, flash ? L.Phosphor : (a != null ? new Color(L.Phosphor.r, L.Phosphor.g, L.Phosphor.b, 0.35f) : T.BorderDim));
                 T.Radius(cell, 6);
                 cell.pickingMode = PickingMode.Ignore;
 
+                // Row 1: slot number left, state CHIP right — the chip has its own
+                // dark background so the status reads whatever the name text does.
                 var top = new VisualElement();
                 top.style.flexDirection = FlexDirection.Row;
                 top.style.justifyContent = Justify.SpaceBetween;
+                top.style.alignItems = Align.Center;
+                top.style.height = 14; top.style.flexShrink = 0;
                 top.pickingMode = PickingMode.Ignore;
 
                 var num = new Label((i + 1).ToString());
@@ -203,30 +214,35 @@ namespace VoxelEngine.GridSystem.UI
                     state.style.fontSize = 8;
                     state.style.unityFontStyleAndWeight = FontStyle.Bold;
                     state.style.color = new StyleColor(SlotStateColor(tag));
+                    state.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.55f));
+                    state.style.paddingLeft = 4; state.style.paddingRight = 4;
+                    state.style.paddingTop = 1; state.style.paddingBottom = 1;
+                    T.Radius(state, 3);
                     top.Add(state);
                 }
                 cell.Add(top);
 
+                // Row 2: the target name — one fixed-height clipped line, never
+                // overlapping the chip above or the action below.
                 var nameLabel = new Label(a != null ? a.DisplayName.ToUpperInvariant() : "—");
-                nameLabel.style.fontSize = 10;
+                nameLabel.style.fontSize = 9;
                 nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
                 nameLabel.style.color = new StyleColor(a != null ? new Color(0.88f, 0.93f, 0.85f) : new Color(0.35f, 0.38f, 0.36f));
                 nameLabel.style.overflow = Overflow.Hidden;
                 nameLabel.style.textOverflow = TextOverflow.Ellipsis;
                 nameLabel.style.whiteSpace = WhiteSpace.NoWrap;
-                nameLabel.style.marginTop = 2;
+                nameLabel.style.height = 13; nameLabel.style.flexShrink = 0;
                 cell.Add(nameLabel);
 
-                if (a != null)
-                {
-                    var action = new Label(a.actionLabel);
-                    action.style.fontSize = 8;
-                    action.style.color = new StyleColor(L.PhosphorDim);
-                    action.style.overflow = Overflow.Hidden;
-                    action.style.textOverflow = TextOverflow.Ellipsis;
-                    action.style.whiteSpace = WhiteSpace.NoWrap;
-                    cell.Add(action);
-                }
+                // Row 3: the assigned action.
+                var action = new Label(a != null ? a.actionLabel : string.Empty);
+                action.style.fontSize = 8;
+                action.style.color = new StyleColor(L.PhosphorDim);
+                action.style.overflow = Overflow.Hidden;
+                action.style.textOverflow = TextOverflow.Ellipsis;
+                action.style.whiteSpace = WhiteSpace.NoWrap;
+                action.style.height = 12; action.style.flexShrink = 0;
+                cell.Add(action);
 
                 strip.Add(cell);
             }
@@ -289,7 +305,7 @@ namespace VoxelEngine.GridSystem.UI
                     break;
                 case TargetKind.Category:
                     foreach (var b in grid.AllBlocks)
-                        if (b != null && GridMasterTerminal.CategoryLabel(b) == a.key) list.Add(b);
+                        if (GridMasterTerminal.IsListedBlock(b) && GridMasterTerminal.CategoryLabel(b) == a.key) list.Add(b);
                     break;
             }
             return list;
@@ -454,8 +470,16 @@ namespace VoxelEngine.GridSystem.UI
             if (grid == null || context == null || context.panel == null) return;
             CloseEditor();
 
-            var root = context;
-            while (root.parent != null) root = root.parent;
+            // 14.64.1 — mount on the persistent fullscreen HUD layer (definite
+            // size, drawn above the content layer). Mounting on the climbed panel
+            // root gave the overlay no resolved height, so every percent-sized
+            // child collapsed — the "whole screen mushed together" report.
+            VisualElement root = _root != null && _root.panel != null ? _root : null;
+            if (root == null)
+            {
+                root = context;
+                while (root.parent != null) root = root.parent;
+            }
 
             _editorGrid = grid;
             _editorTab = 0;
@@ -470,10 +494,14 @@ namespace VoxelEngine.GridSystem.UI
             _editorOverlay.style.justifyContent = Justify.Center;
 
             _editorCard = new VisualElement();
-            _editorCard.style.width = new StyleLength(new Length(72f, LengthUnit.Percent));
-            _editorCard.style.maxWidth = 1060;
+            // Absolute insets instead of percent width/height: the card keeps a real
+            // rectangle whatever the host's layout state is (no collapse, no cutoff).
+            _editorCard.style.position = Position.Absolute;
+            _editorCard.style.left = new StyleLength(new Length(14f, LengthUnit.Percent));
+            _editorCard.style.right = new StyleLength(new Length(14f, LengthUnit.Percent));
+            _editorCard.style.top = new StyleLength(new Length(8f, LengthUnit.Percent));
+            _editorCard.style.bottom = new StyleLength(new Length(9f, LengthUnit.Percent));
             _editorCard.style.minWidth = 560;
-            _editorCard.style.height = new StyleLength(new Length(80f, LengthUnit.Percent));
             _editorCard.style.backgroundColor = new StyleColor(L.Chassis);
             T.Border(_editorCard, 2, L.Bezel); T.Radius(_editorCard, 10);
             _editorCard.style.paddingLeft = 10; _editorCard.style.paddingRight = 10;
@@ -483,6 +511,17 @@ namespace VoxelEngine.GridSystem.UI
 
             root.Add(_editorOverlay);
             RebuildEditor();
+        }
+
+        private static bool EditorClosePressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.escapeKey.wasPressedThisFrame) return true;
+#else
+            if (Input.GetKeyDown(KeyCode.Escape)) return true;
+#endif
+            return GameSettings.WasPressed(InputAction.Inventory);
         }
 
         public static void CloseEditor()
@@ -545,7 +584,7 @@ namespace VoxelEngine.GridSystem.UI
                 {
                     foreach (var block in _editorGrid.AllBlocks)
                     {
-                        if (block == null || block is GridArmorBlock) continue;
+                        if (!GridMasterTerminal.IsListedBlock(block)) continue;
                         var cell = block.GridPos;
                         string name = $"{BlockDisplayName(block)}  [{cell.x},{cell.y},{cell.z}]";
                         var captured = block;
@@ -561,7 +600,7 @@ namespace VoxelEngine.GridSystem.UI
                     var counts = new Dictionary<string, int>();
                     foreach (var block in _editorGrid.AllBlocks)
                     {
-                        if (block == null || block is GridArmorBlock) continue;
+                        if (!GridMasterTerminal.IsListedBlock(block)) continue;
                         string cat = GridMasterTerminal.CategoryLabel(block);
                         counts[cat] = counts.TryGetValue(cat, out int n) ? n + 1 : 1;
                     }

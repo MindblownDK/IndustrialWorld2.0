@@ -157,8 +157,15 @@ namespace VoxelEngine.Player
             _hasAnchor = true;
 
             // ── stick: the hull normal is "down" (only reached in low-g) ──
+            // 14.64.1 — raw contact normals flicker between hull faces/edges at
+            // touchdown; smooth the boot "down" and ignore sub-degree wiggle so
+            // landing on a grid doesn't shake the camera.
+            Vector3 targetUp = hull.normal.sqrMagnitude > 0.5f ? hull.normal : up;
+            if (!OverrideActive)
+                UpDirection = targetUp;                       // first contact snaps
+            else if (Vector3.Angle(UpDirection, targetUp) > 1.5f)
+                UpDirection = Vector3.Slerp(UpDirection, targetUp, 1f - Mathf.Exp(-10f * dt));
             OverrideActive = true;
-            UpDirection = hull.normal.sqrMagnitude > 0.5f ? hull.normal : up;
             GravityOverride = -UpDirection * bootGravity;
         }
 
@@ -255,6 +262,19 @@ namespace VoxelEngine.Player
             return _refGridBody != null && !_refGridBody.isKinematic
                 ? _refGridBody.GetPointVelocity(position)
                 : Vector3.zero;
+        }
+
+        /// <summary>14.64.1 — programmatic relative lock (cockpit exit, grid-bed
+        /// wake): the given grid's velocity becomes "at rest" for the dampeners.</summary>
+        public void LockReference(VoxelEngine.GridSystem.GridEntity grid, bool announce = true)
+        {
+            if (grid == null || grid.Body == null) return;
+            if (LockedReference == grid) return;
+            LockedReference = grid;
+            _nextLockLeashCheck = Time.unscaledTime + 1f;
+            if (announce)
+                VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                    $"Matching velocity: {grid.name}", null, new Color(0.35f, 0.90f, 0.80f));
         }
 
         /// <summary>Ctrl+dampener key — lock/unlock the grid under the crosshair as the

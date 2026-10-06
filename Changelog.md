@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.64.0-dev`
+**Current Version:** `14.64.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.64.1-dev] Wake On Deck
+
+**Field-report round on 14.64.0: grid-cryobed wakes land ON the ship, no more walking through vacuum, the landing jitter and the rotating cut-off piece are gone, seat exits auto-lock relative dampeners, and the Grid Control editor got unmushed.**
+
+- FIXED - loading a world with a claimed grid cryobed woke the player thousands of kilometres from the ship (with a chunk wait timing out over empty space). The stored bed record is a cosmic point captured at CLAIM time - a bed on a GRID goes stale by every kilometre the ship flies. Load-in and death respawn now prefer the LIVE claimed bed block (it is restored before the spawner runs): the player wakes exactly at the bed through a dedicated path with no terrain waits, no 100 m ground snap (which would have parked you on the hull ROOF above the room) and no altitude pull-down. The wake inherits the hull's velocity, relative-locks the dampeners to the ship, and heals the sidecar record for the death screen.
+- FIXED - you could WALK through open space with the jetpack off. Weightless on foot (no meaningful gravity, no boots on a hull, no ground) now means NO walking authority and no air friction: you coast on pure inertia until the jetpack, a hull underfoot or gravity takes over.
+- FIXED - the jitter when landing on a grid. Raw hull-contact normals flicker between faces and edges at touchdown, and the boots re-aimed their artificial "down" at every flicker. The boot up-vector now snaps on first contact, then smooths (and ignores sub-degree wiggle) - touchdown is steady.
+- FIXED - the block attached to a ground-off block slowly rotated in zero-g instead of staying put. Two causes: the ground-alignment pass treated ANY near-rest grid as "on the ground" and slerped free-floating pieces toward planet-up forever - it now demands real support below the hull (locked gear, grounded wheels, or terrain/structure within a short probe); and a cut from a hull at rest now starts exactly at rest instead of inheriting milli-radian wobble that nothing ever damps in space.
+- NEW - leaving ANY control seat (cockpit, console) automatically locks your relative dampeners to that grid: you step out already station-keeping with your own ship. The 200 m leash or Ctrl+Z releases it as usual.
+- FIXED - Grid Control HUD editor rendered as a mushed, cut-off strip. The overlay mounted on a root without a resolved height, collapsing every percent-sized child. It now mounts on the persistent fullscreen HUD layer and the editor card uses absolute insets - a real rectangle on every screen.
+- CHANGED - the editor closes like any screen: ESC and the inventory key dismiss it, and it never lingers when the terminal underneath is gone (seat exit, another UI taking over). CloseAll shuts it too.
+- FIXED - toolbar slot readability: the live state is now a CHIP with its own dark background on a fixed top row, the target name is a clipped single line below it, the action a third line - nothing overlaps, whatever the name length.
+- CHANGED - pipes are infrastructure, not controls: gas pipe segments no longer appear in the terminal block index, and neither liquid nor gas pipes show up in the Grid Control HUD editor or count as category members.
+---
 
 ### [14.64.0-dev] Grid Control
 

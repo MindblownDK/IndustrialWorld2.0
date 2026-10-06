@@ -169,6 +169,35 @@ namespace VoxelEngine.Player
                 }
             }
 
+            // 14.64.1 — a cryobed on a GRID moves with its ship: any STORED record is
+            // stale by every kilometre the ship flew since it was claimed (the "woke
+            // up 3000 km from the hull" load, with the chunk wait timing out over
+            // empty space). The claimed bed block itself is restored BEFORE this
+            // coroutine runs — when it exists, wake AT the live block and skip the
+            // terrain pipeline entirely: the deck IS the floor.
+            if (!hasSavedPos && session != null && session.hasBedSpawn &&
+                TryFindClaimedGridBed(out var loadBed))
+            {
+                Debug.Log("[PlayerSpawner] Live grid cryobed found — waking on the hull at " + loadBed.SpawnPoint);
+                session.bedSpawnPoint = loadBed.SpawnPoint;
+                session.RefreshBedCosmic();          // heal the sidecar for the death screen
+                session.SaveSpawnSidecar();
+                yield return WakeAtGridBed(loadBed);
+
+                if (offlineDied)
+                {
+                    yield return null;
+                    var gridBedStats = GetComponent<PlayerStats>();
+                    if (gridBedStats != null)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Offline Death", offlineReason, null, new Color(0.95f, 0.25f, 0.20f));
+                        yield return new WaitForSeconds(0.6f);
+                        gridBedStats.TakeDamage(9999f, ignoreInfinite: true);
+                    }
+                }
+                yield break;
+            }
+
             // Determine the target position.
             Vector3 target;
             bool isFreshWorld = false;
@@ -477,6 +506,72 @@ namespace VoxelEngine.Player
             }
         }
 
+        // ============================================================
+        //                 GRID-CRYOBED LIVE WAKE (14.64.1)
+        // ============================================================
+
+        /// <summary>Prefer the LIVE claimed grid cryobed over any stored record —
+        /// grid beds move with their ship. Picks an online bed when several are claimed.</summary>
+        private static bool TryFindClaimedGridBed(out VoxelEngine.GridSystem.GridCryobed bed)
+        {
+            bed = null;
+            foreach (var candidate in Object.FindObjectsByType<VoxelEngine.GridSystem.GridCryobed>())
+            {
+                if (candidate == null || !candidate.claimedByLocalPlayer) continue;
+                if (bed == null) bed = candidate;
+                if (candidate.IsAvailableForRespawn) { bed = candidate; break; }
+            }
+            return bed != null;
+        }
+
+        /// <summary>Minimal wake path for a bed that lives ON a grid: no terrain
+        /// waits, no ground snapping (a 100 m ray would land the player on the hull
+        /// ROOF above the room), no altitude pull-down. Place at the bed, settle a
+        /// few frames re-pinning to the moving hull, inherit the hull's velocity and
+        /// wake up relative-locked to the ship.</summary>
+        private IEnumerator WakeAtGridBed(VoxelEngine.GridSystem.GridCryobed bed)
+        {
+            ReadyForPlayerControl = false;
+            DisableController();
+
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (origin != null) origin.suppressAutoFrameSwitches = true;
+
+            PrepareRespawnFrame(bed.SpawnPoint);
+            SetPosition(bed.SpawnPoint);
+
+            // Streaming / physics settle can nudge the hull — follow the LIVE bed.
+            for (int i = 0; i < 5; i++)
+            {
+                yield return null;
+                if (bed != null) SetPosition(bed.SpawnPoint);
+            }
+
+            EnableController();
+            ZeroPlayerVelocity();
+
+            var pc = GetComponent<PlayerController>();
+            if (pc != null)
+            {
+                pc.BeginSpawnGrace();
+                var hull = bed != null ? bed.Grid : null;
+                if (hull != null && hull.Body != null && !hull.Body.isKinematic)
+                    pc.SetVelocity(hull.Body.GetPointVelocity(transform.position));
+                // Wake up station-keeping with the ship you slept on.
+                var boots = GetComponent<MagneticBoots>();
+                if (boots != null && hull != null) boots.LockReference(hull, announce: false);
+            }
+
+            ReadyForPlayerControl = true;
+            if (origin != null) origin.suppressAutoFrameSwitches = false;
+            if (!VoxelEngine.UI.UIState.IsBlocking)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+            Debug.Log("[PlayerSpawner] Woke at grid cryobed — control enabled at " + transform.position);
+        }
+
         private void OnDisable()
         {
             // Save while the player still owns a valid transform and Inventory. This
@@ -491,6 +586,19 @@ namespace VoxelEngine.Player
         public void Respawn()
         {
             var session = Menu.WorldSession.Instance;
+
+            // 14.64.1 — a claimed GRID cryobed moves with its ship; stored records go
+            // stale the moment it flies. The LIVE block is in the scene right now:
+            // respawn at ITS current position and heal the record.
+            if (session != null && session.hasBedSpawn && TryFindClaimedGridBed(out var liveBed))
+            {
+                session.bedSpawnPoint = liveBed.SpawnPoint;
+                session.RefreshBedCosmic();
+                session.SaveSpawnSidecar();
+                Debug.Log("[PlayerSpawner] Respawn → live grid cryobed at " + session.bedSpawnPoint);
+                StartCoroutine(WakeAtGridBed(liveBed));
+                return;
+            }
 
             // 14.60.6 — the cosmic respawn (origin re-anchor + frame/streaming
             // re-target) is for CROSS-WORLD beds only. A bed on the planet you are

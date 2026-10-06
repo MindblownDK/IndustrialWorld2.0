@@ -1162,6 +1162,7 @@ namespace VoxelEngine.UI
         }
         public void CloseAll()
         {
+            VoxelEngine.GridSystem.UI.GridControlHud.CloseEditor();
             CloseItemPortsOverlay();
             CloseDropVoidOverlay();
             CloseTankTypeVoidConfirmation();

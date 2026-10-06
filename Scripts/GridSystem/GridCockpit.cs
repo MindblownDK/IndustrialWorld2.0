@@ -702,6 +702,13 @@ namespace VoxelEngine.GridSystem
             var hullBody = Grid != null ? Grid.Body : null;
             if (hullBody != null)
                 Pilot.SetVelocity(hullBody.GetPointVelocity(Pilot.transform.position));
+
+            // 14.64.1 - leaving ANY control seat locks the relative dampeners to
+            // this grid: you step out already station-keeping with your own ship
+            // (the 200 m leash or Ctrl+Z releases it later).
+            var exitBoots = Pilot.GetComponent<VoxelEngine.Player.MagneticBoots>();
+            if (exitBoots != null && Grid != null)
+                exitBoots.LockReference(Grid);
             VoxelEngine.Networking.GridSync.ReleaseControl();
             Pilot = null;
             if (Grid != null && Grid.ActiveCockpit == this) Grid.ActiveCockpit = null;

@@ -33,7 +33,7 @@ namespace VoxelEngine.GridSystem.UI
             _bar = new VisualElement { name = "ShipToolHud" };
             _bar.style.position = Position.Absolute;
             // 14.64.0 — lifted above the Grid Control HUD toolbar (slots 1–9).
-            _bar.style.bottom = 96; _bar.style.left = 0; _bar.style.right = 0;
+            _bar.style.bottom = 108; _bar.style.left = 0; _bar.style.right = 0;
             _bar.style.flexDirection = FlexDirection.Row;
             _bar.style.justifyContent = Justify.Center;
             _bar.style.display = DisplayStyle.None;

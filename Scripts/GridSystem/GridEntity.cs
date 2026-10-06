@@ -976,8 +976,16 @@ namespace VoxelEngine.GridSystem
             // Conservation of motion across the cut.
             if (_rb != null && !_rb.isKinematic && island.Body != null)
             {
-                island.Body.linearVelocity = _rb.GetPointVelocity(island.Body.worldCenterOfMass);
-                island.Body.angularVelocity = _rb.angularVelocity;
+                // 14.64.1 — a cut from a hull at REST stays at rest: residual
+                // milli-rad/s wobble on the parent otherwise becomes a visible,
+                // never-damped spin on the severed piece in zero-g.
+                bool parentAtRest = _rb.linearVelocity.sqrMagnitude < 0.0025f
+                                    && _rb.angularVelocity.sqrMagnitude < 0.0004f;
+                if (!parentAtRest)
+                {
+                    island.Body.linearVelocity = _rb.GetPointVelocity(island.Body.worldCenterOfMass);
+                    island.Body.angularVelocity = _rb.angularVelocity;
+                }
             }
             // A freshly severed piece must immediately obey gravity — never start asleep.
             if (island.Body != null) island.Body.WakeUp();
@@ -1811,6 +1819,26 @@ namespace VoxelEngine.GridSystem
         // (landing gear locked or low velocity near surface) and not piloted, we
         // gently slerp its up toward planet up.
         private float _alignTimer;
+        /// <summary>True when something that is NOT this grid (terrain, another
+        /// structure) sits within a short probe below the hull's centre of mass.</summary>
+        private bool HasSupportBelow()
+        {
+            if (_rb == null) return false;
+            Vector3 gravityDir = GravityProvider.GetGravity(transform.position);
+            if (gravityDir.sqrMagnitude < 0.0001f) return false;
+            gravityDir.Normalize();
+            float probe = Mathf.Max(6f, gridSize.CellSize() * 4f);
+            var supportHits = Physics.RaycastAll(_rb.worldCenterOfMass, gravityDir, probe, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < supportHits.Length; i++)
+            {
+                var col = supportHits[i].collider;
+                if (col == null) continue;
+                if (col.GetComponentInParent<GridEntity>() == this) continue;
+                return true;
+            }
+            return false;
+        }
+
         private void StabilizeGroundAlignment()
         {
             if (!GravityProvider.IsRadial) return;
@@ -1842,6 +1870,13 @@ namespace VoxelEngine.GridSystem
             _alignTimer += Time.fixedDeltaTime;
             if (_alignTimer < 0.25f) return;
             _alignTimer = 0f;
+
+            // 14.64.1 — "at rest" is NOT "on the ground": a severed hull piece
+            // floating dead-still in orbit passed the near-rest test and was slerped
+            // toward planet-up forever (the "cut block slowly rotates in zero-g"
+            // report). Without locked gear or grounded wheels, demand real support
+            // below the hull before aligning.
+            if (!anyLocked && !anyGrounded && !HasSupportBelow()) return;
 
             Vector3 planetUp = GravityProvider.GetUp(transform.position);
             if (planetUp.sqrMagnitude < 0.0001f) return;
