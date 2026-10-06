@@ -440,6 +440,9 @@ namespace VoxelEngine.Persistence
                 }
                 if (writeAutosaveSlot)
                     WriteAutosaveSnapshot(path);
+                // Pollution is additive and keeps its own body-local sidecar, but follows
+                // the same explicit/autosave cadence as the rest of the authoritative world.
+                VoxelEngine.Environment.PollutionService.Instance?.SaveNow();
                 Debug.Log($"[WorldState] Saved -> {path} (previous snapshot: {backupPath})");
 
                 // 11.4 Offline survival — record logout time/pos/cryobed for O₂ consumption on next login
@@ -1745,6 +1748,15 @@ namespace VoxelEngine.Persistence
             {
                 chemicalPlant.EnsureContainers();
                 var sc = SerializeMulti(chemicalPlant.inputC, chemicalPlant.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var carbonHarvester = go.GetComponentInChildren<VoxelEngine.Environment.AtmosphericCarbonHarvester>(true);
+            if (carbonHarvester != null)
+            {
+                carbonHarvester.EnsureContainers();
+                var sc = SerializeMulti(carbonHarvester.outputC);
                 AttachPortSnapshot(go, sc);
                 return sc;
             }
@@ -4736,6 +4748,15 @@ namespace VoxelEngine.Persistence
             {
                 chemicalPlant.EnsureContainers();
                 DeserializeMulti(sc, chemicalPlant.inputC, chemicalPlant.outputC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var carbonHarvester = go.GetComponentInChildren<VoxelEngine.Environment.AtmosphericCarbonHarvester>(true);
+            if (carbonHarvester != null)
+            {
+                carbonHarvester.EnsureContainers();
+                DeserializeMulti(sc, carbonHarvester.outputC);
                 RestorePortSnapshot(go, sc);
                 return;
             }

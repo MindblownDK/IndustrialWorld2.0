@@ -15,6 +15,7 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
+using VoxelEngine.Environment;
 using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Cosmos
@@ -240,12 +241,12 @@ namespace VoxelEngine.Cosmos
             }
         }
 
-        /// <summary>
-        /// Pollution burden 0..1 for a body. PLACEHOLDER (12.21.0-dev): always zero
-        /// until the pollution simulation lands — wire the real per-body source here
-        /// and the map readout lights up with no further map changes.
-        /// </summary>
-        private static double PollutionFor(BodyInstance body) => 0d;
+        /// <summary>Live per-body airborne burden from the pollution service.</summary>
+        private static double PollutionFor(BodyInstance body)
+        {
+            if (body?.settings == null) return 0d;
+            return PollutionService.AirborneBurdenFor(body.settings.bodyName);
+        }
 
         // ── Player constructs ────────────────────────────────────────────────────
         /// <summary>

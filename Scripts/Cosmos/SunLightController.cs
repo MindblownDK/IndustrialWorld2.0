@@ -7,6 +7,7 @@
 // The light direction is computed from the active body's position relative to the star in
 // cosmic space, so sunrise/sunset happen at the right angle on every face of the sphere.
 using UnityEngine;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Cosmos
 {
@@ -157,6 +158,12 @@ namespace VoxelEngine.Cosmos
             // and weather can never fight the day/night cycle above.
             sunLight.intensity *= VoxelEngine.Weather.WeatherLighting.SunIntensityScale;
             RenderSettings.ambientLight *= VoxelEngine.Weather.WeatherLighting.AmbientScale;
+
+            // Local smog attenuates direct sunlight without becoming a global factory tax.
+            // At altitude the nearby sparse cells naturally sample to zero.
+            float smog = PollutionService.SampleAirborne01(playerPos) * (1f - spaceBlend);
+            sunLight.intensity *= Mathf.Lerp(1f, 0.72f, smog);
+            RenderSettings.ambientIntensity *= Mathf.Lerp(1f, 0.88f, smog);
         }
     }
 }

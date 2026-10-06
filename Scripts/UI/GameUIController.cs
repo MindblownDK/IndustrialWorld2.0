@@ -113,6 +113,7 @@ namespace VoxelEngine.UI
         private bool _crackerLiveDirty;
         private VoxelEngine.Crafting.Pumpjack _openPumpjack;
         private VoxelEngine.Industrial.StationaryChemicalPlant _openChemPlant;
+        private VoxelEngine.Environment.AtmosphericCarbonHarvester _openCarbonHarvester;
         private VoxelEngine.Storage.StorageTerminal    _openStorageTerminal;
         private VoxelEngine.Storage.ServerRack         _openServerRack;
         private VoxelEngine.Storage.PatternTerminal    _openPatternTerminal;
@@ -372,7 +373,7 @@ namespace VoxelEngine.UI
                 _openCoalGen != null || _openReactor != null || _openTurbine != null ||
                 _openPortReactor != null || _openProcessor != null || _openReprocessor != null ||
                 _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null || _openWaterPump != null || _openWindTurbine != null ||
-                _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null ||
+                _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null ||
                 _openGridBlock != null || _openGridTerminal != null || _openWaterTower != null || _openRadarBeacon != null ||
                 _openSteamEngine != null || _openSchedule != null;
 
@@ -587,7 +588,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
-            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStation    = null;
             _activeQueue    = null;
@@ -627,7 +628,7 @@ namespace VoxelEngine.UI
             _openFurnace = null; _openElectric = null; _openCoalGen = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null; _openProcessor = null; _openReprocessor = null;
             _openElectrolyser = null; _openHydroEngine = null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null;
-            _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null;
+            _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
@@ -758,7 +759,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
-            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _openStation    = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
@@ -798,7 +799,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
-            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
@@ -823,7 +824,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
-            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
@@ -847,7 +848,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
-            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null; _openStation = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
@@ -890,7 +891,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
             _openProcessor = null; _openReprocessor = null; _openElectrolyser = null; _openBiofarm = null;
-            _openHydroEngine = null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine = null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
@@ -981,6 +982,9 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Industrial.StationaryChemicalPlant scp:
                     _openChemPlant = scp; scp.EnsureContainers();
                     WatchContainer(scp.inputC); WatchContainer(scp.outputC); break;
+                case VoxelEngine.Environment.AtmosphericCarbonHarvester harvester:
+                    _openCarbonHarvester = harvester; harvester.EnsureContainers();
+                    WatchContainer(harvester.outputC); break;
                 case VoxelEngine.Building.RailStation railStation:
                     _openRailStation = railStation; break;
                 case VoxelEngine.Building.RailTrack railSwitch:
@@ -1068,7 +1072,7 @@ namespace VoxelEngine.UI
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
             _openProcessor = null; _openReprocessor = null; _openElectrolyser = null; _openBiofarm = null;
             _openHydroEngine = null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null;
-            _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null;
+            _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
@@ -1115,7 +1119,7 @@ namespace VoxelEngine.UI
             _openPortReactor = null; _openProcessor = null; _openReprocessor = null;
             _openElectrolyser = null; _openBiofarm = null; _openHydroEngine = null;
             _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openWindTurbine = null;
-            _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null;
+            _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openGridTerminal = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null;
             _openCraftTerminal = null; _openImporter = null; _openExporter = null;
@@ -1145,7 +1149,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
-            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openGridTerminal = null;
+            _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
@@ -1180,7 +1184,7 @@ namespace VoxelEngine.UI
             _openReprocessor= null; _openElectrolyser = null;
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null;
             _openGridBlock  = null; _openGridTerminal = null;
-            _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null;
+            _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter   = null; _openExporter     = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS     = null;
@@ -1444,7 +1448,7 @@ namespace VoxelEngine.UI
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
-                    _openPumpjack != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
+                    _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
                 {
@@ -1463,7 +1467,7 @@ namespace VoxelEngine.UI
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
-                    _openPumpjack != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
+                    _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null;
                 // The station pane (_openStation) renders its OWN crafting list on
                 // the right, so we suppress the center panel only in that case.
@@ -1543,6 +1547,7 @@ namespace VoxelEngine.UI
                 else if (_openDisplay           != null) _contentLayer.Add(RailPanels.DisplayPanel(_openDisplay));
                 else if (_openPumpjack          != null) { var mp = MachineUIs.JackPumpPanel(_openPumpjack, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openPumpjack); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openChemPlant); }
+                else if (_openCarbonHarvester  != null) { var mp = MachineUIs.CarbonHarvesterPanel(_openCarbonHarvester, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openCarbonHarvester); }
                 else if (_openCrusher          != null) { var mp = MachineUIs.CrusherPanel(_openCrusher, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openCrusher); }
                 else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openAssembler); }
                 else if (_openFunnel           != null) _contentLayer.Add(MachineUIs.FunnelPanel(_openFunnel));
@@ -2852,7 +2857,7 @@ namespace VoxelEngine.UI
                    _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null || _openDrawerController != null ||
                    _openDronePort != null || _openItemDisplay != null || _openCrusher != null || _openAssembler != null ||
                    _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
-                   _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openStation != null ||
+                   _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null || _openStation != null ||
                    _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null ||
                    _openPortalController != null;
         }

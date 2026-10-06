@@ -11,9 +11,11 @@
 // Attach to the same GameObject as the Camera.
 
 using UnityEngine;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Weather
 {
+    [DefaultExecutionOrder(120)]
     [RequireComponent(typeof(Camera))]
     public class RainFogEffect : MonoBehaviour
     {
@@ -24,8 +26,12 @@ namespace VoxelEngine.Weather
         public Color rainFogColor = new Color(0.28f, 0.30f, 0.34f, 1f);
         [Tooltip("Seconds to transition in/out of rain fog.")]
         public float transitionSpeed = 1.5f;
+        [Tooltip("Maximum additional fog density from severe local smog while weather owns the fog pass.")]
+        public float maxSmogFogDensity = 0.018f;
+        public Color smogFogColor = new Color(0.30f, 0.25f, 0.20f, 1f);
 
-        private float _currentIntensity; // 0..1 blended
+        private float _currentIntensity; // rain, 0..1 blended
+        private float _currentSmog;
         private bool _saved;
         private Color _sFC;
         private float _sFD;
@@ -38,22 +44,31 @@ namespace VoxelEngine.Weather
             // the component retires itself headless.
             if (VoxelEngine.Networking.NetworkSession.IsDedicated) { enabled = false; return; }
             var weather = WeatherManager.Instance;
-            if (weather == null) return;
 
-            // Only rain (not snow) affects fog
+            // Only rain (not snow) affects the weather contribution. Smog joins this pass
+            // only while non-clear weather owns fog; on clear days PlanetSkyController owns it.
             float targetIntensity = 0f;
-            if (weather.IsPrecipitating && !weather.IsSnowBiome)
+            float targetSmog = 0f;
+            bool weatherOwnsFog = weather != null && weather.TargetState != WeatherState.Clear;
+            if (weather != null && weather.IsPrecipitating && !weather.IsSnowBiome)
                 targetIntensity = weather.Intensity;
+            if (weatherOwnsFog)
+                targetSmog = PollutionService.SampleAirborne01(transform.position);
 
-            // Don't apply rain fog if the player is underwater (UnderwaterEffect handles that)
+            // Don't apply weather/smog fog if the player is underwater.
             var waterState = GetComponentInParent<VoxelEngine.Player.PlayerWaterState>();
             if (waterState != null && waterState.IsHeadUnderwater)
+            {
                 targetIntensity = 0f;
+                targetSmog = 0f;
+            }
 
-            // Smooth transition
-            _currentIntensity = Mathf.MoveTowards(_currentIntensity, targetIntensity, transitionSpeed * Time.deltaTime);
+            _currentIntensity = Mathf.MoveTowards(_currentIntensity, targetIntensity,
+                transitionSpeed * Time.deltaTime);
+            _currentSmog = Mathf.MoveTowards(_currentSmog, targetSmog,
+                transitionSpeed * Time.deltaTime);
 
-            if (_currentIntensity > 0.01f)
+            if (_currentIntensity > 0.01f || _currentSmog > 0.01f)
             {
                 if (!_saved)
                 {
@@ -64,21 +79,21 @@ namespace VoxelEngine.Weather
                     _saved = true;
                 }
 
-                float t = _currentIntensity;
-                RenderSettings.fog     = true;
+                Color polluted = Color.Lerp(_sFC, smogFogColor, _currentSmog * 0.78f);
+                RenderSettings.fog = true;
                 RenderSettings.fogMode = FogMode.Exponential;
-                RenderSettings.fogColor   = Color.Lerp(_sFC, rainFogColor, t);
-                RenderSettings.fogDensity = _sFD + maxRainFogDensity * t;
+                RenderSettings.fogColor = Color.Lerp(polluted, rainFogColor, _currentIntensity);
+                RenderSettings.fogDensity = _sFD + maxRainFogDensity * _currentIntensity
+                    + maxSmogFogDensity * _currentSmog;
             }
             else if (_saved)
             {
-                // Restore
-                if (WeatherManager.Instance == null || !WeatherManager.Instance.IsPrecipitating)
+                if (!weatherOwnsFog)
                 {
-                    RenderSettings.fog        = _sFog;
-                    RenderSettings.fogColor   = _sFC;
+                    RenderSettings.fog = _sFog;
+                    RenderSettings.fogColor = _sFC;
                     RenderSettings.fogDensity = _sFD;
-                    RenderSettings.fogMode    = _sFM;
+                    RenderSettings.fogMode = _sFM;
                 }
                 _saved = false;
             }

@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.65.2-dev`
-**Roadmap Version:** `14.65.2-dev`
-**Date:** 2026-10-04
+**Current Version:** `14.66.0-dev`
+**Roadmap Version:** `14.66.0-dev`
+**Date:** 2026-10-06
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 14.66.0-dev - The Air Has Memory
+- Host-authoritative sparse body-local airborne pollution with wind, rain dilution, recovery, additive sidecar persistence and client snapshots
+- Direct source profiles wired to combustion, process, routed exhaust, scrubber capture and flare activity; electricity is not double-counted
+- Atmospheric Carbon Harvester closes the powered cleanup -> Carbon Concentrate -> Graphite loop; Setup Step 114 authors all content non-destructively
+- Optional Logistics Map heat layer, functional orbital burden, reversible smog visuals and local solar attenuation
 
 ### 14.65.2-dev - Station Keeping
 - Boots yaw-carry measures grid rotation, not the player's look (deck stutter fix)
@@ -414,7 +420,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(12.21.0-dev: the star map already shows a per-planet/moon pollution readout; values stay 0% until this simulation lands and feeds the tracking snapshot.)*
+*(Phase 1 shipped 14.66.0-dev: sparse airborne cells, direct sources, wind/weather/recovery, save/network snapshots, optional local map layer, live orbital burden, reversible visuals/solar loss, and automated carbon capture through Setup Step 114. Runoff, climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
 
 #### Pollution Sources
 
@@ -1826,10 +1832,10 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Step 59 Setup Wizard:** Non-destructive generation of scanner tool items, craft bench recipes, and registration. (Implemented 9.26.0-dev)
    - Terrain core drill and acoustic seismic survey rig. (Upcoming)
 
-16. **Pollution & Industrial Threat Director**
-   - Chunk/cell pollution accumulation for air, soil, and water.
-   - Wind-driven spread, persistence, filtration, cleanup, and reduced-rate dormant simulation.
-   - Pollution source inspection, map overlays, warning thresholds, and production statistics integration.
+16. **Pollution & Industrial Threat Director** - **PHASE 1 SHIPPED (14.66.0-dev)**
+   - ~~Sparse body-local airborne pollution, transport, cleanup, optional map telemetry and body burden~~ *(14.66.0-dev; Setup Step 114)*.
+   - Runoff/soil/water contamination and reduced-rate dormant-region transport remain open.
+   - Per-source attribution/history, warning thresholds and production-statistics integration remain open.
    - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
    - Planet Ecology Profiles choose appropriate passive life, pollution responders, enemy tiers, and bosses.
 
@@ -1914,8 +1920,8 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Tracks oxygen level and pressure per room; charge is carried across hull edits and saves.
     - Vents add or remove oxygen against the grid gas network.
 
-29. **Pollution Service**
-    - Deterministic chunk/cell emissions, spread, decay, filtration, contamination, source attribution, and reduced-rate distant simulation.
+29. **Pollution Service** - **PHASE 1 SHIPPED (14.66.0-dev)**
+    - Sparse body-local airborne emissions, wind spread, precipitation dilution, recovery, capture, sidecar persistence and host snapshots are live; contamination attribution and reduced-rate distant-region simulation remain open.
 
 30. **Ecology Registry**
     - ScriptableObject planet profiles containing passive species, hostile species, resistances, pollution responses, elites, bosses, loot tables, and spawn budgets.

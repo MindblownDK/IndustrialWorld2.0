@@ -1441,7 +1441,9 @@ namespace VoxelEngine.Player
                 var splitter = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorSplitter>();
                 if (splitter != null) { UI.GameUIController.Instance?.OpenMachine(splitter); return; }
 
-                // Industrial fluid processors.
+                // Industrial fluid processors and local pollution cleanup.
+                var carbonHarvester = hit.collider.GetComponentInParent<VoxelEngine.Environment.AtmosphericCarbonHarvester>();
+                if (carbonHarvester != null) { UI.GameUIController.Instance?.OpenMachine(carbonHarvester); return; }
                 var jackPump = hit.collider.GetComponentInParent<VoxelEngine.Crafting.Pumpjack>();
                 if (jackPump != null) { UI.GameUIController.Instance?.OpenMachine(jackPump); return; }
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();

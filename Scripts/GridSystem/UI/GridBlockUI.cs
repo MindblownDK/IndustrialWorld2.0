@@ -2904,12 +2904,15 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.StatRow("⚡", "Rated Max", PowerFormat.Watts(sp.maxOutput), T.AccentCyan));
             p.Add(T.StatRow("📈", "Efficiency", $"{eff * 100f:0}%",
                 eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed));
+            if (sp.LocalSmog01 > 0.01f)
+                p.Add(T.StatRow("", "Smog Transmission", $"{sp.PollutionEfficiency01 * 100f:0}%",
+                    sp.PollutionEfficiency01 >= 0.85f ? T.AccentGreen : T.AccentAmber));
             p.Add(T.Spacer(6));
 
             // Visual efficiency vector.
             Color effColor = eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed;
             p.Add(StarshipTheme.VectorMeter("EFFICIENCY", eff, effColor, $"{eff * 100f:0}%"));
-            p.Add(T.Muted("Output scales with sun angle, shadowing and weather."));
+            p.Add(T.Muted("Output scales with sun angle, shadowing, weather and local smog."));
             StarshipTheme.Frame(p, effColor);
             return p;
         }

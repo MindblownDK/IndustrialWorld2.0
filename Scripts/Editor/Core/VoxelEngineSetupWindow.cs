@@ -984,6 +984,8 @@ namespace VoxelEngine.EditorTools
 
             AddWizardButton(scroll, "113. Welder Tool\n(Repair tool + recipe, pays HP in material - Non-Destructive)",
                 VoxelEngine.EditorTools.WelderSetup.Run, 48);
+            AddWizardButton(scroll, "114. Airborne Pollution\n(Sparse smog, source profiles, carbon harvester + research - Non-Destructive)",
+                () => VoxelEngine.EditorTools.PollutionSystemSetup.RunStep114(), 56);
             AddWizardButton(scroll, "112. Keep-Stocked Logistics\n(Crafting Card upgrade + editable filters - Non-Destructive)",
                 () => VoxelEngine.EditorTools.CraftingCardSetup.RunStep112(), 56);
 

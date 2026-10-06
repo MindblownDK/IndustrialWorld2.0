@@ -9,6 +9,7 @@
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.GridSystem
 {
@@ -23,14 +24,18 @@ namespace VoxelEngine.GridSystem
 
         private float _currentOutput;
         private float _timer;
+        private float _localSmog01;
+        private float _pollutionEfficiency01 = 1f;
 
         public override float PowerOutput => Enabled ? _currentOutput : 0f;
 
         /// <summary>Current wattage being generated right now (0 when disabled).</summary>
         public float CurrentOutput => PowerOutput;
 
-        /// <summary>0..1 efficiency = current output ÷ rated max (sunlight × weather).</summary>
+        /// <summary>0..1 efficiency = current output ÷ rated max (sunlight × weather × local air).</summary>
         public float Efficiency01 => maxOutput > 0f ? Mathf.Clamp01(PowerOutput / maxOutput) : 0f;
+        public float LocalSmog01 => _localSmog01;
+        public float PollutionEfficiency01 => _pollutionEfficiency01;
 
         private void Update()
         {
@@ -75,7 +80,10 @@ namespace VoxelEngine.GridSystem
             var season = Weather.PlanetarySeasons.GetCurrentSeasonInfo();
             float seasonSolarMult = season.solarMultiplier;
 
-            _currentOutput = maxOutput * sunDot * weatherMult * seasonSolarMult;
+            _localSmog01 = PollutionService.SampleAirborne01(transform.position);
+            _pollutionEfficiency01 = Mathf.Lerp(1f, 0.65f, _localSmog01);
+            _currentOutput = maxOutput * sunDot * weatherMult * seasonSolarMult
+                * _pollutionEfficiency01;
         }
 
         /// <summary>

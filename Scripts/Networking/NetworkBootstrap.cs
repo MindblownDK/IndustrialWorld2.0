@@ -137,6 +137,14 @@ namespace VoxelEngine.Networking
         public byte Target;
     }
 
+    /// <summary>Server -> clients: opaque sparse pollution snapshot. Gameplay code
+    /// never touches Fish-Net; the pollution service owns simulation and serialization.</summary>
+    public struct PollutionStateBroadcast : IBroadcast
+    {
+        public long Revision;
+        public string Json;
+    }
+
     /// <summary>Server -> client on join: which world the host is running,
     /// so the client can warn when terrain will not line up.</summary>
     public struct WorldInfoBroadcast : IBroadcast
@@ -975,6 +983,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.RegisterBroadcast<PlayerIdentityAnnounceBroadcast>(OnClientIdentityAnnounce);
             _networkManager.ClientManager.RegisterBroadcast<WeatherStateBroadcast>(OnClientWeather);
+            _networkManager.ClientManager.RegisterBroadcast<PollutionStateBroadcast>(OnClientPollution);
             _networkManager.ClientManager.RegisterBroadcast<ChatRelayBroadcast>(OnClientChat);
             _networkManager.ClientManager.RegisterBroadcast<VoiceRelayBroadcast>(OnClientVoice);
             _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
@@ -1140,6 +1149,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerIdentityAnnounceBroadcast>(OnClientIdentityAnnounce);
             _networkManager.ClientManager.UnregisterBroadcast<WeatherStateBroadcast>(OnClientWeather);
+            _networkManager.ClientManager.UnregisterBroadcast<PollutionStateBroadcast>(OnClientPollution);
             _networkManager.ClientManager.UnregisterBroadcast<ChatRelayBroadcast>(OnClientChat);
             _networkManager.ClientManager.UnregisterBroadcast<VoiceRelayBroadcast>(OnClientVoice);
             _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
@@ -1321,6 +1331,7 @@ namespace VoxelEngine.Networking
         private void LateUpdate()
         {
             PollWeatherBroadcast();   // server-side no-op costs one bool test
+            PollPollutionBroadcast(); // same authority/keepalive pattern, sparse JSON payload
 
             // 14.46.1 - invite expiry is the HOST's call now (clients stopped
             // judging it with their own clocks), so the host sweeps every few
@@ -1458,6 +1469,7 @@ namespace VoxelEngine.Networking
                 _lastArrivedBody = "";   // a reconnect must re-request its planet
                 if (_serverStarted) { _statusLine = "Hosting"; return; }
 
+                VoxelEngine.Environment.PollutionService.ClearRemoteSnapshot();
                 GoOffline();
 
                 // A guest who joined from the main menu has no world of their
@@ -2766,9 +2778,10 @@ namespace VoxelEngine.Networking
             // world is agreed on; the keepalive in LateUpdate corrects any
             // drift after that.
             SendWeatherTo(conn);
+            SendPollutionTo(conn);
         }
 
-        // ── identity announce + weather sync (14.46.0) ────────────────────
+        // ── identity announce + weather/pollution sync ─────────────── ────────────────────
 
         /// <summary>Server: announce one avatar's identity - to everyone
         /// when target is null, else to that connection alone.</summary>
@@ -2852,6 +2865,48 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted) return;
             VoxelEngine.Weather.WeatherManager.Instance?.ApplyRemote(msg.Current, msg.Target);
+        }
+
+        private long _lastPollutionRevision = long.MinValue;
+        private float _nextPollutionPollAt;
+        private float _nextPollutionKeepaliveAt;
+        private const float PollutionPollSeconds = 2f;
+        private const float PollutionKeepaliveSeconds = 15f;
+
+        private void SendPollutionTo(NetworkConnection conn)
+        {
+            var pollution = VoxelEngine.Environment.PollutionService.Instance;
+            if (!_serverStarted || pollution == null || conn == null) return;
+            _networkManager.ServerManager.Broadcast(conn, new PollutionStateBroadcast
+            {
+                Revision = pollution.Revision,
+                Json = pollution.ExportSnapshotJson()
+            }, true);
+        }
+
+        /// <summary>Host: sparse snapshot on change, bounded to a two-second cadence,
+        /// plus a keepalive so a dropped packet self-heals.</summary>
+        private void PollPollutionBroadcast()
+        {
+            if (!_serverStarted || Time.unscaledTime < _nextPollutionPollAt) return;
+            _nextPollutionPollAt = Time.unscaledTime + PollutionPollSeconds;
+            var pollution = VoxelEngine.Environment.PollutionService.Instance;
+            if (pollution == null) return;
+            bool changed = pollution.Revision != _lastPollutionRevision;
+            if (!changed && Time.unscaledTime < _nextPollutionKeepaliveAt) return;
+            _lastPollutionRevision = pollution.Revision;
+            _nextPollutionKeepaliveAt = Time.unscaledTime + PollutionKeepaliveSeconds;
+            _networkManager.ServerManager.Broadcast(new PollutionStateBroadcast
+            {
+                Revision = pollution.Revision,
+                Json = pollution.ExportSnapshotJson()
+            }, true);
+        }
+
+        private void OnClientPollution(PollutionStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || string.IsNullOrEmpty(msg.Json)) return;
+            VoxelEngine.Environment.PollutionService.ApplyRemoteSnapshotJson(msg.Json);
         }
 
         // ── staged join catch-up (14.21.1) ──────────────────────────────

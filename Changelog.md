@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.65.2-dev`
+**Current Version:** `14.66.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.66.0-dev] The Air Has Memory
+
+**Phase 1 pollution is now a complete, save-compatible factory loop: direct industrial emissions become sparse body-local smog, weather and wind move it, maps expose it, local light and solar respond to it, and powered carbon capture turns cleanup into an automated Graphite feedstock.**
+
+#### Added
+- **Host-authoritative sparse pollution service.** Atmospheric load is stored in 64 m body-local cells, so plumes survive floating-origin shifts and planetary motion. Wind advects smog downwind; precipitation dilutes it; natural recovery reverses abandoned pollution. Runoff, climate-load and orbital-debris fields are reserved in the same data shape for later phases without making them active gameplay systems yet.
+- **Additive save/load and multiplayer snapshots.** `pollution.json` sits beside the world save and is written atomically with a previous backup. A missing sidecar means clean air, so existing worlds load unchanged. Offline/host simulation owns emissions and cleanup; clients receive sparse snapshots through `NetworkBootstrap` on join, change and keepalive and never author pollution while `NetworkSession.SimulationIsRemote` is true.
+- **Data-driven direct pollution sources.** Setup-authored `PollutionSourceProfile` assets drive solid-fuel combustion, fuel furnaces, electric-smelting process dust, refinery/chemical processing, flares and routed maritime exhaust. Emissions follow real machine activity and never derive from electricity consumption, preventing double-counting. Routed exhaust respects the existing captured-share path, so attached gas capture/scrubbing lowers the released plume.
+- **Atmospheric Carbon Harvester.** The powered automatic machine removes local airborne load without disposable filters, conserves it into belt-accessible Carbon Concentrate, and exposes status, local air, capture rate, stored units, power and output inventory in its machine panel. Carbon Concentrate processes into the existing Graphite item at an Assembler; power demand and finite local pollution prevent an infinite resource loop.
+- **Optional local pollution map layer.** The Logistics Map gains an off-by-default `POLLUTION` layer. Sparse heat cells render beneath routes and markers, while the sidebar reports local band, local percentage, body burden, trend and active-cell count. No permanent pollution HUD was added.
+- **Functional orbital burden.** `OrbitalTrackingService` now feeds each body’s live airborne burden to the existing orbital-map pollution readout.
+- **Reversible local environmental response.** Local smog adds brown-grey atmospheric haze and fog, dims direct/ambient light, and lowers only solar panels inside polluted cells. Clear air restores the original sky, lighting, fog and solar output.
+- **Non-destructive Setup Step 114.** `Tools -> Voxel Engine -> Voxel Engine Setup` now authors profiles, source links, Carbon Concentrate, the harvester prefab/block/recipe, Graphite processing recipe, persistence registrations and Atmospheric Carbon Capture research. Re-running creates missing content and repairs missing links without resetting tuned source, machine, recipe or prefab values.
+
+#### Changed
+- `GridSolarPanel` and its inspection panel expose local smog transmission separately from sun, shadow, weather and season efficiency.
+- `Scripts/Core/GameVersion.cs` is synchronized to `14.66.0-dev`; the README now makes runtime/documented version synchronization a permanent release rule.
 
 ### [14.65.2-dev] Station Keeping
 

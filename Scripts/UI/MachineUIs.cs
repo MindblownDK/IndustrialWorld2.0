@@ -8,6 +8,7 @@
 
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.Environment;
 using VoxelEngine.Gas;
 using VoxelEngine.Items;
 using VoxelEngine.Nuclear;
@@ -123,6 +124,52 @@ namespace VoxelEngine.UI
                 recipe => assembler.SelectRecipe(recipe),
                 accent,
                 "Select a recipe, load matching inputs, then route outputs with belts or funnels.");
+        }
+
+        public static VisualElement CarbonHarvesterPanel(AtmosphericCarbonHarvester harvester,
+            SlotBuilder slot)
+        {
+            harvester.EnsureContainers();
+            var panel = T.MachinePanel();
+            bool running = harvester.Status == "Capturing" || harvester.Status == "Trace collection";
+            Color accent = new Color(0.24f, 0.85f, 0.67f);
+            Color statusColor = running ? T.AccentGreen
+                : harvester.Status == "Output full" || harvester.Status == "No power"
+                    ? T.AccentAmber : T.TextMuted;
+            panel.Add(BuildHeader("C", "Atmospheric Carbon Harvester",
+                harvester.Status.ToUpperInvariant(), statusColor, accent));
+            panel.Add(IndustrialTheme.HazardDivider());
+
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            panel.Add(content);
+
+            content.Add(T.StatRow("", "Local Air", $"{harvester.LocalAirPollution01 * 100f:0}%",
+                harvester.LocalAirPollution01 < 0.2f ? T.AccentGreen : T.AccentAmber));
+            content.Add(T.StatRow("", "Capture Rate", $"{harvester.CurrentCaptureRate:0.0} units/s",
+                running ? accent : T.TextMuted));
+            content.Add(T.StatRow("", "Stored Carbon", $"{harvester.StoredPollutionUnits:0.0} units",
+                T.TextSecondary));
+            content.Add(T.StatRow("", "Power Draw", $"{harvester.wattsPerSecond:0} W",
+                harvester.IsPowered ? T.AccentGold : T.TextMuted));
+            var (airBar, _) = T.ProgressBar(harvester.LocalAirPollution01, accent, 9, false);
+            content.Add(airBar);
+            content.Add(T.Spacer(6));
+
+            content.Add(T.SmallButton(harvester.userEnabled ? "SWITCH OFF" : "SWITCH ON", () =>
+            {
+                harvester.userEnabled = !harvester.userEnabled;
+                GameUIController.Instance?.RequestRefresh();
+            }, harvester.userEnabled ? T.AccentAmber : T.AccentGreen));
+            content.Add(T.Divider());
+            content.Add(T.Subtitle("Carbon Concentrate Output"));
+            content.Add(T.SlotCard("Output", SlotGrid(harvester.outputC, slot)));
+            content.Add(T.Spacer(8));
+            content.Add(T.Muted("Runs automatically while powered. Captured smog becomes Carbon Concentrate; route it to an Assembler for Graphite. No disposable filter is required."));
+            IndustrialTheme.Frame(panel);
+            return panel;
         }
 
         public static VisualElement FunnelPanel(Funnel funnel)

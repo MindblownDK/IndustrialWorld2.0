@@ -7,6 +7,7 @@
 // driven here when weather is clear so a volcanic world stays orange even at noon.
 
 using UnityEngine;
+using VoxelEngine.Environment;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Weather;
 
@@ -40,6 +41,7 @@ namespace VoxelEngine.Cosmos
         private bool _hasPalette;
         private bool _ownsFog;
         private bool _savedFog;
+        private float _localSmog01;
         private float _savedFogDensity;
         private Color _savedFogColor;
         private FogMode _savedFogMode;
@@ -118,6 +120,7 @@ namespace VoxelEngine.Cosmos
             SpaceBlend = atmosphere.HasAtmosphere
                 ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.20f, 0.02f, atmosphere.Density01))
                 : 1f;
+            _localSmog01 = PollutionService.SampleAirborne01(viewer) * (1f - SpaceBlend);
 
             var body = GravityProvider.ActiveBody;
             RadialUp = body != null ? body.UpAt(viewer) : Vector3.up;
@@ -138,6 +141,7 @@ namespace VoxelEngine.Cosmos
         public Color ResolveBackgroundColor()
         {
             Color localAir = Color.Lerp(CurrentPalette.AmbientNight, CurrentPalette.UpperAir, DayFactor);
+            localAir = Color.Lerp(localAir, new Color(0.30f, 0.25f, 0.20f, 1f), _localSmog01 * 0.32f);
             return Color.Lerp(localAir, new Color(0.002f, 0.004f, 0.012f, 1f), SpaceBlend);
         }
 
@@ -183,15 +187,19 @@ namespace VoxelEngine.Cosmos
             if (_domeMaterial == null) return;
             PlanetSkyPalette p = CurrentPalette;
             if (_domeMaterial.HasProperty(IdZenith)) _domeMaterial.SetColor(IdZenith, p.Zenith);
-            if (_domeMaterial.HasProperty(IdHorizon)) _domeMaterial.SetColor(IdHorizon, p.Horizon);
-            if (_domeMaterial.HasProperty(IdGround)) _domeMaterial.SetColor(IdGround, p.GroundFog);
+            Color smogTint = new Color(0.34f, 0.28f, 0.21f, 1f);
+            if (_domeMaterial.HasProperty(IdHorizon))
+                _domeMaterial.SetColor(IdHorizon, Color.Lerp(p.Horizon, smogTint, _localSmog01 * 0.55f));
+            if (_domeMaterial.HasProperty(IdGround))
+                _domeMaterial.SetColor(IdGround, Color.Lerp(p.GroundFog, smogTint, _localSmog01 * 0.75f));
             if (_domeMaterial.HasProperty(IdNight)) _domeMaterial.SetColor(IdNight, p.AmbientNight);
             if (_domeMaterial.HasProperty(IdSunset)) _domeMaterial.SetColor(IdSunset, p.Sunset);
             if (_domeMaterial.HasProperty(IdSunDir)) _domeMaterial.SetVector(IdSunDir, SunDirection);
             if (_domeMaterial.HasProperty(IdRadialUp)) _domeMaterial.SetVector(IdRadialUp, RadialUp);
             if (_domeMaterial.HasProperty(IdSpaceBlend)) _domeMaterial.SetFloat(IdSpaceBlend, SpaceBlend);
             if (_domeMaterial.HasProperty(IdDayFactor)) _domeMaterial.SetFloat(IdDayFactor, DayFactor);
-            if (_domeMaterial.HasProperty(IdHaze)) _domeMaterial.SetFloat(IdHaze, p.HazeStrength);
+            if (_domeMaterial.HasProperty(IdHaze))
+                _domeMaterial.SetFloat(IdHaze, Mathf.Clamp01(p.HazeStrength + _localSmog01 * 0.65f));
             if (_domeMaterial.HasProperty(IdAurora)) _domeMaterial.SetFloat(IdAurora, p.AuroraStrength * (1f - SpaceBlend));
             if (_domeMaterial.HasProperty(IdAuroraA)) _domeMaterial.SetColor(IdAuroraA, new Color(0.25f, 0.95f, 0.72f, 1f));
             if (_domeMaterial.HasProperty(IdAuroraB)) _domeMaterial.SetColor(IdAuroraB, new Color(0.78f, 0.28f, 0.92f, 1f));
@@ -253,12 +261,14 @@ namespace VoxelEngine.Cosmos
             }
 
             float fogT = (1f - SpaceBlend) * Mathf.Clamp01(atmosphere.Density01 / 0.55f);
-            float density = CurrentPalette.SurfaceFogDensity * fogT;
+            float density = CurrentPalette.SurfaceFogDensity * fogT + _localSmog01 * 0.018f;
             bool enable = density > 0.0004f && CurrentPalette.Kind != PlanetSkyKind.Moon
                 && CurrentPalette.Kind != PlanetSkyKind.Asteroid;
             RenderSettings.fog = enable;
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogColor = Color.Lerp(CurrentPalette.GroundFog, CurrentPalette.Horizon, 0.35f);
+            Color baseFog = Color.Lerp(CurrentPalette.GroundFog, CurrentPalette.Horizon, 0.35f);
+            RenderSettings.fogColor = Color.Lerp(baseFog,
+                new Color(0.30f, 0.25f, 0.20f, 1f), _localSmog01 * 0.78f);
             RenderSettings.fogDensity = density;
         }
 
@@ -277,7 +287,8 @@ namespace VoxelEngine.Cosmos
             Shader.SetGlobalColor("_VoxelSkyZenith", CurrentPalette.Zenith);
             Shader.SetGlobalColor("_VoxelSkyHorizon", CurrentPalette.Horizon);
             Shader.SetGlobalColor("_VoxelSkyRim", CurrentPalette.AtmosphereRim);
-            Shader.SetGlobalFloat("_VoxelSkyHaze", CurrentPalette.HazeStrength);
+            Shader.SetGlobalFloat("_VoxelSkyHaze",
+                Mathf.Clamp01(CurrentPalette.HazeStrength + _localSmog01 * 0.65f));
         }
 
         private void EnsureDome()
