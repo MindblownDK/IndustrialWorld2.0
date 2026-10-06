@@ -41,6 +41,24 @@ namespace VoxelEngine.Persistence
         private readonly HashSet<string> _missingSavedItemWarnings = new();
 
         private bool _loaded;
+
+        /// <summary>14.65.2 - true once the saved orbital clock has been applied (or
+        /// there was nothing to apply). PlayerSpawner and the grid pose correction
+        /// wait on this before trusting any body-relative coordinate.</summary>
+        public bool CosmicClockSettled { get; private set; }
+
+        /// <summary>14.65.2 - true once LoadAll has finished (success, failure or
+        /// no-file). Load-order consumers poll this instead of racing Start().</summary>
+        public bool LoadCompleted => _loaded;
+
+        // 14.65.2 - grids whose anchored pose resolved before the cosmos was ready,
+        // queued for a second-chance placement, plus the restored-grid death watch
+        // (no-data-loss law, part two).
+        private readonly List<KeyValuePair<GridEntity, SavedGrid>> _poseCorrectionQueue
+            = new List<KeyValuePair<GridEntity, SavedGrid>>();
+        private readonly List<KeyValuePair<GridEntity, SavedGrid>> _restoreDeathWatch
+            = new List<KeyValuePair<GridEntity, SavedGrid>>();
+        private float _restoreDeathWatchUntil = -1f;
         private float _saveTimer;
 
         /// <summary>
@@ -2016,7 +2034,7 @@ namespace VoxelEngine.Persistence
             VoxelEngine.Networking.TeamBannerRegistry.Load();
 
             string path = WorldStatePath();
-            if (!File.Exists(path)) { _loaded = true; return; }
+            if (!File.Exists(path)) { _loaded = true; CosmicClockSettled = true; return; }
 
             try
             {
@@ -2045,6 +2063,7 @@ namespace VoxelEngine.Persistence
                     // Only the second case must block autosave.
                     _loadFailed = true;
                     _loaded = true;
+                    CosmicClockSettled = true;
                     Debug.LogError("[WorldState] Could not read the save. Autosave is DISABLED " +
                                    "for this session so the existing file is not overwritten. " +
                                    "Fix or remove the file, then restart.");
@@ -2060,10 +2079,16 @@ namespace VoxelEngine.Persistence
                 // survive any number of dedicated sessions untouched.
                 _carriedPlayerBlock = save.localPlayerAbsent ? null : save.player;
 
+                // 14.65.2 - clock FIRST: the bodies must sit at the saved orbital
+                // phase before any body-anchored pose (grids, then the player) resolves.
+                RestoreCosmicClock(save.cosmicSimulationSeconds);
                 RestorePlacedTiered(save);
                 RestorePlacedBlocks(save);
-                if (!save.localPlayerAbsent) RestorePlayer(save);
+                // 14.65.2 - grids BEFORE the player: a save written on a ship deck can
+                // then prove its raw coordinate against the restored hull (deck rescue)
+                // instead of being vetoed by a body comparison at the wrong phase.
                 int anchoredGrids = RestoreGrids(save);
+                if (!save.localPlayerAbsent) RestorePlayer(save);
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
                 RestoreDronePorts(save);
@@ -2086,6 +2111,7 @@ namespace VoxelEngine.Persistence
                                " - autosave DISABLED for this session to protect the file.");
             }
             _loaded = true;
+            if (_loadFailed) CosmicClockSettled = true;   // failed load: release the waiters
         }
 
         // ============================================================
@@ -2105,6 +2131,24 @@ namespace VoxelEngine.Persistence
             // live world cannot build it.
             foreach (var carried in _unrestoredGrids)
                 if (carried != null) save.grids.Add(carried);
+
+            // NO DATA LOSS LAW, part two (14.65.2): a grid that restored fine but was
+            // destroyed by load-settling physics used to vanish from the next save with
+            // zero trace (a wrong-frame restore crashed it in-session). Through the
+            // settling window, a restored grid that no longer exists - or lost every
+            // block - gets its ORIGINAL record written back verbatim instead.
+            if (_restoreDeathWatchUntil > 0f && Time.unscaledTime <= _restoreDeathWatchUntil)
+            {
+                foreach (var watch in _restoreDeathWatch)
+                {
+                    if (watch.Value == null) continue;
+                    if (watch.Key != null && watch.Key.BlockCount > 0) continue;   // alive - saved above
+                    Debug.LogError($"[WorldState] Restored grid '{watch.Value.identityName}' " +
+                                   $"({(watch.Value.blocks != null ? watch.Value.blocks.Count : 0)} blocks) died within " +
+                                   "minutes of loading — its saved record is carried forward instead of being dropped.");
+                    save.grids.Add(watch.Value);
+                }
+            }
         }
 
         /// <summary>Serialize ONE grid. Split out of SaveGrids in 14.25.0 so the same
@@ -2675,7 +2719,17 @@ namespace VoxelEngine.Persistence
         {
             int anchored = 0;
             _unrestoredGrids.Clear();
+            _poseCorrectionQueue.Clear();
+            _restoreDeathWatch.Clear();
             if (save.grids == null || save.grids.Count == 0) return 0;
+
+            // 14.65.2 - when the cosmos is not ready (or the clock not yet applied) at
+            // this point, every body-anchored pose below resolves against a missing or
+            // t=0 universe. Queue those grids for a second-chance placement once it
+            // settles - restoring them "successfully" kilometres from their true pose
+            // is exactly how three anchored ships died in-session and left the save.
+            var cosmosReg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            bool cosmosSettledNow = cosmosReg != null && cosmosReg.IsReady && CosmicClockSettled;
 
             foreach (var savedGrid in save.grids)
             {
@@ -2692,6 +2746,11 @@ namespace VoxelEngine.Persistence
                 if (restored != null)
                 {
                     if (fromAnchor) anchored++;
+                    // NO DATA LOSS LAW, part two: watch every restored grid through the
+                    // load-settling window - one that dies keeps its record (SaveGrids).
+                    _restoreDeathWatch.Add(new KeyValuePair<GridEntity, SavedGrid>(restored, savedGrid));
+                    if (!cosmosSettledNow && (savedGrid.hasBodyAnchor || savedGrid.hasCosmic))
+                        _poseCorrectionQueue.Add(new KeyValuePair<GridEntity, SavedGrid>(restored, savedGrid));
                     continue;
                 }
                 // A non-empty record that produced no grid is a loss candidate:
@@ -2703,7 +2762,67 @@ namespace VoxelEngine.Persistence
                 }
             }
 
+            _restoreDeathWatchUntil = Time.unscaledTime + 120f;
+            if (_poseCorrectionQueue.Count > 0) StartCoroutine(CorrectRestoredGridPoses());
+
             return anchored;
+        }
+
+        /// <summary>14.65.2 - second-chance placement for anchored grids. RestoreGrids
+        /// runs synchronously at scene load, where the cosmos registry can still be
+        /// building and the orbital clock unapplied: a body-anchored grid then resolves
+        /// against a missing or t=0 body, lands kilometres from its true pose, and dies
+        /// to physics before the next save. Once the universe settles, every queued
+        /// record is re-resolved; a surviving grid sitting away from its real pose is
+        /// re-parked, and a player standing on or floating beside it rides along.</summary>
+        private System.Collections.IEnumerator CorrectRestoredGridPoses()
+        {
+            float deadline = Time.unscaledTime + 25f;
+            while (Time.unscaledTime < deadline)
+            {
+                var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (reg != null && reg.IsReady && CosmicClockSettled) break;
+                yield return null;
+            }
+            // One extra frame so a freshly applied clock has actually placed the bodies.
+            yield return null;
+
+            foreach (var pair in _poseCorrectionQueue)
+            {
+                var grid = pair.Key;
+                var record = pair.Value;
+                if (grid == null || record == null) continue;
+                // Someone already flying it owns its pose now.
+                if (grid.ActiveCockpit != null && grid.ActiveCockpit.Pilot != null) continue;
+                try
+                {
+                    ResolveSavedGridPose(record, out Vector3 pos, out Quaternion rot, out bool fromAnchor);
+                    if (!fromAnchor && !record.hasCosmic) continue;
+                    Vector3 current = grid.Body != null ? grid.Body.position : grid.transform.position;
+                    Vector3 delta = pos - current;
+                    if (delta.sqrMagnitude <= 16f) continue;   // close enough - leave physics alone
+                    Debug.LogWarning($"[WorldState] Re-parked restored grid '{grid.name}' {delta.magnitude:0} m onto its " +
+                                     "settled anchor pose (the cosmos finished loading after the grid restored).");
+                    grid.RestorePersistentPose(pos, rot,
+                        record.wheelParkingBrake ? Vector3.zero : record.velocity,
+                        record.wheelParkingBrake ? Vector3.zero : record.angularVelocity);
+
+                    // A player standing on (or station-keeping beside) the hull rides the correction.
+                    var pc = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+                    if (pc != null && (pc.transform.position - current).sqrMagnitude < 150f * 150f)
+                    {
+                        var playerCc = pc.GetComponent<CharacterController>();
+                        if (playerCc != null) playerCc.enabled = false;
+                        pc.transform.position += delta;
+                        if (playerCc != null) playerCc.enabled = true;
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[WorldState] Grid pose correction failed: " + e);
+                }
+            }
+            _poseCorrectionQueue.Clear();
         }
 
         /// <summary>Rebuild ONE grid from its record. Split out of RestoreGrids in 14.25.0
@@ -3073,7 +3192,23 @@ namespace VoxelEngine.Persistence
             }
         }
 
-        private void RestorePlayer(SaveData save) => RestorePlayer(save.player, save.cosmicSimulationSeconds);
+        private void RestorePlayer(SaveData save) => RestorePlayer(save.player, 0d);   // clock handled by RestoreCosmicClock (14.65.2)
+
+        /// <summary>14.65.2 - apply the saved orbital clock (sync when the registry is
+        /// ready, deferred otherwise) and track settlement, so load-order consumers
+        /// (PlayerSpawner, the grid pose correction) can wait for a placed universe.</summary>
+        private void RestoreCosmicClock(double seconds)
+        {
+            if (seconds <= 0d) { CosmicClockSettled = true; return; }
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry != null && registry.IsReady)
+            {
+                registry.RestoreSimulationSeconds(seconds);
+                CosmicClockSettled = true;
+                return;
+            }
+            StartCoroutine(RestoreCosmicClockWhenReady(seconds));
+        }
 
         /// <summary>14.60.7 - deferred orbital-clock restore for loads where the
         /// cosmos registry finishes building after the save is applied.</summary>
@@ -3086,12 +3221,14 @@ namespace VoxelEngine.Persistence
                 if (reg != null && reg.IsReady)
                 {
                     reg.RestoreSimulationSeconds(seconds);
+                    CosmicClockSettled = true;
                     Debug.Log($"[WorldState] Cosmic clock restored (deferred) to t={seconds:0.#}s once the registry was ready.");
                     yield break;
                 }
                 yield return null;
             }
             Debug.LogWarning("[WorldState] Cosmic clock restore timed out waiting for the registry — session stays at t=0.");
+            CosmicClockSettled = true;   // settled wrong is still settled: never leave the waiters hanging
         }
 
         /// <summary>Puts one player back: pose, inventory, equipment, hotbar.
@@ -3232,10 +3369,27 @@ namespace VoxelEngine.Persistence
                 }
             }
 
-            if (IsFiniteVector(player.pos) && IsSafePlayerSavePosition(player.pos))
+            if (IsFiniteVector(player.pos))
             {
-                position = player.pos;
-                return true;
+                if (IsSafePlayerSavePosition(player.pos))
+                {
+                    position = player.pos;
+                    return true;
+                }
+                // 14.65.2 - a grid deck at the saved position is its own truth: the
+                // player logged out standing on (or floating beside) a ship, and grids
+                // restore at the same relative scene pose this save wrote. The body
+                // coherence test above can run against a universe at the wrong orbital
+                // phase and must not veto a deck wake. Grids restore BEFORE the player
+                // (LoadAll order, 14.65.2), so the hull is already present here.
+                var deckHits = Physics.OverlapSphere(player.pos, 6f, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < deckHits.Length; i++)
+                {
+                    if (deckHits[i] == null) continue;
+                    if (deckHits[i].GetComponentInParent<GridEntity>() == null) continue;
+                    position = player.pos;
+                    return true;
+                }
             }
             return false;
         }
@@ -3286,6 +3440,13 @@ namespace VoxelEngine.Persistence
         /// position sits on/near (2000 m window). A no-op when they already agree or when no
         /// body is close, so space positions are never dragged onto a planet.
         /// </summary>
+        /// <summary>14.65.2 - public bridge for PlayerSpawner: when the load-time
+        /// player restore was rejected (registry still building), the spawner resolves
+        /// the saved position itself AFTER waiting for the cosmos - and must then point
+        /// the frame and the voxel streamer at the body that position sits on, exactly
+        /// like a successful load-time restore would have.</summary>
+        public static void EnsureStreamingForRestoredPosition(Vector3 scenePos) => EnsureStreamingBodyAt(scenePos);
+
         private static void EnsureStreamingBodyAt(Vector3 scenePos)
         {
             var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;

@@ -107,6 +107,13 @@ namespace VoxelEngine.GridSystem
                 || hitName.IndexOf("NativeSphericalWater", System.StringComparison.OrdinalIgnoreCase) >= 0) return;
             if (Time.time - VoxelEngine.Cosmos.SpaceOrigin.LastJoltTime < 1.5f) return;
 
+            // 14.65.2 - load-settling grace: in the first seconds of a session a
+            // restored pose can intersect terrain or dock geometry it never touched in
+            // the saved world (the cosmos settles AFTER the grids restore), and that
+            // phantom crash ate hulls before the pose correction could run. Nothing a
+            // player does needs crash damage this early; real flying resumes after it.
+            if (Time.timeSinceLevelLoad < 12f) return;
+
             float speed = collision.relativeVelocity.magnitude;
             if (speed < MinImpactSpeed) return;
             _nextImpactAt = Time.time + ImpactCooldown;

@@ -208,6 +208,33 @@ namespace VoxelEngine.Player
         /// under the player, so the player's heading turns with it.</summary>
         public void AddExternalYaw(float degrees) => _yaw += degrees;
 
+        // 14.65.2 - frame-follow state for REL-locked jetpack flight: the reference
+        // grid's transform pose last frame, so the player can ride the hull's ACTUAL
+        // frame motion (including its interpolation-off stepping at speed) instead of
+        // integrating smoothly past it.
+        private VoxelEngine.GridSystem.GridEntity _flyFollowGrid;
+        private Vector3 _flyFollowLastPos;
+        private bool _hasFlyFollowPose;
+
+        /// <summary>14.65.2 - seat exit with nothing to stand on: turn the jetpack on
+        /// so the freshly locked relative dampeners hold formation with the hull from
+        /// the very first frame, instead of handing the crewman to gravity while the
+        /// ship burns away. No flight permission (no jetpack / dry tanks / atmosphere
+        /// rules) means no change - the exit stays a plain step-out.</summary>
+        public void AutoEnableFlightForSeatExit()
+        {
+            if (GameSettings.FlyMode) return;
+            if (!HasFlightPermission()) return;
+            // A standing surface within reach keeps the walk update: the deck carry
+            // and the boots own a crewman who steps out onto his own hull. Casting
+            // from inside the player's own capsule ignores it (boots probe precedent).
+            Vector3 up = UpVec;
+            if (Physics.SphereCast(transform.position + up * 0.4f, 0.35f, -up, out _, 3.5f,
+                                   ~0, QueryTriggerInteraction.Ignore)) return;
+            GameSettings.FlyMode = true;
+            _flyRotation = transform.rotation;   // start 6DOF from the current pose (no snap)
+        }
+
         /// <summary>14.62.0 — the player's PERSONAL inertia dampeners (default ON).
         /// ON: the jetpack brakes toward its reference (world rest or a grid) and the
         /// magnetic boots carry you with a deck you stand on. OFF: pure Newtonian
@@ -1026,7 +1053,44 @@ namespace VoxelEngine.Player
                 if (relVel.sqrMagnitude > 240f * 240f)
                     _velocity = dampRef + relVel.normalized * 240f;
             }
-            _cc.Move(_velocity * dt);
+
+            // 14.65.2 - frame-follow. Above 30 m/s a grid's rigidbody runs without
+            // interpolation (14.65.0): its transform advances in whole physics steps
+            // (22.7 m per step at 1134 m/s) while the player integrates per render
+            // frame. Integrating in WORLD space made the hull wobble a full step
+            // around the station-keeping player - unreadable at speed, and the
+            // cockpit prompt never stayed under the crosshair. While the dampeners
+            // hold a grid reference, ride the hull's ACTUAL frame motion and
+            // integrate only the RELATIVE velocity on top: the pair renders rock
+            // solid no matter how the hull steps.
+            Vector3 frameMove = _velocity * dt;
+            var followGrid = (DampenersOn && _boots != null) ? _boots.ActiveReferenceGrid : null;
+            if (followGrid != null && followGrid.Body != null && !followGrid.Body.isKinematic)
+            {
+                Vector3 refPos = followGrid.transform.position;
+                if (_hasFlyFollowPose && _flyFollowGrid == followGrid)
+                {
+                    Vector3 refDelta = refPos - _flyFollowLastPos;
+                    Vector3 expected = dampRef * dt;
+                    // Trust the hull's frame motion only when it is in the same
+                    // ballpark as its velocity claims: an origin shift (which already
+                    // moved this player with the world) or any other teleport falls
+                    // back to plain integration for that one frame.
+                    float tolerance = Mathf.Max(40f, dampRef.magnitude * Time.fixedDeltaTime * 4f);
+                    if ((refDelta - expected).sqrMagnitude <= tolerance * tolerance
+                        && Time.time - VoxelEngine.Cosmos.SpaceOrigin.LastJoltTime > 0.25f)
+                        frameMove = refDelta + (_velocity - dampRef) * dt;
+                }
+                _flyFollowGrid = followGrid;
+                _flyFollowLastPos = refPos;
+                _hasFlyFollowPose = true;
+            }
+            else
+            {
+                _hasFlyFollowPose = false;
+                _flyFollowGrid = null;
+            }
+            _cc.Move(frameMove);
         }
 
         /// <summary>Kill fly-mode with a single, rate-limited explanation toast.</summary>

@@ -106,6 +106,34 @@ namespace VoxelEngine.Player
                 Debug.LogWarning("[OfflineSurvival] Check exception: " + ex.Message);
             }
 
+            // 14.65.2 - resolve the save against a READY universe. The body anchor
+            // and the inside-a-body test both resolve through the live registry; this
+            // coroutine can outrun CosmosBootstrap at scene load, and with the registry
+            // missing the anchor silently failed, the stale scene float was trusted,
+            // and a space/ship save "woke up on the home planet" after a pointless
+            // chunk wait. Wait (bounded) for the registry, the finished local load and
+            // the restored orbital clock before reading the save at all.
+            {
+                bool needLocalLoad = session == null || !session.IsRemoteJoin;
+                float cosmosDeadline = Time.unscaledTime + 15f;
+                float registryAppearDeadline = Time.unscaledTime + 3f;
+                while (Time.unscaledTime < cosmosDeadline)
+                {
+                    var cosmosReg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                    if (cosmosReg == null)
+                    {
+                        if (Time.unscaledTime > registryAppearDeadline) break;   // scene without a cosmos
+                        yield return null;
+                        continue;
+                    }
+                    var persistence = Persistence.WorldStatePersistence.Instance;
+                    bool loadSettled = persistence == null
+                        || ((!needLocalLoad || persistence.LoadCompleted) && persistence.CosmicClockSettled);
+                    if (cosmosReg.IsReady && loadSettled) break;
+                    yield return null;
+                }
+            }
+
             bool hasSavedPos = TryReadSavedPlayerPosition(out Vector3 savedPos);
 
             // 14.24.0 - a guest's state belongs to the HOST, not to this
@@ -146,11 +174,22 @@ namespace VoxelEngine.Player
             // restore the player INSIDE a planet (or so close to a core that they spawn
             // in solid terrain). Those saves are poisoned — reject them and fall back to
             // the surface/bed spawn path. Legit surface/orbit/deep-space saves pass.
-            if (hasSavedPos && IsSavedPositionInsideBody(savedPos))
+            // 14.65.2 - a restored hull at the saved position overrides the
+            // inside-a-body test: the deck the player logged out on is its own truth
+            // (player and grids are saved in the same frame, so their RELATIVE pose is
+            // coherent even when the body comparison is not).
+            if (hasSavedPos && IsSavedPositionInsideBody(savedPos) && GridDeckAt(savedPos) == null)
             {
                 Debug.LogWarning("[PlayerSpawner] Saved position is inside a celestial body — rejecting poisoned save, spawning on the surface instead.");
                 hasSavedPos = false;
             }
+
+            // 14.65.2 - the load-time restore can have been rejected while the cosmos
+            // was still building; this position was resolved against the READY
+            // universe above, so make sure the frame and the voxel streamer point at
+            // whatever body it sits on (no-op when they already match).
+            if (hasSavedPos)
+                Persistence.WorldStatePersistence.EnsureStreamingForRestoredPosition(savedPos);
 
             // 14.60.7 - the bed's cosmic record resolves against the LIVE registry,
             // and at scene load this coroutine can outrun CosmosBootstrap: with the
@@ -1062,7 +1101,13 @@ namespace VoxelEngine.Player
                 float y = float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
                 float z = float.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
                 pos = new Vector3(x, y, z);
-                if (!IsSafeSavedPosition(pos))
+                // 14.65.2 - a restored hull at the saved coordinate proves the save:
+                // ship-deck logouts must not be vetoed by a body comparison running at
+                // the wrong orbital phase. (NaN/Infinity still rejects - never probe
+                // physics with a poisoned vector.)
+                bool finitePos = !float.IsNaN(x) && !float.IsNaN(y) && !float.IsNaN(z)
+                              && !float.IsInfinity(x) && !float.IsInfinity(y) && !float.IsInfinity(z);
+                if (!IsSafeSavedPosition(pos) && (!finitePos || GridDeckAt(pos) == null))
                 {
                     Debug.LogWarning("[PlayerSpawner] Ignored an invalid saved player position: " + pos);
                     pos = default;

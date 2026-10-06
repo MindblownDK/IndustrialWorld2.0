@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.65.1-dev`
-**Roadmap Version:** `14.65.1-dev`
+**Current Version:** `14.65.2-dev`
+**Roadmap Version:** `14.65.2-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,13 @@
 ---
 
 ## 0. Recently Done
+
+### 14.65.2-dev - Station Keeping
+- Boots yaw-carry measures grid rotation, not the player's look (deck stutter fix)
+- Seat exit with no deck below auto-enables the jetpack; REL-locked flight frame-follows the hull (high-speed exit stutter + re-entry fix)
+- Spawner waits for registry + local load + orbital clock before resolving the save; streaming re-targeted from the spawner path; deck proximity proves a save
+- Clock restored first in load order; grids before player; anchored grids get a second-chance placement once the cosmos settles
+- NO DATA LOSS part two: restored grids that die in the load-settling window keep their record in the save; impact damage grace after scene load
 
 ### 14.65.1-dev - Nothing Lost
 - WorldStatePersistence NO DATA LOSS law: per-grid try/catch in RestoreGrids with loud LogError; _unrestoredGrids/_unrestoredPlaced carry failed records verbatim into SaveGrids/SavePlacedBlocks; per-block try/catch in RestoreGridBlocks; Grid Control import guarded; placed-block missing-item drop now loud + carried.

@@ -80,6 +80,8 @@ namespace VoxelEngine.Player
         private bool _hasAnchor;
         private Vector3 _anchorLocal;
         private Vector3 _prevForwardLocal;
+        // 14.65.2 - the WORLD forward at anchor-capture time: the yaw-carry baseline.
+        private Vector3 _anchorForwardWorld = Vector3.forward;
 
         // Fly-reference cache (OverlapSphere is not free - refresh at 4 Hz).
         private Rigidbody _refGridBody;
@@ -144,12 +146,19 @@ namespace VoxelEngine.Player
                     _cc.Move(delta);
 
                 // Yaw-carry: when the ship turns, the crew turns with the deck.
-                Vector3 oldForward = grid.transform.TransformDirection(_prevForwardLocal);
-                Vector3 newForward = Vector3.ProjectOnPlane(oldForward, up);
-                Vector3 curForward = Vector3.ProjectOnPlane(transform.forward, up);
-                if (newForward.sqrMagnitude > 1e-6f && curForward.sqrMagnitude > 1e-6f && _pc != null)
+                // 14.65.2 - measure the GRID's rotation, never the player's. The old
+                // form compared the deck direction against transform.forward, which by
+                // Tick time already contains THIS frame's mouse look (UpdateLook runs
+                // first): on a stationary ship every look delta came back as a counter
+                // yaw one frame later - the walking-on-deck look stutter. Pushing the
+                // forward stored at anchor time through the grid's CURRENT pose and
+                // comparing it against the same vector AS CAPTURED isolates pure deck
+                // rotation: zero for a parked hull, exact for a turning one.
+                Vector3 newForward = Vector3.ProjectOnPlane(grid.transform.TransformDirection(_prevForwardLocal), up);
+                Vector3 oldForward = Vector3.ProjectOnPlane(_anchorForwardWorld, up);
+                if (newForward.sqrMagnitude > 1e-6f && oldForward.sqrMagnitude > 1e-6f && _pc != null)
                 {
-                    float dYaw = Vector3.SignedAngle(curForward, newForward, up);
+                    float dYaw = Vector3.SignedAngle(oldForward, newForward, up);
                     if (Mathf.Abs(dYaw) > 0.001f && Mathf.Abs(dYaw) < 30f) _pc.AddExternalYaw(dYaw);
                 }
             }
@@ -158,6 +167,7 @@ namespace VoxelEngine.Player
             AttachedGrid = grid;
             _anchorLocal = grid.transform.InverseTransformPoint(transform.position);
             _prevForwardLocal = grid.transform.InverseTransformDirection(transform.forward);
+            _anchorForwardWorld = transform.forward;
             _hasAnchor = true;
 
             // ── stick: the hull normal is "down" (only reached in low-g) ──
@@ -183,6 +193,7 @@ namespace VoxelEngine.Player
             if (!Engaged || AttachedGrid == null) return;
             _anchorLocal = AttachedGrid.transform.InverseTransformPoint(transform.position);
             _prevForwardLocal = AttachedGrid.transform.InverseTransformDirection(transform.forward);
+            _anchorForwardWorld = transform.forward;
             _hasAnchor = true;
         }
 

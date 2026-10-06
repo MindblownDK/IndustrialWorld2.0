@@ -778,6 +778,11 @@ namespace VoxelEngine.GridSystem
             var exitBoots = Pilot.GetComponent<VoxelEngine.Player.MagneticBoots>();
             if (exitBoots != null && Grid != null)
                 exitBoots.LockReference(Grid);
+            // 14.65.2 - no deck below the exit point means the walk update would hand
+            // the crewman to gravity while the hull burns on (the "ship recedes after
+            // exiting at speed" report). Flip the jetpack on so the relative dampeners
+            // locked above hold formation from the very first frame.
+            Pilot.AutoEnableFlightForSeatExit();
             VoxelEngine.Networking.GridSync.ReleaseControl();
             Pilot = null;
             if (Grid != null && Grid.ActiveCockpit == this) Grid.ActiveCockpit = null;
