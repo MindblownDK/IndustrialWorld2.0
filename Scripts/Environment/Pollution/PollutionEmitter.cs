@@ -55,7 +55,7 @@ namespace VoxelEngine.Environment
             _flare = GetComponentInChildren<FlareStack>(true);
             _gridFlare = GetComponentInChildren<GridFlareStack>(true);
             _exhaust = GetComponentInChildren<GridExhaustPipe>(true);
-            _timer = Mathf.Abs(GetInstanceID() % 100) * 0.01f * Mathf.Max(0.1f, reportInterval);
+            _timer = Mathf.Abs(GetEntityId().GetHashCode() % 100) * 0.01f * Mathf.Max(0.1f, reportInterval);
         }
 
         private void Update()

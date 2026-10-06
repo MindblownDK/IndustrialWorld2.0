@@ -166,7 +166,7 @@ MonoBehaviour:
   connectionBlockingLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  wattsPerSecond: 0
+  wattsPerSecond: 100
 --- !u!114 &5250994319717581141
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -216,6 +216,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 445a71aa1a278ef408d4bfb46c5d5962, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Storage.AutoCrafter
-  patterns: []
-  craftQueue: []
-  maxQueueSize: 8
+  patternBank:
+    _name: Container
+    _slots: []
+    _minSize: 1
+  jobs: []

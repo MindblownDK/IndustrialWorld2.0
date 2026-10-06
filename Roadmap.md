@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.66.0-dev`
-**Roadmap Version:** `14.66.0-dev`
+**Current Version:** `14.66.1-dev`
+**Roadmap Version:** `14.66.1-dev`
 **Date:** 2026-10-06
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.66.1-dev - Modern Identity
+- Pollution emitter staggering uses Unity's current entity-ID API instead of obsolete instance IDs
 
 ### 14.66.0-dev - The Air Has Memory
 - Host-authoritative sparse body-local airborne pollution with wind, rain dilution, recovery, additive sidecar persistence and client snapshots

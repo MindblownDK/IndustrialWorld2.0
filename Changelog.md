@@ -1,9 +1,14 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.66.0-dev`
+**Current Version:** `14.66.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.66.1-dev] Modern Identity
+
+#### Fixed
+- **Pollution emitters compile against the current Unity object API.** Their staggered reporting timer now derives its harmless jitter seed from `GetEntityId()` instead of the obsolete, error-level `GetInstanceID()` call.
 
 ### [14.66.0-dev] The Air Has Memory
 

@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2748258526120619663}
   - component: {fileID: 5038480163400482959}
   - component: {fileID: 1093376641079048938}
-  - component: {fileID: 6154602954765534654}
+  - component: {fileID: 2961900424775322809}
   m_Layer: 0
   m_Name: WirelessStorageTerminal
   m_TagString: Untagged
@@ -53,7 +53,7 @@ MonoBehaviour:
   connectionBlockingLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  wattsPerSecond: 0
+  wattsPerSecond: 60
 --- !u!114 &1093376641079048938
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -69,7 +69,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &6154602954765534654
+--- !u!114 &2961900424775322809
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -78,11 +78,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 4992734715689890576}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d37781fc987d97f40a343dac278915f7, type: 3}
+  m_Script: {fileID: 11500000, guid: 5a0d2a4ed3c07184db025cef3f2444df, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Storage.WirelessTransmitter
-  transmitterName: Wireless Network
-  playerRange: 60
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Storage.StorageTerminal
+  isWireless: 1
+  searchRadius: 12
+  wirelessRange: 60
 --- !u!1 &6534519078309535468
 GameObject:
   m_ObjectHideFlags: 0
