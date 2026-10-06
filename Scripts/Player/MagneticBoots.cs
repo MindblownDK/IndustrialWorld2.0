@@ -43,6 +43,8 @@ namespace VoxelEngine.Player
         [Header("Jetpack reference")]
         [Tooltip("While flying, dampeners reference the nearest grid within this range (m).")]
         public float flyReferenceRange = 14f;
+        [Tooltip("The relative lock auto-releases beyond this distance (m) from the locked grid's closest block.")]
+        public float lockReleaseRange = 200f;
 
         /// <summary>Boots engaged: jetpack off + feet on a grid (carry active).</summary>
         public bool Engaged { get; private set; }
@@ -80,6 +82,7 @@ namespace VoxelEngine.Player
         private Rigidbody _refGridBody;
         private VoxelEngine.GridSystem.GridEntity _refGrid;
         private float _nextRefScan;
+        private float _nextLockLeashCheck;
 
         private void Awake()
         {
@@ -90,6 +93,8 @@ namespace VoxelEngine.Player
         /// <summary>Pumped by PlayerController right before its walk/fly update.</summary>
         public void Tick(float dt)
         {
+            TickLockLeash();
+
             if (_cc == null || !_cc.enabled || GameSettings.FlyMode)
             {
                 Release();
@@ -101,6 +106,17 @@ namespace VoxelEngine.Player
             // on a drifting, dampener-less freighter still rides it. Only turning
             // YOUR dampeners off cuts you loose.
             if (_pc != null && !_pc.DampenersOn)
+            {
+                Release();
+                return;
+            }
+
+            // 14.64.0 — the boots are a ZERO-G tool. In real planetary gravity the
+            // ordinary deck carry owns moving decks; the boots engaging on top of it
+            // double-moved the player every frame (the stand-on-a-grid stutter) and
+            // glued crews to hulls they should simply stand on.
+            Vector3 fieldGravity = VoxelEngine.Cosmos.GravityProvider.GetGravity(transform.position);
+            if (fieldGravity.magnitude >= lowGravityThreshold)
             {
                 Release();
                 return;
@@ -140,18 +156,46 @@ namespace VoxelEngine.Player
             _prevForwardLocal = grid.transform.InverseTransformDirection(transform.forward);
             _hasAnchor = true;
 
-            // ── stick: in low gravity the hull normal is "down" ──
-            Vector3 fieldGravity = VoxelEngine.Cosmos.GravityProvider.GetGravity(transform.position);
-            if (fieldGravity.magnitude < lowGravityThreshold)
+            // ── stick: the hull normal is "down" (only reached in low-g) ──
+            OverrideActive = true;
+            UpDirection = hull.normal.sqrMagnitude > 0.5f ? hull.normal : up;
+            GravityOverride = -UpDirection * bootGravity;
+        }
+
+        /// <summary>14.64.0 — re-anchor AFTER the player's own movement. The anchor
+        /// used to be captured here in Tick, BEFORE the frame's walk/fly move; the
+        /// next frame's carry then dragged the player back toward where the frame
+        /// STARTED, cancelling part of every step — the on-deck stutter.
+        /// PlayerController calls this once the frame's final position is settled.</summary>
+        public void CaptureAnchor()
+        {
+            if (!Engaged || AttachedGrid == null) return;
+            _anchorLocal = AttachedGrid.transform.InverseTransformPoint(transform.position);
+            _prevForwardLocal = AttachedGrid.transform.InverseTransformDirection(transform.forward);
+            _hasAnchor = true;
+        }
+
+        /// <summary>14.64.0 — the relative lock has a leash: drift beyond
+        /// lockReleaseRange from the locked grid's CLOSEST BLOCK and it lets go.</summary>
+        private void TickLockLeash()
+        {
+            if (LockedReference == null) return;
+            if (Time.unscaledTime < _nextLockLeashCheck) return;
+            _nextLockLeashCheck = Time.unscaledTime + 0.5f;
+
+            float bestSqr = float.MaxValue;
+            foreach (var block in LockedReference.AllBlocks)
             {
-                OverrideActive = true;
-                UpDirection = hull.normal.sqrMagnitude > 0.5f ? hull.normal : up;
-                GravityOverride = -UpDirection * bootGravity;
+                if (block == null) continue;
+                float d = (block.transform.position - transform.position).sqrMagnitude;
+                if (d < bestSqr) bestSqr = d;
             }
-            else
-            {
-                OverrideActive = false;
-            }
+            if (bestSqr <= lockReleaseRange * lockReleaseRange) return;
+
+            VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
+                $"Lock released: {LockedReference.name} out of range ({lockReleaseRange:0} m)",
+                null, new Color(1f, 0.70f, 0.25f));
+            LockedReference = null;
         }
 
         private VoxelEngine.GridSystem.GridEntity ProbeGrid(Vector3 up, out RaycastHit hit)
@@ -185,8 +229,13 @@ namespace VoxelEngine.Player
         {
             // Explicit lock wins — linear velocity, not point velocity: at hundreds of
             // metres the rotation lever arm would turn a slow tumble into nonsense.
+            // Kinematic bodies (gear-locked hulls, client replicas) can report a STALE
+            // linearVelocity; they are not actually moving — treating that ghost speed
+            // as "rest" slowly accelerated a standing player away from a parked ship.
             if (LockedReference != null && LockedReference.Body != null)
-                return LockedReference.Body.linearVelocity;
+                return LockedReference.Body.isKinematic
+                    ? Vector3.zero
+                    : LockedReference.Body.linearVelocity;
 
             if (Time.unscaledTime >= _nextRefScan)
             {
@@ -203,7 +252,9 @@ namespace VoxelEngine.Player
                     if (d < best) { best = d; _refGridBody = g.Body; _refGrid = g; }
                 }
             }
-            return _refGridBody != null ? _refGridBody.GetPointVelocity(position) : Vector3.zero;
+            return _refGridBody != null && !_refGridBody.isKinematic
+                ? _refGridBody.GetPointVelocity(position)
+                : Vector3.zero;
         }
 
         /// <summary>Ctrl+dampener key — lock/unlock the grid under the crosshair as the

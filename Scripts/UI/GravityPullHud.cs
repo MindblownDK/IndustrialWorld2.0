@@ -369,9 +369,13 @@ namespace VoxelEngine.UI
 
             if (reference != null && reference.Body != null)
             {
-                Vector3 refVel = locked
-                    ? reference.Body.linearVelocity
-                    : reference.Body.GetPointVelocity(player.transform.position);
+                // Kinematic bodies (gear-locked hulls, client replicas) can report a
+                // stale linearVelocity — they are not actually moving. Rest = zero.
+                Vector3 refVel = reference.Body.isKinematic
+                    ? Vector3.zero
+                    : locked
+                        ? reference.Body.linearVelocity
+                        : reference.Body.GetPointVelocity(player.transform.position);
                 float rel = (_measuredVelocity - refVel).magnitude;
                 string relText = rel >= 100f ? $"{rel:0}" : $"{rel:0.0}";
                 string refName = reference.name.ToUpperInvariant();

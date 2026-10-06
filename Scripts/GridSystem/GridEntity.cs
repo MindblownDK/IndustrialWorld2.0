@@ -110,8 +110,9 @@ namespace VoxelEngine.GridSystem
         /// <summary>Velocity the dampeners treat as "at rest" — the locked reference
         /// grid's linear velocity, or zero (world rest) when no lock is set.</summary>
         public Vector3 DampenerRestVelocity =>
-            DampenerReferenceGrid != null && DampenerReferenceGrid != this && DampenerReferenceGrid.Body != null
-                ? DampenerReferenceGrid.Body.linearVelocity
+            DampenerReferenceGrid != null && DampenerReferenceGrid != this
+            && DampenerReferenceGrid.Body != null && !DampenerReferenceGrid.Body.isKinematic
+                ? DampenerReferenceGrid.Body.linearVelocity   // kinematic = stale ghost speed; rest is zero
                 : Vector3.zero;
 
         // Dedicated wheel channel: no synthetic cockpit input and no thruster commands.
@@ -933,15 +934,29 @@ namespace VoxelEngine.GridSystem
         /// keeps sailing, it does not freeze in space.</summary>
         private GridEntity SplitIslandIntoGrid(List<Vector3Int> cells)
         {
-            var island = Create(transform.position, gridSize);
+            // 14.64.0 — rebase the island's ORIGIN onto its own cells. Creating the
+            // new grid at the PARENT's origin kept split-off blocks keyed to cells far
+            // away from that origin; every origin-pivoted pass afterwards (ground
+            // alignment, stabilization) then swung the piece around a point nowhere
+            // near it — the visible "cut block teleports sideways/down" bug. With the
+            // origin AT the island's min cell, every block keeps its exact world pose
+            // through the cut and physics pivots where the piece actually is.
+            Vector3Int baseCell = cells[0];
+            for (int i = 1; i < cells.Count; i++)
+                baseCell = Vector3Int.Min(baseCell, cells[i]);
+
+            float cellSize = gridSize.CellSize();
+            var island = Create(transform.TransformPoint((Vector3)baseCell * cellSize), gridSize);
             island.transform.rotation = transform.rotation;
 
             int moved = 0;
             for (int i = 0; i < cells.Count; i++)
             {
                 if (!_blocks.TryGetValue(cells[i], out var block) || block == null) continue;
+                Vector3Int cell = cells[i] - baseCell;
                 _blocks.Remove(cells[i]);
-                island._blocks[cells[i]] = block;
+                island._blocks[cell] = block;
+                block.GridPos = cell;
                 block.Grid = island;
                 block.transform.SetParent(island.transform, true);
                 moved++;
@@ -964,6 +979,8 @@ namespace VoxelEngine.GridSystem
                 island.Body.linearVelocity = _rb.GetPointVelocity(island.Body.worldCenterOfMass);
                 island.Body.angularVelocity = _rb.angularVelocity;
             }
+            // A freshly severed piece must immediately obey gravity — never start asleep.
+            if (island.Body != null) island.Body.WakeUp();
             return island;
         }
 

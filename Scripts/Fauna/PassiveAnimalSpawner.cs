@@ -92,6 +92,13 @@ namespace VoxelEngine.Fauna
 
             if (_alive.Count >= maxAlive) return;
 
+            // 14.64.0 — herds are SURFACE life (same rule the EnemySpawner got in
+            // 14.60.0): no streamed world, no meaningful gravity, or no real ground
+            // under the spawn point means no spawn. Low partial gravity high above a
+            // planet otherwise seeded animals in open space next to ships.
+            if (VoxelEngine.Core.ActiveWorld.Current == null) return;
+            if (VoxelEngine.Cosmos.GravityProvider.GetGravity(ppos).magnitude < 0.5f) return;
+
             // Spawn near the player on the tangent plane (radial gravity settles it down).
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ppos);
             Vector3 rand = Random.onUnitSphere;
@@ -99,6 +106,14 @@ namespace VoxelEngine.Fauna
             if (tangent.sqrMagnitude < 0.001f) return;
             tangent = tangent.normalized * Random.Range(spawnNearMin, spawnNearMax);
             Vector3 spawnPos = ppos + tangent + up * 2.5f;
+
+            // Ground check: the spawn point must sit over real footing (and never a
+            // ship hull) — a player flying high above the surface no longer seeds
+            // animals in midair around him.
+            if (!Physics.Raycast(spawnPos + up * 2f, -up, out var groundHit, 12f,
+                    ~0, QueryTriggerInteraction.Ignore)) return;
+            if (groundHit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) return;
+            spawnPos = groundHit.point + up * 1.2f;
 
             var prefab = animalPrefabs[Random.Range(0, animalPrefabs.Length)];
             var go = Instantiate(prefab, spawnPos, Quaternion.LookRotation(-tangent, up));

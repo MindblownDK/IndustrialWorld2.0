@@ -410,6 +410,7 @@ namespace VoxelEngine.UI
 
             VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
             VoxelEngine.GridSystem.UI.ShipToolHud.Tick();
+            VoxelEngine.GridSystem.UI.GridControlHud.Tick();
 
             // 4 Hz refresh while ANY craft queue near the player has work — drives recipe-row progress bars.
             if (_inventoryOpen && inventory != null)
@@ -1332,6 +1333,7 @@ namespace VoxelEngine.UI
 
             VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_hudLayer);
             VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_hudLayer);
+            VoxelEngine.GridSystem.UI.GridControlHud.EnsureMounted(_hudLayer);
             VitalsHud.EnsureMounted(_hudLayer);
             InteractionHud.EnsureMounted(_hudLayer);
             HotbarItemNameHud.EnsureMounted(_hudLayer);
@@ -6628,6 +6630,10 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         private void CheckHotbarKey(InputAction act, int slotIdx)
         {
             if (_searchHasFocus) return; // typing in search bar — don't intercept digits
+            // 14.64.0 — while piloting, the digit keys belong to the Grid Control HUD
+            // toolbar. The hotbar only keeps them inside an OPEN inventory, where they
+            // still swap the hovered stack into a hotbar slot.
+            if (!_inventoryOpen && VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive) return;
             if (UIState.IsBlocking && !_inventoryOpen) return; // modal text fields (cryobed/death/etc.) own number keys
             if (!GameSettings.WasPressed(act) || inventory == null) return;
             if (_inventoryOpen)

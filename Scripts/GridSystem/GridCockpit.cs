@@ -433,10 +433,11 @@ namespace VoxelEngine.GridSystem
             _orbitYaw   += mouseX * orbitSens;
             _orbitPitch += -mouseY * orbitSens;
 
-            // Full 360° sphere around the grid center; keep angles in a clean range so the
-            // return-to-follow direction is predictable when Alt is released.
-            _orbitYaw   = Mathf.Repeat(_orbitYaw   + 180f, 360f) - 180f;
-            _orbitPitch = Mathf.Repeat(_orbitPitch + 180f, 360f) - 180f;
+            // Yaw is a full, seamless 360° ring; keep it in a clean range so the
+            // return-to-follow direction is predictable when Alt is released. Pitch is
+            // clamped against the poles in ApplyCameraMode — letting it wrap across
+            // ±90° flipped the camera's up basis and snapped the view 180°.
+            _orbitYaw = Mathf.Repeat(_orbitYaw + 180f, 360f) - 180f;
         }
 
         /// <summary>P key — if ANY landing gear is locked, unlock them all; otherwise lock them all.</summary>
@@ -527,8 +528,13 @@ namespace VoxelEngine.GridSystem
                 if (Mathf.Abs(_orbitYaw) > 0.001f)
                     offset = Quaternion.AngleAxis(_orbitYaw, transform.up) * offset;
 
+                // Pitch: clamp the TOTAL elevation short of the poles. Crossing
+                // straight over the top/bottom flipped the derived up vector — the
+                // old "camera snaps to the other side" when orbiting ~180° around.
+                float baseElevation = 90f - Vector3.Angle(transform.up, offset);
+                _orbitPitch = Mathf.Clamp(_orbitPitch, -85f - baseElevation, 85f - baseElevation);
                 Vector3 right = Vector3.Cross(transform.up, offset);
-                if (right.sqrMagnitude > 0.0001f)
+                if (Mathf.Abs(_orbitPitch) > 0.001f && right.sqrMagnitude > 0.0001f)
                 {
                     right.Normalize();
                     offset = Quaternion.AngleAxis(_orbitPitch, right) * offset;

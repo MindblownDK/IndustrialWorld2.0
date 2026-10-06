@@ -224,6 +224,11 @@ namespace VoxelEngine.UI
                 _lastSignature = null;
             }
             if (_card.parent == null) return;
+            // 14.64.0 — closing a UI OVER a hovered item never fires PointerLeave,
+            // so the hover stuck and the card showed that item forever. With no
+            // blocking UI open nothing can be hovered: drop the sticky hover.
+            if (_hoveredItem != null && !UIState.IsBlocking)
+                _hoveredItem = null;
             if (_hoveredItem != null && !_hoveredItem.IsEmpty)
             {
                 ShowInventoryItem(_hoveredItem);

@@ -16,7 +16,7 @@ namespace VoxelEngine.GridSystem.UI
         // Cache the last-rendered signature so we only rebuild the toolbar when the tool
         // set or the selection actually changes — rebuilding every frame caused a flicker.
         private static string _lastSig = "\u0000";
-        private const int LayoutRevision = 2;
+        private const int LayoutRevision = 3;
         private static int _mountedRevision;
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -32,7 +32,8 @@ namespace VoxelEngine.GridSystem.UI
 
             _bar = new VisualElement { name = "ShipToolHud" };
             _bar.style.position = Position.Absolute;
-            _bar.style.bottom = 24; _bar.style.left = 0; _bar.style.right = 0;
+            // 14.64.0 — lifted above the Grid Control HUD toolbar (slots 1–9).
+            _bar.style.bottom = 96; _bar.style.left = 0; _bar.style.right = 0;
             _bar.style.flexDirection = FlexDirection.Row;
             _bar.style.justifyContent = Justify.Center;
             _bar.style.display = DisplayStyle.None;

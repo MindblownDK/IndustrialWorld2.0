@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.63.0-dev`
+**Current Version:** `14.64.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.64.0-dev] Grid Control
+
+**Feature + live-test round: the terminal becomes GRID CONTROL with a nine-slot action toolbar for control seats, and eight field reports from the 14.63 session are fixed - REL-lock drift, the split-block teleport, deck jitter, the sticky look-at card, space deer, and the flipping orbit camera.**
+
+- NEW - GRID CONTROL HUD. The terminal screen is renamed GRID CONTROL (module GCC-01), and it gains an EDIT HUD button: drag any controllable block, a whole category (e.g. WEAPONS) or a player-made group onto one of nine slots - each drop then asks WHICH action that key fires: on/off toggle, turn on, turn off, and per-type extras (landing gear: engage/disengage, engage, disengage, autolock on/off; batteries: cycle Auto/Recharge/Discharge; tanks: cycle Auto/Stockpile). While seated in any control seat the toolbar renders bottom-centre with live state tags (ON / OFF / MIXED / LOCKED / FREE) and the digit keys 1-9 fire the slots - the player hotbar yields the digits while piloting (they still swap stacks inside an open inventory). Slots resolve their members at press time, so categories and groups follow the live hull; toggles use the terminal's convergent rule (any on -> all off, else all on). The toolbar belongs to the grid: every seat of the hull shows the same nine slots. Drag works, and so does click-the-source-then-click-the-slot for trackpads; the drill/weapon pill moved up to make room.
+- FIXED - standing still next to a parked ship, you slowly drifted away while the hull read 0 m/s. Kinematic bodies (landing-gear-locked hulls, client replicas) can report a STALE linearVelocity; the dampeners treated that ghost speed as "at rest" and faithfully accelerated you to match it. Kinematic references now count as zero velocity everywhere: jetpack reference damping, the Ctrl+Z lock, the ship's relative dampeners, and the HUD's REL line.
+- NEW - the relative lock has a leash. Drift more than 200 m from the locked grid's CLOSEST BLOCK and the lock releases itself (with a toast), instead of silently steering your dampeners from across the sector.
+- FIXED - the camera jitter/stutter while standing on grids, on Earth and in space. Two carries fought over the player every frame: the magnetic boots AND the legacy deck carry both applied the hull's motion (double move), and the boots captured their anchor BEFORE the frame's walk - so the next frame's carry dragged you back over your own step. Now exactly ONE carry runs at a time (boots in zero-g, deck carry in gravity) and the boots re-anchor AFTER the frame's movement is settled.
+- CHANGED - magnetic boots are a ZERO-G tool. In real planetary gravity (>= 2 m/s2) they fully release: ordinary ground rules apply on Earth decks, where the classic deck carry already rides moving grids. In low-g and deep space nothing changes - hull-stick and carry as before.
+- FIXED - a cut-off block teleported sideways/down instead of staying where it was severed. The split island inherited the PARENT grid's origin, so its blocks sat on cells far from that origin - every origin-pivoted pass afterwards (ground alignment, stabilization) swung the piece around a point nowhere near it. The island's origin is now rebased onto its own min cell: blocks keep their exact world pose through the cut, block cells and GridPos are re-keyed to match, and the new body is explicitly woken so the piece falls immediately.
+- FIXED - passive animals spawned in open space (low partial gravity high above a planet). The herd spawner now follows the same surface rule the enemy spawner got in 14.60.0: no streamed world, no meaningful gravity, or no real ground under the spawn point (and never a ship hull) means no spawn - and spawns snap onto the found ground instead of popping in 2.5 m up.
+- FIXED - the top-left look-at card could get stuck forever. Closing a UI over a hovered item never fires PointerLeave, so the hover stuck and the card kept showing that item for the rest of the session. The hover now drops automatically whenever no blocking UI is open.
+- FIXED - the third-person cockpit orbit camera snapped 180 degrees when orbiting far around the ship. Pitch could wrap across the poles, which flips the camera's derived up vector. Yaw now orbits a seamless full 360 degrees; pitch clamps the total elevation just short of the poles (+-85 degrees) so the view can never flip.
+---
 
 ### [14.63.0-dev] Clean Break
 

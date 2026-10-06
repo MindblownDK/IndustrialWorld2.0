@@ -380,6 +380,10 @@ namespace VoxelEngine.Player
 
                 if (GameSettings.FlyMode) FlyUpdate();
                 else                      WalkUpdate();
+
+                // 14.64.0 — the boots re-anchor AFTER the frame's own movement, so
+                // next frame's carry never drags the player back over his own step.
+                _boots?.CaptureAnchor();
             }
 
             UpdateCameraHeight();
@@ -697,7 +701,12 @@ namespace VoxelEngine.Player
             // standing on. Doing it in this order keeps the two independent: the deck
             // contributes its motion, the player contributes theirs, and neither is
             // measured through the other.
-            ApplyDeckCarry(up);
+            // 14.64.0 — ONE carry system at a time: when the magnetic boots are
+            // engaged (zero-g hull walking) THEY own the deck carry. Running this
+            // legacy carry as well moved the player twice per frame — the jitter
+            // while standing on grids.
+            if (_boots == null || !_boots.Engaged)
+                ApplyDeckCarry(up);
 
             // -- move --
             // 14.24.1: the old "small radial anti-stick lift" added a FLAT 1.5 cm
@@ -715,7 +724,10 @@ namespace VoxelEngine.Player
 
             // Re-anchor LAST, once the final position for this frame is settled, so
             // next frame's carry is measured from where the player actually ended up.
-            UpdateDeckAnchor(up, inWater);
+            if (_boots == null || !_boots.Engaged)
+                UpdateDeckAnchor(up, inWater);
+            else
+                _hasCarryAnchor = false;   // boots own the anchor this frame
         }
 
         // ── moving decks ────────────────────────────────────────────────

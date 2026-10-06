@@ -109,7 +109,7 @@ namespace VoxelEngine.GridSystem.UI
             LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
             win.Add(display);
 
-            display.Add(LcdHudTheme.CreateDisplayHeader("GRID OPERATIONS", "SHIP CONTROL", "SCC-01", "ONLINE"));
+            display.Add(LcdHudTheme.CreateDisplayHeader("GRID OPERATIONS", "GRID CONTROL", "GCC-01", "ONLINE"));
 
             var commands = new VisualElement { name = "ShipControlCommands" };
             commands.style.flexDirection = FlexDirection.Row;
@@ -122,6 +122,8 @@ namespace VoxelEngine.GridSystem.UI
             LcdHudTheme.ApplyDataCard(commands, LcdHudTheme.Bezel);
             commands.Add(LcdHudTheme.CommandButton("ALL ON", () => SetAllEnabled(grid, true), LcdHudTheme.Phosphor));
             commands.Add(LcdHudTheme.CommandButton("ALL OFF", () => SetAllEnabled(grid, false), T.AccentAmber));
+            commands.Add(LcdHudTheme.CommandButton("EDIT HUD", () => GridControlHud.OpenEditor(grid, commands),
+                new Color(0.36f, 0.72f, 0.92f)));
             commands.Add(LcdHudTheme.CommandButton("CLOSE", () => onClose?.Invoke(), T.AccentRed));
             display.Add(commands);
 
@@ -165,6 +167,28 @@ namespace VoxelEngine.GridSystem.UI
                 _states[key] = state;
             }
             return state;
+        }
+
+        // ── Grid Control HUD bridge (14.64.0) ─────────────────────────
+        /// <summary>The category label the terminal files a block under — shared with
+        /// the Grid Control HUD so its category targets match the terminal's tabs.</summary>
+        public static string CategoryLabel(GridBlock block) => CategoryName(block);
+
+        /// <summary>The player-made terminal groups of this grid (name → live blocks).</summary>
+        public static List<KeyValuePair<string, List<GridBlock>>> PlayerGroups(GridEntity grid)
+        {
+            var result = new List<KeyValuePair<string, List<GridBlock>>>();
+            if (grid == null) return result;
+            var state = GetState(grid);
+            foreach (var group in state.groups)
+            {
+                var alive = new List<GridBlock>();
+                foreach (var b in group.blocks)
+                    if (b != null && b.Grid == grid) alive.Add(b);
+                if (alive.Count > 0)
+                    result.Add(new KeyValuePair<string, List<GridBlock>>(group.name, alive));
+            }
+            return result;
         }
 
         private static void CleanState(TerminalState state, List<GridBlock> blocks)
