@@ -771,6 +771,15 @@ namespace VoxelEngine.Networking
         public List<BagRecord> Records;
     }
 
+    /// <summary>14.65.0 — a grid's Grid Control toolbar and terminal groups
+    /// changed: whole-state, the payloads are tiny and edits are rare.</summary>
+    public struct GridControlBarBroadcast : IBroadcast
+    {
+        public string NetId;
+        public string Bar;
+        public string Groups;
+    }
+
     /// <summary>One edited terrain chunk for the join catch-up (14.8.0):
     /// deflate-compressed full padded voxel grid, planet-tagged.</summary>
     public struct TerrainChunkBroadcast : IBroadcast
@@ -958,6 +967,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
             _networkManager.ServerManager.RegisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
             _networkManager.ServerManager.RegisterBroadcast<BagSnapshotBroadcast>(OnServerBagSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<GridControlBarBroadcast>(OnServerGridControlBar);
             _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.RegisterBroadcast<TerrainCatchupRequestBroadcast>(OnServerTerrainCatchup);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
@@ -1012,6 +1022,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
             _networkManager.ClientManager.RegisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
             _networkManager.ClientManager.RegisterBroadcast<BagSnapshotBroadcast>(OnClientBagSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<GridControlBarBroadcast>(OnClientGridControlBar);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
@@ -1121,6 +1132,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
             _networkManager.ServerManager.UnregisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<BagSnapshotBroadcast>(OnServerBagSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<GridControlBarBroadcast>(OnServerGridControlBar);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainCatchupRequestBroadcast>(OnServerTerrainCatchup);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
@@ -1175,6 +1187,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
             _networkManager.ClientManager.UnregisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<BagSnapshotBroadcast>(OnClientBagSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<GridControlBarBroadcast>(OnClientGridControlBar);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
@@ -4106,6 +4119,17 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.Broadcast(new BagRemovedBroadcast { Id = id });
         }
 
+        public void SendGridControlBar(string netId, string bar, string groups)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new GridControlBarBroadcast
+            {
+                NetId = netId,
+                Bar = bar ?? string.Empty,
+                Groups = groups ?? string.Empty
+            });
+        }
+
         private void OnServerBagSpawned(NetworkConnection conn, BagSpawnedBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
@@ -4156,6 +4180,19 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted || WorldMismatch) return;
             BagSync.ApplySnapshot(msg.Records);
+        }
+
+        private void OnServerGridControlBar(NetworkConnection conn, GridControlBarBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) GridControlSync.Apply(msg.NetId, msg.Bar, msg.Groups);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientGridControlBar(GridControlBarBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridControlSync.Apply(msg.NetId, msg.Bar, msg.Groups);
         }
 
         /// <summary>Gather every live loot bag and send it - to a joining

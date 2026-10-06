@@ -30,8 +30,8 @@ namespace VoxelEngine.Player
     public class PlayerImpactDamage : MonoBehaviour
     {
         // ── balance ──────────────────────────────────────────────────
-        private const float GridMinSpeed = 8f;     // m/s into the surface before it hurts
-        private const float GridLethalSpeed = 32f; // full-health kill at reference mass
+        private const float GridMinSpeed = 30f;    // 14.65.0 — below 30 m/s a grid cannot hurt you
+        private const float GridLethalSpeed = 60f; // full-health kill at reference mass
         private const float PlayerMinSpeed = 9f;   // closing speed before body checks hurt
         private const float PlayerLethalSpeed = 30f;
         private const float DamageExponent = 1.35f; // same curve family as fall damage
@@ -92,8 +92,17 @@ namespace VoxelEngine.Player
             // Unity, and a reference key needs no id at all (14.52.1).
             if (_gridCooldown.TryGetValue(grid, out float until) && Time.time < until) return;
 
+            // 14.65.0 — never judge a crash on a jolt frame: a floating-origin
+            // rebase re-expresses every pose for a step and the pose-delta tracker
+            // reads it as a monster velocity (the "-100 HP at absurd m/s" toast).
+            if (Time.time - VoxelEngine.Cosmos.SpaceOrigin.LastJoltTime < 1.5f) return;
+
             var impact = grid.GetComponent<GridImpact>();
-            Vector3 gridVel = impact != null ? impact.VelocityAt(hit.point) : Vector3.zero;
+            // A live rigidbody's own velocity is the truth; the pose-delta tracker
+            // is only for kinematic replicas, where no body velocity exists.
+            Vector3 gridVel = grid.Body != null && !grid.Body.isKinematic
+                ? grid.Body.GetPointVelocity(hit.point)
+                : (impact != null ? impact.VelocityAt(hit.point) : Vector3.zero);
             // Only the closing speed INTO the surface counts: riding a deck or
             // sliding along a wall is contact at zero normal speed.
             float closing = Vector3.Dot(_player.Velocity - gridVel, -hit.normal);

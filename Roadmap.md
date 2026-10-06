@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.64.3-dev`
-**Roadmap Version:** `14.64.3-dev`
+**Current Version:** `14.65.0-dev`
+**Roadmap Version:** `14.65.0-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,15 @@
 ---
 
 ## 0. Recently Done
+
+### 14.65.0-dev - True Position
+- GridEntity.FixedUpdate: speed-adaptive rigidbody interpolation - None above 30 m/s (collider/visual gap at speed), Interpolate below 20 m/s; kinematic bodies untouched.
+- Grid Control persistence: SavedGrid gains controlBar + terminalGroups (JSON, cell-addressed block targets); BuildSavedGrid exports, RestoreGrid imports after both block passes - record doubles as the join snapshot, so joining clients get toolbars for free.
+- GridControlHud.ExportBar/ImportBar + GridMasterTerminal.ExportGroups/ImportGroups (whole-state, empty payload = cleared); live-edit announce via new GridControlSync (BagSync pattern: GridControlBarBroadcast, host relay, IsApplyingRemote echo guard) wired into NetworkBootstrap.
+- SpaceOrigin.ShiftWorld: IsRiderOf(root, keepRoot) - player rigs with boots attached or REL-locked to the kept hull skip the shift (warp riders).
+- PlayerImpactDamage: GridMinSpeed 8 -> 30, GridLethalSpeed 32 -> 60; jolt-frame guard (SpaceOrigin.LastJoltTime 1.5 s); live hull velocity via Body.GetPointVelocity, pose-delta tracker only for kinematic replicas.
+- WelderTool.repairHPPerSecond 45 -> 150; WelderSetup heals assets still at the old default (<= 45).
+- Toolbar/groups follow-up (save + share) DONE - remove from parked list.
 
 ### 14.64.3-dev - Nose First
 - PlayerController: Newtonian 240 m/s ceiling now clamps velocity relative to the dampener reference (dampRef) instead of world speed; new public ForceDampenersOn() called from GridCockpit.Exit.

@@ -174,6 +174,90 @@ namespace VoxelEngine.GridSystem.UI
         /// the Grid Control HUD so its category targets match the terminal's tabs.</summary>
         public static string CategoryLabel(GridBlock block) => CategoryName(block);
 
+        // ── persistence + wire (14.65.0) ──────────────────────────────
+
+        [System.Serializable]
+        private class SavedGroupRec
+        {
+            public string name = "";
+            public bool hidden;
+            public List<string> cells = new(); // "x,y,z" per member block
+        }
+
+        [System.Serializable]
+        private class SavedGroups
+        {
+            public List<SavedGroupRec> groups = new();
+        }
+
+        /// <summary>This grid's player-made groups as JSON, or "" when none.</summary>
+        public static string ExportGroups(GridEntity grid)
+        {
+            if (grid == null) return "";
+            var state = GetState(grid);
+            if (state.groups.Count == 0) return "";
+            var payload = new SavedGroups();
+            foreach (var group in state.groups)
+            {
+                var rec = new SavedGroupRec { name = group.name, hidden = group.hidden };
+                foreach (var b in group.blocks)
+                    if (b != null && b.Grid == grid)
+                        rec.cells.Add($"{b.GridPos.x},{b.GridPos.y},{b.GridPos.z}");
+                if (rec.cells.Count > 0) payload.groups.Add(rec);
+            }
+            return payload.groups.Count == 0 ? "" : JsonUtility.ToJson(payload);
+        }
+
+        /// <summary>Restore groups from ExportGroups JSON (whole-state replace).
+        /// Member cells whose block is gone are dropped silently.</summary>
+        public static void ImportGroups(GridEntity grid, string json)
+        {
+            if (grid == null) return;
+            var state = GetState(grid);
+            // An EMPTY payload means "no groups", not "ignore" — deleting the
+            // last group must propagate like any other edit.
+            if (string.IsNullOrEmpty(json))
+            {
+                state.groups.Clear();
+                return;
+            }
+            SavedGroups payload = null;
+            try { payload = JsonUtility.FromJson<SavedGroups>(json); }
+            catch { return; }
+            if (payload == null || payload.groups == null) return;
+
+            state.groups.Clear();
+            foreach (var rec in payload.groups)
+            {
+                if (rec == null || string.IsNullOrEmpty(rec.name)) continue;
+                var group = new BlockGroup { name = rec.name, hidden = rec.hidden };
+                foreach (var cell in rec.cells)
+                {
+                    var parts = cell.Split(',');
+                    if (parts.Length != 3) continue;
+                    if (!int.TryParse(parts[0], out int x)
+                        || !int.TryParse(parts[1], out int y)
+                        || !int.TryParse(parts[2], out int z)) continue;
+                    var b = grid.GetBlock(new Vector3Int(x, y, z));
+                    if (b != null && !group.blocks.Contains(b)) group.blocks.Add(b);
+                }
+                if (group.blocks.Count > 0) state.groups.Add(group);
+            }
+        }
+
+        private static GridEntity FirstGridOf(BlockGroup group)
+        {
+            if (group == null) return null;
+            foreach (var b in group.blocks)
+                if (b != null && b.Grid != null) return b.Grid;
+            return null;
+        }
+
+        private static void AnnounceShared(GridEntity grid)
+        {
+            if (grid != null) VoxelEngine.Networking.GridControlSync.Announce(grid);
+        }
+
         /// <summary>The player-made terminal groups of this grid (name → live blocks).</summary>
         public static List<KeyValuePair<string, List<GridBlock>>> PlayerGroups(GridEntity grid)
         {
@@ -551,7 +635,9 @@ namespace VoxelEngine.GridSystem.UI
             }, group.hidden ? T.AccentGreen : T.AccentAmber));
             row.Add(TerminalButton("Delete", () =>
             {
+                var owner = FirstGridOf(group);
                 state.groups.Remove(group);
+                AnnounceShared(owner);
                 RefreshTerminal();
             }, T.AccentRed));
             return row;
@@ -686,6 +772,7 @@ namespace VoxelEngine.GridSystem.UI
             }
             group.blocks.Sort((a, b) => string.CompareOrdinal(a.blockName, b.blockName));
             state.groups.Add(group);
+            AnnounceShared(FirstGridOf(group));
             state.selected.Clear();
             state.groupNameDraft = $"Group {state.groups.Count + 1}";
             RefreshTerminal();
@@ -894,7 +981,9 @@ namespace VoxelEngine.GridSystem.UI
             }, group.hidden ? T.AccentGreen : T.AccentAmber));
             groupActions.Add(TerminalButton("Delete Group", () =>
             {
+                var owner = FirstGridOf(group);
                 state.groups.Remove(group);
+                AnnounceShared(owner);
                 RefreshTerminal();
             }, T.AccentRed));
             page.Add(groupActions);

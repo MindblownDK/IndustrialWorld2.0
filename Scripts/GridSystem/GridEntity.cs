@@ -413,6 +413,27 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
+            // 14.65.0 — interpolation is a LIE at speed. Interpolate renders the
+            // hull up to one fixed step BEHIND its colliders: at 2500 m/s that is
+            // a 50 m gap between the ship you SEE and the ship that physics tests,
+            // so raycasts into the visual hull hit vacuum (no look-at card, no
+            // welding, no block placement), an approaching player phases through
+            // the picture and collides at the far end, and the boots' ground probe
+            // misses the deck underfoot. Above 30 m/s the render snaps to the
+            // physics truth; below 20 m/s the planetside smoothness returns.
+            if (_rb != null && !_rb.isKinematic)
+            {
+                float speedSq = _rb.linearVelocity.sqrMagnitude;
+                if (_rb.interpolation == RigidbodyInterpolation.Interpolate)
+                {
+                    if (speedSq > 900f) _rb.interpolation = RigidbodyInterpolation.None;
+                }
+                else if (speedSq < 400f)
+                {
+                    _rb.interpolation = RigidbodyInterpolation.Interpolate;
+                }
+            }
+
             // 14.25.0 stopped a client simulating a grid by returning here outright.
             // That was too blunt and 14.26.1 undid it: the flight model does far more
             // than move the hull. It is also what recalculates power, which is what

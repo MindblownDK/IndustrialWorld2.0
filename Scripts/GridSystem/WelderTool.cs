@@ -15,7 +15,7 @@ namespace VoxelEngine.GridSystem
     {
         [Header("Welding")]
         [Tooltip("Hit points restored per second of welding.")]
-        public float repairHPPerSecond = 45f;
+        public float repairHPPerSecond = 150f; // 14.65.0 — 45 was a soldering iron, not a welder
 
         [Tooltip("Material consumed as HP is restored. One unit pays for hpPerMaterialUnit hit points.")]
         public ItemDefinition repairMaterial;

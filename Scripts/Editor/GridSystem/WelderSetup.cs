@@ -52,6 +52,11 @@ namespace VoxelEngine.EditorTools
                 welder.repairHPPerSecond = 45f;
                 welder.hpPerMaterialUnit = 60f;
             }
+            // 14.65.0 balance heal: lift the old 45 HP/s default to the new rate.
+            // Only the untouched default is raised — a deliberately tuned value
+            // (anything above 45) is the user's and stays.
+            if (welder.repairHPPerSecond <= 45f) welder.repairHPPerSecond = 150f;
+
             // Reconnect-if-missing (never override a deliberate material choice).
             if (welder.repairMaterial == null)
                 welder.repairMaterial = FindItemByName("Iron Ingot") ?? FindItemByName("Iron Plate");

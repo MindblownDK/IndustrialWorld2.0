@@ -2121,7 +2121,12 @@ namespace VoxelEngine.Persistence
                 wheelParkingBrake = grid.WheelControlHeld,
                 hydrogenStored = grid.HydrogenStored,
                 oxygenStored = grid.OxygenStored,
-                warpDrivesToUse = grid.WarpDrivesToUse
+                warpDrivesToUse = grid.WarpDrivesToUse,
+                // 14.65.0 — the Grid Control toolbar and the terminal groups ride
+                // the grid record: saved to disk AND carried by the join snapshot,
+                // because this very record is what goes on the wire.
+                controlBar = VoxelEngine.GridSystem.UI.GridControlHud.ExportBar(grid),
+                terminalGroups = VoxelEngine.GridSystem.UI.GridMasterTerminal.ExportGroups(grid)
             };
             var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
             if (origin != null)
@@ -2698,6 +2703,11 @@ namespace VoxelEngine.Persistence
             // their host-cell relationship and attached pipe topology.
             RestoreGridBlocks(grid, savedGrid.blocks, false);
             RestoreGridBlocks(grid, savedGrid.blocks, true);
+
+            // 14.65.0 — groups first (the bar may reference them), then the bar.
+            // Cells resolve against the just-restored blocks.
+            VoxelEngine.GridSystem.UI.GridMasterTerminal.ImportGroups(grid, savedGrid.terminalGroups);
+            VoxelEngine.GridSystem.UI.GridControlHud.ImportBar(grid, savedGrid.controlBar);
 
             // Construct registry (11.13.0). Only attach the component when the save
             // actually carries an identity, so legacy grids stay componentless.
@@ -4823,6 +4833,8 @@ namespace VoxelEngine.Persistence
             // stays valid while the ship is moving. Empty on pre-14.25.0 saves; the host
             // mints one on load.
             public string netId = "";
+            public string controlBar = "";      // 14.65.0 — Grid Control toolbar
+            public string terminalGroups = "";  // 14.65.0 — player-made groups
             public Vector3 pos;
             public Quaternion rot;
             public Vector3 velocity;

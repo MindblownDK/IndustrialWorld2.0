@@ -617,12 +617,30 @@ namespace VoxelEngine.Cosmos
                 // still while the universe slides. IsChildOf covers the root itself
                 // plus every descendant.
                 if (keepRoot != null && root.IsChildOf(keepRoot)) continue;
+                // 14.65.0 — riders warp WITH the hull: a crewman standing on deck
+                // (boots attached) or relative-locked to the jumping grid is part
+                // of the ship for this teleport even though his transform is not
+                // parented under it. Without this, the universe slid him the full
+                // warp distance away from the deck he was standing on.
+                if (keepRoot != null && IsRiderOf(root, keepRoot)) continue;
                 root.position += delta;
                 var rb = root.GetComponent<Rigidbody>();
                 if (rb != null) rb.position += delta;
             }
 
             Physics.SyncTransforms();
+        }
+
+        /// <summary>Is this root a player rig riding the kept hull — magnetic boots
+        /// attached to it, or relative dampeners locked on it?</summary>
+        private static bool IsRiderOf(Transform root, Transform hull)
+        {
+            if (root == null || hull == null) return false;
+            var grid = hull.GetComponent<VoxelEngine.GridSystem.GridEntity>();
+            if (grid == null) return false;
+            var boots = root.GetComponentInChildren<VoxelEngine.Player.MagneticBoots>(true);
+            if (boots == null) return false;
+            return boots.AttachedGrid == grid || boots.LockedReference == grid;
         }
 
         private bool HasRegisteredAncestor(Transform t)

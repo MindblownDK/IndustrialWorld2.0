@@ -60,6 +60,105 @@ namespace VoxelEngine.GridSystem.UI
         private static string KeyOf(GridEntity grid) =>
             grid != null ? grid.GetEntityId().ToString() : "null";
 
+        // ── persistence + wire (14.65.0) ──────────────────────────────
+        // The bar rides the grid's save record (and therefore the join
+        // snapshot); live edits are announced over GridControlSync.
+
+        [System.Serializable]
+        private class SavedBarSlot
+        {
+            public int i;
+            public int kind;
+            public int x, y, z;          // Block targets: the cell
+            public string key = "";      // group / category targets
+            public string actionId = "";
+            public string actionLabel = "";
+        }
+
+        [System.Serializable]
+        private class SavedBar
+        {
+            public List<SavedBarSlot> slots = new();
+        }
+
+        /// <summary>This grid's toolbar as JSON, or "" when empty. Block targets
+        /// serialize as grid cells, so the record survives save/load and the wire.</summary>
+        public static string ExportBar(GridEntity grid)
+        {
+            if (grid == null || !_bars.TryGetValue(KeyOf(grid), out var slots)) return "";
+            var bar = new SavedBar();
+            for (int i = 0; i < SlotCount; i++)
+            {
+                var a = slots[i];
+                if (a == null) continue;
+                if (a.kind == TargetKind.Block && a.block == null) continue;
+                var s = new SavedBarSlot
+                {
+                    i = i,
+                    kind = (int)a.kind,
+                    key = a.key ?? "",
+                    actionId = a.actionId ?? "",
+                    actionLabel = a.actionLabel ?? ""
+                };
+                if (a.kind == TargetKind.Block)
+                {
+                    s.x = a.block.GridPos.x;
+                    s.y = a.block.GridPos.y;
+                    s.z = a.block.GridPos.z;
+                }
+                bar.slots.Add(s);
+            }
+            return bar.slots.Count == 0 ? "" : JsonUtility.ToJson(bar);
+        }
+
+        /// <summary>Restore a toolbar from ExportBar JSON. Block targets resolve by
+        /// cell; a cell whose block is gone simply leaves the slot empty.</summary>
+        public static void ImportBar(GridEntity grid, string json)
+        {
+            if (grid == null) return;
+            var slots = SlotsFor(grid);
+            // An EMPTY payload means "cleared", not "ignore" — otherwise clearing
+            // the last slot could never propagate to another machine.
+            if (string.IsNullOrEmpty(json))
+            {
+                for (int c = 0; c < SlotCount; c++) slots[c] = null;
+                _lastSig = "\u0000";
+                return;
+            }
+            SavedBar bar = null;
+            try { bar = JsonUtility.FromJson<SavedBar>(json); }
+            catch { return; }
+            if (bar == null || bar.slots == null) return;
+
+            for (int i = 0; i < SlotCount; i++) slots[i] = null;
+            foreach (var s in bar.slots)
+            {
+                if (s == null || s.i < 0 || s.i >= SlotCount) continue;
+                var a = new SlotAssignment
+                {
+                    kind = (TargetKind)s.kind,
+                    key = s.key,
+                    actionId = s.actionId,
+                    actionLabel = s.actionLabel
+                };
+                if (a.kind == TargetKind.Block)
+                {
+                    a.block = grid.GetBlock(new Vector3Int(s.x, s.y, s.z));
+                    if (a.block == null) continue;
+                }
+                slots[s.i] = a;
+            }
+            _lastSig = "\u0000"; // force the bar (and an open editor) to redraw
+        }
+
+        /// <summary>Every local edit funnels here: ship the whole bar (plus the
+        /// terminal groups it may reference) to the other machines.</summary>
+        private static void AnnounceShared()
+        {
+            if (_editorGrid != null)
+                VoxelEngine.Networking.GridControlSync.Announce(_editorGrid);
+        }
+
         private static SlotAssignment[] SlotsFor(GridEntity grid)
         {
             string key = KeyOf(grid);
@@ -845,6 +944,7 @@ namespace VoxelEngine.GridSystem.UI
                 {
                     slots[index] = null;
                     _lastSig = "\u0000";
+                    AnnounceShared();
                     CloseModal();
                     RebuildEditor();
                 }));
@@ -884,6 +984,7 @@ namespace VoxelEngine.GridSystem.UI
                         };
                         _pending = null;
                         _lastSig = "\u0000";
+                        AnnounceShared();
                         CloseModal();
                         RebuildEditor();
                     }));

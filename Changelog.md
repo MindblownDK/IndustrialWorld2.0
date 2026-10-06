@@ -1,9 +1,22 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.64.3-dev`
+**Current Version:** `14.65.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.65.0-dev] True Position
+
+**Field-report round on 14.64.3: the 50-meter lie between the ship you see and the ship physics tests is gone, the Grid Control toolbar survives saves and travels the wire, crews warp with their deck, grids only hurt above 30 m/s, and the welder finally earns its name.**
+
+#### Added
+- **Grid Control toolbar and terminal groups are SAVED - and shared.** Both now ride the grid's own save record: they survive save/load, and because that same record is the multiplayer join snapshot, a joining player receives every ship's toolbar and groups with the ship itself. Live edits (assign, clear, group create/delete) broadcast whole-state to everyone in the session - one crew, one HUD. Block targets serialize as grid cells, so they re-resolve against the rebuilt ship; targets whose block is gone leave the slot empty instead of pointing at the wrong thing.
+- **Crews warp with their ship.** A warp holds the hull still and slides the universe past it - and slid the crewman standing on deck along with the universe, the full jump distance away. Anyone with boots attached to, or relative dampeners locked on, the jumping grid is now treated as part of the ship for the teleport.
+
+#### Fixed
+- **The ship you see is the ship that exists.** Grid rigidbodies rendered with interpolation, which draws the hull up to one physics step behind its colliders - at 2500 m/s a 50 meter gap. Every symptom of this round came from that one lie: the look-at card found nothing at speed, welding and block placement aimed at vacuum, an approaching player phased through the picture of the ship and landed at its far end, the boots' deck probe missed underfoot and shook the camera, and "visually I am not where the game thinks I am" was literally true. Above 30 m/s a grid now renders at its physics truth; below 20 m/s the planetside smoothness returns (hysteresis, no flapping).
+- **Grids only hurt above 30 m/s.** The grid impact floor rises from 8 to 30 m/s relative closing speed (lethal curve re-anchored at 60). On top of that, impact judging now skips floating-origin jolt frames and reads a live hull's true rigidbody velocity instead of the pose-delta tracker - the "-100 HP at absurd speed" toast from brushing your own co-moving ship is gone on both counts.
+- **Welder actually welds.** Repair rate raised from 45 to 150 HP per second (default and setup-tool heal; a deliberately tuned value above the old default is left alone). Material cost per HP is unchanged.
 
 ### [14.64.3-dev] Nose First
 
