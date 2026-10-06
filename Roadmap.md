@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.65.0-dev`
-**Roadmap Version:** `14.65.0-dev`
+**Current Version:** `14.65.1-dev`
+**Roadmap Version:** `14.65.1-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 14.65.1-dev - Nothing Lost
+- WorldStatePersistence NO DATA LOSS law: per-grid try/catch in RestoreGrids with loud LogError; _unrestoredGrids/_unrestoredPlaced carry failed records verbatim into SaveGrids/SavePlacedBlocks; per-block try/catch in RestoreGridBlocks; Grid Control import guarded; placed-block missing-item drop now loud + carried.
+- PlayerSpawner: savedOnGrid detection (GridDeckAt OverlapSphere 4 m) skips WaitForChunkAt + LiftSavedPositionOutOfGround + the 250 m park for deck saves; wakes with boots LockReference + hull point velocity.
+- GridEntity.HasSupportBelow: support = static world only (any GridEntity parent or dynamic rigidbody below is NOT ground) - kills the continuous 4 Hz StabilizeGroundAlignment slerp on severed pieces hovering over their parent hull.
+- GridEntity.IgnoreSeamCollisions: bounds-based pair collection (island collider bounds expanded 1.2 cells vs all parent colliders intersecting), fuse 8192 - covers multi-cell blocks the 26-neighborhood missed.
 
 ### 14.65.0-dev - True Position
 - GridEntity.FixedUpdate: speed-adaptive rigidbody interpolation - None above 30 m/s (collider/visual gap at speed), Interpolate below 20 m/s; kinematic bodies untouched.

@@ -921,6 +921,9 @@ namespace VoxelEngine.Persistence
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
+            // NO DATA LOSS LAW: carry records this session could not rebuild.
+            foreach (var carried in _unrestoredPlaced)
+                if (carried != null) save.placedBlocks.Add(carried);
         }
 
         private static void CaptureFactoryRuntime(GameObject go, SavedPlacedBlock entry)
@@ -2097,6 +2100,11 @@ namespace VoxelEngine.Persistence
                 var entry = BuildSavedGrid(grid);
                 if (entry != null) save.grids.Add(entry);
             }
+            // NO DATA LOSS LAW: records that failed to restore this session go back
+            // into the file verbatim — the ship exists in the save even while the
+            // live world cannot build it.
+            foreach (var carried in _unrestoredGrids)
+                if (carried != null) save.grids.Add(carried);
         }
 
         /// <summary>Serialize ONE grid. Split out of SaveGrids in 14.25.0 so the same
@@ -2656,13 +2664,44 @@ namespace VoxelEngine.Persistence
             return match;
         }
 
+        // 14.65.1 — NO DATA LOSS LAW. A record that failed to become a live
+        // object is never dropped: it is carried VERBATIM into every future save
+        // until the day it restores. Losing a ship because one restore threw —
+        // silently — is the one failure mode a save system may never have.
+        private readonly List<SavedGrid> _unrestoredGrids = new();
+        private readonly List<SavedPlacedBlock> _unrestoredPlaced = new();
+
         private int RestoreGrids(SaveData save)
         {
             int anchored = 0;
+            _unrestoredGrids.Clear();
             if (save.grids == null || save.grids.Count == 0) return 0;
 
             foreach (var savedGrid in save.grids)
-                if (RestoreOneGrid(savedGrid, out bool fromAnchor) != null && fromAnchor) anchored++;
+            {
+                GridEntity restored = null;
+                bool fromAnchor = false;
+                try
+                {
+                    restored = RestoreOneGrid(savedGrid, out fromAnchor);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[WorldState] Grid restore THREW — record preserved for the next save. " + e);
+                }
+                if (restored != null)
+                {
+                    if (fromAnchor) anchored++;
+                    continue;
+                }
+                // A non-empty record that produced no grid is a loss candidate:
+                // say so LOUDLY and carry it forward unchanged.
+                if (savedGrid != null && savedGrid.blocks != null && savedGrid.blocks.Count > 0)
+                {
+                    Debug.LogError($"[WorldState] Grid '{savedGrid.identityName}' ({savedGrid.blocks.Count} blocks) did NOT restore — record carried forward unchanged.");
+                    _unrestoredGrids.Add(savedGrid);
+                }
+            }
 
             return anchored;
         }
@@ -2705,9 +2744,17 @@ namespace VoxelEngine.Persistence
             RestoreGridBlocks(grid, savedGrid.blocks, true);
 
             // 14.65.0 — groups first (the bar may reference them), then the bar.
-            // Cells resolve against the just-restored blocks.
-            VoxelEngine.GridSystem.UI.GridMasterTerminal.ImportGroups(grid, savedGrid.terminalGroups);
-            VoxelEngine.GridSystem.UI.GridControlHud.ImportBar(grid, savedGrid.controlBar);
+            // Cells resolve against the just-restored blocks. A cosmetic payload
+            // may NEVER break a hull restore (14.65.1).
+            try
+            {
+                VoxelEngine.GridSystem.UI.GridMasterTerminal.ImportGroups(grid, savedGrid.terminalGroups);
+                VoxelEngine.GridSystem.UI.GridControlHud.ImportBar(grid, savedGrid.controlBar);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[WorldState] Grid Control toolbar restore skipped: " + e.Message);
+            }
 
             // Construct registry (11.13.0). Only attach the component when the save
             // actually carries an identity, so legacy grids stay componentless.
@@ -2872,7 +2919,12 @@ namespace VoxelEngine.Persistence
             foreach (var saved in blocks)
             {
                 if (saved == null || saved.isPrecision != precisionPass) continue;
-                RestoreOneGridBlock(grid, saved);
+                // 14.65.1 — one bad block must never kill a whole ship's restore.
+                try { RestoreOneGridBlock(grid, saved); }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[WorldState] Grid block '{saved.itemId}' failed to restore on '{grid.name}' — rest of the hull continues. " + e);
+                }
             }
         }
 
@@ -3323,9 +3375,18 @@ namespace VoxelEngine.Persistence
         {
             int restored = 0;
             int anchored = 0;
+            _unrestoredPlaced.Clear();
             foreach (var sb in save.placedBlocks)
             {
-                if (!_blockById.TryGetValue(sb.itemId, out var blockItem) || blockItem.placedPrefab == null) continue;
+                if (sb == null) continue;
+                if (!_blockById.TryGetValue(sb.itemId, out var blockItem) || blockItem.placedPrefab == null)
+                {
+                    // 14.65.1 — this used to be a SILENT drop, and the record was
+                    // then missing from the next save: a block gone without a word.
+                    Debug.LogError($"[WorldState] Placed block '{sb.itemId}' has no item/prefab in this build — record carried forward unchanged.");
+                    _unrestoredPlaced.Add(sb);
+                    continue;
+                }
                 Quaternion finalRot = (sb.rot.w != 0f || sb.rot.x != 0f || sb.rot.y != 0f || sb.rot.z != 0f) ? sb.rot : Quaternion.Euler(0, sb.rotY, 0);
                 Vector3 spawnPos = ResolvePlacedBlockPosition(sb, out bool fromAnchor);
                 if (fromAnchor) anchored++;

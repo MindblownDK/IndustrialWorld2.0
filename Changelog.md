@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.65.0-dev`
+**Current Version:** `14.65.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.65.1-dev] Nothing Lost
+
+**Field-report round on 14.65.0: the save system now obeys a NO DATA LOSS law - nothing silent, nothing dropped, failed records carried forward verbatim - the 10-second frozen spawn-then-teleport is gone, and the rotating cut piece was never an impulse at all: it was an alignment loop.**
+
+#### Fixed
+- **Save system reinforced: NO DATA LOSS, and nothing is quiet anymore.** Four layers. (1) Every grid restores inside its own guard: one record that throws can no longer abort the rest of the world - and it logs a loud error instead of vanishing. (2) A record that fails to become a live object - a grid OR a static block whose item/prefab/restore breaks - is carried VERBATIM into every future save until the day it restores; the ship still exists in the file even while the live world cannot build it. (3) One bad block never kills a whole ship's restore - the rest of the hull continues, with an error naming the block. (4) The Grid Control toolbar payload is cosmetic and may never break a hull restore. The silent placed-block drop (missing item/prefab skipped without a word, record then missing from the next save) is now loud and carried. Save writes were already atomic with backups - the restore side now matches.
+- **Frozen for 10 seconds, then teleported: gone.** A position saved STANDING ON A GRID went through the terrain pipeline: the spawner held the player frozen for the full chunk timeout over coordinates that may never stream (the "[PlayerSpawner] Timed out waiting for chunks" log), then "lifted" him onto terrain far from the ship. A saved position with a deck within arm's reach now skips the chunk wait AND the terrain lift entirely - you wake standing where you logged out, boots locked to the hull, station-keeping with it.
+- **The rotating cut piece - found it, round four.** It was never an impulse: near a planet, a severed piece hovering at rest passed the "near ground" test, saw its own PARENT SHIP below as "support", and the gentle 4 Hz planet-up alignment slerp rotated it CONTINUOUSLY - which is why every seam/velocity fix helped and none cured. "Support below" now means the WORLD - terrain or anchored structure - never another hull (ships resting on ships align via locked landing gear). On top: seam collision pairs are now collected by COLLIDER BOUNDS instead of cell neighborhoods, so multi-cell blocks (a thruster spanning three cells) can no longer feed missed contact impulses across the cut.
 
 ### [14.65.0-dev] True Position
 

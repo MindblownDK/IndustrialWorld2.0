@@ -985,7 +985,7 @@ namespace VoxelEngine.GridSystem
             if (moved == 0) { Destroy(island.gameObject); return null; }
 
             island.RecalculateMass();
-            IgnoreSeamCollisions(island, baseCell);
+            IgnoreSeamCollisions(island);
 
             // The same subsystem notifications any topology change performs, on BOTH hulls.
             NotifyMaritimeDirty();
@@ -1021,41 +1021,37 @@ namespace VoxelEngine.GridSystem
         /// slowly rotates" bug survived every velocity fix because velocity was
         /// never the source. Collisions across the seam stay off for a short grace
         /// window while the pieces drift apart; everything else collides normally.</summary>
-        private void IgnoreSeamCollisions(GridEntity island, Vector3Int baseCell)
+        private void IgnoreSeamCollisions(GridEntity island)
         {
             if (island == null) return;
-            // 14.64.3 — the FULL 26-neighborhood, not just the 6 faces: a piece cut
-            // free by grinding away the connecting block has no face neighbors left
-            // in the parent at all, but its colliders still touch the parent's along
-            // EDGES and CORNERS — and those diagonal contacts jittered impulses into
-            // the island every step, which is why the piece kept rotating after the
-            // face-only pass.
-            var dirs = new List<Vector3Int>(26);
-            for (int dx = -1; dx <= 1; dx++)
-            for (int dy = -1; dy <= 1; dy++)
-            for (int dz = -1; dz <= 1; dz++)
-                if (dx != 0 || dy != 0 || dz != 0)
-                    dirs.Add(new Vector3Int(dx, dy, dz));
+            // 14.65.1 — pair by BOUNDS, not by cell neighborhood. The 26-cell pass
+            // still missed multi-cell blocks (a thruster spanning three cells keyed
+            // at its root touches parent blocks far outside the root's neighborhood)
+            // and every such missed pair kept feeding contact impulses into the
+            // island. Now: EVERY island collider is paired against every parent
+            // collider whose bounds reach the island's expanded bounds — nothing
+            // that can physically touch across the cut is left armed.
+            var islandCols = island.GetComponentsInChildren<Collider>(true);
+            if (islandCols.Length == 0) return;
+            Bounds seam = islandCols[0].bounds;
+            for (int i = 1; i < islandCols.Length; i++)
+                if (islandCols[i] != null) seam.Encapsulate(islandCols[i].bounds);
+            seam.Expand(gridSize.CellSize() * 1.2f);
+
+            var parentCols = GetComponentsInChildren<Collider>(true);
             var pairs = new List<(Collider a, Collider b)>();
-            foreach (var kv in island._blocks)
+            for (int p = 0; p < parentCols.Length; p++)
             {
-                if (kv.Value == null) continue;
-                Collider[] islandCols = null;
-                for (int d = 0; d < dirs.Count; d++)
+                var pc = parentCols[p];
+                if (pc == null || !pc.bounds.Intersects(seam)) continue;
+                for (int i = 0; i < islandCols.Length; i++)
                 {
-                    if (!_blocks.TryGetValue(kv.Key + baseCell + dirs[d], out var parentBlock)
-                        || parentBlock == null) continue;
-                    islandCols ??= kv.Value.GetComponentsInChildren<Collider>(true);
-                    var parentCols = parentBlock.GetComponentsInChildren<Collider>(true);
-                    for (int a = 0; a < islandCols.Length; a++)
-                    for (int b = 0; b < parentCols.Length; b++)
-                    {
-                        if (islandCols[a] == null || parentCols[b] == null) continue;
-                        Physics.IgnoreCollision(islandCols[a], parentCols[b], true);
-                        pairs.Add((islandCols[a], parentCols[b]));
-                    }
+                    var ic = islandCols[i];
+                    if (ic == null) continue;
+                    Physics.IgnoreCollision(ic, pc, true);
+                    pairs.Add((ic, pc));
                 }
-                if (pairs.Count > 4096) break; // the seam is small; this is a fuse
+                if (pairs.Count > 8192) break; // the seam region is small; this is a fuse
             }
             if (pairs.Count > 0)
                 island.StartCoroutine(RestoreSeamCollisions(pairs));
@@ -1936,7 +1932,15 @@ namespace VoxelEngine.GridSystem
             {
                 var col = supportHits[i].collider;
                 if (col == null) continue;
-                if (col.GetComponentInParent<GridEntity>() == this) continue;
+                // 14.65.1 — "support" means the WORLD: terrain or anchored
+                // structure. ANY hull below is not ground — a severed piece
+                // hovering over its own parent ship passed this test and the
+                // 4 Hz planet-up slerp rotated it CONTINUOUSLY (the "cut piece
+                // still rotates" bug: never an impulse, an alignment loop).
+                // Ships resting on other ships align via locked landing gear.
+                if (col.GetComponentInParent<GridEntity>() != null) continue;
+                var supportRb = col.attachedRigidbody;
+                if (supportRb != null && !supportRb.isKinematic) continue;
                 return true;
             }
             return false;

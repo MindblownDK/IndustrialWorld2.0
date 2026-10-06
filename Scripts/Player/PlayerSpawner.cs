@@ -312,7 +312,13 @@ namespace VoxelEngine.Player
             // On a sphere, DON'T force Y to 250 — that would park the player far above the
             // body's surface (which could be at Y=700+). Use the target Y directly so chunks
             // around the surface start streaming immediately.
-            float parkY = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+            // 14.65.1 — a position saved STANDING ON A GRID needs no terrain at
+            // all: the deck is the floor. The old flow held the player frozen for
+            // the full chunk timeout over coordinates that may never stream (the
+            // "[PlayerSpawner] Timed out waiting for chunks" log), then "lifted"
+            // him onto terrain far from the ship. Detect the deck and skip both.
+            bool savedOnGrid = hasSavedPos && GridDeckAt(target) != null;
+            float parkY = (VoxelEngine.Cosmos.GravityProvider.ActiveBody != null || savedOnGrid)
                           ? target.y
                           : Mathf.Max(target.y, 250f);
             SetPosition(new Vector3(target.x, parkY, target.z));
@@ -324,13 +330,24 @@ namespace VoxelEngine.Player
             bool savedInSpace = hasSavedPos && (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace
                 || (activeBody != null
                     && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f));
-            if (!savedInSpace)
+            if (!savedInSpace && !savedOnGrid)
                 yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
 
             // Saved positions near terrain can be from an older build that wrote the
             // controller slightly inside the voxel surface. Lift them to the first
             // surface below the player before enabling the CharacterController.
-            if (hasSavedPos && !savedInSpace)
+            if (savedOnGrid)
+            {
+                // Wake standing on the deck you logged out on: station-keep with
+                // the hull and let the boots grab it, exactly like a grid-bed wake.
+                var deck = GridDeckAt(target);
+                var deckBoots = GetComponent<MagneticBoots>();
+                if (deckBoots != null && deck != null) deckBoots.LockReference(deck, announce: false);
+                var deckPc = GetComponent<PlayerController>();
+                if (deckPc != null && deck != null && deck.Body != null && !deck.Body.isKinematic)
+                    deckPc.SetVelocity(deck.Body.GetPointVelocity(target));
+            }
+            if (hasSavedPos && !savedInSpace && !savedOnGrid)
             {
                 target = LiftSavedPositionOutOfGround(target);
                 SetPosition(target);
@@ -512,6 +529,20 @@ namespace VoxelEngine.Player
 
         /// <summary>Prefer the LIVE claimed grid cryobed over any stored record —
         /// grid beds move with their ship. Picks an online bed when several are claimed.</summary>
+        /// <summary>The grid hull within arm's reach of a point, or null — used to
+        /// recognize "this position was saved standing on a ship".</summary>
+        private static VoxelEngine.GridSystem.GridEntity GridDeckAt(Vector3 pos)
+        {
+            var hits = Physics.OverlapSphere(pos, 4f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i] == null) continue;
+                var g = hits[i].GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
+                if (g != null) return g;
+            }
+            return null;
+        }
+
         private static bool TryFindClaimedGridBed(out VoxelEngine.GridSystem.GridCryobed bed)
         {
             bed = null;
