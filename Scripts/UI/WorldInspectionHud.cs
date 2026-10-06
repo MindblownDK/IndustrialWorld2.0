@@ -87,7 +87,9 @@ namespace VoxelEngine.UI
             LcdHudTheme.AddAnimatedScanlines(_card, 3, 6f, 18f);
             uiRoot.Add(_card);
             // Step aside while machine/chest panels are open — never overlap them.
-            LcdHudTheme.YieldWhileBlocking(_card);
+            // The callback hands the yield scheduler this HUD's own visibility, so
+            // it can never fade a HIDDEN card back in (14.64.2).
+            LcdHudTheme.YieldWhileBlocking(_card, 0f, () => _visible ? 1f : 0f);
 
             var headingRow = new VisualElement();
             headingRow.style.flexDirection = FlexDirection.Row;

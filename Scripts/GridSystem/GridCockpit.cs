@@ -599,7 +599,11 @@ namespace VoxelEngine.GridSystem
             var cc = player.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
             var rb = player.GetComponent<Rigidbody>();
-            if (rb != null) rb.isKinematic = true;
+            if (rb != null)
+            {
+                _pilotRbWasKinematic = rb.isKinematic;
+                rb.isKinematic = true;
+            }
 
             // Parent the player to the cockpit so they ride along with the grid as
             // it moves/rolls/rotates (fixes "ship rolls away, player stays put").
@@ -627,6 +631,9 @@ namespace VoxelEngine.GridSystem
         }
 
         private Transform _originalParent;
+        // 14.64.2 — the pre-seat kinematic state of the rig's helper rigidbody,
+        // captured on Enter and RESTORED on Exit (never forced dynamic).
+        private bool _pilotRbWasKinematic = true;
 
         // ── Maritime integration ──────────────────────────────────────
         // When the ship has a MaritimePropulsionSystem, the cockpit doubles as the
@@ -667,6 +674,50 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(Grid);
         }
 
+        /// <summary>14.64.2 — pick a drop spot whose player capsule does NOT start
+        /// inside the hull. Spawning overlapped used to hand PhysX a depenetration
+        /// impulse that torqued the whole ship on exit. Candidates: right, left,
+        /// behind, ahead, straight up — first clear one wins; the classic right-hand
+        /// spot stays the fallback.</summary>
+        private Vector3 FindClearExitPosition()
+        {
+            Vector3 fallback = transform.position + transform.up * 1.2f + transform.right * 1.5f;
+            if (Pilot == null) return fallback;
+
+            var cc = Pilot.GetComponent<CharacterController>();
+            float radius = cc != null ? Mathf.Max(0.25f, cc.radius * 0.95f) : 0.38f;
+            float height = cc != null ? Mathf.Max(radius * 2f + 0.1f, cc.height * 0.95f) : 1.7f;
+
+            Vector3[] offsets =
+            {
+                transform.up * 1.2f + transform.right * 1.5f,
+                transform.up * 1.2f - transform.right * 1.5f,
+                transform.up * 1.2f - transform.forward * 1.5f,
+                transform.up * 1.2f + transform.forward * 1.5f,
+                transform.up * 2.2f,
+            };
+            var scratch = new Collider[8];
+            for (int o = 0; o < offsets.Length; o++)
+            {
+                Vector3 pos = transform.position + offsets[o];
+                Vector3 foot = pos + transform.up * radius;
+                Vector3 head = pos + transform.up * (height - radius);
+                int n = Physics.OverlapCapsuleNonAlloc(foot, head, radius, scratch,
+                    ~0, QueryTriggerInteraction.Ignore);
+                bool blocked = false;
+                for (int i = 0; i < n; i++)
+                {
+                    var col = scratch[i];
+                    if (col == null) continue;
+                    if (col.transform.IsChildOf(Pilot.transform)) continue;
+                    blocked = true;
+                    break;
+                }
+                if (!blocked) return pos;
+            }
+            return fallback;
+        }
+
         public void Exit()
         {
             if (Pilot == null) return;
@@ -686,13 +737,30 @@ namespace VoxelEngine.GridSystem
 
             // Unparent the player from the grid and drop them beside the cockpit.
             Pilot.transform.SetParent(_originalParent, worldPositionStays: true);
-            Pilot.transform.position = transform.position + transform.up * 1.2f + transform.right * 1.5f;
+            Pilot.transform.position = FindClearExitPosition();
 
             Pilot.enabled = true;
             var cc = Pilot.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = true;
             var rb = Pilot.GetComponent<Rigidbody>();
-            if (rb != null) rb.isKinematic = false;
+            if (rb != null)
+            {
+                // 14.64.2 — RESTORE the pre-seat state instead of forcing the body
+                // dynamic. Exit used to flip the helper rigidbody live, and from
+                // then on PhysX depenetration fought the CharacterController every
+                // frame: the exit "ship bounce" plus impact damage, blocks smashed
+                // at walking speed and the residual deck jitter all traced back to
+                // that one permanently dynamic body.
+                rb.isKinematic = _pilotRbWasKinematic;
+                if (!rb.isKinematic)
+                {
+                    var hull = Grid != null ? Grid.Body : null;
+                    rb.linearVelocity = hull != null
+                        ? hull.GetPointVelocity(Pilot.transform.position)
+                        : Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+            }
 
             // 14.61.0 - leaving the seat INHERITS the ship's velocity: stepping out
             // of a cruising ship used to zero the player against the world, so the
@@ -706,6 +774,7 @@ namespace VoxelEngine.GridSystem
             // 14.64.1 - leaving ANY control seat locks the relative dampeners to
             // this grid: you step out already station-keeping with your own ship
             // (the 200 m leash or Ctrl+Z releases it later).
+            Pilot.ForceDampenersOn();
             var exitBoots = Pilot.GetComponent<VoxelEngine.Player.MagneticBoots>();
             if (exitBoots != null && Grid != null)
                 exitBoots.LockReference(Grid);

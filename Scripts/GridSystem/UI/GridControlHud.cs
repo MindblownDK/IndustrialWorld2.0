@@ -182,7 +182,7 @@ namespace VoxelEngine.GridSystem.UI
                 bool flash = i == _flashSlot;
 
                 var cell = new VisualElement();
-                cell.style.width = 108; cell.style.height = 64;
+                cell.style.width = 108; cell.style.height = 74;
                 cell.style.marginLeft = 2; cell.style.marginRight = 2;
                 cell.style.paddingLeft = 6; cell.style.paddingRight = 6;
                 cell.style.paddingTop = 4; cell.style.paddingBottom = 4;
@@ -198,7 +198,7 @@ namespace VoxelEngine.GridSystem.UI
                 top.style.flexDirection = FlexDirection.Row;
                 top.style.justifyContent = Justify.SpaceBetween;
                 top.style.alignItems = Align.Center;
-                top.style.height = 14; top.style.flexShrink = 0;
+                top.style.minHeight = 14; top.style.flexShrink = 0;
                 top.pickingMode = PickingMode.Ignore;
 
                 var num = new Label((i + 1).ToString());
@@ -231,7 +231,7 @@ namespace VoxelEngine.GridSystem.UI
                 nameLabel.style.overflow = Overflow.Hidden;
                 nameLabel.style.textOverflow = TextOverflow.Ellipsis;
                 nameLabel.style.whiteSpace = WhiteSpace.NoWrap;
-                nameLabel.style.height = 13; nameLabel.style.flexShrink = 0;
+                nameLabel.style.minHeight = 14; nameLabel.style.flexShrink = 0;
                 cell.Add(nameLabel);
 
                 // Row 3: the assigned action.
@@ -241,7 +241,7 @@ namespace VoxelEngine.GridSystem.UI
                 action.style.overflow = Overflow.Hidden;
                 action.style.textOverflow = TextOverflow.Ellipsis;
                 action.style.whiteSpace = WhiteSpace.NoWrap;
-                action.style.height = 12; action.style.flexShrink = 0;
+                action.style.minHeight = 13; action.style.flexShrink = 0;
                 cell.Add(action);
 
                 strip.Add(cell);
@@ -549,14 +549,31 @@ namespace VoxelEngine.GridSystem.UI
             commands.style.flexDirection = FlexDirection.Row;
             commands.style.flexWrap = Wrap.Wrap;
             commands.style.marginBottom = 6;
-            commands.style.paddingTop = 4; commands.style.paddingBottom = 2;
-            commands.style.paddingLeft = 4; commands.style.paddingRight = 4;
+            // 14.64.3 — the tab strip is now UN-SQUEEZABLE: fixed 40 px height,
+            // no wrap, no shrink, keys hard-sized to 26 px and centered. minHeight
+            // alone still lost to the surrounding flex math on short screens and
+            // the keys overflowed the card's bottom edge.
+            commands.style.flexShrink = 0;
+            commands.style.height = 40;
+            commands.style.minHeight = 40;
+            commands.style.flexWrap = Wrap.NoWrap;
+            commands.style.alignItems = Align.Center;
+            commands.style.paddingTop = 0; commands.style.paddingBottom = 0;
+            commands.style.paddingLeft = 6; commands.style.paddingRight = 6;
             L.ApplyDataCard(commands, L.Bezel);
             commands.Add(L.CommandButton("ALL BLOCKS", () => { _editorTab = 0; RebuildEditor(); }, null, _editorTab == 0));
             commands.Add(L.CommandButton("CATEGORIES", () => { _editorTab = 1; RebuildEditor(); }, null, _editorTab == 1));
             commands.Add(L.CommandButton("GROUPS", () => { _editorTab = 2; RebuildEditor(); }, null, _editorTab == 2));
             var spacer = new VisualElement(); spacer.style.flexGrow = 1; commands.Add(spacer);
             commands.Add(L.CommandButton("CLOSE", CloseEditor, T.AccentRed));
+            foreach (var child in commands.Children())
+            {
+                if (child is not Button key) continue;
+                key.style.height = 26;
+                key.style.minHeight = 26;
+                key.style.flexShrink = 0;
+                key.style.marginBottom = 0;
+            }
             _editorCard.Add(commands);
 
             _pendingHint = new Label();

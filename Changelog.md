@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.64.1-dev`
+**Current Version:** `14.64.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.64.3-dev] Nose First
+
+**Field-report round on 14.64.2: the world-frame speed ceiling that stole the ship on cockpit exit is now relative, moving hulls can actually be boarded, the autopilot flies nose first, the cut seam covers edge and corner contacts with separation-latched re-arming, and the editor tab strip is physically un-squeezable.**
+
+#### Fixed
+- **Stepping out of a fast cockpit no longer loses the ship.** The jetpack's Newtonian safety ceiling clamped WORLD speed to 240 m/s - a pilot exiting a 2500 m/s cockpit was instantly braked, the hull sailed away, and the 200 m leash then honestly released the fresh relative lock ("active... inactive, too far from grid"). The ceiling now applies to speed RELATIVE to the dampener reference, so you keep the hull's velocity and only your motion relative to it is capped. Seat exits also force the personal dampeners ON, making the "relative no matter what" exit contract real even for pilots who flew out in Newtonian drift.
+- **Moving ships can be boarded.** The dampeners only adopted a grid's velocity within 14 m - outside that bubble they braked you toward world rest, so a cruising hull forever receded as you approached. The fly reference range is now 60 m (floored at runtime for existing player rigs), so the ship "stands still" for you from well outside arm's reach.
+- **Severed pieces: the seam war, round three.** Two real faults remained. First, a piece cut free by grinding away its connecting block has NO face neighbors left in the parent - but its colliders still touch along edges and corners, and those diagonal contacts jittered impulses into the island every step; the seam grace now covers the full 26-cell neighborhood. Second, the grace expired on a timer: a piece at rest in zero-g is still flush against its old neighbors 1.5 s later, and the first restored contact kicked it spinning again. Pairs now re-arm only once they have genuinely separated by over 4 cm; pairs that stay flush stay ignored, so a piece resting in its own cut can never be shoved by it. On top of both, every grid rigidbody now caps depenetration response speed, so no bad contact can ever launch or spin a hull.
+- **Editor tab strip is un-squeezable.** minHeight still lost to the surrounding flex math on short screens; the ALL BLOCKS / CATEGORIES / GROUPS / CLOSE strip is now a fixed 40 px row with no wrap and hard 26 px keys, centered - there is no layout left that can clip them.
+
+#### Changed
+- **Autopilot flies nose first.** With equal thrust on every side, the cruise steer walked the six axes in a fixed order and the hull flew whichever way the tie fell. Among drive axes within 2% of the strongest, the autopilot now prefers the one aligned with the helm's forward (active cockpit, else the first cockpit on the hull), so a symmetric ship points its nose - and its pilot - at where it is going. A genuinely stronger drive axis still wins outright.
+
+### [14.64.2-dev] Clean Exit
+
+**Field-report round on 14.64.1: the one dynamic rigidbody behind the exit bounce, the beacon smash and the deck jitter is gone, the relative-dampener leash stops believing phantom frames, the look-at card finally hides, cut pieces stop spinning, and the death bag rides the ship it fell on.**
+
+#### Fixed
+- **Cockpit exit no longer bounces the ship or hurts the pilot.** Leaving a seat used to force the player rig's helper rigidbody DYNAMIC; from then on PhysX depenetration fought the character controller every frame - the exit shove that torqued the hull and dealt impact damage, blocks "rammed" at walking speed, and the residual deck jitter all traced to that one body. Exit now RESTORES the pre-seat kinematic state, and if the body really was dynamic it leaves co-moving with the hull instead of carrying stale velocity.
+- **Exit drop spot is overlap-checked.** The drop position is capsule-tested against the hull first (right, left, behind, ahead, straight up - first clear spot wins), so the pilot never spawns inside a wall and hands the ship a depenetration impulse.
+- **Relative-dampener leash stops releasing on phantom frames.** At thousands of m/s, a floating-origin shift or an interpolation lag frame can read as hundreds of meters of separation for a single physics step - and the 200 m leash cut the lock on that lone bad sample. Release now requires two consecutive out-of-range strikes at least half a second apart; any in-range read clears the count.
+- **Look-at info card actually hides.** The "step aside while a panel is open" fader drove the card's opacity back to 1 whenever no UI was blocking, overwriting Hide() within 16 ms - the card permanently showed the last block you ever looked at. The fader now respects the HUD's own visibility and only ever dims below it.
+- **Severed pieces stay put - properly this time.** The cut seam itself was the spin: freshly split colliders spawn in exact face contact with the parent blocks they were severed from, and the physics engine answers that contact with a depenetration impulse - in zero-g, one impulse is a rotation that never damps. Collisions across the seam are now suspended for a 1.5 s grace window while the pieces drift apart.
+- **Walking into blocks can't wreck them.** Grid impact damage now also filters on the player rig root, so no player collider - whatever state its rigidbody is in - ever counts as a hull-ramming projectile.
+- **Grid Control editor tab strip sized to its buttons.** The ALL BLOCKS / CATEGORIES / GROUPS keys overflowed their card; the strip no longer shrinks below button height and centers its keys vertically.
+- **Slot action text no longer clipped.** Toolbar cells grew to fit all three rows; the fixed row heights that cut off descenders ("ENGAGE / DISENGAGE") are now minimums.
+
+#### Changed
+- **Death loot bags ride the ship they fell on.** Dying on a moving grid used to leave the bag frozen at a world point while the hull flew on. The bag now parents itself to any grid within reach of the death spot - live deaths, remote replicas and save restores alike - so the beacon stays on the deck where you fell.
 
 ### [14.64.1-dev] Wake On Deck
 

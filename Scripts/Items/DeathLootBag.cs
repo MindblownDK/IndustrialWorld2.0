@@ -125,9 +125,36 @@ namespace VoxelEngine.Items
             go.transform.position = pos;
             go.transform.up = up;
 
+            // 14.64.2 — a death ON a ship leaves the bag ON the ship. A loose world
+            // point is useless once the hull flies on, so any grid within reach
+            // adopts the bag transform (world pose kept) and the beacon rides the
+            // deck. Works for live deaths, remote replicas and snapshot restores
+            // alike — they all pass through Create.
+            var deck = FindGridNear(pos);
+            if (deck != null) go.transform.SetParent(deck.transform, true);
+
             bag.BuildVisual();
             _byId[id] = bag;
             return bag;
+        }
+
+        /// <summary>The closest grid hull within ~3 m of a point, or null. Used to
+        /// parent death bags to the deck they dropped on.</summary>
+        private static GridSystem.GridEntity FindGridNear(Vector3 pos)
+        {
+            var hits = Physics.OverlapSphere(pos, 3f, ~0, QueryTriggerInteraction.Ignore);
+            GridSystem.GridEntity best = null;
+            float bestSqr = float.MaxValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var h = hits[i];
+                if (h == null) continue;
+                var g = h.GetComponentInParent<GridSystem.GridEntity>();
+                if (g == null) continue;
+                float d = (h.ClosestPointOnBounds(pos) - pos).sqrMagnitude;
+                if (d < bestSqr) { bestSqr = d; best = g; }
+            }
+            return best;
         }
 
         // ─────────────────────────────────────────────────────────────────

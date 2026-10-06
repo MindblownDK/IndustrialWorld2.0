@@ -495,7 +495,8 @@ namespace VoxelEngine.UI
         /// This is the systemic fix for HUD/panel overlap — right-side and bottom
         /// modules step aside whenever a panel needs the screen.
         /// </summary>
-        public static void YieldWhileBlocking(VisualElement element, float minOpacity = 0f)
+        public static void YieldWhileBlocking(VisualElement element, float minOpacity = 0f,
+            System.Func<float> baseOpacity = null)
         {
             if (element == null) return;
             float smooth = 1f;
@@ -503,7 +504,13 @@ namespace VoxelEngine.UI
             {
                 if (element == null) return;
                 bool blocked = VoxelEngine.UI.UIState.IsBlocking;
-                float target = blocked ? minOpacity : 1f;
+                // 14.64.2 — respect the OWNER's visibility. This scheduler used to
+                // drive opacity back to 1 whenever no UI was blocking, overwriting
+                // the owner's own Hide() within 16 ms — the "look-at card never
+                // hides" bug. Owners with their own show/hide state pass a
+                // baseOpacity callback; the yield only ever dims BELOW it.
+                float basis = baseOpacity != null ? Mathf.Clamp01(baseOpacity()) : 1f;
+                float target = blocked ? Mathf.Min(minOpacity, basis) : basis;
                 // ASYMMETRIC fade: out fast (opening inventory/UI should feel instant),
                 // back in slower and smoother so the module returns elegantly.
                 float rate = blocked ? 18f : 8f;

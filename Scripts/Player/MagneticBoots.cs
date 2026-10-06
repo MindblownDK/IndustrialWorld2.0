@@ -42,7 +42,10 @@ namespace VoxelEngine.Player
 
         [Header("Jetpack reference")]
         [Tooltip("While flying, dampeners reference the nearest grid within this range (m).")]
-        public float flyReferenceRange = 14f;
+        // 14.64.3 — 60 m, up from 14: approaching a cruising hull, the dampeners
+        // must adopt ITS velocity well before arm's reach or the ship forever
+        // recedes from the braking player.
+        public float flyReferenceRange = 60f;
         [Tooltip("The relative lock auto-releases beyond this distance (m) from the locked grid's closest block.")]
         public float lockReleaseRange = 200f;
 
@@ -83,6 +86,7 @@ namespace VoxelEngine.Player
         private VoxelEngine.GridSystem.GridEntity _refGrid;
         private float _nextRefScan;
         private float _nextLockLeashCheck;
+        private int _lockLeashStrikes;
 
         private void Awake()
         {
@@ -197,7 +201,21 @@ namespace VoxelEngine.Player
                 float d = (block.transform.position - transform.position).sqrMagnitude;
                 if (d < bestSqr) bestSqr = d;
             }
-            if (bestSqr <= lockReleaseRange * lockReleaseRange) return;
+            if (bestSqr <= lockReleaseRange * lockReleaseRange)
+            {
+                _lockLeashStrikes = 0;
+                return;
+            }
+
+            // 14.64.2 — never trust ONE distance sample at speed. At thousands of
+            // m/s a floating-origin shift or an interpolation lag frame reads as
+            // hundreds of meters of phantom separation for a single physics step,
+            // and the leash used to cut the lock on that lone bad read. Two
+            // consecutive out-of-range strikes (>= 0.5 s apart) are now required;
+            // any in-range sample in between clears the count.
+            _lockLeashStrikes++;
+            if (_lockLeashStrikes < 2) return;
+            _lockLeashStrikes = 0;
 
             VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
                 $"Lock released: {LockedReference.name} out of range ({lockReleaseRange:0} m)",
@@ -250,7 +268,8 @@ namespace VoxelEngine.Player
                 _refGridBody = null;
                 _refGrid = null;
                 float best = float.MaxValue;
-                var hits = Physics.OverlapSphere(position, flyReferenceRange, ~0, QueryTriggerInteraction.Ignore);
+                // Mathf.Max guards stale serialized values on existing player rigs.
+                var hits = Physics.OverlapSphere(position, Mathf.Max(flyReferenceRange, 60f), ~0, QueryTriggerInteraction.Ignore);
                 for (int i = 0; i < hits.Length; i++)
                 {
                     var g = hits[i].GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
@@ -272,6 +291,7 @@ namespace VoxelEngine.Player
             if (LockedReference == grid) return;
             LockedReference = grid;
             _nextLockLeashCheck = Time.unscaledTime + 1f;
+            _lockLeashStrikes = 0;
             if (announce)
                 VoxelEngine.UI.BuildFeedbackHud.Show("Relative Dampeners",
                     $"Matching velocity: {grid.name}", null, new Color(0.35f, 0.90f, 0.80f));

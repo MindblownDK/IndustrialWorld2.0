@@ -86,8 +86,13 @@ namespace VoxelEngine.GridSystem
             if (_rb == null || _rb.isKinematic || _grid == null) return;
             if (Time.time < _nextImpactAt) return;
 
-            // Players never blunt a hull - their damage is victim-side.
+            // Players never blunt a hull - their damage is victim-side. Filter on
+            // BOTH the controller and the rig root: a player rig whose helper
+            // rigidbody went dynamic (14.64.2 cockpit-exit bug) collided through a
+            // plain capsule, slipped past the controller check and let a crewman
+            // "ram" his own beacon at walking speed.
             if (collision.collider.GetComponentInParent<CharacterController>() != null) return;
+            if (collision.collider.GetComponentInParent<VoxelEngine.Player.PlayerController>() != null) return;
 
             // 14.60.0 - "my ship takes damage in empty space": two real sources,
             // both phantom. (1) Planet-LOD safety shells and other runtime helper

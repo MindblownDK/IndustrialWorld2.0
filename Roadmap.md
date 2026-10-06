@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.64.1-dev`
-**Roadmap Version:** `14.64.1-dev`
+**Current Version:** `14.64.3-dev`
+**Roadmap Version:** `14.64.3-dev`
 **Date:** 2026-10-04
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,22 @@
 ---
 
 ## 0. Recently Done
+
+### 14.64.3-dev - Nose First
+- PlayerController: Newtonian 240 m/s ceiling now clamps velocity relative to the dampener reference (dampRef) instead of world speed; new public ForceDampenersOn() called from GridCockpit.Exit.
+- MagneticBoots: flyReferenceRange 14 -> 60 m with a runtime floor (Mathf.Max) guarding stale serialized values.
+- GridEntity seam grace v2: 26-neighborhood pair collection (edge/corner contacts), fuse 4096; RestoreSeamCollisions re-arms each pair only after >4 cm separation (0.5 s polls, 120 s deadline, flush pairs stay ignored); grid rigidbodies get maxDepenetrationVelocity = 2.
+- NavFlightAutopilot.BestThrustWorldAxis: among axes within 2% of the strongest, prefer alignment with HelmForwardLocal() (ActiveCockpit, else first GridCockpit block, else grid +Z).
+- GridControlHud editor tab strip: fixed height 40, NoWrap, hard 26 px buttons, centered.
+
+### 14.64.2-dev - Clean Exit
+- GridCockpit: Enter captures / Exit restores the rig rigidbody's kinematic state (never forces dynamic); dynamic restores inherit hull point velocity. Exit drop spot overlap-tested via OverlapCapsuleNonAlloc over five candidate offsets.
+- MagneticBoots: lock leash requires two consecutive out-of-range samples (0.5 s cadence) before release; in-range or re-lock resets the strike count.
+- LcdHudTheme.YieldWhileBlocking: optional baseOpacity callback - the yield scheduler dims below the owner's intended opacity instead of forcing 1; WorldInspectionHud passes its visibility.
+- GridEntity.SplitIslandIntoGrid: Physics.IgnoreCollision across cut-seam collider pairs (island cell vs adjacent parent block) for a 1.5 s grace, re-enabled by coroutine on the island; pair count fused at 2048.
+- GridImpact: player filter extended to PlayerController rig root alongside CharacterController.
+- DeathLootBag.Create: OverlapSphere (3 m) grid probe; bag parents to the nearest hull with world pose kept - applies to live, replicated and restored bags.
+- GridControlHud: tab strip flexShrink 0 / minHeight 38 / centered keys; slot cells 108x74 with min-height rows.
 
 ### 14.64.1-dev - Wake On Deck
 Grid-cryobed live wake: PlayerSpawner.TryFindClaimedGridBed (prefers an online claimed GridCryobed) + WakeAtGridBed coroutine (no chunk wait, no ground snap, no altitude pull-down; re-pins to the moving hull over 5 settle frames, inherits hull point velocity, MagneticBoots.LockReference to the ship, heals bedSpawnPoint + sidecar) - used by BOTH the load path (before the stored-record branch, with the offline-death tail preserved) and Respawn(). Weightless-on-foot: WalkUpdate gives zero input authority and no friction when !_grounded, gravity < 0.5 and boots disengaged. Landing jitter: MagneticBoots smooths UpDirection (snap on first contact, exp slerp, ignore <1.5 deg). Zero-g split rotation: StabilizeGroundAlignment requires HasSupportBelow (non-self hit within max(6 m, 4 cells) along gravity) unless gear-locked/wheel-grounded; SplitIslandIntoGrid zeroes island velocity when the parent is at rest. Seat exit: GridCockpit.Exit relative-locks the pilot's boots to the grid (announce toast). Grid Control editor: mounts on the HUD layer, card absolute insets (14/14/8/9%), ESC/Inventory key close + auto-close when UIState stops blocking + GameUIController.CloseAll hook; slot cells 108x64 with fixed-height rows and a backgrounded state chip; GridMasterTerminal.IsListedBlock (armor + water/gas pipe filter) shared by the terminal list, editor tabs and category resolution.

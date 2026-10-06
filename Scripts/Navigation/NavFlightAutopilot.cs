@@ -565,15 +565,47 @@ namespace VoxelEngine.Navigation
         private Vector3 BestThrustWorldAxis()
         {
             var t = _grid.GetThrustByDirection();
-            float best = t.fwd;
-            Vector3 local = Vector3.forward;
-            if (t.back  > best) { best = t.back;  local = Vector3.back; }
-            if (t.right > best) { best = t.right; local = Vector3.right; }
-            if (t.left  > best) { best = t.left;  local = Vector3.left; }
-            if (t.up    > best) { best = t.up;    local = Vector3.up; }
-            if (t.down  > best) { best = t.down;  local = Vector3.down; }
+            float[] thrust = { t.fwd, t.back, t.right, t.left, t.up, t.down };
+            Vector3[] locals =
+            {
+                Vector3.forward, Vector3.back, Vector3.right,
+                Vector3.left, Vector3.up, Vector3.down
+            };
+            float best = 0f;
+            for (int i = 0; i < thrust.Length; i++)
+                if (thrust[i] > best) best = thrust[i];
             if (best <= 0f) return _grid.transform.forward;
-            return _grid.transform.TransformDirection(local);
+
+            // 14.64.3 — a symmetric ship cruises NOSE FIRST. The old pick walked
+            // the six axes in a fixed order, so a hull with equal thrust on every
+            // side flew whichever way the tie fell — usually not where the pilot
+            // seat points. Among axes within 2% of the strongest, prefer the one
+            // most aligned with the helm's forward; a genuinely stronger drive
+            // axis still wins outright.
+            Vector3 noseLocal = HelmForwardLocal();
+            int pick = 0;
+            float bestAlign = float.MinValue;
+            for (int i = 0; i < thrust.Length; i++)
+            {
+                if (thrust[i] < best * 0.98f) continue;
+                float align = Vector3.Dot(locals[i], noseLocal);
+                if (align > bestAlign) { bestAlign = align; pick = i; }
+            }
+            return _grid.transform.TransformDirection(locals[pick]);
+        }
+
+        /// <summary>The helm's forward direction in grid-local space: the active
+        /// cockpit if someone ever sat here, else the first cockpit block on the
+        /// hull, else grid +Z. This is what "the ship faces forward" means.</summary>
+        private Vector3 HelmForwardLocal()
+        {
+            VoxelEngine.GridSystem.GridCockpit seat = _grid.ActiveCockpit;
+            if (seat == null)
+                foreach (var b in _grid.AllBlocks)
+                    if (b is VoxelEngine.GridSystem.GridCockpit c) { seat = c; break; }
+            if (seat == null) return Vector3.forward;
+            Vector3 local = _grid.transform.InverseTransformDirection(seat.transform.forward);
+            return local.sqrMagnitude > 0.0001f ? local.normalized : Vector3.forward;
         }
 
         /// <summary>P-controller: torque the given world axis onto worldDir.

@@ -914,6 +914,17 @@ namespace VoxelEngine.Player
                 null, DampenersOn ? new Color(0.35f, 0.90f, 0.80f) : new Color(1f, 0.70f, 0.25f));
         }
 
+        /// <summary>14.64.3 — seat exits turn the personal dampeners ON so the
+        /// "relative no matter what" exit contract actually holds: the fresh grid
+        /// lock is useless if the pilot steps out in Newtonian drift.</summary>
+        public void ForceDampenersOn()
+        {
+            if (DampenersOn) return;
+            DampenersOn = true;
+            VoxelEngine.UI.BuildFeedbackHud.Show("Dampeners",
+                "Personal dampeners ON", null, new Color(0.35f, 0.90f, 0.80f));
+        }
+
         private void FlyUpdate()
         {
             float dt = Time.deltaTime;
@@ -1005,8 +1016,15 @@ namespace VoxelEngine.Player
                 _velocity += GravVec * dt;
                 if (wishDir.sqrMagnitude > 0.0001f)
                     _velocity += wishDir.normalized * (spd * 2.2f) * dt;
-                if (_velocity.sqrMagnitude > 240f * 240f)
-                    _velocity = _velocity.normalized * 240f;
+                // 14.64.3 — the safety ceiling is a RELATIVE speed. Clamping the
+                // WORLD speed to 240 m/s instantly braked a pilot who stepped out
+                // of a 2500 m/s cockpit, so the hull sailed away and the leash cut
+                // the fresh relative lock seconds later. The ceiling now applies to
+                // the velocity relative to the dampener reference (the ship); far
+                // from any grid the reference is zero and nothing changes.
+                Vector3 relVel = _velocity - dampRef;
+                if (relVel.sqrMagnitude > 240f * 240f)
+                    _velocity = dampRef + relVel.normalized * 240f;
             }
             _cc.Move(_velocity * dt);
         }

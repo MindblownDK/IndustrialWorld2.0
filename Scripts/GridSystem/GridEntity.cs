@@ -964,6 +964,7 @@ namespace VoxelEngine.GridSystem
             if (moved == 0) { Destroy(island.gameObject); return null; }
 
             island.RecalculateMass();
+            IgnoreSeamCollisions(island, baseCell);
 
             // The same subsystem notifications any topology change performs, on BOTH hulls.
             NotifyMaritimeDirty();
@@ -990,6 +991,87 @@ namespace VoxelEngine.GridSystem
             // A freshly severed piece must immediately obey gravity — never start asleep.
             if (island.Body != null) island.Body.WakeUp();
             return island;
+        }
+
+        /// <summary>14.64.2 — the cut seam must not SHOVE. Freshly split colliders
+        /// spawn in exact face contact with the parent blocks they were severed
+        /// from, and PhysX answers that contact with a depenetration impulse; in
+        /// zero-g one impulse is a spin that never damps — the "severed piece
+        /// slowly rotates" bug survived every velocity fix because velocity was
+        /// never the source. Collisions across the seam stay off for a short grace
+        /// window while the pieces drift apart; everything else collides normally.</summary>
+        private void IgnoreSeamCollisions(GridEntity island, Vector3Int baseCell)
+        {
+            if (island == null) return;
+            // 14.64.3 — the FULL 26-neighborhood, not just the 6 faces: a piece cut
+            // free by grinding away the connecting block has no face neighbors left
+            // in the parent at all, but its colliders still touch the parent's along
+            // EDGES and CORNERS — and those diagonal contacts jittered impulses into
+            // the island every step, which is why the piece kept rotating after the
+            // face-only pass.
+            var dirs = new List<Vector3Int>(26);
+            for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+            for (int dz = -1; dz <= 1; dz++)
+                if (dx != 0 || dy != 0 || dz != 0)
+                    dirs.Add(new Vector3Int(dx, dy, dz));
+            var pairs = new List<(Collider a, Collider b)>();
+            foreach (var kv in island._blocks)
+            {
+                if (kv.Value == null) continue;
+                Collider[] islandCols = null;
+                for (int d = 0; d < dirs.Count; d++)
+                {
+                    if (!_blocks.TryGetValue(kv.Key + baseCell + dirs[d], out var parentBlock)
+                        || parentBlock == null) continue;
+                    islandCols ??= kv.Value.GetComponentsInChildren<Collider>(true);
+                    var parentCols = parentBlock.GetComponentsInChildren<Collider>(true);
+                    for (int a = 0; a < islandCols.Length; a++)
+                    for (int b = 0; b < parentCols.Length; b++)
+                    {
+                        if (islandCols[a] == null || parentCols[b] == null) continue;
+                        Physics.IgnoreCollision(islandCols[a], parentCols[b], true);
+                        pairs.Add((islandCols[a], parentCols[b]));
+                    }
+                }
+                if (pairs.Count > 4096) break; // the seam is small; this is a fuse
+            }
+            if (pairs.Count > 0)
+                island.StartCoroutine(RestoreSeamCollisions(pairs));
+        }
+
+        private static System.Collections.IEnumerator RestoreSeamCollisions(
+            List<(Collider a, Collider b)> pairs)
+        {
+            // 14.64.3 — re-enabling on a TIMER re-armed the shove: a piece at rest
+            // in zero-g is still flush against its old neighbors when the grace
+            // expires, and the very first restored contact kicked it spinning
+            // again. Each pair now re-enables only once it has genuinely separated
+            // (>4 cm of daylight); pairs that stay flush simply stay ignored — a
+            // piece resting in its own cut can never be shoved by it.
+            var wait = new WaitForSeconds(0.5f);
+            yield return wait;
+            float deadline = Time.time + 120f;
+            while (pairs.Count > 0 && Time.time < deadline)
+            {
+                for (int i = pairs.Count - 1; i >= 0; i--)
+                {
+                    var (a, b) = pairs[i];
+                    if (a == null || b == null)
+                    {
+                        pairs.RemoveAt(i);
+                        continue;
+                    }
+                    Vector3 pa = a.bounds.ClosestPoint(b.bounds.center);
+                    Vector3 pb = b.bounds.ClosestPoint(pa);
+                    if ((pa - pb).sqrMagnitude <= 0.0016f) continue; // still flush
+                    if (a.enabled && b.enabled && a.gameObject.activeInHierarchy
+                        && b.gameObject.activeInHierarchy)
+                        Physics.IgnoreCollision(a, b, false);
+                    pairs.RemoveAt(i);
+                }
+                yield return wait;
+            }
         }
 
         public GridBlock GetBlock(Vector3Int gridPos)
@@ -1924,6 +2006,10 @@ namespace VoxelEngine.GridSystem
             rb.useGravity = false;
             rb.linearDamping = 0f;
             rb.angularDamping = 1.5f;
+            // 14.64.3 — depenetration is a correction, not a cannon: cap how fast
+            // PhysX may shove a hull out of an overlap so a bad contact can never
+            // launch or spin a grid.
+            rb.maxDepenetrationVelocity = 2f;
             var entity = go.AddComponent<GridEntity>();
             entity.gridSize = size;
             return entity;
