@@ -45,9 +45,6 @@ namespace VoxelEngine.EditorTools
             };
         }
 
-        [MenuItem("Tools/Voxel Engine/Sync Item Icons (ItemIcons folder)")]
-        private static void SyncMenu() => Sync(auto: false);
-
         public static void Sync(bool auto = false)
         {
             var guids = AssetDatabase.FindAssets("t:ItemDefinition");

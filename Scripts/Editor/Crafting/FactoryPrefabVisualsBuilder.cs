@@ -7,7 +7,6 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// Adds procedural visual meshes to Factory and HV prefabs created by Step 17.
-    /// Run from: Tools ▸ Voxel Engine ▸ Add Factory Prefab Visuals
     /// Non-destructive: checks for existing children before adding.
     /// </summary>
     public static class FactoryPrefabVisualsBuilder
@@ -18,7 +17,6 @@ namespace VoxelEngine.EditorTools
         private const string FAC_MATS = FAC + "/Materials";
         private const string HV_MATS  = HV + "/Materials";
 
-        [MenuItem("Tools/Voxel Engine/Add Factory Prefab Visuals")]
         public static void BuildAll()
         {
             int count = 0;

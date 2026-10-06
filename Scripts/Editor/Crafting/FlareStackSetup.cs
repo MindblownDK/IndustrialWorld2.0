@@ -49,7 +49,6 @@ namespace VoxelEngine.EditorTools
         private const string PETRO_DIST_NODE   = NODES + "/ResNode_PetroleumDistillation.asset";
         private const string OIL_REFINING_NODE = NODES + "/ResNode_OilRefining.asset";
 
-        [MenuItem("Tools/Voxel Engine/Run Step 70 (Flare Stack & Heat Recovery)", priority = 70)]
         public static void RunStep70()
         {
             int created = 0, preserved = 0;

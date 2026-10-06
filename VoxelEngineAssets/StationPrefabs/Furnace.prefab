@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 4663737158822581988}
   - component: {fileID: 4947374043132741270}
   - component: {fileID: 6644085824980302415}
+  - component: {fileID: 3369558044514728907}
   m_Layer: 0
   m_Name: Furnace
   m_TagString: Untagged
@@ -135,6 +136,21 @@ MonoBehaviour:
     _name: Container
     _slots: []
     _minSize: 1
+--- !u!114 &3369558044514728907
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2729089929732934182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: 688c872ef3026194cb54a0cc3d3dd60d, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1
 --- !u!1 &5063493187396224353
 GameObject:
   m_ObjectHideFlags: 0

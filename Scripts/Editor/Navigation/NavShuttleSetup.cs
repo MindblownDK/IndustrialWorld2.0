@@ -36,9 +36,6 @@ namespace VoxelEngine.EditorTools
         private const string UTIL_PATH  = NODES + "/res_grid_utilities.asset";
         private const string CATALOG    = "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset";
 
-        [MenuItem("Tools/Voxel Engine/Setup Step 66 — Refuel Connector & Auto-Run")]
-        public static void RunStep66Menu() => RunStep66();
-
         public static void RunStep66()
         {
             Debug.Log("[NavShuttleSetup] Step 66 — refuel connector & auto-run started.");

@@ -162,9 +162,6 @@ namespace VoxelEngine.EditorTools
         private static bool UnsetResearchSeconds(float value)
             => value <= 0.01f || Mathf.Approximately(value, NODE_SECONDS_SENTINEL);
 
-        [MenuItem("Tools/Voxel Engine/Run Step 72 (Asphalt Roads)", priority = 72)]
-        public static void RunStep72Menu() => RunStep72();
-
         public static void RunStep72()
         {
             Debug.Log("[AsphaltRoadSetup] Step 72 - Asphalt Roads started.");

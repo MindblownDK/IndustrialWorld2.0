@@ -992,6 +992,7 @@ GameObject:
   - component: {fileID: 2717796960409564750}
   - component: {fileID: 8322055302501065189}
   - component: {fileID: 286646702906307295}
+  - component: {fileID: 6604294438639373921}
   m_Layer: 0
   m_Name: Grid_FlareVent_Large
   m_TagString: Untagged
@@ -1063,6 +1064,21 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.5, y: 2.5, z: 2.5}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &6604294438639373921
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7543810227312220447}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: ea0763044cbdcf441ae6c68ef853d5fe, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1
 --- !u!1 &8333578116485150250
 GameObject:
   m_ObjectHideFlags: 0

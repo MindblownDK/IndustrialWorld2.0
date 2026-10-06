@@ -574,6 +574,7 @@ GameObject:
   - component: {fileID: 1935207668285481020}
   - component: {fileID: 3278047284668595860}
   - component: {fileID: 8424562259254609244}
+  - component: {fileID: 3122448555486628170}
   m_Layer: 0
   m_Name: FlareStack
   m_TagString: Untagged
@@ -704,6 +705,21 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.2, y: 5.5, z: 2.2}
   m_Center: {x: 0, y: 2.75, z: 0}
+--- !u!114 &3122448555486628170
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143467405143968865}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: ea0763044cbdcf441ae6c68ef853d5fe, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1
 --- !u!1 &2170312507474364544
 GameObject:
   m_ObjectHideFlags: 0

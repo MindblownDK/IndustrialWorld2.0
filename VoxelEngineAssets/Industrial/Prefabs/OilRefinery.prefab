@@ -125,6 +125,7 @@ GameObject:
   - component: {fileID: 2266649818070531480}
   - component: {fileID: 5379383564175426930}
   - component: {fileID: 873123390398446078}
+  - component: {fileID: 3708361706801289229}
   m_Layer: 0
   m_Name: OilRefinery
   m_TagString: Untagged
@@ -259,3 +260,18 @@ MonoBehaviour:
     autoType: 1
   baseWattsPerSecond: 400
   idleWattsPerSecond: 20
+--- !u!114 &3708361706801289229
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8197380636947939266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: 58a73175f2762c249ac12a71fc3ba89f, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1

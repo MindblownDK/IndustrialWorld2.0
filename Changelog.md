@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.66.1-dev`
+**Current Version:** `14.66.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.66.2-dev] One Workshop
+
+#### Changed
+- **The Voxel Engine Setup Wizard is organized by system instead of release chronology.** Its 118 unique actions now live in collapsible groups with automatically generated sequential numbering: core bootstrap, worlds and space, construction, factory and power, environment, grids and navigation, storage, roads and railways, creatures and bosses, combat and weapons, and maintenance.
+- **Related content is together.** Passive animals, hostile creatures, mythical enemies and boss progression share one group; player weapons, explosives, armour and every dedicated defence setup share another.
+- **Setup entry points are centralized.** Standalone content setup commands were removed from `Tools -> Voxel Engine` after being represented in the wizard. True validators and dedicated-server utilities remain separate tools.
+- **Redundant and missing setup entries were reconciled.** The duplicate spherical-fluid action was removed, the complete celestial-world action owns Sol registration, and Water Crossings plus previously standalone repair/authoring actions are now present in the wizard.
+
+#### Fixed
+- **Graphite is now actually authored.** Industrial Content creates the canonical Graphite item, while Airborne Pollution also creates or repairs it non-destructively when run directly, registers it for persistence, and continues authoring the Carbon Concentrate conversion in the same run.
 
 ### [14.66.1-dev] Modern Identity
 

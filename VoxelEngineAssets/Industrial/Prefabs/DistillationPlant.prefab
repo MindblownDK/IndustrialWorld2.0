@@ -735,6 +735,7 @@ GameObject:
   - component: {fileID: 6800970543729014872}
   - component: {fileID: 4201369342946330773}
   - component: {fileID: 652346464732622566}
+  - component: {fileID: 8415952264095516437}
   m_Layer: 0
   m_Name: DistillationPlant
   m_TagString: Untagged
@@ -941,6 +942,21 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 40
+--- !u!114 &8415952264095516437
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 400072344281064306}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: 58a73175f2762c249ac12a71fc3ba89f, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1
 --- !u!1 &441629055093023252
 GameObject:
   m_ObjectHideFlags: 0

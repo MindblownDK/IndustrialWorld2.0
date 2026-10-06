@@ -42,9 +42,6 @@ namespace VoxelEngine.EditorTools
         private const string UTILS_NODE_PATH = NODES + "/res_grid_utilities.asset";
         private const string CATALOG       = "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset";
 
-        [MenuItem("Tools/Voxel Engine/Setup Step 67 — Static Refuel Pad")]
-        public static void RunStep67Menu() => RunStep67();
-
         public static void RunStep67()
         {
             Debug.Log("[StaticRefuelSetup] Step 67 — static refuel pad started.");

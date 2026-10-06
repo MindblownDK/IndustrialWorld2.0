@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 7561083288583377630}
   - component: {fileID: 765621197657731794}
   - component: {fileID: 6891818826419409539}
+  - component: {fileID: 1188849840037991398}
   m_Layer: 0
   m_Name: ElectricFurnace
   m_TagString: Untagged
@@ -227,6 +228,21 @@ MonoBehaviour:
   iconStyleOverride: 
   zoneLabel: 
   tintStatusLights: 0
+--- !u!114 &1188849840037991398
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1678840095331228440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: 0027e1eed31f0924b9b7981b9d5f5042, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1
 --- !u!1 &2137446516897142933
 GameObject:
   m_ObjectHideFlags: 0

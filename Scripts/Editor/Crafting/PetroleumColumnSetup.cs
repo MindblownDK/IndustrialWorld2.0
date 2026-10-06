@@ -92,9 +92,6 @@ namespace VoxelEngine.EditorTools
         // marker is missing, so a hand-tuned model is never thrown away twice.
         private const string MODEL_REV = "ModelRev2";
 
-        [MenuItem("Tools/Voxel Engine/Setup Step 69 — Distillation Plant Content")]
-        public static void RunStep69Menu() => RunStep69();
-
         public static void RunStep69()
         {
             Debug.Log("[PetroleumColumnSetup] Step 69 — distillation plant started.");

@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5661485971018343632}
   - component: {fileID: 5695361302610132630}
   - component: {fileID: 3340819941145823862}
+  - component: {fileID: 7055470408927437023}
   m_Layer: 0
   m_Name: Generator_Coal
   m_TagString: Untagged
@@ -152,6 +153,21 @@ MonoBehaviour:
   fuelRemaining: 0
   fuelMaxDuration: 0
   userEnabled: 1
+--- !u!114 &7055470408927437023
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2730566610513939242}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: 688c872ef3026194cb54a0cc3d3dd60d, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1
 --- !u!1 &5179494236818197979
 GameObject:
   m_ObjectHideFlags: 0

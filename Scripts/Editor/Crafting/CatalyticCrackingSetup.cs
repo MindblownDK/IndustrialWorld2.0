@@ -83,9 +83,6 @@ namespace VoxelEngine.EditorTools
         private static bool UnsetResearchSeconds(float value)
             => value <= 0.01f || Mathf.Approximately(value, NODE_SECONDS_SENTINEL);
 
-        [MenuItem("Tools/Voxel Engine/Run Step 71 (Catalytic Cracking & Petrochemicals)", priority = 71)]
-        public static void RunStep71Menu() => RunStep71();
-
         public static void RunStep71()
         {
             Debug.Log("[CatalyticCrackingSetup] Step 71 — Catalytic Cracking & Petrochemicals started.");

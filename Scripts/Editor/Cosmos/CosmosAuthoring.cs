@@ -12,7 +12,6 @@ namespace VoxelEngine.EditorTools
     {
         private const string PlanetsDir = "Assets/VoxelEngineAssets/Planets";
 
-        [MenuItem("Tools/Voxel Engine/Author Earth Planet Template")]
         public static void AuthorEarthTemplate()
         {
             EnsureFolder(PlanetsDir);
@@ -20,13 +19,15 @@ namespace VoxelEngine.EditorTools
             const string path = PlanetsDir + "/Planet_Earth.asset";
             var existing = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(path);
 
-            var planet = existing != null ? existing : ScriptableObject.CreateInstance<PlanetTemplate>();
-            planet.name = "Planet_Earth";
-            planet.body = BodySettings.CreateEarthlike();
-            planet.orbitalDistanceKm = new Vector2(2500f, 4000f);
-            planet.orbitSpeed = 0.6f;
+            bool isNew = existing == null;
+            var planet = isNew ? ScriptableObject.CreateInstance<PlanetTemplate>() : existing;
+            if (isNew || string.IsNullOrWhiteSpace(planet.name)) planet.name = "Planet_Earth";
+            if (planet.body == null) planet.body = BodySettings.CreateEarthlike();
+            if (planet.orbitalDistanceKm == Vector2.zero)
+                planet.orbitalDistanceKm = new Vector2(2500f, 4000f);
+            if (planet.orbitSpeed <= 0f) planet.orbitSpeed = 0.6f;
 
-            if (existing == null)
+            if (isNew)
                 AssetDatabase.CreateAsset(planet, path);
             else
                 EditorUtility.SetDirty(planet);
@@ -35,8 +36,8 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
             EditorUtility.FocusProjectWindow();
             Selection.activeObject = planet;
-            Debug.Log("[Cosmos] Earth planet template authored at " + path +
-                      " (gravity 1g, oxygen, grass, full ore catalogue incl. Lithium).");
+            Debug.Log("[Cosmos] Earth planet template created/repaired at " + path +
+                      "; existing authored body and orbit tuning was preserved.");
         }
 
         /// <summary>
@@ -45,7 +46,6 @@ namespace VoxelEngine.EditorTools
         /// Plains/Forest were using Clay (brown dirt) as their surface, making the world look
         /// barren. Now they use Grass (natural green). Also ensures Desert = Sand, etc.
         /// </summary>
-        [MenuItem("Tools/Voxel Engine/Normalize Biome Surface Materials (Grass)")]
         public static void NormalizeBiomeSurfaces()
         {
             // Find all biome assets in the project.
@@ -105,72 +105,6 @@ namespace VoxelEngine.EditorTools
             {
                 Debug.Log("[Cosmos] All biome surfaces already correct.");
             }
-        }
-
-        [MenuItem("Tools/Voxel Engine/Create Solar System (Sol)")]
-        public static void AuthorSolSystem()
-        {
-            EnsureFolder(PlanetsDir);
-            const string path = PlanetsDir + "/System_Sol.asset";
-
-            var sys = AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(path);
-            if (sys == null)
-            {
-                sys = ScriptableObject.CreateInstance<SolarSystemTemplate>();
-                AssetDatabase.CreateAsset(sys, path);
-            }
-            sys.name = "System_Sol";
-            sys.systemName = "Sol System";
-            sys.sun = new SunSettings { displayName = "Sol", sunCount = 1, intensity = 1.3f };
-            sys.minPlanetSeparationKm = 500f;
-            sys.maxPlanetSeparationKm = 10000f;
-            sys.quasar = new QuasarSettings { enabled = true, brightness = 1.4f };
-
-            // Auto-attach the Earth planet if it exists, so a fresh system is immediately playable.
-            var earth = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(PlanetsDir + "/Planet_Earth.asset");
-            if (earth != null)
-            {
-                sys.planets = new PlanetTemplate[] { earth };
-            }
-
-            EditorUtility.SetDirty(sys);
-
-            // Ensure the runtime library (Resources) knows about this system so the main-menu
-            // system picker can list it.
-            EnsureLibraryRegistered(sys);
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            Selection.activeObject = sys;
-            Debug.Log("[Cosmos] Sol system template created at " + path +
-                      " (Earth auto-attached if present, CosmosTemplateLibrary updated).");
-        }
-
-        /// <summary>
-        /// Make sure Resources/CosmosTemplateLibrary.asset exists and contains the given system,
-        /// so the main-menu New World page can offer it in the solar-system picker.
-        /// </summary>
-        private static void EnsureLibraryRegistered(SolarSystemTemplate system)
-        {
-            if (system == null) return;
-            const string libDir  = "Assets/Resources";
-            const string libPath = libDir + "/CosmosTemplateLibrary.asset";
-            EnsureFolder(libDir);
-
-            var library = AssetDatabase.LoadAssetAtPath<CosmosTemplateLibrary>(libPath);
-            if (library == null)
-            {
-                library = ScriptableObject.CreateInstance<CosmosTemplateLibrary>();
-                AssetDatabase.CreateAsset(library, libPath);
-            }
-
-            if (library.systems == null) library.systems = new System.Collections.Generic.List<SolarSystemTemplate>();
-            if (!library.systems.Contains(system))
-                library.systems.Add(system);
-
-            EditorUtility.SetDirty(library);
-            // Invalidate the runtime cache so the next Load() picks up the updated asset.
-            CosmosTemplateLibrary.InvalidateCache();
         }
 
         private static void EnsureFolder(string assetPath)

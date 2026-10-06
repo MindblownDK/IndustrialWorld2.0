@@ -20,7 +20,6 @@ namespace VoxelEngine.EditorTools
     {
         private const string Root = "Assets/VoxelEngineAssets";
 
-        [MenuItem("Tools/Voxel Engine/Repair Missing Recipe Links")]
         public static void RepairMissingRecipeLinks()
         {
             int repaired = 0;

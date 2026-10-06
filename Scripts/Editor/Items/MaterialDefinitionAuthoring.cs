@@ -14,7 +14,6 @@ namespace VoxelEngine.EditorTools
         private const string RegistryPath = "Assets/VoxelEngineAssets/MaterialRegistry.asset";
         private const string MaterialsDir = "Assets/VoxelEngineAssets/Materials";
 
-        [MenuItem("Tools/Voxel Engine/Ensure Material Definitions (incl. Lithium)")]
         public static void EnsureMaterialDefinitions()
         {
             EnsureFolder(MaterialsDir);
@@ -82,7 +81,6 @@ namespace VoxelEngine.EditorTools
         /// if your Clay/Sand were created at tier 1, bare hands could not mine them. This re-applies
         /// the soft-block tier to any existing definitions of those materials.
         /// </summary>
-        [MenuItem("Tools/Voxel Engine/Normalize Soft Material Tiers (Hand-Mineable)")]
         public static void NormalizeSoftTiers()
         {
             var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>(RegistryPath);

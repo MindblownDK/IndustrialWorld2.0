@@ -81,8 +81,6 @@ namespace VoxelEngine.EditorTools
         private const string PLANET_FOLDER  = ASSET_ROOT + "/Planets";
         private const string BIOME_FOLDER   = ASSET_ROOT + "/Biomes";
 
-        private Vector2 _scrollPos;
-
         [MenuItem("Tools/Voxel Engine/Setup Wizard")]
         public static void Open() => GetWindow<VoxelEngineSetupWindow>("Voxel Engine Setup");
 
@@ -105,891 +103,215 @@ namespace VoxelEngine.EditorTools
             scroll.Add(title);
 
             AddInfo(scroll,
-                "Click each step in order.\n" +
-                "1. Create assets — generates materials, items, planet definitions.\n" +
-                "2. Spawn player — adds Player + UI and links any existing world.\n" +
-                "3. Build main menu scene (saves browser + new world UI).\n" +
-                "Run steps in order — most are idempotent and safe to re-run.");
-
-            AddWizardButton(scroll, "1. Create All Assets", CreateAllAssets, 40);
-            AddWizardButton(scroll, "2. Spawn Player + UI in Scene", SpawnManagerAndPlayer, 40);
-            AddWizardButton(scroll, "3. Build Main Menu Scene", BuildMainMenuScene, 40);
-            AddWizardButton(scroll, "4. Build Crafting Content (recipes, tools, stations, blocks)", BuildBaseCraftingContent, 40);
-            AddWizardButton(scroll, "5. Build Tiered Building Content (10 player-scale families x 4 tiers + Hammer)", BuildTieredContent, 40);
-            AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
-            AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
-            AddWizardButton(scroll, "8. Build Native Spherical Fluid Content (canister, pool pumps, tanks, pipes, wakes)", BuildFluidContent, 48);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 10 expands the game with the full Industrial content pack:\n" +
-                "  • Iron / Copper / Steel PLATES, Iron Gear, Copper Wire, Glass\n" +
-                "  • Electronic & Advanced Circuits\n" +
-                "  • Refined-Oil Barrel / Plastic Bar (Empty/Crude barrels are retired; crude is a liquid)\n" +
-                "  • Pirate Jack Pump + Oil Refinery prefabs & recipes, plus oil-rich crude seep distribution + Pirate Jack Pump node repair\n" +
-                "  • Wireless Storage Terminal (new block)\n" +
-                "  • Factory research tree expansion (Plating, Electronics,\n" +
-                "    Oil Extraction, Oil Refining, Plastics, Logistics Network,\n" +
-                "    Mass Storage, Crystalline Storage, Wireless Access, Quarrying,\n" +
-                "    Fluid Handling, Gas Processing, Nuclear Fission, Adv Electronics).\n" +
-                "Re-runnable. Idempotent. Always run AFTER steps 4, 6, 7.");
-            AddWizardButton(scroll, "10. Build Industrial Content (plates, oil chain, advanced recipes, full research tree)", BuildIndustrialContent, 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 11 fills in EVERY system the research nodes were already pointing at:\n" +
-                "  • Farming  (Wheat / Corn / Carrot crops + Seeds + Foods + Hoe + Tilled Soil + Sprinkler + Harvester + cooking)\n" +
-                "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Drawers / Displays / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
-                "  • Wrench tool (universal network connector)\n" +
-                "  • Item Pipes  (Solid + Glass variants)\n" +
-                "  • Quarry + Upgrades (Range / Speed / Efficiency)\n" +
-                "  • Gas  (Electrolyser / Hydrogen Engine / Gas Tank / Gas Pipe Solid+Glass + Hydrogen / Oxygen markers)\n" +
-                "  • Nuclear  (Enriched Fuel Rod / LEU Pellet / Depleted Uranium / Spent Fuel Rod / High-Level Waste +\n" +
-                "              Uranium Processor / Reactor Core / Steam Turbine / Portable Reactor / Waste Reprocessor)\n" +
-                "  • New research node: Farming (gates seeds/farm-plot/sprinkler/harvester/cooking)\n" +
-                "Re-runnable. Idempotent. Run AFTER steps 4, 6, 7, 8, 10.");
-            AddWizardButton(scroll, "11. Build Survival + Industrial Logistics Content\n(Farming + Storage + Quarry + Gas + Nuclear)", BuildSurvivalAndLogisticsContent, 72);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 12 builds the Grid System (Ships/Vehicles):\n" +
-                "  • Cockpit (Small/Large)\n" +
-                "  • Thrusters, Gyroscopes\n" +
-                "  • Grid Batteries, Reactors\n" +
-                "  • Landing Gear, Docking Ports\n" +
-                "  • Grid-based Tools (Drills, Grinders)\n" +
-                "Re-runnable. Idempotent. Run AFTER step 10.");
-            AddWizardButton(scroll, "12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", BuildGridSystemContent, 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
-                "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
-                "  • Propulsion (Waterwheel, Drive Shaft, Watertight Shaft Housing, Mechanical Belt, Propellers, Engines, Ship Turbos, Gearbox, Generator)\n" +
-                "  • Premium engine models: Crude Inline-4, HFO V8 with glass inspection windows, MGO V12 with\n" +
-                "    gantry walkways, quartz viewports and a belt-driven seawater pump (rebuilds via mesh version)\n" +
-                "  • Engine upgrade modules: High-Flow Turbocharger, Efficiency Tuning Chip,\n" +
-                "    Overclocked Fuel Injectors, Super-Cooler Radiator Jacket (engines + generators)\n" +
-                "  • Free-ratio bidirectional gearbox (typed number + slider, 0.25×–20×)\n" +
-                "  • Watertight Shaft Housing + two-click Mechanical Belt branching (RMB shaft → RMB shaft)\n" +
-                "  • Runtime item-persistence catalog (protects Portable Batteries / H₂ Tanks on login)\n" +
-                "  • Heat-seizure repair rules: engines that overheat past 100 °C seize and need\n" +
-                "    spare parts (from their own recipe) to be repaired\n" +
-                "  • v17 meshes: marine funnel exhaust stack, pillow-block drive shaft, guarded-coupling generator\n" +
-                "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe, Marine Water Pump)\n" +
-                "  • 5-tier \"Maritime Engineering\" research tree\n" +
-                "  • MaritimeSettings balance asset\n" +
-                "Re-runnable. Idempotent. Run AFTER step 12.");
-            AddWizardButton(scroll, "13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", BuildMaritimeContent, 56);
-            AddWizardButton(scroll, "14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", BuildFloodlightContent, 40);
-            AddWizardButton(scroll, "15. Build Wind Power Content (Modular T-Series T90/T150/T236 + Vertical Turbines + Monopoles + Research)", BuildWindmillContent, 40);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 16 rebuilds the active scene's native spherical water stack:\n" +
-                "  • Removes legacy external-ocean components and Assets/Liquid when present\n" +
-                "  • Creates native VoxelWaterURP water + viscous crude materials\n" +
-                "  • Real voxel ocean basins, lakes/pools, and radial boat wakes — no wrapped water sphere\n" +
-                "  • Finite/infinite pool pump telemetry, internal tanks, existing pipe transport, and Dirt-drop repair\n" +
-                "Re-runnable. Idempotent. Run after Step 8.");
-            AddWizardButton(scroll, "16. Rebuild Real Spherical Water (ocean basins, dirt drops, pools, pipes + boat wakes)", BuildFluidContent, 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 17 builds the FACTORY FOUNDATIONS + HIGH VOLTAGE GRID:\n" +
-                "  • Conveyor Belt (Basic / Fast / Express tiers)\n" +
-                "  • Hold Build Wheel to select Straight / Ramp / Vertical for the held tier\n" +
-                "  • Conveyor direction chevrons + centered status lines\n" +
-                "  • Conveyor Chute (vertical item transport)\n" +
-                "  • Crusher + Assembler Mk.1/Mk.2/Mk.3 machines\n" +
-                "  • MachineDefinition + MachineRecipe ScriptableObjects\n" +
-                "  • VoltageSystemConfig (25 MW LV/HV threshold)\n" +
-                "  • Power Pole (6 connections, 15 m reach, realistic lattice visuals)\n" +
-                "  • Electrical Substation (150 m relay)\n" +
-                "  • HV Transmission Tower (12 m lattice, 200 m span, unlimited power)\n" +
-                "  • Step-Up Transformer (LV→HV, BLUE accent, 200 MW, 2% loss)\n" +
-                "  • Step-Down Transformer (HV→LV, AMBER accent, 200 MW, 2% loss)\n" +
-                "  • Grid Light Block + LED Strip (accent lighting)\n" +
-                "  • Research node: Factory Logistics (gates conveyors, machines, HV)\n" +
-                "Re-runnable. Idempotent. Non-destructive — never overwrites balance values.\n" +
-                "Run AFTER steps 4, 6, 7, 10, 12.");
-            AddWizardButton(scroll, "17. Build Factory Foundations + HV Grid\n(Conveyors, Machines, Power Poles, Transformers, HV Towers)", BuildFactoryFoundationsContent, 72);
-
-            AddSpacer(scroll, 6);
-
-            AddInfo(scroll,
-                "Step 18 builds GRID SHAPE VARIANTS (non-destructive):\n" +
-                "  • Cube / Slope / HalfBlock / HalfSlope / Corner / InvertedSlope\n" +
-                "  • GridShapeWheel now uses programmatic geometric icons (no more misaligned Unicode text)\n" +
-                "  • Ghost preview automatically rebuilds when variant changes (no more \"large ghost\" bug)\n" +
-                "  • Shape variant is applied to placed block on build\n" +
-                "  • Creates missing GridShapeWheel component on Player if absent\n" +
-                "  • Verifies GridBuilder variant wiring\n" +
-                "  • Non-destructive: preserves all existing balance, health, power, and custom prefab geometry\n" +
-                "Re-runnable. Idempotent. Never overwrites user-authored materials or balance values.");
-            AddWizardButton(scroll, "18. Setup Grid Shape Variants (Non-Destructive)\n(Cube, Slope, Half, Corner, Inverted — preserve balance)", () => VoxelEngine.EditorTools.GridShapeVariantSetup.RunStep18(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 19 builds GRID SCREENS & CAMERA BLOCK (non-destructive):\n" +
-                "  • Screens: Small/Wide/Medium/Large/ExtraLarge (1x1 to 8x8)\n" +
-                "  • Camera Block: Security camera with live video feed for screens\n" +
-                "  • IGridDataProvider interface — Battery, Cargo, Gas tank data sources\n" +
-                "  • GridScreenConfigUI — right-click config panel for source + display mode\n" +
-                "  • Auto-links to nearest data source on placement\n" +
-                "  • Creates premium prefabs, items, and recipes\n" +
-                "  • Non-destructive: preserves all existing balance and custom geometry\n" +
-                "Re-runnable. Idempotent. Never overwrites user-authored values.\n" +
-                "Run Step 12 (Grid System) first to have grid blocks to attach screens to.");
-            AddWizardButton(scroll, "19. Setup Grid Screens & Displays (Non-Destructive)\n(Adds screen blocks + data provider interfaces)", () => VoxelEngine.EditorTools.GridScreenSetup.RunStep19(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 20 builds 33 THEMED CELESTIAL RUIN variants across 11 planets (non-destructive):\n" +
-                "  • Moon (3) — pale lunar habitat domes + listening posts\n" +
-                "  • Mars (4) — dust-blasted iron fortresses with sand drifts\n" +
-                "  • Venus (3) — sulfur pressure-domes (warped/melted)\n" +
-                "  • Acid (3) — bio-corroded vaults + crystal spires\n" +
-                "  • Space Pirate (5) — scrap forts, neon dens, loot caches, junk towers\n" +
-                "  • Greek (2) — marble treasury temples + oracle shrines\n" +
-                "  • Ice (3) — glacial domes + frozen bunkers (icicle accents)\n" +
-                "  • Water (2) — stilt platforms + sunken domes (barnacles/algae)\n" +
-                "  • Desolate (1) — crumbled dry wasteland outpost\n" +
-                "  • Volcanic (4) — obsidian citadels + magma forges + charred domes (emissive magma vents)\n" +
-                "  • Crystal (3) — geode shrines + prism spires + lumina temples (emissive crystals)\n" +
-                "Each ruin has a distinct silhouette (Temple / Dome / Fortress), procedural themed\n" +
-                "textures (shared for GPU batching), themed loot, and a visible relic chest.\n" +
-                "Creates prefabs + placeable block items. Existing loot config is preserved.\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "20. Build Celestial Ruins (33 variants across 11 planets: Moon, Mars, Venus, Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)", BuildCelestialRuinsContent, 72);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 21 (Phase 2) wires the themed ruins to their own PLANETS so they spawn in-world (non-destructive):\n" +
-                "  • 11 themed biomes with planet-correct surface materials + ruin scatter\n" +
-                "  • Mars/Venus reconfigured + 8 new planets (Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)\n" +
-                "  • Moon wired to the Lunar biome; all planets appended to System_Sol\n" +
-                "  • Creates/repairs the runtime CosmosTemplateLibrary + Asteroids_MainBelt automatically\n" +
-                "  • 5 new voxel surface materials (Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode)\n" +
-                "Run AFTER Steps 1 and 20. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "21. Build Celestial Worlds — Planets, Themed Biomes & Ruin Spawning (Phase 2)", BuildCelestialWorldsContent, 72);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 22 (Combat Phase 1) adds the damage framework, player weapons, and a test target (non-destructive):\n" +
-                "  • IDamageable + DamageType + Damageable (reusable by enemies, dummies, grid blocks)\n" +
-                "  • Iron Sword (melee, LMB swing) + Iron Pistol (ranged, LMB fire)\n" +
-                "  • Training Dummy — placeable target that takes damage and respawns\n" +
-                "Hold LMB with a weapon to attack. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "22. Build Combat (Phase 1) — Damage Framework, Sword, Pistol, Training Dummy", BuildCombatContent, 72);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 23 (Combat Phase 2) adds the first real enemy (non-destructive):\n" +
-                "  • Ghoul — shambling hostile that wanders, detects you, chases, and melees\n" +
-                "  • Radial-gravity aligned (spherical worlds), Damageable, drops loot\n" +
-                "  • Spawns rarely in Wasteland / Forest / Desert\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "23. Build Enemies (Phase 2) — Ghoul (wander/chase/melee AI)", BuildEnemyContent, 72);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 24 builds 6 tiers of Crusader armor (non-destructive):\n" +
-                "  Initiate's Gambeson → Squire's Leather → Knight's Chainmail →\n" +
-                "  Templar's Plate → Paladin's Bulwark → Stellar Archon Plate\n" +
-                "Each tier reduces more damage. Equip via RMB in hotbar.\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "24. Build Crusader Armor (6 Tiers: Initiate to Stellar Archon)", BuildArmorContent, 72);
-
-            AddInfo(scroll,
-                "Step 25 builds passive livestock (Combat Phase 3c, non-destructive):\n" +
-                "  • Cow, Sheep, Pig — peaceful quadrupeds that wander + flee, radial-aligned\n" +
-                "  • Drop Raw Meat, Hide, Wool; auto-spawn near the player via PassiveAnimalSpawner\n" +
-                "  • Non-destructive: existing prefabs preserved. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "25. Build Passive Livestock (Phase 3c) — Cow, Sheep, Pig", BuildLivestockContent, 40);
-
-            AddInfo(scroll,
-                "Step 26 builds the rideable horse (Combat Phase 3d, non-destructive):\n" +
-                "  • Look at a horse + H to mount; WASD ride, Shift gallop, Space jump, F dismount\n" +
-                "  • Radial-aligned; grazes when riderless; spawns in Plains/Steppes\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "26. Build Rideable Horse (Phase 3d) — mount & steer", BuildHorseContent, 40);
-
-            AddInfo(scroll,
-                "Step 27 builds the Manticore mythical enemy (Combat Phase 3e, non-destructive):\n" +
-                "  • Lion body, humanoid face, bat wings, venomous scorpion tail\n" +
-                "  • Fires toxic tail spikes (armor-bypassing poison) + claws in melee\n" +
-                "  • Spawns rarely in Desert/Wasteland. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "27. Build Mythical Enemy — Manticore (Phase 3e)", BuildManticoreContent, 40);
-
-            AddInfo(scroll,
-                "Step 28 builds the Griffin mythical enemy (Combat Phase 3f, non-destructive):\n" +
-                "  • Heraldic lion-eagle that FLIES — circles overhead, then dive-bombs\n" +
-                "  • Drops Griffin Feathers + Talons; rare Griffin Heart\n" +
-                "  • Spawns rarely in Mountains/Steppes. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "28. Build Mythical Enemy — Griffin (Phase 3f, flying)", BuildGriffinContent, 40);
-
-            AddInfo(scroll,
-                "Step 29 builds the Karkadann mythical enemy (Combat Phase 3g, non-destructive):\n" +
-                "  • Massive armored brute that telegraphs then CHARGES in a straight line\n" +
-                "  • Heavy frontal armor — flank/rear it for full damage; trample + knockback\n" +
-                "  • Spawns rarely in Steppes/Desert. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "29. Build Mythical Enemy — Karkadann (Phase 3g, charger)", BuildKarkadannContent, 40);
-
-            AddInfo(scroll,
-                "Step 30 builds the Ifrit Djinn mythical enemy (Combat Phase 3h, non-destructive):\n" +
-                "  • Fire spirit caster: fireballs + teleport-blink + fire walls (AoE)\n" +
-                "  • Ignites an armor-escalating BURN (heavier armor burns hotter)\n" +
-                "  • Spawns rarely in Desert/Wasteland. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "30. Build Mythical Enemy — Ifrit Djinn (Phase 3h, caster)", BuildIfritContent, 40);
-
-            AddInfo(scroll,
-                "Step 31 builds the ROC mini-boss (Combat Phase 3i, non-destructive):\n" +
-                "  • Colossal flying bird — dive-bombs + wing-gust AoE; ENRAGES below 50% HP\n" +
-                "  • Guaranteed boss loot: Giant Pinions + Roc Storm Core\n" +
-                "  • Spawns VERY rarely in Mountains/Steppes. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "31. Build Mythical Mini-Boss — Roc (Phase 3i)", BuildRocContent, 40);
-
-            AddInfo(scroll,
-                "Step 32 builds the Basilisk mythical enemy (Combat Phase 3j, non-destructive):\n" +
-                "  • Serpentine beast with a PETRIFYING GAZE (cone slow) + venomous bite\n" +
-                "  • Circle-strafe to break the gaze. Drops Basilisk Scale + Petrified Eye\n" +
-                "  • Spawns rarely in Forest/Steppes. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "32. Build Mythical Enemy — Basilisk (Phase 3j, petrify gaze)", BuildBasiliskContent, 40);
-
-            AddInfo(scroll,
-                "Step 33 builds PLAYER WEAPONS (Combat Phase 3k, non-destructive):\n" +
-                "  • Grenade — throwable explosive (AoE + chain reactions), consumable\n" +
-                "  • Iron Rifle — long-range semi-auto. Both crafted at the Assembler\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "33. Build Player Weapons — Grenade + Rifle (Phase 3k)", BuildExplosiveContent, 40);
-
-            AddInfo(scroll,
-                "Step 34 builds the Powder Keg (big bomb, non-destructive):\n" +
-                "  • Placeable high-yield explosive — fuses then a big mushroom-cloud blast\n" +
-                "  • Voxel crater + camera shake; shoot/chain to detonate early\n" +
-                "  • Craft at the Assembler. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "34. Build Powder Keg (big bomb, mushroom cloud)", BuildPowderKegContent, 40);
-
-            AddInfo(scroll,
-                "Step 35 builds the TSAR BOMB (~10x the keg, non-destructive): ginormous mushroom cloud + huge crater.\n" +
-                "Step 36 builds the ANTIMATTER BOMB (~40x the Tsar): star-death sequence (expand -> contract -> white glow -> MASSIVE blast). Re-runnable.");
-            AddWizardButton(scroll, "35. Build Tsar Bomb (huge bomb, ~10x keg)", BuildTsarBombContent, 40);
-            AddWizardButton(scroll, "36. Build Antimatter Bomb (ultimate, ~40x tsar)", BuildAntimatterBombContent, 40);
-
-            AddInfo(scroll,
-                "Step 37 builds the AUTO TURRET (non-destructive):\n" +
-                "  • Placeable defense; auto-targets hostile creatures + fires hitscan shots\n" +
-                "  • Reload with Bullets (RMB). Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "37. Build Auto Turret (defense)", BuildTurretContent, 40);
-
-            AddInfo(scroll,
-                "Step 38 builds the HEAVY CANNON (auto-targeting artillery, non-destructive):\n" +
-                "  • Fires arcing explosive shells; configurable faction targeting\n" +
-                "  • Minigun + Schwerer Gustav + cockpit control coming next. Re-runnable.");
-            AddWizardButton(scroll, "38. Build Heavy Artillery — Cannon", BuildArtilleryCannonContent, 40);
-
-            AddInfo(scroll,
-                "Step 39: Minigun Turret (6-barrel rapid-fire, uses Bullets).\n" +
-                "Step 40: Schwerer Gustav (colossal 800mm railway gun).\n" +
-                "Both auto-target by faction + use the defense panel. Re-runnable.");
-            AddWizardButton(scroll, "39. Build Minigun Turret (rapid-fire)", BuildArtilleryMinigunContent, 40);
-            AddWizardButton(scroll, "40. Build Schwerer Gustav (massive railway gun)", BuildArtilleryGustavContent, 40);
-
-            AddInfo(scroll,
-                "Step 41 builds the FLAMETHROWER TURRET (close-range area denial, non-destructive):\n" +
-                "  • Continuous cone of fire + lingering ground fire patches\n" +
-                "  • Fuelled by Flame Canisters (or Coal fallback) via the defense panel\n" +
-                "  • Auto-targets by faction. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "41. Build Flamethrower Turret (area denial)", BuildFlamethrowerTurretContent, 40);
-
-            AddInfo(scroll,
-                "Step 42 builds the MORTAR TURRET (indirect fire, non-destructive):\n" +
-                "  • High-arc shells over walls/terrain — no line of sight required\n" +
-                "  • Explosive / Smoke / Illumination shells via the defense panel\n" +
-                "  • Auto-targets by faction. Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "42. Build Mortar Turret (indirect fire)", BuildMortarTurretContent, 40);
-
-            AddInfo(scroll,
-                "Step 43 builds the GIANT SHELL TURRET (siege / boss killer, non-destructive):\n" +
-                "  • Slow-tracking heavy barrel; fires factory-built Giant Shells one at a time\n" +
-                "  • Prefers high-HP / boss targets; huge blast + crater\n" +
-                "  • Auto-targets by faction via the defense panel. Re-runnable.");
-            AddWizardButton(scroll, "43. Build Giant Shell Turret (siege)", BuildGiantShellTurretContent, 40);
-
-            AddInfo(scroll,
-                "Step 44 builds the ANTI-AIR TURRET (flak vs flyers, non-destructive):\n" +
-                "  • Fast dual-barrel tracking; prefers Griffins / Rocs / high-altitude targets\n" +
-                "  • Proximity-burst flak rounds (AA Rounds or Bullets fallback)\n" +
-                "  • Aerial-Only toggle on the defense panel. Re-runnable.");
-            AddWizardButton(scroll, "44. Build Anti-Air Turret (flak)", BuildAntiAirTurretContent, 40);
-
-            AddInfo(scroll,
-                "Step 45 builds the ENERGY / RELIC TURRET (late-tier electrical, non-destructive):\n" +
-                "  • Hitscan Electrical beams; spinning relic crystal + core glow\n" +
-                "  • Charged Cells (standard) / Relic Capacitors (heavy shot)\n" +
-                "  • Defense panel magazine + faction targeting. Re-runnable.");
-            AddWizardButton(scroll, "45. Build Energy / Relic Turret", BuildEnergyRelicTurretContent, 40);
-
-            AddInfo(scroll,
-                "Step 46 builds the PAINT TOOL + 15 cosmetic finishes (non-destructive):\n" +
-                "  • Hand tool: LMB paints looked-at static/grid blocks\n" +
-                "  • RMB cycles finish, Shift+RMB clears\n" +
-                "  • Finishes are cosmetic only and save with the world. Re-runnable.");
-            AddWizardButton(scroll, "46. Build Paint Tool (cosmetic finishes)", BuildPaintToolContent, 40);
-
-            AddInfo(scroll,
-                "Step 47 refreshes JETPACK FUEL accounting (non-destructive):\n" +
-                "  • Fuel capacity / drain rates on all three jetpack families\n" +
-                "  • Refillable Portable Hydrogen Tank (fill from world H₂ Gas Tanks)\n" +
-                "  • H₂/Hybrid packs auto-recharge from portable tanks at ≤10% fuel\n" +
-                "  • Charged Cells feed Atmospheric / Hybrid power side\n" +
-                "  • Re-runnable. Does not strip existing jetpack assets.");
-            AddWizardButton(scroll, "47. Refresh Jetpack Fuel Accounting", BuildJetpackFuelContent, 40);
-
-            AddInfo(scroll,
-                "Step 48 completes the ARMOR workflow (non-destructive):\n" +
-                "  • Armor Station — premium armory workbench for armor and module crafting\n" +
-                "  • Armor Upgrade Station — premium anvil for timed module installation\n" +
-                "  • Five module families × five tiers plus the Hazmat seal\n" +
-                "  • Armor tier controls capacity: T1→1 slot/T1 modules through T6→6 slots/T5 modules; Hazmat requires T5+\n" +
-                "  • Installation base time is 30 seconds: T1 30s through T5/Hazmat 150s\n" +
-                "  • Repairs missing links while preserving existing recipe costs, craft times, materials, and prefab custom work.\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "48. Build Armor Stations + Timed Upgrades (Non-Destructive)", BuildArmorStationsAndUpgrades, 72);
-
-            AddInfo(scroll,
-                "Step 49 initializes profile-driven ATMOSPHERE + SPACE data on every existing planet/moon (non-destructive):\n" +
-                "  • Total gas density is separate from breathable oxygen, so thin/toxic/airless worlds behave honestly\n" +
-                "  • Radius-relative atmosphere tops work on both the small test planet and full-size worlds\n" +
-                "  • Existing initialized profile values are preserved unchanged\n" +
-                "Re-runnable. Run after Step 21 when themed celestial worlds are present.");
-            AddWizardButton(scroll, "49. Initialize Atmosphere + Space Profiles (Non-Destructive)", BuildAtmosphereSpaceProfiles, 56);
-            AddWizardButton(scroll, "50. Build Warp Drive (Item, Prefab, Recipe, Research — Non-Destructive)", BuildWarpDriveContent, 56);
-
-            AddInfo(scroll,
-                "Step 51 authors PLANET-SPECIFIC SKY + SPACE AMBIANCE profiles (non-destructive):\n" +
-                "  • Resolves each planet/moon to a sky theme (temperate, ice, volcanic, acid, moon, …)\n" +
-                "  • Preserves existing sky overrides, display colours, and runtime material properties\n" +
-                "  • Keeps the sky, nebula, eclipse-aware solar glare, and sparse dust shaders in standalone builds\n" +
-                "  • Missing display colours are filled from the theme so distant planets match their sky\n" +
-                "Re-runnable. Run after Step 21 / Step 49 when celestial worlds are present.");
-            AddWizardButton(scroll, "51. Author Planet Skies + Space Ambiance (Non-Destructive)", BuildPlanetSkyProfiles, 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 52 (Phase 5) authors the SINGULARITY REMNANTS — the real BLACK HOLE and QUASAR bodies (non-destructive):\n" +
-                "  • Adds a black hole to every solar system: real inverse-square gravity, a flyable event horizon,\n" +
-                "    a swirling Doppler-beamed accretion disc, tidal crush death ('COMPRESSED BY THE SINGULARITY')\n" +
-                "  • Promotes the quasar to a REAL distant body: bigger mass, accretion disc + lethal relativistic\n" +
-                "    polar jets that shear anything crossing them\n" +
-                "  • Both are seeded far beyond the planets (deep space); aim at their beacons and warp-lock to travel\n" +
-                "  • Enforces the ONE SUN policy: authored sun counts are normalized to 1\n" +
-                "  • Never overwrites authored physics, colours, or distances — creates only what is missing\n" +
-                "Re-runnable. Idempotent. Run after Step 21 / Step 49 / Step 51.");
-            AddWizardButton(scroll, "52. Author Singularity Remnants — Black Hole + Quasar (Non-Destructive)", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 53 (Phase 5) builds the SINGULARITY HARVESTER — the grid block that turns the black hole into an endgame resource node (non-destructive):\n" +
-                "  • Grand Large grid block with a contained mini black hole: lensed horizon sphere, spinning\n" +
-                "    accretion disc, glowing containment coils, amber collector tips\n" +
-                "  • Harvests SINGULARITY MATTER when within 2,500 km of a singularity's horizon — yield\n" +
-                "    climbs the closer you park (danger = reward); the quasar pays 1.5×\n" +
-                "  • Auto-pushes the resource into grid cargo containers; LCD screen data provider included\n" +
-                "  • Full authoring chain: resource item + prefab + item + recipe + tier-8 research after Warp Drive\n" +
-                "  • Never overwrites authored balance (rates, power, recipe inputs, research costs)\n" +
-                "Re-runnable. Idempotent. Run after Step 52 (the black hole must exist to harvest it).");
-            AddWizardButton(scroll, "53. Build Singularity Harvester (Resource, Prefab, Item, Recipe, Research — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityHarvesterSetup.RunStep53(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 54 (Phase 5) builds CONTAINMENT SYSTEMS for exotic matter (non-destructive):\n" +
-                "  • Antimatter (rare drop from black holes) + Dark Matter (rare drop from quasars)\n" +
-                "  • Containment-class storage: plain cargo REFUSES exotic matter — only the\n" +
-                "    Containment Vault accepts it (armoured, hazard-marked, violet containment ring)\n" +
-                "  • Portable canisters: Antimatter Canister / Dark Matter Canister (Assembler) —\n" +
-                "    the safe, stackable way to carry exotic matter; required for the future\n" +
-                "    Star Crafter / World Engine\n" +
-                "  • Research: Exotic Containment (tier 8) after Singularity Harvester\n" +
-                "  • Wires the harvester prefab's exotic-drop fields (only when null)\n" +
-                "Re-runnable. Idempotent. Run after Steps 52–53.");
-            AddWizardButton(scroll, "54. Build Containment Systems (Antimatter, Dark Matter, Vault, Canisters — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityContainmentSetup.RunStep54(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 55 (Phase 5) builds the ASTRAL NAVIGATOR navigation block (non-destructive):\n" +
-                "  • Pinpoints the black hole, the quasar, the sun, every planet and moon\n" +
-                "  • AUTO tracks the nearest body; SPECIFIC locks a chosen target (panel ◀ ▶)\n" +
-                "  • Projects a true waypoint marker — aim at it and engage the warp drive\n" +
-                "    to jump straight to the target (planets: 90 km orbit, singularities:\n" +
-                "    standoff corridor, sun: safe 50,000 km halo)\n" +
-                "  • Powered navigation: 6 kW while enabled\n" +
-                "  • Research: Astral Navigator (tier 6, Logistics) — the early travel bridge\n" +
-                "Re-runnable. Idempotent. Run after Steps 52–54.");
-            AddWizardButton(scroll, "55. Build Astral Navigator (Navigation Block, Waypoint, Warp Lock — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityLocatorSetup.RunStep55(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 56 (9.16.0) wires the LIQUIDS OVERHAUL (non-destructive):\n" +
-                "  • Renames the bucket to the LIQUID CANISTER (10 L, one liquid at a time):\n" +
-                "    RMB a liquid pool to scoop 0.5 L/click until full, LMB pours 0.5 L/click\n" +
-                "    into the world; RMB a liquid tank or water pump to pour in, RMB an\n" +
-                "    infinity jack pump to fill with crude oil\n" +
-                "  • Flags industrial planet templates so their lakes generate as\n" +
-                "    refined-product pools (rainbow-sheened fuel/oil lakes)\n" +
-                "  • The 7 liquids themselves are runtime (materials, sim physics, mesh\n" +
-                "    submeshes, shader profiles) — no assets needed\n" +
-                "Re-runnable. Idempotent. Run after Steps 52–55.");
-            AddWizardButton(scroll, "56. Wire the Liquids Overhaul (Liquid Canister, Industrial Worlds — Non-Destructive)", () => VoxelEngine.EditorTools.LiquidOverhaulSetup.RunStep56(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 57 (9.16.0) wires the FIRE SYSTEM (non-destructive):\n" +
-                "  • Creates the IGNITER tool — RMB a flammable liquid pool to set it\n" +
-                "    alight (liquid fuel, refined oil, MGO, crude oil, heavy fuel oil)\n" +
-                "  • Crafted at the Crafting Bench: 2 iron + 1 copper\n" +
-                "  • Fires burn fuel down, spread across pools, glow and flicker with\n" +
-                "    real light, and burn players who walk in; water/coolant quench them\n" +
-                "  • The sim, visuals, lights and FireURP shader are runtime — no assets\n" +
-                "Re-runnable. Idempotent. Run after Steps 52–56.");
-            AddWizardButton(scroll, "57. Wire the Fire System (Igniter Tool — Non-Destructive)", () => VoxelEngine.EditorTools.FireSystemSetup.RunStep57(), 48);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 58 (9.25.0) wires the WEATHER, CLIMATE & PLANETARY SEASONS system (non-destructive):\n" +
-                "  • Authors a themed climate profile on every planet/moon (version-gated):\n" +
-                "    desert = wind & dust, ice = snow & blizzard, ocean = heavy rain, airless = calm\n" +
-                "  • Planetary Seasons: 4-season astronomical calendar (Spring, Summer, Autumn, Winter)\n" +
-                "    with annual temperature oscillations, solar/wind modifiers, and freezing winter snow\n" +
-                "  • Authors the Grid Season Monitor & Grand Ground Planetary Observatory blocks & Screen Data Object\n" +
-                "  • High-performance procedural rain & snow particles, blizzard wind, synced thunder,\n" +
-                "    and spatial audio (no audio files needed)\n" +
-                "  • Ensures a single _Weather controller in the scene; reused if present\n" +
-                "Re-runnable. Idempotent. Authored climate values are never overwritten.");
-            AddWizardButton(scroll, "58. Wire Weather, Climate & Seasons (Snow, Seasons, Screens — Non-Destructive)", () => VoxelEngine.EditorTools.WeatherSystemSetup.RunStep58(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 59 (9.26.0) builds GEOLOGICAL PROSPECTING TOOLS & SPHERICAL ORE DETECTION (non-destructive):\n" +
-                "  • Handheld Geological Prospecting Scanner tool (Tool_ProspectingScanner.asset) + Crafting recipe\n" +
-                "  • Probes subterranean voxel layers (up to 24m) along the planet's radial down vector\n" +
-                "  • Grid Ore Detector spherical-safe radial coreward scanning and IGridDataProvider LCD screen telemetry\n" +
-                "Re-runnable. Idempotent. Authored tuning and custom components are never overwritten.");
-            AddWizardButton(scroll, "59. Build Geological Prospecting Tools (Scanner, Screen Telemetry, Spherical Ore Detection — Non-Destructive)", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 60 (9.27.0) wires AIRTIGHT ROOMS, PRESSURE & AIR VENTS (non-destructive):\n" +
-                "  • Authors the AIR VENT grid block in Large and Small sizes (prefab, item, recipe)\n" +
-                "  • Vents pressurise or depressurise the sealed room they face using grid O\u2082\n" +
-                "  • Marks every existing sliding / vault door prefab AIRTIGHT so already-built\n" +
-                "    ships and bases gain pressure hulls without being rebuilt\n" +
-                "  • Sealed rooms are detected automatically; a pressurised room is breathable\n" +
-                "    without a sealed suit, even in hard vacuum\n" +
-                "  • Recipes registered and linked to the Grid Utilities research node\n" +
-                "Re-runnable. Idempotent. Slide tuning, power draws and balance values are preserved.");
-            AddWizardButton(scroll, "60. Wire Airtight Rooms, Pressure & Air Vents (Sealed Rooms, Vents, Bulkhead Doors \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.AirtightSystemSetup.RunStep60(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 61 (9.29.0) wires BLOCK THERMAL SIMULATION, ATMOSPHERIC ENTRY & HEAT SHIELDS (non-destructive):\n" +
-                "  • Authors the HEAT SHIELD grid block in Large and Small sizes (prefab, item, recipe)\n" +
-                "  • Every hull block tracks a real temperature from planetary ambient, entry\n" +
-                "    heating and running thrusters; above 800 \u00B0C blocks start to burn\n" +
-                "  • Shields ablate a finite charge to protect themselves AND the block behind them\n" +
-                "  • Adds GridThermalSystem to every existing grid prefab so built ships are covered\n" +
-                "  • Recipes registered and linked to the Grid Utilities research node\n" +
-                "Re-runnable. Idempotent. Block HP, mass and power draws are preserved.");
-            AddWizardButton(scroll, "61. Wire Thermal Simulation, Atmospheric Entry & Heat Shields (Hull Heating, Ablative Shields \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.ThermalSystemSetup.RunStep61(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 62 (9.30.0) wires VISIBLE BLOCK DAMAGE, THRUSTER PLUME HAZARD & SUIT TEMPERATURE (non-destructive):\n" +
-                "  \u2022 Creates the Resources/VoxelEngineRuntime/BlockDamageOverlay material (procedural cracks,\n" +
-                "    soot and incandescent glow shell drawn over any damaged or hot block)\n" +
-                "  \u2022 Re-verifies GridThermalSystem on every grid prefab\n" +
-                "  \u2022 Runtime: thruster plumes heat/damage own hull, other grids, base blocks, creatures and the\n" +
-                "    player; hull cooling is slow; the suit has a real temperature (TMP strip in Suit Status)\n" +
-                "Re-runnable. Idempotent. Block HP, mass, power draws and authored material tweaks are preserved.");
-            AddWizardButton(scroll, "62. Wire Visible Block Damage, Thruster Plume Hazard & Suit Temperature (Cracks, Glow, Plumes \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.BlockDamageVisualSetup.RunStep62(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 63 (9.32.0) wires ENGINE ROOM (CONCEALED-SPACE) ATMOSPHERE & HEAT (non-destructive):\n" +
-                "  \u2022 Authors the EXHAUST SCRUBBER grid block in Large and Small sizes (prefab, item, recipe)\n" +
-                "  \u2022 Authors the GAS VENT (large) and VENT SLEEVE (small): the end of a gas run, which is\n" +
-                "    what makes exhaust disposable instead of a storage obligation — unpowered it still clears\n" +
-                "    the line by draft, powered it runs the extractor\n" +
-                "  \u2022 Engine combustion air becomes a three-way choice: piped O\u2082 (full power, and the engine\n" +
-                "    then takes air from nowhere else), a hole to the sky on a breathable planet (minus a little\n" +
-                "    power, blocked the moment you enclose it), or the room's own air (worst of the three)\n" +
-                "  \u2022 A dry oxygen line is now a choice on the engine panel: FALLBACK ON drops back to room or\n" +
-                "    planet air at that source's cost, STRICT holds the engine to the pipe and stalls it\n" +
-                "  \u2022 An exhaust stack's gas tap is now live whether or not anything is venting, and a pipe can\n" +
-                "    be snapped onto the stack or onto a player-installed gas port there (one run per stack)\n" +
-                "  \u2022 Sealed volumes now track their own atmosphere: trapped waste heat and accumulated exhaust\n" +
-                "  \u2022 Blocked-in exhaust stacks dump their heat into the room, run hotter and give the engine\n" +
-                "    back-pressure; engines drink the room's oxygen when no pipe feeds them and stall when it is gone\n" +
-                "  \u2022 A scrubber pumps heat and foul gas overboard, refills the volume from piped oxygen and banks\n" +
-                "    the captured gas as industrial ExhaustGas; an open hatch clears a cooked room for free\n" +
-                "  \u2022 Adds GridPressureSystem (and re-verifies GridThermalSystem) to every existing grid prefab so\n" +
-                "    already-built ships have compartments to track\n" +
-                "  \u2022 Compartment atmosphere is saved additively with the room oxygen charge; legacy saves load clean\n" +
-                "  \u2022 Recipes registered and linked to the Grid Utilities research node\n" +
-                "Re-runnable. Idempotent. Flow rates, power draws, block HP, mass and authored balance are preserved.");
-            AddWizardButton(scroll, "63. Wire Engine Room Atmosphere & Heat (Concealed Spaces, Exhaust Trapping, Scrubbers \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep63(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 64 (9.33.0) tunes VOLUME-AWARE VENTILATION on the blocks Step 63 introduced (non-destructive):\n" +
-                "  \u2022 Every flow number in this game was authored as absolute litres per second, which is fine\n" +
-                "    in a three-by-three engine closet and useless in a converted hangar: the room's litres scale\n" +
-                "    and the fan's do not. An automatic unit now keeps up with the compartment it serves.\n" +
-                "  \u2022 AIR VENT + VENTILATION UNIT: the authored flow becomes a ceiling the unit opens up to, with\n" +
-                "    a floor of half an air change per minute so a big room still turns over, and no scaling\n" +
-                "    at all without a gas line behind it, so a grille never conjures an atmosphere\n" +
-                "  \u2022 EXHAUST SCRUBBER: its air-change rating is held down to the feed line's litres per second,\n" +
-                "    so instead of starving the room and reading \"No Piped O\u2082\" it runs slower and reads \"Supply Limited\"\n" +
-                "  \u2022 GAS VENT + VENT SLEEVE: a sleeve blowing into a sealed compartment is metered to what that\n" +
-                "    compartment can absorb; overboard nothing changes, because there is no room to outrun\n" +
-                "  \u2022 Every panel now prints the air changes per minute it is actually honouring next to the\n" +
-                "    rating it was given, and an AUTO-SCALE / FIXED switch on the two vents pins it if you prefer\n" +
-                "    the old exact litres-per-second behaviour\n" +
-                "  \u2022 The two switches are saved additively per block, so a tuned line survives a reload and a\n" +
-                "    legacy save keeps the prefab defaults\n" +
-                "Re-runnable. Idempotent. Authored flow rates, power draws and balance values are never overwritten \u2014\n" +
-                "the step only raises values still sitting at an Unity default, which cannot have come from you.");
-            AddWizardButton(scroll, "64. Tune Volume-Aware Ventilation (Air Vents, Scrubbers, Gas Sleeves \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep64(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 65 (9.34.0) authors the ROUTE BOOK & RANGE CALCULATOR (non-destructive):\n" +
-                "  \u2022 ROUTE RECORDER (large) and NAV PLOTTER (Small): a navigation shelf bolted to the deck.\n" +
-                "    It records the run you actually fly \u2014 a point is added whenever the ship has moved \u2014 and\n" +
-                "    files it under a name you can reopen at any console on the same ship\n" +
-                "  \u2022 Every saved route is costed against the ship in front of you: distance, travel time, the\n" +
-                "    speed its own thrust can hold, the energy out of the batteries, what the grid burns while\n" +
-                "    the trip is being flown, and the reserve left at the far end\n" +
-                "  \u2022 Three profiles \u2014 ECONOMY, STANDARD, SPRINT \u2014 trade the same distance against time and watts\n" +
-                "  \u2022 A route that cannot be flown is refused by name: not enough thrust, no reserve, a gravity\n" +
-                "    well this ship cannot climb out of, a leg through an atmosphere, an arrival inside the body\n" +
-                "  \u2022 Waypoints pinned to a moon or planet ride it, so a run saved above an orbiting body is\n" +
-                "    still above that body eight hours later\n" +
-                "  \u2022 Routes are saved on the GRID, not on the block: a recorded run survives the recorder being\n" +
-                "    moved, replaced or rebuilt, and a legacy ship simply opens with an empty book\n" +
-                "  \u2022 No autopilot and no warp shortcut: this costs a flight, it does not fly it\n" +
-                "Re-runnable. Idempotent. Existing prefabs, items and recipes keep their mass, HP, power and craft costs.");
-            AddWizardButton(scroll, "65. Author Route Book & Range Calculator (Recorded Runs, Route Costing \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep65(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 66 (9.35.0) authors the REFUEL CONNECTOR & AUTO-RUN (non-destructive):\n" +
-                "  \u2022 REFUEL CONNECTOR (large) \u2014 a named waymark with a magnetic lock. Power, hydrogen,\n" +
-                "    liquid fuel and cargo cross between the two grids at the fitting's rating, one ship at\n" +
-                "    a time, and a mated ship is served at full rate where a hovering one gets 45 percent\n" +
-                "  \u2022 FUEL HATCH (Small) \u2014 soft capture, no lock, deliberately slower: the pad a deckhouse\n" +
-                "    or a small craft can actually afford\n" +
-                "  \u2022 AUTO-RUN PILOT research node under Grid Utilities: named ends, a target to leave at,\n" +
-                "    armed stop conditions, and the reserve rule that refuses a leg before it is started\n" +
-                "  \u2022 A loop is priced with the same call the route panel prints, so the schedule and the\n" +
-                "    arithmetic cannot disagree about what this ship can still do\n" +
-                "  \u2022 Reloaded worlds restore a loop PAUSED \u2014 a save never resumes a burn by itself\n" +
-                "  \u2022 RUN UNTIL IT RUNS OUT is offered, confirm-once: no reserve, fly until the numbers\n" +
-                "    refuse, then hold station and say why. Nothing here avoids terrain or flies a dock approach\n" +
-                "Re-runnable. Idempotent. Existing prefabs, items, recipes and research costs are preserved.");
-
-            AddWizardButton(scroll, "66. Author Refuel Connector & Auto-Run (Named Waymarks, Shuttle Loops \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.NavShuttleSetup.RunStep66(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 67 (9.36.0) authors the STATIC REFUEL PAD (non-destructive):\n" +
-                "  \u2022 A world-placed block in the Quarry's family (BlockItem + placedPrefab + PlacedBlock),\n" +
-                "    not a tiered definition: a pad is a machine you place, and it takes its tier from the\n" +
-                "    block system's own health and mining values\n" +
-                "  \u2022 Name it and it becomes a waymark, so a loop can be pointed at a ground base exactly\n" +
-                "    the way it is pointed at a station \u2014 the name is saved with the pad by position, like\n" +
-                "    a quarry's depth, and a destroyed pad loses its name instead of leaving a ghost record\n" +
-                "  \u2022 It is a real PowerConsumer on the base's wire network: 0 W while idle, its rated draw\n" +
-                "    while pumping, and it REFUSES to serve when the base cannot sustain that load rather\n" +
-                "    than trickle-charging a frigate on watts the grid does not have\n" +
-                "  \u2022 Fuel and cargo are plumbed in, not scavenged from whatever is nearby: a PadFuelTank node on\n" +
-                "    the fluid run so the base's pumps fill the pad, a PadGasTank carrying the collider\n" +
-                "    that makes it a gas endpoint, and a drum behind two port faces and the\n" +
-                "    IItemConsumer/IItemProvider API \u2014 item pipes AND belts, chutes and funnels can all\n" +
-                "    fill it or empty it, and the panel prints how many links each graph reports\n" +
-                "  \u2022 Serves ground rigs too: a car or lorry is a grid with wheels here, so a parked vehicle\n" +
-                "    takes the same queue, and a rig with no fuel tank asks for no fuel instead of hanging\n" +
-                "  \u2022 GROUND REFUEL PADS research node under Grid Utilities; Auto-Run Pilot now requires it\n" +
-                "Re-runnable. Idempotent. Pad watts, litres per second, tank and drum sizes, the six port faces,\n" +
-                "node offsets, item stats, recipe costs and research costs are preserved on a re-run.");
-            AddWizardButton(scroll, "67. Author Static Refuel Pad (Ground Pads for Non-Grid Bases \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.StaticRefuelSetup.RunStep67(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 68 (9.37.0) authors the GRID INSPECTOR OVERLAY research (non-destructive):\n" +
-                "  \u2022 Three research nodes gate the reader modes of the inspector overlay, in the order\n" +
-                "    the design settled: INTEGRITY SCAN first (structural awareness), THERMAL SCAN second\n" +
-                "    (engine-room awareness), CENTRE OF MASS last (ship design)\n" +
-                "  \u2022 INTEGRITY SCAN \u2014 tier 3 under Grid Utilities; THERMAL SCAN \u2014 tier 4, requires the\n" +
-                "    first; CENTRE OF MASS \u2014 tier 5, requires the second\n" +
-                "  \u2022 The runtime hotkey (rebindable in Settings, default K) walks the ring OFF \u2192 HEAT \u2192 DAMAGE \u2192\n" +
-                "    CENTRE OF MASS \u2192 OFF, skipping modes whose node is still locked; a press with nothing\n" +
-                "    unlocked says which node unlocks the reader, in one line; each mode is also selectable\n" +
-                "    from the overlay pill itself\n" +
-                "  \u2022 No prefab, item or recipe in this round: the overlay is a viewing mode that tints the\n" +
-                "    existing block renderers through per-renderer material-property data and restores them\n" +
-                "    the moment it is off\n" +
-                "Re-runnable. Idempotent. Existing node costs, research times, labels and descriptions are preserved.");
-            AddWizardButton(scroll, "68. Author Grid Inspector Overlay Research (Integrity Scan, Thermal Scan, Centre of Mass \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.GridInspectorSetup.RunStep68(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 69 (9.38.0) authors the DISTILLATION PLANT (non-destructive):\n" +
-                "  \u2022 A NEW wide plant-hall block \u2014 the Oil Refinery stays its legacy two-tank machine;\n" +
-                "    crude conversion happens only here. The model is a real plant: skid deck, drums,\n" +
-                "    main column with dome and platform rings, a stripper column, a stack and pipe work\n" +
-                "  \u2022 Six product outlets in a row along the front, each with an ANALOG DIAL above it \u2014\n" +
-                "    bezel and hub in that liquid's colour, a red needle that sweeps as the tank fills.\n" +
-                "    The crude and refined-oil inlets on the left end have dials of their own\n" +
-                "  \u2022 ATMOSPHERIC CUT \u2014 100 L crude \u2192 2 LPG / 8 naphtha / 12 kerosene / 26 diesel /\n" +
-                "    18 gasoline / 32 heavy fuel oil (98 L out; the 2 L off-gas loss arrives with the\n" +
-                "    flare-disposal round)\n" +
-                "  \u2022 RE-RUN REFINED OIL \u2014 conversion cut on the plant so legacy stock stays spendable\n" +
-                "  \u2022 NAPHTHA PLASTIC stays on the refinery next to its legacy plastic recipe (better per litre)\n" +
-                "  \u2022 Fuel-chain migration: Refine Crude Oil, Distil Heavy Fuel Oil and Distil Marine Gas\n" +
-                "    Oil are detached from the standing AND the ship refinery (the assets are kept for\n" +
-                "    saves that already run them)\n" +
-                "  \u2022 Block item + craft recipe gated by ATMOSPHERIC DISTILLATION research (tier 5, requires\n" +
-                "    Oil Refining). Existing names are renamed in place, so saves keep their blocks\n" +
-                "Re-runnable. Idempotent. Existing recipes, prefab lists, tuned tank numbers, dial wiring\n" +
-                "and research costs are preserved.");
-            AddWizardButton(scroll, "69. Author Distillation Plant Content (Atmospheric Cut, Re-Run, Naphtha Plastic \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 70 (9.39.0) authors FLARE STACK & HEAT RECOVERY (non-destructive):\n" +
-                "  \u2022 A stationary Flare Stack derrick tower (5.5m tall with pilot flame and heat recovery generator)\n" +
-                "    and Grid Flare Vents (Large & Small) as run terminators for surplus gases and liquids\n" +
-                "  \u2022 Destroys excess fractions (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil,\n" +
-                "    refined oil, crude oil) and off-gases so distillation never back-pressures\n" +
-                "  \u2022 Waste-Heat Power Recovery: converts thermal burn energy (approx 20%) into electrical\n" +
-                "    power directly onto the power grid\n" +
-                "  \u2022 Oxygen draw & casing thermal simulation: chokes if unventilated in a sealed room\n" +
-                "  \u2022 Gated under FLARE DISPOSAL & HEAT RECOVERY research (tier 5)\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "70. Author Flare Stack & Heat Recovery Content (Tower, Vents, Power Recovery \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.FlareStackSetup.RunStep70(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 71 (9.40.0) authors CATALYTIC CRACKING & DOWNSTREAM PETROCHEMICALS (non-destructive):\n" +
-                "  \u2022 Catalytic Cracker & Reformer machine: high-temperature reaction core with dynamic reactor\n" +
-                "    bed temperature, catalyst activity decay/replenishment, and 3 analog world dials\n" +
-                "  \u2022 Downstream Conversion Recipes: Fluid Catalytic Cracking (FCC: HFO \u2192 Diesel/Gasoline/LPG),\n" +
-                "    Continuous Catalytic Reforming (CCR: Naphtha \u2192 High-Octane Gasoline/LPG), Hydrocracking,\n" +
-                "    Synthetic Resin synthesis, Industrial Lubricant synthesis, and catalyst pellet syntheses\n" +
-                "  \u2022 4 New Items: Zeolite Catalyst, Platinum Catalyst Pellet, Synthetic Resin, Industrial Lubricant\n" +
-                "  \u2022 Gated under CATALYTIC CRACKING & PETROCHEMICALS research (tier 6, requires Atmospheric Distillation & Flare Disposal)\n" +
-                "Re-runnable. Idempotent.");
-            AddWizardButton(scroll, "71. Author Catalytic Cracking & Petrochemicals (Cracker, Catalysts, Polymers, Lubricants \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.CatalyticCrackingSetup.RunStep71(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 72 (9.41.0) authors ASPHALT ROADS (non-destructive):\n" +
-                "  \u2022 An ASPHALT ROAD block that DRAPES over the terrain (five ground samples per cell)\n" +
-                "    and AUTO-SHAPES from its neighbours \u2014 straight, bend, junction, crossing and ramp\n" +
-                "    are all one block: connected edges lose their kerb, so a run reads as one strip\n" +
-                "  \u2022 A ROAD PAVER tool: hold LMB and drag to lay a continuous run (skipped cells are\n" +
-                "    interpolated), RMB lifts one back. Block-by-block placement stays as the fallback\n" +
-                "  \u2022 Worth something: faster on foot, more drive traction and lateral grip for wheels\n" +
-                "  \u2022 Not free: PER-RUN wear from traffic (weighted by grid mass), grading that doubles\n" +
-                "    the material on rough ground and refuses ground rougher than the tolerance, and no\n" +
-                "    paving underwater or inside a wall without a culvert\n" +
-                "  \u2022 The material chain: BLOW BITUMEN (40 L Heavy Fuel Oil \u2192 4 Bitumen) on both chemical\n" +
-                "    plants, MIX HOT ASPHALT (1 Bitumen + 2 Sand + 3 Gravel \u2192 8 Asphalt) on every\n" +
-                "    assembler, then Asphalt \u2192 road block and \u2192 the paver's repair stock\n" +
-                "  \u2022 Gated under ASPHALT ROADS research (tier 6, requires Atmospheric Distillation)\n" +
-                "  \u2022 Wear is saved additively per block; legacy saves restore roads brand new\n" +
-                "Re-runnable. Idempotent. Existing block health, mining tier, stack size, mass, craft\n" +
-                "times, recipe quantities and research cost/tier/column are never reset.");
-            AddWizardButton(scroll, "72. Author Asphalt Roads Content (Road Block, Paver Tool, Bitumen + Hot Mix Chain \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.AsphaltRoadSetup.RunStep72(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 74 (9.51.0) creates dedicated AUTO-RUN PILOT blocks (Large and Small).\n" +
-                "Placeable models, icons, crafting recipes, Auto-Run Piloting research and save-catalog links.\n" +
-                "Right-click a pilot to plan and start unattended road runs; no separate Route Recorder needed.\n" +
-                "Create missing content and repair links only. Existing tuning, custom visuals and costs are preserved.");
-            AddWizardButton(scroll, "74. Create / Repair Auto-Run Pilot Blocks (Large + Small — Non-Destructive)",
-                () => IndustrialWorld.EditorTools.AutoRunPilotSetup.RunStep74(), 62);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 75 (9.58.0) authors the UNIVERSAL MACHINE UPGRADE MODULES (non-destructive):\n" +
-                "  \u2022 MACHINE SPEED MODULE and MACHINE EFFICIENCY MODULE \u2014 the modules the Electric\n" +
-                "    Furnace and the Oil Refinery upgrade slots read. They had no assets at all, so those\n" +
-                "    slots could never be filled; only the Quarry's Range/Speed/Efficiency modules and the\n" +
-                "    maritime engine modules existed.\n" +
-                "  \u2022 x1.25 speed per Speed Module, x0.8 power draw per Efficiency Module, stacking across\n" +
-                "    the machine's upgrade slots\n" +
-                "  \u2022 Crafted at an ASSEMBLER, unlocked by the existing ADVANCED MANUFACTURING research\n" +
-                "    (the node keeps its cost, tier and column)\n" +
-                "  \u2022 Generated icons, recipe quantities and save-catalogue links\n" +
-                "Create missing content and repair links only \u2014 existing multipliers, descriptions,\n" +
-                "icons, recipe quantities and research settings are never reset.");
-            AddWizardButton(scroll, "75. Author Universal Machine Upgrade Modules (Speed + Efficiency \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75(), 62);
-            AddWizardButton(scroll, "76. Convert the Jack Pump to a Tank-Only Crude Producer\n(No input barrels, no output slots \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76(), 62);
-            AddWizardButton(scroll, "77. Build the Storage Chest Tiers\n(Wooden Crate 9 / Iron Chest 18 / Steel Chest 36 \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.StorageChestTiersSetup.RunStep77(), 62);
-            AddWizardButton(scroll, "78. Build the Logistic Chests\n(Provider / Requester / Buffer \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.LogisticChestsSetup.RunStep78(), 62);
-            AddWizardButton(scroll, "79. Audit and Repair Item Identity\n(Unauthored item ids + duplicate report \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79(), 62);
-            AddWizardButton(scroll, "80. Consolidate the Ore Items\n(Iron Ore + Copper Ore become canonical, duplicates retired)",
-                () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80(), 62);
-            AddWizardButton(scroll, "81. Repair Stolen Item Identity\n(Gravel, Radar Beacon and Fire Igniter stop claiming to be Iron Ore \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81(), 62);
-            AddWizardButton(scroll, "82. Build the Drone Port\n(Long-range logistics relay, 400 m \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.DronePortSetup.RunStep82(), 62);
-            AddWizardButton(scroll, "83. Build the Transmission Tower\n(High-voltage 128 m power span \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.TransmissionTowerSetup.RunStep83(), 62);
-            AddWizardButton(scroll, "84. Build the Orbital Programme\n(Orbital Map, Satellite Research Station, research \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.OrbitalProgrammeSetup.RunStep84(), 62);
-            AddWizardButton(scroll, "85. Build the Rail System\n(Track, switch, buffer, station, locomotive \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.RailSystemSetup.RunStep85(), 62);
-            AddWizardButton(scroll, "86. Build the Deep Core Programme\n(Survey scanner + deep ore extractor \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86(), 62);
-            AddWizardButton(scroll, "87. Build Livestock Husbandry\n(Farmable animals + livestock pen \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.LivestockHusbandrySetup.RunStep87(), 62);
-            AddWizardButton(scroll, "88. Build Boss Relic Cores\n(Boss variants + relic-gated research \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.BossRelicSetup.RunStep88(), 62);
-            AddWizardButton(scroll, "89. Build the Orbital Station Family\n(Hammer wheel station pieces + research \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.OrbitalStationSetup.RunStep89(), 62);
-            AddWizardButton(scroll, "90. Build Station Life Support\n(Pressurises sealed station rooms \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.StationLifeSupportSetup.RunStep90(), 62);
-            AddWizardButton(scroll, "91. Build the Interplanetary Cargo Pad\n(Bulk freight between worlds \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.CargoPadSetup.RunStep91(), 62);
-            AddWizardButton(scroll, "92. Build the Rail Truck\n(Train System v2 \u2014 any grid runs on rails \u2014 needs 85 \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.RailTruckSetup.RunStep92(), 62);
-            AddWizardButton(scroll, "93. Build the Rail Layer\n(Drag-to-lay track, 1-3 gauge \u2014 needs 85 \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.RailLayerSetup.RunStep93(), 62);
-            AddWizardButton(scroll, "94. Build the Rail Signal\n(Block occupancy readout \u2014 needs 85 \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.RailSignalSetup.RunStep94(), 62);
-            AddWizardButton(scroll, "95. Build Steampunk Displays & Schedules\n(Split-flap, nixie, analog + train schedule block \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.RailDisplaySetup.RunStep95(), 62);
-            AddWizardButton(scroll, "96. Build the Steam Railway\n(Steam engine + grand water tower \u2014 needs 95 \u2014 Non-Destructive)",
-                () => IndustrialWorld.EditorTools.RailSteamSetup.RunStep96(), 62);
-            AddWizardButton(scroll, "97. Build Warp Coil Resonator\n(Upgrade item + recipe + research \u2014 needs 50 \u2014 Non-Destructive)",
-                BuildWarpCoilResonance, 62);
-            AddWizardButton(scroll, "98. Build Warp Gate\n(Paired fixed-structure transit \u2014 needs 50 \u2014 Non-Destructive)",
-                BuildWarpGateContent, 56);
-            AddWizardButton(scroll, "99. Build Portals\n(Framed paired portals by name + code \u2014 needs 98 \u2014 Non-Destructive)",
-                BuildPortalContent, 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 100 wires the HAMMER BUILD WHEEL (non-destructive):\n" +
-                "  \u2022 Creates the HammerBuildWheel object + UIDocument on the player when missing\n" +
-                "  \u2022 Links the shared MenuPanelSettings, the Inventory and the TieredBlockRegistry only when they are null\n" +
-                "  \u2022 Raises the sorting order only when it was never set \u2014 an authored value is kept\n" +
-                "  \u2022 Audits every structural and orbital-station family and names the ones that will\n" +
-                "    render as a locked wedge (missing definition or missing base-tier prefab)\n" +
-                "Re-runnable. Idempotent. Nothing already authored is replaced.\n" +
-                "Run AFTER step 2 and step 5 (and step 89 for the station set).");
-            AddWizardButton(scroll, "100. Wire the Hammer Build Wheel\n(Radial build dial \u2014 links + registry audit \u2014 Non-Destructive)",
-                () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep100(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 101 wires the REST OF THE RADIAL WHEEL FAMILY (non-destructive):\n" +
-                "  \u2022 Conveyor shape wheel (Straight / Ramp / Vertical)\n" +
-                "  \u2022 Grid armour shape wheel (Cube / Slope / Half / Half-slope / Corner / Inverted)\n" +
-                "  \u2022 Energy pipe shape wheel (nine conduit fittings)\n" +
-                "  \u2022 Road surface wheel (Asphalt / Pathway / Drawbridge)\n" +
-                "  \u2022 Jump drive wheel (charted worlds, beacons and route points on the Warp Drive key)\n" +
-                "All five share one dial: same hold-flick-release, same cursor lock, same drawn icons.\n" +
-                "Re-runnable. Idempotent. Adds only the components that are missing.\n" +
-                "Run AFTER step 2.");
-            AddWizardButton(scroll, "101. Wire the Radial Wheel Family\n(Conveyor, armour, pipe, road + jump drive \u2014 Non-Destructive)",
-                () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep101(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 102 rebuilds ALL HAMMER CONSTRUCTION at Size-V6 with tiered surfaces:\n" +
-                "  \u2022 Module 7.5 m square (double the old footprint), storey 5.625 m (half again the old height)\n" +
-                "  \u2022 Strong exterior / weak interior on every wall-like piece:\n" +
-                "      Wood  \u2014 laid logs outside, posts and cross-braces inside\n" +
-                "      Stone \u2014 fitted masonry outside, rough hewn rubble inside\n" +
-                "      Sheet Metal \u2014 corrugated scrap outside, L-beam grid inside\n" +
-                "      Armoured \u2014 matte plate and rivets outside, tread-plate bracing inside\n" +
-                "  \u2022 New pieces: Wall Frame (wide opening), Garage Door (roll-up shutter), Floor Hatch (lid + ladder)\n" +
-                "  \u2022 Orbital Station rebuilt on the same module so both families share seams\n" +
-                "  \u2022 Every piece welded into combined meshes \u2014 rich detail, three draw calls\n" +
-                "  \u2022 BuildSystemV2 grid, snap radius and reach raised to match (only if still on defaults)\n" +
-                "Re-runnable. Costs are NEVER overwritten, and a prefab carrying custom work is left untouched.\n" +
-                "Run AFTER step 5. Pieces placed before this step keep their save data but were authored at the old module.");
-            AddWizardButton(scroll, "102. Rebuild Construction at Size-V6\n(Bigger modules + tiered strong/weak surfaces + garage and hatch)",
-                () => VoxelEngine.EditorTools.TieredRebuildSetup.RunStep102(), 72);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 103 anchors every runtime-created shader for standalone builds:\n" +
-                "  \u2022 Creates dedicated terrain and water materials under Resources/VoxelEngineRuntime\n" +
-                "  \u2022 Creates one build-reachable material anchor for every VoxelEngine runtime shader\n" +
-                "  \u2022 Anchors the URP Lit, Unlit and particle fallbacks used by procedural visuals\n" +
-                "  \u2022 Preserves existing material properties and repairs shader links only\n" +
-                "  \u2022 Adds a pre-build check so missing anchors fail clearly instead of shipping magenta surfaces\n" +
-                "Re-runnable and idempotent. Run once before the next standalone build.");
-            AddWizardButton(scroll, "103. Anchor Runtime Shaders for Builds\n(Terrain + water + procedural shader inclusion - Non-Destructive)",
-                () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103(), 64);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 104 authors the Code Lock:\n" +
-                "  \u2022 Item_CodeLock (crafted at the Crafting Bench: 6 Iron Ingot + 4 Copper Ingot)\n" +
-                "  \u2022 Recipe registered in the RecipeRegistry, item in the persistence catalog\n" +
-                "  \u2022 Fits on doors, gates, garage doors and floor hatches with a right-click\n" +
-                "Re-runnable and idempotent. Existing assets are connected, never replaced.");
-            AddWizardButton(scroll, "104. Build Code Lock\n(Item + recipe + persistence catalog - Non-Destructive)",
-                () => VoxelEngine.EditorTools.CodeLockSetup.RunStep104(), 56);
-
-            AddSpacer(scroll, 6);
-            AddInfo(scroll,
-                "Step 105 wires the multiplayer bootstrap (requires the Fish-Net asset, run in the MAIN GAME scene):\n" +
-                "  \u2022 NetworkPlayerAvatar prefab (networked body + visor + nameplate) under VoxelEngineAssets/Networking\n" +
-                "  \u2022 'Network' scene object with NetworkManager, Tugboat transport and NetworkBootstrap\n" +
-                "  \u2022 Avatar prefab connected to the bootstrap; Fish-Net registers it automatically\n" +
-                "Re-runnable and idempotent. Save the scene afterwards. Host/Join lives in the pause menu.");
-            AddWizardButton(scroll, "105. Wire Multiplayer Bootstrap\n(Avatar prefab + NetworkManager scene object - Non-Destructive)",
-                () => VoxelEngine.EditorTools.NetworkSetup.RunStep105(), 56);
-
-            AddSpacer(scroll, 6);
-            AddWizardButton(scroll, "106. Team Banners & Crusader Shield\n(Shield item + banner blocks + recipes - Non-Destructive)",
-                () => VoxelEngine.EditorTools.BannerSetup.RunStep106(), 56);
-            AddWizardButton(scroll, "107. Mass-storage Security Block\n(Guard block + item + recipe - Non-Destructive)",
-                () => VoxelEngine.EditorTools.SecurityBlockSetup.RunStep107(), 56);
-            AddWizardButton(scroll, "108. Mass-storage Overhaul\n(Data Pipe + handheld Wireless Terminal + rebrands - Non-Destructive)",
-                () => VoxelEngine.EditorTools.StorageOverhaulSetup.RunStep108(), 56);
-
-            AddWizardButton(scroll, "109. Storage Network Polish\n(External Storage block + importer/exporter visual overhaul - Non-Destructive)",
-                () => VoxelEngine.EditorTools.StorageNetworkPolishSetup.RunStep109(), 56);
-
-            AddWizardButton(scroll, "110. Drawer Facelift\n(Steel Storage Drawer + Drawer Controller fronts - Non-Destructive)",
-                () => VoxelEngine.EditorTools.DrawerFaceliftSetup.RunStep110(), 56);
-
-            AddWizardButton(scroll, "111. Network Auto-Crafting\n(Blank Pattern item + recipe + controller crafter - Non-Destructive)",
-                () => VoxelEngine.EditorTools.AutoCraftingSetup.RunStep111(), 56);
-
-            AddWizardButton(scroll, "113. Welder Tool\n(Repair tool + recipe, pays HP in material - Non-Destructive)",
-                VoxelEngine.EditorTools.WelderSetup.Run, 48);
-            AddWizardButton(scroll, "114. Airborne Pollution\n(Sparse smog, source profiles, carbon harvester + research - Non-Destructive)",
-                () => VoxelEngine.EditorTools.PollutionSystemSetup.RunStep114(), 56);
-            AddWizardButton(scroll, "112. Keep-Stocked Logistics\n(Crafting Card upgrade + editable filters - Non-Destructive)",
-                () => VoxelEngine.EditorTools.CraftingCardSetup.RunStep112(), 56);
-
+                "Setup actions are grouped by system and numbered automatically in the order shown.\n" +
+                "Start with Core & Project Bootstrap, then open only the groups you need.\n" +
+                "Most content actions are idempotent; review each completion dialog and the Console before continuing.");
+
+            BuildOrganizedSetupList(scroll);
             AddSpacer(scroll, 20);
+        }
+
+        private readonly struct SetupEntry
+        {
+            public readonly string Label;
+            public readonly System.Action Action;
+
+            public SetupEntry(string label, System.Action action)
+            {
+                Label = label;
+                Action = action;
+            }
+        }
+
+        private static SetupEntry Setup(string label, System.Action action)
+            => new SetupEntry(label, action);
+
+        private void BuildOrganizedSetupList(UnityEngine.UIElements.VisualElement parent)
+        {
+            int number = 1;
+
+            AddSetupGroup(parent, ref number, "Core & Project Bootstrap",
+                "Create the shared registries and core scenes first. These actions are the foundation used by every content group.", true,
+                Setup("Create all base assets and registries", CreateAllAssets),
+                Setup("Ensure material definitions and hand-mineable soft materials", () =>
+                {
+                    VoxelEngine.EditorTools.MaterialDefinitionAuthoring.EnsureMaterialDefinitions();
+                    VoxelEngine.EditorTools.MaterialDefinitionAuthoring.NormalizeSoftTiers();
+                }),
+                Setup("Spawn player and UI in the active scene", SpawnManagerAndPlayer),
+                Setup("Build the main-menu scene", BuildMainMenuScene),
+                Setup("Build base crafting, tools, stations and blocks", BuildBaseCraftingContent),
+                Setup("Build research tree, science packs and research lab", BuildResearchContent),
+                Setup("Anchor runtime shaders for standalone builds", () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103()),
+                Setup("Wire multiplayer bootstrap in the active game scene", () => VoxelEngine.EditorTools.NetworkSetup.RunStep105()));
+
+            AddSetupGroup(parent, ref number, "Worlds, Biomes & Space",
+                "Planet authoring, celestial content and orbital progression are kept together. The complete celestial-world action owns Sol creation, so the old separate Sol setup is retired.", false,
+                Setup("Author or repair the Earth planet template", () => VoxelEngine.EditorTools.CosmosAuthoring.AuthorEarthTemplate()),
+                Setup("Build celestial ruins", BuildCelestialRuinsContent),
+                Setup("Build celestial worlds, themed biomes and Sol registration", BuildCelestialWorldsContent),
+                Setup("Initialize atmosphere and space profiles", BuildAtmosphereSpaceProfiles),
+                Setup("Author planet skies and space ambiance", BuildPlanetSkyProfiles),
+                Setup("Author black hole and quasar remnants", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52()),
+                Setup("Build the Singularity Harvester", () => VoxelEngine.EditorTools.SingularityHarvesterSetup.RunStep53()),
+                Setup("Build exotic containment systems", () => VoxelEngine.EditorTools.SingularityContainmentSetup.RunStep54()),
+                Setup("Build the Astral Navigator", () => VoxelEngine.EditorTools.SingularityLocatorSetup.RunStep55()),
+                Setup("Build the orbital programme", () => IndustrialWorld.EditorTools.OrbitalProgrammeSetup.RunStep84()));
+
+            AddSetupGroup(parent, ref number, "Construction & Building Tools",
+                "Player-scale construction, shape wheels and build tools.", false,
+                Setup("Build tiered player construction content", BuildTieredContent),
+                Setup("Setup grid shape variants", () => VoxelEngine.EditorTools.GridShapeVariantSetup.RunStep18()),
+                Setup("Build the paint tool and cosmetic finishes", BuildPaintToolContent),
+                Setup("Wire the hammer build wheel", () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep100()),
+                Setup("Wire conveyor, armour, pipe, road and jump-drive wheels", () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep101()),
+                Setup("Rebuild construction at Size-V6", () => VoxelEngine.EditorTools.TieredRebuildSetup.RunStep102()),
+                Setup("Build the code lock", () => VoxelEngine.EditorTools.CodeLockSetup.RunStep104()),
+                Setup("Build the welder repair tool", VoxelEngine.EditorTools.WelderSetup.Run));
+
+            AddSetupGroup(parent, ref number, "Factory, Industry & Power",
+                "Core production, power infrastructure, petroleum processing and industrial upgrades.", false,
+                Setup("Build power content", BuildPowerContent),
+                Setup("Build industrial content", BuildIndustrialContent),
+                Setup("Build survival and industrial logistics content", BuildSurvivalAndLogisticsContent),
+                Setup("Build stationary and grid floodlights", BuildFloodlightContent),
+                Setup("Build wind-power content", BuildWindmillContent),
+                Setup("Build factory foundations, conveyors and high-voltage grid", BuildFactoryFoundationsContent),
+                Setup("Add or repair factory prefab visuals", () => VoxelEngine.EditorTools.FactoryPrefabVisualsBuilder.BuildAll()),
+                Setup("Build geological prospecting and ore detection", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59()),
+                Setup("Author the distillation plant", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69()),
+                Setup("Author flare stacks and heat recovery", () => VoxelEngine.EditorTools.FlareStackSetup.RunStep70()),
+                Setup("Author catalytic cracking and petrochemicals", () => VoxelEngine.EditorTools.CatalyticCrackingSetup.RunStep71()),
+                Setup("Author universal machine upgrade modules", () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75()),
+                Setup("Convert the jack pump to tank-only crude output", () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76()),
+                Setup("Build the deep-core programme", () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86()));
+
+            AddSetupGroup(parent, ref number, "Fluids, Atmosphere & Environment",
+                "Water, liquids, weather, pressure, thermal hazards and pollution. The duplicate spherical-water action was removed; one action now owns that setup.", false,
+                Setup("Build native spherical fluids, pools, pumps, pipes and wakes", BuildFluidContent),
+                Setup("Wire the liquids overhaul", () => VoxelEngine.EditorTools.LiquidOverhaulSetup.RunStep56()),
+                Setup("Wire the fire system and igniter", () => VoxelEngine.EditorTools.FireSystemSetup.RunStep57()),
+                Setup("Wire weather, climate and seasons", () => VoxelEngine.EditorTools.WeatherSystemSetup.RunStep58()),
+                Setup("Wire airtight rooms, pressure and air vents", () => VoxelEngine.EditorTools.AirtightSystemSetup.RunStep60()),
+                Setup("Wire thermal simulation, entry heating and heat shields", () => VoxelEngine.EditorTools.ThermalSystemSetup.RunStep61()),
+                Setup("Wire visible block damage, plume hazards and suit temperature", () => VoxelEngine.EditorTools.BlockDamageVisualSetup.RunStep62()),
+                Setup("Wire engine-room atmosphere, exhaust and scrubbers", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep63()),
+                Setup("Tune volume-aware ventilation", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep64()),
+                Setup("Build airborne pollution and atmospheric carbon capture", () => VoxelEngine.EditorTools.PollutionSystemSetup.RunStep114()));
+
+            AddSetupGroup(parent, ref number, "Grids, Ships & Navigation",
+                "Ship blocks, maritime systems, displays, travel, refuelling and station infrastructure.", false,
+                Setup("Build the grid ship and vehicle system", BuildGridSystemContent),
+                Setup("Build maritime propulsion and mechanical networks", BuildMaritimeContent),
+                Setup("Setup grid screens, displays and camera block", () => VoxelEngine.EditorTools.GridScreenSetup.RunStep19()),
+                Setup("Build the warp drive", BuildWarpDriveContent),
+                Setup("Author route book and range calculator", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep65()),
+                Setup("Author refuel connectors and auto-run", () => VoxelEngine.EditorTools.NavShuttleSetup.RunStep66()),
+                Setup("Author static ground refuel pads", () => VoxelEngine.EditorTools.StaticRefuelSetup.RunStep67()),
+                Setup("Author grid-inspector overlay research", () => VoxelEngine.EditorTools.GridInspectorSetup.RunStep68()),
+                Setup("Create dedicated auto-run pilot blocks", () => IndustrialWorld.EditorTools.AutoRunPilotSetup.RunStep74()),
+                Setup("Build the drone port", () => IndustrialWorld.EditorTools.DronePortSetup.RunStep82()),
+                Setup("Build the transmission tower", () => IndustrialWorld.EditorTools.TransmissionTowerSetup.RunStep83()),
+                Setup("Build the orbital station family", () => IndustrialWorld.EditorTools.OrbitalStationSetup.RunStep89()),
+                Setup("Build station life support", () => IndustrialWorld.EditorTools.StationLifeSupportSetup.RunStep90()),
+                Setup("Build the warp-coil resonator", BuildWarpCoilResonance),
+                Setup("Build paired warp gates", BuildWarpGateContent),
+                Setup("Build named and coded portals", BuildPortalContent));
+
+            AddSetupGroup(parent, ref number, "Storage & Logistics",
+                "Storage tiers, network logistics, freight and automated crafting.", false,
+                Setup("Build storage chest tiers", () => IndustrialWorld.EditorTools.StorageChestTiersSetup.RunStep77()),
+                Setup("Build provider, requester and buffer chests", () => IndustrialWorld.EditorTools.LogisticChestsSetup.RunStep78()),
+                Setup("Build the interplanetary cargo pad", () => IndustrialWorld.EditorTools.CargoPadSetup.RunStep91()),
+                Setup("Build the mass-storage security block", () => VoxelEngine.EditorTools.SecurityBlockSetup.RunStep107()),
+                Setup("Build the mass-storage data-pipe overhaul", () => VoxelEngine.EditorTools.StorageOverhaulSetup.RunStep108()),
+                Setup("Polish storage-network blocks", () => VoxelEngine.EditorTools.StorageNetworkPolishSetup.RunStep109()),
+                Setup("Apply the drawer facelift", () => VoxelEngine.EditorTools.DrawerFaceliftSetup.RunStep110()),
+                Setup("Build network auto-crafting", () => VoxelEngine.EditorTools.AutoCraftingSetup.RunStep111()),
+                Setup("Build keep-stocked logistics filters", () => VoxelEngine.EditorTools.CraftingCardSetup.RunStep112()));
+
+            AddSetupGroup(parent, ref number, "Roads & Railways",
+                "Road surfaces, water crossings and the complete rail family.", false,
+                Setup("Author asphalt roads and road paver", () => VoxelEngine.EditorTools.AsphaltRoadSetup.RunStep72()),
+                Setup("Author road water crossings", () => VoxelEngine.EditorTools.RoadBridgeSetup.RunStep73()),
+                Setup("Build the base rail system", () => IndustrialWorld.EditorTools.RailSystemSetup.RunStep85()),
+                Setup("Build the rail truck", () => IndustrialWorld.EditorTools.RailTruckSetup.RunStep92()),
+                Setup("Build the drag-to-lay rail layer", () => IndustrialWorld.EditorTools.RailLayerSetup.RunStep93()),
+                Setup("Build rail signals", () => IndustrialWorld.EditorTools.RailSignalSetup.RunStep94()),
+                Setup("Build railway displays and schedules", () => IndustrialWorld.EditorTools.RailDisplaySetup.RunStep95()),
+                Setup("Build the steam railway", () => IndustrialWorld.EditorTools.RailSteamSetup.RunStep96()));
+
+            AddSetupGroup(parent, ref number, "Combat, Weapons & Defences",
+                "All player weapons, explosives, armour and defensive weapons are grouped together.", false,
+                Setup("Build combat foundation, sword, pistol and training dummy", BuildCombatContent),
+                Setup("Build Crusader armour tiers", BuildArmorContent),
+                Setup("Build grenade and rifle", BuildExplosiveContent),
+                Setup("Build the powder keg", BuildPowderKegContent),
+                Setup("Build the Tsar bomb", BuildTsarBombContent),
+                Setup("Build the antimatter bomb", BuildAntimatterBombContent),
+                Setup("Build the auto turret", BuildTurretContent),
+                Setup("Build the heavy artillery cannon", BuildArtilleryCannonContent),
+                Setup("Build the minigun turret", BuildArtilleryMinigunContent),
+                Setup("Build the Schwerer Gustav", BuildArtilleryGustavContent),
+                Setup("Build the flamethrower turret", BuildFlamethrowerTurretContent),
+                Setup("Build the mortar turret", BuildMortarTurretContent),
+                Setup("Build the giant-shell turret", BuildGiantShellTurretContent),
+                Setup("Build the anti-air flak turret", BuildAntiAirTurretContent),
+                Setup("Build the energy and relic turret", BuildEnergyRelicTurretContent),
+                Setup("Refresh jetpack fuel accounting", BuildJetpackFuelContent),
+                Setup("Build armour stations and timed upgrades", BuildArmorStationsAndUpgrades),
+                Setup("Build team banners and Crusader shield", () => VoxelEngine.EditorTools.BannerSetup.RunStep106()));
+
+            AddSetupGroup(parent, ref number, "Creatures, Enemies & Bosses",
+                "All passive animals, mounts, hostile creatures, mythical enemies and boss progression are in one place.", false,
+                Setup("Build the Ghoul enemy", BuildEnemyContent),
+                Setup("Build passive livestock", BuildLivestockContent),
+                Setup("Build the rideable horse", BuildHorseContent),
+                Setup("Build the Manticore", BuildManticoreContent),
+                Setup("Build the flying Griffin", BuildGriffinContent),
+                Setup("Build the charging Karkadann", BuildKarkadannContent),
+                Setup("Build the Ifrit Djinn", BuildIfritContent),
+                Setup("Build the Roc mini-boss", BuildRocContent),
+                Setup("Build the Basilisk", BuildBasiliskContent),
+                Setup("Build livestock husbandry", () => IndustrialWorld.EditorTools.LivestockHusbandrySetup.RunStep87()),
+                Setup("Build boss relic cores and boss variants", () => IndustrialWorld.EditorTools.BossRelicSetup.RunStep88()));
+
+            AddSetupGroup(parent, ref number, "Maintenance & Repair",
+                "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
+                Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
+                Setup("Consolidate duplicate ore items", () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80()),
+                Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
+                Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
+                Setup("Rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
+                Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()));
+        }
+
+        private static void AddSetupGroup(UnityEngine.UIElements.VisualElement parent, ref int number,
+            string title, string description, bool expanded, params SetupEntry[] entries)
+        {
+            var foldout = new UnityEngine.UIElements.Foldout
+            {
+                text = $"{title} ({entries.Length})",
+                value = expanded
+            };
+            foldout.style.marginBottom = 8;
+            foldout.style.unityFontStyleAndWeight = FontStyle.Bold;
+
+            var help = new UnityEngine.UIElements.Label(description);
+            help.style.whiteSpace = UnityEngine.UIElements.WhiteSpace.Normal;
+            help.style.unityFontStyleAndWeight = FontStyle.Normal;
+            help.style.marginLeft = 8;
+            help.style.marginRight = 4;
+            help.style.marginBottom = 6;
+            help.style.color = new Color(0.72f, 0.75f, 0.80f);
+            foldout.Add(help);
+
+            for (int i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+                AddWizardButton(foldout, $"{number++}. {entry.Label}", entry.Action, 48);
+            }
+            parent.Add(foldout);
         }
 
         private static void AddInfo(UnityEngine.UIElements.VisualElement parent, string text)
@@ -1021,6 +343,7 @@ namespace VoxelEngine.EditorTools
             var button = new UnityEngine.UIElements.Button(() => QueueWizardAction(action)) { text = text };
             button.style.height = height;
             button.style.marginBottom = 4;
+            button.style.whiteSpace = UnityEngine.UIElements.WhiteSpace.Normal;
             button.style.unityFontStyleAndWeight = FontStyle.Bold;
             parent.Add(button);
         }
@@ -1528,7 +851,7 @@ namespace VoxelEngine.EditorTools
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
                     "The active scene does not look like a gameplay scene yet.\n\n" +
-                    "Run Step 2 to spawn the Player + UI, or open your existing game scene before running this step.", "OK");
+                    "Run Core & Project Bootstrap -> Spawn player and UI, or open your existing game scene before running this step.", "OK");
                 return;
             }
 
@@ -1959,7 +1282,7 @@ namespace VoxelEngine.EditorTools
                 "* 16 recipes across all 3 station tiers\n" +
                 "* 3 smelting recipes (auto-loaded into Furnace)\n\n" +
                 "Trees now drop Wood Logs when chopped.\n" +
-                "RecipeRegistry asset is wired into the GameUI automatically when you re-run Step 2.", "OK");
+                "RecipeRegistry asset is wired into the GameUI automatically when you re-run Spawn player and UI.", "OK");
         }
 
         // ============================================================
@@ -2208,7 +1531,7 @@ namespace VoxelEngine.EditorTools
                 $"{ITEM_FOLDER}/{retiredName}.asset");
             if (retired != null)
                 Debug.LogWarning("[Setup] Canonical " + canonicalName + " is missing; using the retired " +
-                                 retiredName + " instead. Run step 80 (Consolidate the Ore Items) to fix this.");
+                                 retiredName + " instead. Run Maintenance & Repair -> Consolidate duplicate ore items to fix this.");
             return retired;
         }
 
@@ -2998,7 +2321,7 @@ namespace VoxelEngine.EditorTools
             if (recipeRegistry == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 first — RecipeRegistry.asset doesn\'t exist yet.", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first — RecipeRegistry.asset doesn\'t exist yet.", "OK");
                 return;
             }
 
@@ -3120,7 +2443,7 @@ namespace VoxelEngine.EditorTools
                 "* TieredBlockRegistry asset created\n" +
                 $"* Size-V5 prefabs migrated this run: {migratedSizeV5PrefabCount}\n" +
                 "* Seamless Foundation deck, bidirectional edge/doorway stairs, player-away Doors, and finite late-game Quarry migration verified\n\n" +
-                "Re-run Step 2 to spawn a player with BuildSystemV2 wired up,\n" +
+                "Re-run Core & Project Bootstrap -> Spawn player and UI to wire BuildSystemV2,\n" +
                 "or manually add the BuildSystemV2 component and assign the registry.",
                 "OK");
         }
@@ -3183,7 +2506,7 @@ namespace VoxelEngine.EditorTools
             if (copperIngot == null || ironIngot == null || steelIngot == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 (Build Crafting Content) first - it creates Iron / Copper / Steel ingots which the power system needs.", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first - it creates Iron / Copper / Steel ingots which the power system needs.", "OK");
                 return;
             }
 
@@ -3348,7 +2671,7 @@ namespace VoxelEngine.EditorTools
             if (woodLog == null || ironIngot == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 (Build Crafting Content) first - it creates wood/iron items the research tree needs.", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first - it creates wood/iron items the research tree needs.", "OK");
                 return;
             }
 
@@ -3415,7 +2738,7 @@ namespace VoxelEngine.EditorTools
             if (recipeRegistry == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 first - RecipeRegistry.asset doesn\'t exist.", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first - RecipeRegistry.asset doesn\'t exist.", "OK");
                 return;
             }
             // Science pack recipes (always unlocked).
@@ -3681,7 +3004,7 @@ namespace VoxelEngine.EditorTools
             if (ironIngot == null || copperIngot == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 first (need iron+copper ingots).", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first (need iron+copper ingots).", "OK");
                 return;
             }
 
@@ -3853,7 +3176,7 @@ namespace VoxelEngine.EditorTools
 
             // ---- 6) Recipes ----
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
-            if (recipeRegistry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Step 4 first.", "OK"); return; }
+            if (recipeRegistry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Core & Project Bootstrap -> Build base crafting first.", "OK"); return; }
 
             AddRecipe("Recipe_WaterBucket", "Liquid Canister", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
             AddRecipe("Recipe_TankSolid", "Water Tank (Solid)", bTankSolid, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 6));
@@ -4279,7 +3602,7 @@ namespace VoxelEngine.EditorTools
             if (ironIngot == null || copperIngot == null || steelIngot == null || woodLog == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 (Build Crafting Content) first — it creates the ingot/wood items the industrial pack depends on.", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first — it creates the ingot/wood items the industrial pack depends on.", "OK");
                 return;
             }
 
@@ -4290,13 +3613,13 @@ namespace VoxelEngine.EditorTools
             if (sciT1 == null || sciT2 == null || sciT3 == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 7 (Build Research Content) first — it creates the Science Pack items the industrial pack depends on.", "OK");
+                    "Run Core & Project Bootstrap -> Build research content first — it creates the Science Pack items the industrial pack depends on.", "OK");
                 return;
             }
 
             // Recipe registry (created by Step 4).
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
-            if (registry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Step 4 first.", "OK"); return; }
+            if (registry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Core & Project Bootstrap -> Build base crafting first.", "OK"); return; }
 
             // ====================================================================
             //  1) NEW RESOURCE ITEMS — plates, gears, wires, circuits, oil chain
@@ -4332,8 +3655,23 @@ namespace VoxelEngine.EditorTools
             var circuitBasic= MakeIndustrialResource("Item_Circuit",    "Electronic Circuit", "PCB with copper traces on an iron substrate. Brain of every machine.", new Color(0.30f, 0.65f, 0.40f), VoxelEngine.Items.ResourceCategory.Component, "Electronics");
             var circuitAdv  = MakeIndustrialResource("Item_AdvCircuit", "Advanced Circuit",  "Layered logic board. Powers high-tier automation and digital storage.",   new Color(0.30f, 0.55f, 0.95f), VoxelEngine.Items.ResourceCategory.Component, "Electronics");
 
-            // ─ Glass (smelted from sand) ─
+            // ─ Processed materials ─
             var glass       = MakeIndustrialResource("Item_Glass",      "Glass",          "Clear pane fused from sand. Used in lab equipment and storage windows.",   new Color(0.70f, 0.88f, 0.95f), VoxelEngine.Items.ResourceCategory.Component, "Materials");
+            string graphitePath = $"{itemsFolder}/Item_Graphite.asset";
+            ItemDefinition graphite = AssetDatabase.LoadAssetAtPath<ItemDefinition>(graphitePath);
+            if (graphite == null)
+            {
+                graphite = MakeIndustrialResource("Item_Graphite", "Graphite",
+                    "Refined carbon used in electrodes, electrical components and industrial recipes.",
+                    new Color(0.18f, 0.19f, 0.21f), VoxelEngine.Items.ResourceCategory.Raw, "Materials");
+            }
+            graphite.itemId = "graphite";
+            if (string.IsNullOrWhiteSpace(graphite.displayName)) graphite.displayName = "Graphite";
+            if (string.IsNullOrWhiteSpace(graphite.description))
+                graphite.description = "Refined carbon used in electrodes, electrical components and industrial recipes.";
+            if (graphite.maxStack <= 0) graphite.maxStack = 999;
+            if (graphite.massPerUnit <= 0f) graphite.massPerUnit = 1f;
+            EditorUtility.SetDirty(graphite);
 
             // ─ Oil chain ─
             // Crude is a liquid drawn by the Jack Pump into its own tank, and the
@@ -4687,7 +4025,7 @@ namespace VoxelEngine.EditorTools
             var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>(treePath);
             if (tree == null)
             {
-                EditorUtility.DisplayDialog("Voxel Engine", "Run Step 7 (Build Research Content) first — the ResearchTree asset doesn't exist yet.", "OK");
+                EditorUtility.DisplayDialog("Voxel Engine", "Run Core & Project Bootstrap -> Build research content first — the ResearchTree asset doesn't exist yet.", "OK");
                 return;
             }
 
@@ -5435,17 +4773,17 @@ namespace VoxelEngine.EditorTools
             if (ironIngot == null || ironPlate == null || circuit == null || sciT1 == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Steps 4 + 7 + 10 first — Step 11 expects the ingots / plates / circuits / science packs to exist.", "OK");
+                    "Run base crafting, research content and industrial content first — Step 11 expects the ingots / plates / circuits / science packs to exist.", "OK");
                 return;
             }
 
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
-            if (registry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Step 4 first.", "OK"); return; }
+            if (registry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Core & Project Bootstrap -> Build base crafting first.", "OK"); return; }
 
             const string researchFolder = ASSET_ROOT + "/Research";
             const string nodesFolder    = researchFolder + "/Nodes";
             var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>(researchFolder + "/ResearchTree.asset");
-            if (tree == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Step 7 first.", "OK"); return; }
+            if (tree == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Core & Project Bootstrap -> Build research content first.", "OK"); return; }
 
             // ============================================================
             //  Generic helpers  (local to Step 11 to keep things readable)
@@ -7279,7 +6617,7 @@ root =>
 
             if (steelPlate == null || circuit == null)
             {
-                EditorUtility.DisplayDialog("Voxel Engine", "Run Step 10 (Industrial Content) first.", "OK");
+                EditorUtility.DisplayDialog("Voxel Engine", "Run Factory, Industry & Power -> Build industrial content first.", "OK");
                 return;
             }
 
@@ -8172,7 +7510,7 @@ root =>
 
             if (steelPlate == null || circuit == null)
             {
-                EditorUtility.DisplayDialog("Voxel Engine", "Run Steps 4, 6, 7, 10, 12 first.", "OK");
+                EditorUtility.DisplayDialog("Voxel Engine", "Run base crafting, power, research, industrial and grid-system content first.", "OK");
                 return;
             }
 
@@ -9023,7 +8361,7 @@ root =>
             var glass = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{ASSET_ROOT}/Industrial/Items/Item_Glass.asset");
             if (ironIngot == null || copperWire == null || glass == null)
             {
-                EditorUtility.DisplayDialog("Voxel Engine", "Run Steps 4 and 10 (Industrial Content) first.", "OK");
+                EditorUtility.DisplayDialog("Voxel Engine", "Run base crafting and industrial content first.", "OK");
                 return;
             }
 
@@ -9274,7 +8612,7 @@ root =>
             {
                 EditorUtility.DisplayDialog(
                     "Voxel Engine — Step 17",
-                    "Step 17 needs the base crafting, power, research, and industrial content first.\n\nRun Steps 4, 6, 7, and 10, then run Step 17 again.",
+                    "Step 17 needs the base crafting, power, research, and industrial content first.\n\nRun base crafting, power, research and industrial content, then run Factory Foundations again.",
                     "OK");
                 return;
             }
@@ -12140,7 +11478,7 @@ root =>
                 foreach (var rn in ruinNames)
                 {
                     var ruin = LoadRuin(rn);
-                    if (ruin == null) { Debug.LogWarning($"[CelestialWorlds] Ruin prefab not found: {rn} (run Step 20 first)"); continue; }
+                    if (ruin == null) { Debug.LogWarning($"[CelestialWorlds] Ruin prefab not found: {rn} (run Worlds, Biomes & Space -> Build celestial ruins first)"); continue; }
                     bool has = false;
                     foreach (var e in list) if (e.prefab == ruin) { has = true; break; }
                     if (!has) list.Add(new BiomeDefinition.ScatterEntry { prefab = ruin, density = density, minScale = 1.1f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
@@ -12250,7 +11588,7 @@ root =>
                 "• Runtime CosmosTemplateLibrary + Asteroids_MainBelt repaired automatically\n\n" +
                 "New surface materials: Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode.\n" +
                 "Ruins now spawn on their own world via biome scatter (~0.0006 density).\n\n" +
-                "IMPORTANT: re-run Step 1 (Create All Assets) once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
+                "IMPORTANT: re-run Core & Project Bootstrap -> Create all base assets once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
                 "OK");
         }
 
@@ -16367,7 +15705,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "4. Templar's Plate (38%)\n" +
                 "5. Paladin's Bulwark (50%)\n" +
                 "6. Stellar Archon Plate (62%)\n\n" +
-                "Armor recipes are now reserved for the Armor Station. Run Step 48 to generate or repair both armor stations, upgrade modules, research links, and timed anvil installation.\n" +
+                "Armor recipes are now reserved for the Armor Station. Run Combat, Weapons & Defences -> Build armour stations to generate or repair both armor stations, upgrade modules, research links, and timed anvil installation.\n" +
                 "Equip: put armor in your hotbar, select it, and press RMB. Old armor returns to your inventory with installed upgrades intact.",
                 "OK");
         }

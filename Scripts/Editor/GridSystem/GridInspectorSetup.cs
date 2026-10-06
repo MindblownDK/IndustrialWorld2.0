@@ -34,9 +34,6 @@ namespace VoxelEngine.EditorTools
         public const string HEAT_PATH = NODES + "/res_grid_inspector_heat.asset";
         public const string COM_PATH = NODES + "/res_grid_inspector_com.asset";
 
-        [MenuItem("Tools/Voxel Engine/Setup Step 68 — Grid Inspector Overlay Research")]
-        public static void RunStep68Menu() => RunStep68();
-
         public static void RunStep68()
         {
             Debug.Log("[GridInspectorSetup] Step 68 — Grid Inspector research started.");

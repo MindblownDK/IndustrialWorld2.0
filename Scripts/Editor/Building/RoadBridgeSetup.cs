@@ -68,9 +68,6 @@ namespace VoxelEngine.EditorTools
         private const float DECK_MASS   = 140f;
         private const int   DECK_HEALTH = 900;
 
-        [MenuItem("Tools/Voxel Engine/Run Step 73 (Water Crossings)", priority = 73)]
-        public static void RunStep73Menu() => RunStep73();
-
         public static void RunStep73()
         {
             Debug.Log("[RoadBridgeSetup] Step 73 - Water Crossings started.");
@@ -166,7 +163,7 @@ namespace VoxelEngine.EditorTools
             else
             {
                 Debug.LogWarning("[RoadBridgeSetup] " + AsphaltRoadSetup.PAVER_ITEM + " not found. " +
-                                 "Run Step 72 (Asphalt Roads) first, then re-run Step 73 to wire the " +
+                                 "Run Roads & Railways -> Author asphalt roads first, then re-run Author road water crossings to wire the " +
                                  "paver's bridge fields.");
             }
 

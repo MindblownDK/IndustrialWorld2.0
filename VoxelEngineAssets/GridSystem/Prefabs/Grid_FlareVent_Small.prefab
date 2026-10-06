@@ -1082,6 +1082,7 @@ GameObject:
   - component: {fileID: 2699170207767661119}
   - component: {fileID: 6716069249102966104}
   - component: {fileID: 1821692645482630186}
+  - component: {fileID: 89939098269609429}
   m_Layer: 0
   m_Name: Grid_FlareVent_Small
   m_TagString: Untagged
@@ -1153,3 +1154,18 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.5, y: 0.5, z: 0.5}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &89939098269609429
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8727218165462987105}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a858a7cc4fa459fab852748ae426b85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.PollutionEmitter
+  profile: {fileID: 11400000, guid: ea0763044cbdcf441ae6c68ef853d5fe, type: 2}
+  emissionMultiplier: 1
+  reportInterval: 1

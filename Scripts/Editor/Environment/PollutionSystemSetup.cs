@@ -1,7 +1,8 @@
 // Assets/Scripts/Editor/Environment/PollutionSystemSetup.cs
 //
-// Step 114 - Phase 1 airborne pollution content. Non-destructive: creates missing
-// assets/components, reconnects missing references, and preserves authored tuning.
+// Phase 1 airborne pollution content setup (RunStep114 is retained as a stable API).
+// Non-destructive: creates missing assets/components, reconnects missing references,
+// and preserves authored tuning.
 
 #if UNITY_EDITOR
 using System;
@@ -38,6 +39,7 @@ namespace VoxelEngine.EditorTools
         private const string CatalogPath = "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset";
 
         private const string CarbonPath = ItemsFolder + "/Item_CarbonConcentrate.asset";
+        private const string GraphitePath = Root + "/Industrial/Items/Item_Graphite.asset";
         private const string HarvesterPrefabPath = PrefabsFolder + "/AtmosphericCarbonHarvester.prefab";
         private const string HarvesterBlockPath = BlocksFolder + "/Block_AtmosphericCarbonHarvester.asset";
         private const string HarvesterRecipePath = RecipesFolder + "/Recipe_AtmosphericCarbonHarvester.asset";
@@ -56,22 +58,16 @@ namespace VoxelEngine.EditorTools
             if (registry == null)
             {
                 EditorUtility.DisplayDialog("Pollution System",
-                    "Run Step 4 (Build Crafting Content) first. RecipeRegistry.asset is missing.", "OK");
+                    "Run Core & Project Bootstrap -> Build base crafting first. RecipeRegistry.asset is missing.", "OK");
                 return;
             }
-
-            var graphite = FindItem("graphite", "Item_Graphite");
-            if (graphite == null)
-            {
-                EditorUtility.DisplayDialog("Pollution System",
-                    "The existing Graphite item could not be found. Run the industrial content setup steps first.", "OK");
-                return;
-            }
+            registry.recipes ??= new List<RecipeDefinition>();
 
             try
             {
                 EnsureFolders();
                 int created = 0, repaired = 0, preserved = 0;
+                var graphite = EnsureGraphiteItem(ref created, ref repaired, ref preserved);
 
                 var combustion = EnsureProfile(ProfilesFolder + "/PollutionSource_Combustion.asset",
                     "combustion", "Solid-Fuel Combustion",
@@ -112,6 +108,7 @@ namespace VoxelEngine.EditorTools
                     new[] { new RecipeIngredient { item = carbon, count = 4 } }, registry,
                     ref created, ref repaired, ref preserved);
 
+                EnsurePersisted(graphite);
                 EnsurePersisted(carbon);
                 EnsurePersisted(block);
                 EnsureResearch(harvesterRecipe, graphiteRecipe, ref created, ref repaired, ref preserved);
@@ -120,13 +117,13 @@ namespace VoxelEngine.EditorTools
 
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
-                Debug.Log($"[Setup 114] Pollution setup complete. Created {created}, repaired {repaired}, " +
+                Debug.Log($"[PollutionSetup] Complete. Created {created}, repaired {repaired}, " +
                           $"preserved {preserved}; {sources} emitting prefab(s) audited.");
-                EditorUtility.DisplayDialog("Step 114 - Airborne Pollution",
+                EditorUtility.DisplayDialog("Airborne Pollution Setup",
                     "Phase 1 pollution content is ready.\n\n" +
                     "Created/reconnected:\n" +
                     "  - Data-driven profiles on combustion, process, flare and exhaust prefabs\n" +
-                    "  - Atmospheric Carbon Harvester + Carbon Concentrate\n" +
+                    "  - Graphite, Atmospheric Carbon Harvester + Carbon Concentrate\n" +
                     "  - Carbon Concentrate to Graphite recipe\n" +
                     "  - Atmospheric Carbon Capture research\n\n" +
                     $"Created: {created}   Repaired: {repaired}   Preserved: {preserved}\n" +
@@ -134,7 +131,7 @@ namespace VoxelEngine.EditorTools
             }
             catch (Exception ex)
             {
-                Debug.LogError("[Setup 114] Pollution setup failed: " + ex);
+                Debug.LogError("[PollutionSetup] Failed: " + ex);
                 EditorUtility.DisplayDialog("Pollution System", "Setup stopped: " + ex.Message, "OK");
             }
         }
@@ -166,6 +163,58 @@ namespace VoxelEngine.EditorTools
             }
             EditorUtility.SetDirty(profile);
             return profile;
+        }
+
+        private static ItemDefinition EnsureGraphiteItem(ref int created, ref int repaired, ref int preserved)
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<ItemDefinition>(GraphitePath)
+                ?? FindItem("graphite", "Item_Graphite");
+            if (existing == null)
+            {
+                EnsureFolder(Path.GetDirectoryName(GraphitePath)?.Replace('\\', '/'));
+                if (AssetDatabase.LoadMainAssetAtPath(GraphitePath) != null)
+                    throw new InvalidOperationException("Graphite asset path is occupied by a non-item asset: " + GraphitePath);
+
+                var graphite = ScriptableObject.CreateInstance<ResourceItem>();
+                graphite.itemId = "graphite";
+                graphite.displayName = "Graphite";
+                graphite.description = "Refined carbon used in electrodes, electrical components and industrial recipes.";
+                graphite.category = "Resources";
+                graphite.subcategory = ResourceCategory.Raw;
+                graphite.maxStack = 999;
+                graphite.massPerUnit = 1f;
+                graphite.fuelSeconds = 0f;
+                graphite.iconTint = new Color(0.18f, 0.19f, 0.21f);
+                AssetDatabase.CreateAsset(graphite, GraphitePath);
+                created++;
+                return graphite;
+            }
+
+            bool dirty = false;
+            if (!string.Equals(existing.itemId, "graphite", StringComparison.OrdinalIgnoreCase))
+            {
+                existing.itemId = "graphite";
+                dirty = true;
+            }
+            if (string.IsNullOrWhiteSpace(existing.displayName))
+            {
+                existing.displayName = "Graphite";
+                dirty = true;
+            }
+            if (string.IsNullOrWhiteSpace(existing.description))
+            {
+                existing.description = "Refined carbon used in electrodes, electrical components and industrial recipes.";
+                dirty = true;
+            }
+            if (existing.maxStack <= 0) { existing.maxStack = 999; dirty = true; }
+            if (existing.massPerUnit <= 0f) { existing.massPerUnit = 1f; dirty = true; }
+            if (dirty)
+            {
+                repaired++;
+                EditorUtility.SetDirty(existing);
+            }
+            else preserved++;
+            return existing;
         }
 
         private static ResourceItem EnsureCarbonItem(ref int created, ref int repaired, ref int preserved)
