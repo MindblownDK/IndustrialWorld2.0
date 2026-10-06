@@ -18,6 +18,7 @@ using UnityEngine.InputSystem;
 using VoxelEngine.Biomes;
 using VoxelEngine.Core;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Weather
 {
@@ -487,6 +488,20 @@ namespace VoxelEngine.Weather
             bool noPrecip = profile.precipitation == WeatherClimateProfile.Precipitation.None;
             bool snow = IsSnowBiome || profile.precipitation == WeatherClimateProfile.Precipitation.Snow || seasonInfo.isFreezing;
 
+            // A polluted atmosphere modestly favours precipitation: weather "fights back"
+            // without locking the player into storms. The local plume matters most, body-wide
+            // burden supplies a smaller background term, and the total response is hard-capped
+            // at ten percentage points. Existing dilution/recovery lowers this on later rolls.
+            if (!noPrecip && playerCamera != null)
+            {
+                PollutionTelemetry air = PollutionService.TelemetryAt(playerCamera.position);
+                float burden = Mathf.Clamp01(air.LocalAir01 * 0.72f + air.BodyAir01 * 0.28f);
+                float response = Mathf.SmoothStep(0f, 0.10f,
+                    Mathf.InverseLerp(0.08f, 0.75f, burden));
+                roll = Mathf.Clamp01(roll - response);
+                storm = Mathf.Clamp01(storm + response * 0.65f);
+            }
+
             // First cycle on arrival: guarantee a VISIBLE weather move so a freshly entered
             // world does not read as "clear forever".
             if (_pendingFirstCycle)
@@ -502,41 +517,47 @@ namespace VoxelEngine.Weather
                 return;
             }
 
-            // Desert / ash worlds: wind & overcast only — NEVER rain or snow.
+            // Desert / ash worlds: wind & occasional overcast only — NEVER rain or snow.
             if (noPrecip)
             {
-                TargetState = roll < Mathf.Clamp01(overcast + 0.3f) ? WeatherState.Overcast : WeatherState.Clear;
+                TargetState = roll < Mathf.Clamp01(overcast + 0.12f) ? WeatherState.Overcast : WeatherState.Clear;
                 LogStateChange();
                 return;
             }
 
             if (snow)
             {
-                // Snow / winter: clear/overcast -> snow -> blizzard, scaled by storm chance.
-                if (CurrentState == WeatherState.Clear || CurrentState == WeatherState.Overcast)
-                    TargetState = roll < 0.55f ? WeatherState.Snow
-                                : (roll < Mathf.Clamp01(overcast + 0.25f) ? WeatherState.Overcast : WeatherState.Clear);
+                // Snow / winter still spends real time under a clear sky. Pollution can shift
+                // these thresholds by at most the capped response above.
+                if (CurrentState == WeatherState.Clear)
+                    TargetState = roll < 0.18f ? WeatherState.Snow
+                                : (roll < Mathf.Clamp01(0.18f + overcast * 0.45f) ? WeatherState.Overcast : WeatherState.Clear);
+                else if (CurrentState == WeatherState.Overcast)
+                    TargetState = roll < 0.28f ? WeatherState.Snow
+                                : (roll < 0.50f ? WeatherState.Overcast : WeatherState.Clear);
                 else if (CurrentState == WeatherState.Snow)
                     TargetState = roll < storm ? WeatherState.Blizzard
-                                : (roll < 0.70f ? WeatherState.Snow : WeatherState.Clear);
+                                : (roll < 0.52f ? WeatherState.Snow : WeatherState.Clear);
                 else // Blizzard
-                    TargetState = roll < 0.5f ? WeatherState.Blizzard : WeatherState.Snow;
+                    TargetState = roll < 0.24f ? WeatherState.Blizzard
+                                : (roll < 0.58f ? WeatherState.Snow : WeatherState.Clear);
             }
             else
             {
-                // Temperate biomes: clear -> overcast -> rain -> heavy rain.
+                // Temperate weather now returns to clear conditions frequently; pollution adds
+                // only a small bounded nudge toward rain and heavy rain.
                 if (CurrentState == WeatherState.Clear)
-                    TargetState = roll < 0.40f ? WeatherState.Overcast
-                                : (roll < 0.70f ? WeatherState.LightRain : WeatherState.Clear);
+                    TargetState = roll < 0.20f ? WeatherState.Overcast
+                                : (roll < 0.32f ? WeatherState.LightRain : WeatherState.Clear);
                 else if (CurrentState == WeatherState.Overcast)
-                    TargetState = roll < 0.55f ? WeatherState.LightRain
-                                : (roll < 0.80f ? WeatherState.Overcast : WeatherState.Clear);
+                    TargetState = roll < 0.28f ? WeatherState.LightRain
+                                : (roll < 0.54f ? WeatherState.Overcast : WeatherState.Clear);
                 else if (CurrentState == WeatherState.LightRain)
                     TargetState = roll < storm ? WeatherState.HeavyRain
-                                : (roll < 0.75f ? WeatherState.LightRain : WeatherState.Overcast);
+                                : (roll < 0.55f ? WeatherState.LightRain : WeatherState.Clear);
                 else // HeavyRain
-                    TargetState = roll < 0.45f ? WeatherState.HeavyRain
-                                : (roll < 0.85f ? WeatherState.LightRain : WeatherState.Overcast);
+                    TargetState = roll < 0.25f ? WeatherState.HeavyRain
+                                : (roll < 0.56f ? WeatherState.LightRain : WeatherState.Clear);
             }
 
             LogStateChange();

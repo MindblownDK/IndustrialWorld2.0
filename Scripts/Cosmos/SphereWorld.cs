@@ -1751,6 +1751,36 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
+        /// Chunk-independent generated surface query for maps and other coarse overview UI.
+        /// This reads the same analytic density column used by terrain generation, so geography
+        /// remains available outside the streamed voxel bubble without blocking chunk access.
+        /// The direction is body-local; returned radius is metres from the body's centre.
+        /// </summary>
+        public bool TrySampleAnalyticMapSurface(Vector3 localRadialDirection,
+            out float surfaceRadius, out byte surfaceMaterial, out bool isOcean)
+        {
+            surfaceRadius = 0f;
+            surfaceMaterial = (byte)MaterialId.Air;
+            isOcean = false;
+            if (body == null || !_biomes.IsCreated || _biomes.Length == 0) return false;
+
+            Vector3 radialUp = localRadialDirection.sqrMagnitude > 0.0001f
+                ? localRadialDirection.normalized
+                : Vector3.up;
+            SphereDensity.EvaluateColumn(body.genParams, _biomes, (float3)radialUp,
+                out surfaceRadius, out int biomeIndex);
+            biomeIndex = Mathf.Clamp(biomeIndex, 0, _biomes.Length - 1);
+            surfaceMaterial = _biomes[biomeIndex].surfaceMat;
+            isOcean = surfaceRadius < body.genParams.seaRadius - 0.25f;
+            if (isOcean)
+            {
+                surfaceRadius = body.genParams.seaRadius;
+                surfaceMaterial = (byte)MaterialId.WaterLiquid;
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Fast radial surface sample for dense visual systems such as grass. It evaluates one
         /// density column and probes only the handful of voxel cells around that exact surface,
         /// avoiding the former 145-cell radial scan per blade candidate.

@@ -17,12 +17,19 @@ MonoBehaviour:
   description: 'Crude Engine (1x2x1). FUEL: Wood Logs / Planks / Coal (solid fuel
     from cargo). Low torque, high fuel efficiency - perfect for starter paddleboats.
     Exposed brass pistons, small copper boiler, sputtering smoke. REQUIRES adjacent
-    Exhaust Pipe. Can fit 1 Small Turbocharger.'
+    Exhaust Pipe. Can fit 1 Small Turbocharger.
+
+
+    Routed air emissions: 500 g/s
+    PM-eq at full load before exhaust capture and scrubbing.'
   icon: {fileID: 21300000, guid: db69a2bcab35e64716a1cfe36949129c, type: 3}
   iconTint: {r: 0.5, g: 0.35, b: 0.18, a: 1}
   maxStack: 20
   massPerUnit: 1
   category: Maritime
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
   blockPrefab: {fileID: 8349647232198590195, guid: c5c1cc93aad8a1945b07c6ebb8db1cac, type: 3}

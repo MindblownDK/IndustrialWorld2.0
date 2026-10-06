@@ -37,6 +37,37 @@ namespace VoxelEngine.Environment
         };
     }
 
+    /// <summary>
+    /// Scientific display conversion for the simulation's compact pollution units.
+    /// One simulation unit represents 0.1 kg of particulate-matter-equivalent industrial
+    /// emissions (PM-eq). Gameplay remains tuned in sparse units while every player-facing
+    /// value uses SI mass and mass-flow units.
+    /// </summary>
+    public static class PollutionUnits
+    {
+        public const float KilogramsPerUnit = 0.1f;
+
+        public static float ToKilograms(float units) => Mathf.Max(0f, units) * KilogramsPerUnit;
+
+        public static string FormatRate(float unitsPerSecond)
+        {
+            float kgPerSecond = ToKilograms(unitsPerSecond);
+            if (kgPerSecond >= 1f) return $"{kgPerSecond:0.##} kg/s PM-eq";
+            float gramsPerSecond = kgPerSecond * 1000f;
+            if (gramsPerSecond >= 1f) return $"{gramsPerSecond:0.#} g/s PM-eq";
+            return $"{gramsPerSecond * 1000f:0.#} mg/s PM-eq";
+        }
+
+        public static string FormatMass(float units)
+        {
+            float kilograms = ToKilograms(units);
+            if (kilograms >= 1000f) return $"{kilograms / 1000f:0.##} t PM-eq";
+            if (kilograms >= 1f) return $"{kilograms:0.##} kg PM-eq";
+            float grams = kilograms * 1000f;
+            return grams >= 1f ? $"{grams:0.#} g PM-eq" : $"{grams * 1000f:0.#} mg PM-eq";
+        }
+    }
+
     [Serializable]
     public sealed class PollutionCellRecord
     {

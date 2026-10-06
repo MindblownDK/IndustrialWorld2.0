@@ -23,6 +23,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Building;
 using VoxelEngine.Crafting;
+using VoxelEngine.Environment;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using VoxelEngine.Simulation;
@@ -65,6 +66,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Items.DeathLootBag _openLootBag; // death loot bag behind _rightContainer (14.36.0)
         private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
         private Furnace        _openFurnace;
+        private readonly List<PollutionEmitter> _displayPollutionEmitters = new(4);
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
         private VoxelEngine.Power.CoalGeneratorFuel _openCoalGen;
@@ -1557,6 +1559,8 @@ namespace VoxelEngine.UI
                 else if (_openPowerBattery != null) _contentLayer.Add(BuildRightPowerBattery(_openPowerBattery));
                 else if (_openArmorUpgradeStation != null) BuildRightArmorUpgradeStation(_contentLayer, _openArmorUpgradeStation);
                 else if (_openStation  != null) BuildRightStationCrafting(_contentLayer, _openStation);
+
+                AppendOpenMachinePollutionTelemetry(_contentLayer);
             }
             else
             {
@@ -1565,6 +1569,90 @@ namespace VoxelEngine.UI
             }
 
             RestorePanelScrollOffsets();
+        }
+
+        /// <summary>
+        /// Adds one consistent emissions card to whichever pollution-producing machine
+        /// panel is currently open. This deliberately stays out of permanent HUD space.
+        /// Maritime engines resolve the exhaust-pipe emitters that actually release gas.
+        /// </summary>
+        private void AppendOpenMachinePollutionTelemetry(VisualElement content)
+        {
+            Component source = null;
+            if (_openFurnace != null) source = _openFurnace;
+            else if (_openElectric != null) source = _openElectric;
+            else if (_openCoalGen != null) source = _openCoalGen;
+            else if (_openGridBlock != null) source = _openGridBlock;
+            else if (_openOilRefinery != null) source = _openOilRefinery;
+            else if (_openDistillationPlant != null) source = _openDistillationPlant;
+            else if (_openCatalyticCracker != null) source = _openCatalyticCracker;
+            else if (_openFlareStack != null) source = _openFlareStack;
+            else if (_openChemPlant != null) source = _openChemPlant;
+            if (source == null || content == null || content.childCount == 0) return;
+
+            PollutionEmitter.CollectForDisplay(source, _displayPollutionEmitters);
+            var routedEngine = source.GetComponent<VoxelEngine.Maritime.GridMaritimeEngine>()
+                ?? source.GetComponentInParent<VoxelEngine.Maritime.GridMaritimeEngine>();
+            float routedFallback = routedEngine != null && routedEngine.routedPollutionProfile != null
+                ? Mathf.Max(0f, routedEngine.routedPollutionProfile.perSecond.airborneSmog)
+                : 0f;
+            if (_displayPollutionEmitters.Count == 0 && routedFallback <= 0f) return;
+
+            float current = 0f;
+            float rated = 0f;
+            float lifetime = 0f;
+            for (int i = 0; i < _displayPollutionEmitters.Count; i++)
+            {
+                var emitter = _displayPollutionEmitters[i];
+                if (emitter == null) continue;
+                current += emitter.CurrentAirbornePerSecond;
+                rated += emitter.RatedAirbornePerSecond;
+                lifetime += emitter.LifetimeAirborneOutput;
+            }
+            if (rated <= 0f) rated = routedFallback;
+            if (rated <= 0f) return;
+
+            var card = new VisualElement { name = "MachinePollutionTelemetry" };
+            card.style.marginTop = 8;
+            card.style.marginLeft = 10;
+            card.style.marginRight = 10;
+            card.style.marginBottom = 8;
+            card.style.paddingTop = 7;
+            card.style.paddingBottom = 7;
+            card.style.paddingLeft = 9;
+            card.style.paddingRight = 9;
+            card.style.backgroundColor = new StyleColor(new Color(0.16f, 0.13f, 0.08f, 0.92f));
+            card.style.borderLeftWidth = 2;
+            card.style.borderLeftColor = new StyleColor(new Color(0.95f, 0.63f, 0.19f));
+
+            var heading = new Label("AIR EMISSIONS · PM-EQUIVALENT");
+            heading.style.color = new StyleColor(new Color(1f, 0.76f, 0.34f));
+            heading.style.unityFontStyleAndWeight = FontStyle.Bold;
+            heading.style.fontSize = 11;
+            card.Add(heading);
+
+            var currentLabel = new Label($"Current     {PollutionUnits.FormatRate(current)}");
+            currentLabel.style.color = new StyleColor(new Color(0.91f, 0.94f, 0.95f));
+            currentLabel.style.marginTop = 4;
+            card.Add(currentLabel);
+
+            var ratedLabel = new Label($"Full load   {PollutionUnits.FormatRate(rated)}");
+            ratedLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
+            card.Add(ratedLabel);
+
+            if (!VoxelEngine.Networking.NetworkSession.SimulationIsRemote)
+            {
+                var totalLabel = new Label($"This session {PollutionUnits.FormatMass(lifetime)} emitted");
+                totalLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
+                card.Add(totalLabel);
+            }
+
+            // Machine builders generally place their scrolling content inside the panel.
+            // Appending there keeps the card reachable on smaller resolutions.
+            var panel = content[content.childCount - 1];
+            var scroll = panel.Q<ScrollView>();
+            if (scroll != null) scroll.Add(card);
+            else panel.Add(card);
         }
 
         // ── PANEL SCROLL POSITION ACROSS LIVE REBUILDS ────────────────────────

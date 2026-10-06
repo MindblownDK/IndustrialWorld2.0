@@ -1,5 +1,6 @@
 // Assets/Scripts/VoxelEngine/Environment/Pollution/PollutionEmitter.cs
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Crafting;
 using VoxelEngine.Gas;
@@ -26,6 +27,42 @@ namespace VoxelEngine.Environment
         public float Activity01 { get; private set; }
         public float CurrentAirbornePerSecond { get; private set; }
         public float LifetimeAirborneOutput { get; private set; }
+        public float RatedAirbornePerSecond => profile != null
+            ? Mathf.Max(0f, profile.perSecond.airborneSmog * emissionMultiplier)
+            : 0f;
+
+        /// <summary>
+        /// Resolves the emitters whose readings should be presented for a selected machine.
+        /// Most machines own their emitter. Maritime engines deliberately route combustion
+        /// through exhaust pipes, so selecting an engine reports the serving pipe(s) instead.
+        /// </summary>
+        public static void CollectForDisplay(Component source, List<PollutionEmitter> results)
+        {
+            if (results == null) return;
+            results.Clear();
+            if (source == null) return;
+
+            AddUnique(results, source.GetComponent<PollutionEmitter>());
+            AddUnique(results, source.GetComponentInParent<PollutionEmitter>());
+            var descendants = source.GetComponentsInChildren<PollutionEmitter>(true);
+            for (int i = 0; i < descendants.Length; i++) AddUnique(results, descendants[i]);
+
+            var engine = source.GetComponent<GridMaritimeEngine>()
+                ?? source.GetComponentInParent<GridMaritimeEngine>();
+            if (engine == null || engine.Grid == null) return;
+
+            foreach (var block in engine.Grid.AllBlocks)
+            {
+                var pipe = block != null ? block.GetComponent<GridExhaustPipe>() : null;
+                if (pipe == null || !pipe.ServesEngine(engine)) continue;
+                AddUnique(results, pipe.GetComponent<PollutionEmitter>());
+            }
+        }
+
+        private static void AddUnique(List<PollutionEmitter> results, PollutionEmitter emitter)
+        {
+            if (emitter != null && !results.Contains(emitter)) results.Add(emitter);
+        }
 
         private float _timer;
         private CoalGeneratorFuel _coal;
@@ -62,8 +99,12 @@ namespace VoxelEngine.Environment
         {
             if (NetworkSession.SimulationIsRemote)
             {
-                Activity01 = 0f;
-                CurrentAirbornePerSecond = 0f;
+                // Guests never author pollution, but replicated machine/exhaust state can still
+                // drive an honest live panel instead of falsely reporting a clean machine.
+                Activity01 = ResolveActivity01();
+                CurrentAirbornePerSecond = profile != null
+                    ? Mathf.Max(0f, profile.perSecond.airborneSmog * emissionMultiplier * Activity01)
+                    : 0f;
                 return;
             }
 

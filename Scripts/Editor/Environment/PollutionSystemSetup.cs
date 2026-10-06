@@ -103,7 +103,7 @@ namespace VoxelEngine.EditorTools
                     block, 1, 35f, false,
                     Ingredients(steel, 30, wire, 18, circuit, 6), registry,
                     ref created, ref repaired, ref preserved);
-                var graphiteRecipe = EnsureRecipe(GraphiteRecipePath, "Compress Carbon Concentrate",
+                var graphiteRecipe = EnsureRecipe(GraphiteRecipePath, "Carbon to Graphite",
                     graphite, 1, 8f, false,
                     new[] { new RecipeIngredient { item = carbon, count = 4 } }, registry,
                     ref created, ref repaired, ref preserved);
@@ -124,7 +124,7 @@ namespace VoxelEngine.EditorTools
                     "Created/reconnected:\n" +
                     "  - Data-driven profiles on combustion, process, flare and exhaust prefabs\n" +
                     "  - Graphite, Atmospheric Carbon Harvester + Carbon Concentrate\n" +
-                    "  - Carbon Concentrate to Graphite recipe\n" +
+                    "  - Carbon to Graphite recipe\n" +
                     "  - Atmospheric Carbon Capture research\n\n" +
                     $"Created: {created}   Repaired: {repaired}   Preserved: {preserved}\n" +
                     $"Source prefabs audited: {sources}", "OK");
@@ -386,7 +386,7 @@ namespace VoxelEngine.EditorTools
                 bool dirty = false;
                 if (recipe.outputItem == null) { recipe.outputItem = output; recipe.outputCount = outputCount; dirty = true; }
                 if (recipe.inputs == null || recipe.inputs.Length == 0) { recipe.inputs = inputs; dirty = true; }
-                if (string.IsNullOrWhiteSpace(recipe.displayName)) { recipe.displayName = display; dirty = true; }
+                if (!string.Equals(recipe.displayName, display, StringComparison.Ordinal)) { recipe.displayName = display; dirty = true; }
                 if (dirty) repaired++; else preserved++;
             }
             if (!registry.recipes.Contains(recipe))
@@ -495,9 +495,82 @@ namespace VoxelEngine.EditorTools
                     repaired++;
                 }
                 else preserved++;
+                PollutionSourceProfile authoredProfile = emitter.profile;
+                float authoredMultiplier = emitter.emissionMultiplier;
                 PrefabUtility.UnloadPrefabContents(root);
+
+                AppendRatedEmissionsToLinkedItems(asset, authoredProfile, authoredMultiplier,
+                    routedEngine: false, ref repaired);
+            }
+
+            // Engines route their emissions through an exhaust-pipe emitter. Their own
+            // placement item still advertises the same before-capture full-load rating.
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (asset == null || asset.GetComponentInChildren<GridMaritimeEngine>(true) == null) continue;
+
+                var root = PrefabUtility.LoadPrefabContents(path);
+                var engine = root.GetComponentInChildren<GridMaritimeEngine>(true);
+                bool dirty = engine != null && engine.routedPollutionProfile == null;
+                if (dirty)
+                {
+                    engine.routedPollutionProfile = exhaust;
+                    EditorUtility.SetDirty(engine);
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                    repaired++;
+                }
+                PollutionSourceProfile authoredProfile = engine != null
+                    ? engine.routedPollutionProfile
+                    : exhaust;
+                PrefabUtility.UnloadPrefabContents(root);
+                AppendRatedEmissionsToLinkedItems(asset, authoredProfile, 1f,
+                    routedEngine: true, ref repaired);
             }
             return audited;
+        }
+
+        private static void AppendRatedEmissionsToLinkedItems(GameObject prefab,
+            PollutionSourceProfile profile, float emissionMultiplier, bool routedEngine, ref int repaired)
+        {
+            float ratedAirborne = profile != null
+                ? profile.perSecond.airborneSmog * Mathf.Max(0f, emissionMultiplier)
+                : 0f;
+            if (prefab == null || ratedAirborne <= 0f) return;
+            string[] itemGuids = AssetDatabase.FindAssets("t:ItemDefinition", new[] { Root });
+            string prefix = routedEngine ? "Routed air emissions: " : "Rated air emissions: ";
+            string suffix = routedEngine
+                ? " at full load before exhaust capture and scrubbing."
+                : " at full load.";
+            string authoredLine = prefix + PollutionUnits.FormatRate(ratedAirborne) + suffix;
+
+            for (int i = 0; i < itemGuids.Length; i++)
+            {
+                string itemPath = AssetDatabase.GUIDToAssetPath(itemGuids[i]);
+                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(itemPath);
+                bool linked = (item is BlockItem block && block.placedPrefab == prefab)
+                    || (item is GridBlockItem grid && grid.blockPrefab == prefab);
+                if (!linked) continue;
+
+                string description = item.description ?? string.Empty;
+                var kept = new List<string>();
+                string[] lines = description.Replace("\r", string.Empty).Split('\n');
+                for (int line = 0; line < lines.Length; line++)
+                {
+                    if (lines[line].StartsWith("Rated air emissions: ", StringComparison.Ordinal)
+                        || lines[line].StartsWith("Routed air emissions: ", StringComparison.Ordinal)) continue;
+                    kept.Add(lines[line]);
+                }
+                string baseDescription = string.Join("\n", kept).TrimEnd();
+                string updated = string.IsNullOrEmpty(baseDescription)
+                    ? authoredLine
+                    : baseDescription + "\n\n" + authoredLine;
+                if (item.description == updated) continue;
+                item.description = updated;
+                EditorUtility.SetDirty(item);
+                repaired++;
+            }
         }
 
         private static RecipeIngredient[] Ingredients(ItemDefinition first, int firstCount,

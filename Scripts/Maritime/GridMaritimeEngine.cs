@@ -86,6 +86,8 @@ namespace VoxelEngine.Maritime
         public ItemContainer SolidFuelInput { get; private set; }
 
         [Header("Exhaust Gas")]
+        [Tooltip("Rated routed pollution profile shown in the engine panel. Actual release still occurs only at serving exhaust pipes, after capture and scrubbing.")]
+        public VoxelEngine.Environment.PollutionSourceProfile routedPollutionProfile;
         [Tooltip("Maximum exhaust gas backlog before the engine chokes and stops.")]
         public float exhaustGasCapacity = 100f;
         [Tooltip("Exhaust gas produced per second at full throttle.")]

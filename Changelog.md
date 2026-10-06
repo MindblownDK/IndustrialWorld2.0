@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.66.2-dev`
+**Current Version:** `14.67.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.67.0-dev] Weathering the Load
+
+**Pollution is now geographically readable and mechanically connected to the sky: the local map follows the planet's tangent plane over recognizable generated terrain, every source reports scientific emissions, orbital bodies wear live pollution bands, and severe air modestly encourages cleansing weather without turning the forecast into a punishment.**
+
+#### Added
+- **Generated terrain beneath the local pollution layer.** The Logistics Map now samples the same analytic spherical density columns and biome surface materials as world generation, including sea-radius ocean detection, into a cached coarse raster. It does not require streamed chunks or blocking voxel reads. Routes, markers and pollution cells now share a body-relative east/north tangent frame instead of global X/Z, so the map remains geographically correct anywhere on a planet.
+- **Scientific source emissions in machine panels and item tooltips.** One simulation pollution unit is defined as `0.1 kg` of particulate-matter-equivalent emissions. A shared formatter automatically presents rates as `mg/s`, `g/s` or `kg/s PM-eq` and accumulated output as SI mass. Every directly emitting machine panel shows current and full-load output, with session total on the simulation owner; maritime-engine panels aggregate their serving exhaust-pipe emitters. Re-running Airborne Pollution setup idempotently appends rated emissions to linked block items, including routed before-capture ratings on engine items.
+- **Orbital pollution bands.** Planets and moons now gain one to three colour-coded atmospheric rings as body burden rises, with CLEAR, TRACE, HAZE, SMOG or SEVERE and the exact PM-equivalent burden shown in the body list.
+
+#### Changed
+- **Pollution now nudges weather within a hard cap.** Host-authored weather rolls combine mostly local air with a smaller body burden. At severe load the precipitation roll moves by no more than ten percentage points and storm chance receives a still smaller increase; existing dilution and recovery naturally remove the bias again.
+- **Clear skies are genuinely clear more often.** Weather transitions return to Clear substantially more often, non-home atmospheric fallback cloudiness is lower, clear-state coverage is reduced to isolated wisps, and cloud-shell opacity no longer turns small coverage values into a solid veil.
+- **Graphite is explicit in the conversion name.** The setup-authored recipe is now player-facing as `Carbon to Graphite`, while the `carbon_concentrate` and `graphite` internal IDs remain unchanged for save compatibility.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.67.0-dev`.
 
 ### [14.66.2-dev] One Workshop
 

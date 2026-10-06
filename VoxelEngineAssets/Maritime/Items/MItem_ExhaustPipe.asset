@@ -14,15 +14,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
   itemId: exhaust_pipe
   displayName: "Exhaust Pipe \xB7 2.5 m"
-  description: Exhaust venting pipe. EVERY engine requires at least one adjacent
+  description: 'Exhaust venting pipe. EVERY engine requires at least one adjacent
     exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas
     buildup and emits visible smoke particles while engines run. Looks like a pipe
     with vent holes.
+
+
+    Rated air emissions: 500 g/s PM-eq at full load.'
   icon: {fileID: 21300000, guid: d9b984dd28e9fddd80e6af8c5826f15e, type: 3}
   iconTint: {r: 0.3, g: 0.28, b: 0.25, a: 1}
   maxStack: 20
   massPerUnit: 1
   category: Maritime
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
   blockPrefab: {fileID: 7337885553638005735, guid: a472cc181b0a04945859485d35917d25, type: 3}

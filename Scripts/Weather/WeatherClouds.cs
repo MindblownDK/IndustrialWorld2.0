@@ -145,13 +145,13 @@ namespace VoxelEngine.Weather
 
         private static float HomeCoverage(WeatherState state) => state switch
         {
-            WeatherState.Clear     => 0.12f,   // a few lazy fair-weather wisps
-            WeatherState.Overcast  => 0.64f,
-            WeatherState.LightRain => 0.80f,
-            WeatherState.HeavyRain => 0.96f,   // solid ceiling, horizon to horizon
-            WeatherState.Snow      => 0.74f,
-            WeatherState.Blizzard  => 0.96f,
-            _ => 0.12f
+            WeatherState.Clear     => 0.035f,  // isolated wisps; most of the clear sky stays open
+            WeatherState.Overcast  => 0.48f,
+            WeatherState.LightRain => 0.68f,
+            WeatherState.HeavyRain => 0.88f,
+            WeatherState.Snow      => 0.58f,
+            WeatherState.Blizzard  => 0.90f,
+            _ => 0.035f
         };
 
         private static float HomeStorm(WeatherState state) => state switch
@@ -183,8 +183,8 @@ namespace VoxelEngine.Weather
             float seed = settings.bodyName != null ? (settings.bodyName.GetHashCode() & 0xFFFF) * 0.01f : 3.7f;
             float cycle = Mathf.Sin(Time.time * 0.012f + seed) * 0.5f + 0.5f;
 
-            coverage = Mathf.Clamp01(0.22f + profile.overcastBias * 0.55f + (cycle - 0.5f) * 0.24f);
-            storm = Mathf.Clamp01(profile.stormChance * (0.35f + cycle * 0.55f));
+            coverage = Mathf.Clamp01(0.09f + profile.overcastBias * 0.36f + (cycle - 0.5f) * 0.14f);
+            storm = Mathf.Clamp01(profile.stormChance * (0.30f + cycle * 0.45f));
             snow = profile.precipitation == WeatherClimateProfile.Precipitation.Snow;
         }
 

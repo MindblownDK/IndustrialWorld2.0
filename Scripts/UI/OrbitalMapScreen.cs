@@ -468,13 +468,13 @@ namespace VoxelEngine.UI
             state.style.color = new StyleColor(MotionColor(entry.Motion));
             row.Add(state);
 
-            // Pollution burden. Reads 0% everywhere until the pollution simulation
-            // lands and feeds the tracking snapshot — the readout is already wired.
+            // Live body-wide airborne burden from the pollution service. The same value
+            // drives the atmospheric bands painted around the body's map disc.
             if (entry.Kind == MapEntryKind.Planet || entry.Kind == MapEntryKind.Moon)
             {
-                var pol = new Label($"POLLUTION {(entry.Pollution01 * 100d):0}%");
+                var pol = new Label($"AIR {PollutionBand(entry.Pollution01)}   ·   {(entry.Pollution01 * 100d):0.0}% PM-EQ BURDEN");
                 pol.style.fontSize = 9;
-                pol.style.color = new StyleColor(new Color(0.62f, 0.64f, 0.52f));
+                pol.style.color = new StyleColor(PollutionBandColour(entry.Pollution01));
                 row.Add(pol);
             }
 
@@ -571,6 +571,25 @@ namespace VoxelEngine.UI
             _ => new Color(0.50f, 0.56f, 0.64f),
         };
 
+        private static string PollutionBand(double burden) => burden switch
+        {
+            < 0.01d => "CLEAR",
+            < 0.20d => "TRACE",
+            < 0.45d => "HAZE",
+            < 0.70d => "SMOG",
+            _ => "SEVERE",
+        };
+
+        private static Color PollutionBandColour(double burden)
+        {
+            float value = Mathf.Clamp01((float)burden);
+            if (value < 0.35f)
+                return Color.Lerp(new Color(0.38f, 0.78f, 0.58f), new Color(0.96f, 0.78f, 0.24f), value / 0.35f);
+            if (value < 0.70f)
+                return Color.Lerp(new Color(0.96f, 0.78f, 0.24f), new Color(0.92f, 0.34f, 0.12f), (value - 0.35f) / 0.35f);
+            return Color.Lerp(new Color(0.92f, 0.34f, 0.12f), new Color(0.70f, 0.10f, 0.18f), (value - 0.70f) / 0.30f);
+        }
+
         // ── Painting ─────────────────────────────────────────────────────────────
         private static void Paint(MeshGenerationContext ctx)
         {
@@ -659,6 +678,25 @@ namespace VoxelEngine.UI
                     painter.BeginPath();
                     painter.Arc(p, radius, 0f, 360f);
                     painter.Stroke();
+
+                    // Body-wide airborne burden appears as one to three atmospheric bands.
+                    // Clear worlds retain an uncluttered silhouette; worsening air thickens and
+                    // multiplies the halo while the sidebar supplies the exact percentage.
+                    float burden = Mathf.Clamp01((float)e.Pollution01);
+                    if (burden >= 0.01f)
+                    {
+                        int bands = burden < 0.25f ? 1 : burden < 0.60f ? 2 : 3;
+                        Color pollutionInk = PollutionBandColour(burden);
+                        pollutionInk.a = Mathf.Lerp(0.32f, 0.86f, burden);
+                        painter.strokeColor = pollutionInk;
+                        painter.lineWidth = Mathf.Lerp(1.2f, 3.6f, burden);
+                        for (int band = 0; band < bands; band++)
+                        {
+                            painter.BeginPath();
+                            painter.Arc(p, radius + 3.5f + band * 4f, 0f, 360f);
+                            painter.Stroke();
+                        }
+                    }
                     _bodyDiscs.Add((p, radius, e.PositionKm, e.RadiusKm));
                 }
                 else

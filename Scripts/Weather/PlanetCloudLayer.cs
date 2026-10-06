@@ -147,7 +147,7 @@ namespace VoxelEngine.Weather
             _coverage = Mathf.MoveTowards(_coverage, Mathf.Clamp01(targetCoverage), blendSpeed * Time.deltaTime);
             _storm = Mathf.MoveTowards(_storm, Mathf.Clamp01(targetStorm), blendSpeed * 2f * Time.deltaTime);
 
-            bool visible = _coverage > 0.02f;
+            bool visible = _coverage > 0.025f;
             if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
             if (!visible) return;
 
@@ -171,7 +171,11 @@ namespace VoxelEngine.Weather
             _material.SetFloat(IdCoverage, _coverage);
             _material.SetFloat(IdStorm, _storm);
             _material.SetFloat(IdFlash, flash * 0.6f);
-            _material.SetFloat(IdOpacity, Mathf.Clamp01(_coverage * 4f));
+            // Coverage already controls how much of the shell survives the shader threshold.
+            // The old coverage*4 opacity made even the clear-state wisps read as a solid veil.
+            float opacityBase = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.025f, 0.65f, _coverage));
+            float opacity = opacityBase * Mathf.Lerp(0.42f, 1f, _storm);
+            _material.SetFloat(IdOpacity, Mathf.Clamp01(opacity));
             _material.SetVector(IdOffset, _massOffset);
             _material.SetVector(IdDetailOff, _detailOffset);
             _material.SetVector(IdCellOff, _cellOffset);

@@ -86,7 +86,7 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public readonly Color BodyColor;
 
-        /// <summary>Pollution burden 0..1. Always 0 until the pollution simulation lands.</summary>
+        /// <summary>Live body-wide airborne pollution burden, 0..1.</summary>
         public readonly double Pollution01;
 
         /// <summary>Radius in km, for drawing bodies to scale. Zero for craft.</summary>

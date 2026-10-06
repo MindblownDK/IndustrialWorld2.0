@@ -23,7 +23,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Environment;
+using VoxelEngine.Materials;
 using VoxelEngine.Settings;
 using Cursor = UnityEngine.Cursor;
 using T = VoxelEngine.UI.UITheme;
@@ -58,6 +60,55 @@ namespace VoxelEngine.UI
 
         private static float _refreshTimer;
         private static readonly List<PollutionMapCell> _pollutionCells = new(128);
+
+        private const int TerrainRasterCells = 29;
+        private static readonly List<TerrainTile> _terrainTiles = new(TerrainRasterCells * TerrainRasterCells);
+        private static CelestialBody _terrainBody;
+        private static Vector3 _terrainAnchor;
+        private static Vector2 _terrainViewCentre;
+        private static Vector2 _terrainViewportSize;
+        private static float _terrainMetresPerPixel;
+        private static MapFrame _projectionFrame;
+
+        private readonly struct MapFrame
+        {
+            public readonly CelestialBody Body;
+            public readonly SphereWorld Sphere;
+            public readonly Vector3 Anchor;
+            public readonly Vector3 Up;
+            public readonly Vector3 East;
+            public readonly Vector3 North;
+
+            public MapFrame(CelestialBody body, SphereWorld sphere, Vector3 anchor,
+                Vector3 up, Vector3 east, Vector3 north)
+            {
+                Body = body;
+                Sphere = sphere;
+                Anchor = anchor;
+                Up = up;
+                East = east;
+                North = north;
+            }
+        }
+
+        private readonly struct TerrainTile
+        {
+            public readonly float EastMetres;
+            public readonly float NorthMetres;
+            public readonly float HalfEastMetres;
+            public readonly float HalfNorthMetres;
+            public readonly Color Colour;
+
+            public TerrainTile(float eastMetres, float northMetres,
+                float halfEastMetres, float halfNorthMetres, Color colour)
+            {
+                EastMetres = eastMetres;
+                NorthMetres = northMetres;
+                HalfEastMetres = halfEastMetres;
+                HalfNorthMetres = halfNorthMetres;
+                Colour = colour;
+            }
+        }
 
         private static readonly Color Backdrop = new(0.030f, 0.038f, 0.052f, 0.985f);
         private static readonly Color GridInk = new(0.12f, 0.17f, 0.22f, 0.55f);
@@ -330,18 +381,52 @@ namespace VoxelEngine.UI
         private static void FrameAll()
         {
             var bounds = LogisticsMapData.Extent;
-            _anchor = bounds.center;
+            Vector3 viewer = ViewerPosition();
+            _anchor = bounds.size.sqrMagnitude > 0.001f ? bounds.center : viewer;
+
+            // A cartesian bounds centre sits slightly inside a curved world. Lift it back to
+            // the viewer's surface radius so the tangent basis and analytic terrain agree.
+            CelestialBody body = GravityProvider.ActiveBody;
+            if (body != null)
+            {
+                Vector3 centre = body.transform.position;
+                Vector3 direction = _anchor - centre;
+                if (direction.sqrMagnitude < 0.0001f) direction = viewer - centre;
+                float radius = Mathf.Max(100f, Vector3.Distance(viewer, centre));
+                _anchor = centre + direction.normalized * radius;
+            }
+
+            MapFrame frame = BuildMapFrame(_anchor);
+            float minEast = 0f, maxEast = 0f, minNorth = 0f, maxNorth = 0f;
+            void Include(Vector3 world)
+            {
+                Vector3 delta = world - frame.Anchor;
+                float east = Vector3.Dot(delta, frame.East);
+                float north = Vector3.Dot(delta, frame.North);
+                minEast = Mathf.Min(minEast, east);
+                maxEast = Mathf.Max(maxEast, east);
+                minNorth = Mathf.Min(minNorth, north);
+                maxNorth = Mathf.Max(maxNorth, north);
+            }
+
+            var markers = LogisticsMapData.Markers;
+            for (int i = 0; i < markers.Count; i++) Include(markers[i].World);
+            var links = LogisticsMapData.Links;
+            for (int i = 0; i < links.Count; i++)
+            {
+                Include(links[i].A);
+                Include(links[i].B);
+            }
 
             Rect r = _canvas.contentRect;
             float w = r.width > 10 ? r.width : 900f;
             float h = r.height > 10 ? r.height : 700f;
+            float spanEast = Mathf.Max(16f, maxEast - minEast);
+            float spanNorth = Mathf.Max(16f, maxNorth - minNorth);
 
-            float spanX = Mathf.Max(16f, bounds.size.x);
-            float spanZ = Mathf.Max(16f, bounds.size.z);
-
-            // Metres per pixel needed to fit each axis, with a margin so markers near the
-            // edge are not clipped by their own labels.
-            float need = Mathf.Max(spanX / (w * 0.82f), spanZ / (h * 0.82f));
+            // Metres per pixel needed to fit each tangent axis, with a margin so markers
+            // near the edge are not clipped by their own labels.
+            float need = Mathf.Max(spanEast / (w * 0.82f), spanNorth / (h * 0.82f));
             _baseScale = Mathf.Max(0.02f, need);
             _zoom = 1f;
         }
@@ -501,14 +586,43 @@ namespace VoxelEngine.UI
         };
 
         // ── Painting ─────────────────────────────────────────────────────────────
-        private static Vector2 Project(Vector3 world, Vector2 centre, float metresPerPixel)
+        private static MapFrame BuildMapFrame(Vector3 anchor)
         {
-            // Top-down onto XZ, +Z up the screen — the same projection the orbital map
-            // uses, so the two read consistently despite their different scales.
-            float dx = (world.x - _anchor.x) / metresPerPixel;
-            float dz = (world.z - _anchor.z) / metresPerPixel;
-            return new Vector2(centre.x + dx, centre.y - dz);
+            CelestialBody body = GravityProvider.ActiveBody;
+            if (body == null)
+                return new MapFrame(null, null, anchor, Vector3.up, Vector3.right, Vector3.forward);
+
+            Vector3 up = anchor - body.transform.position;
+            if (up.sqrMagnitude < 0.0001f) up = body.transform.up;
+            up.Normalize();
+
+            // Project the body's authored forward axis into the local tangent plane. This
+            // gives every surface map a stable north rather than tying it to global X/Z.
+            Vector3 north = Vector3.ProjectOnPlane(body.transform.forward, up);
+            if (north.sqrMagnitude < 0.0001f)
+                north = Vector3.ProjectOnPlane(body.transform.up, up);
+            if (north.sqrMagnitude < 0.0001f)
+                north = Vector3.ProjectOnPlane(body.transform.right, up);
+            north.Normalize();
+            Vector3 east = Vector3.Cross(up, north).normalized;
+            north = Vector3.Cross(east, up).normalized;
+
+            SphereWorld sphere = VoxelEngine.Core.ActiveWorld.Current as SphereWorld;
+            if (sphere != null && sphere.body != body) sphere = null;
+            return new MapFrame(body, sphere, anchor, up, east, north);
         }
+
+        private static Vector2 Project(Vector3 world, Vector2 centre,
+            float metresPerPixel, in MapFrame frame)
+        {
+            Vector3 delta = world - frame.Anchor;
+            float east = Vector3.Dot(delta, frame.East) / metresPerPixel;
+            float north = Vector3.Dot(delta, frame.North) / metresPerPixel;
+            return new Vector2(centre.x + east, centre.y - north);
+        }
+
+        private static Vector2 Project(Vector3 world, Vector2 centre, float metresPerPixel)
+            => Project(world, centre, metresPerPixel, _projectionFrame);
 
         private static void Paint(MeshGenerationContext ctx)
         {
@@ -518,7 +632,9 @@ namespace VoxelEngine.UI
 
             Vector2 centre = new Vector2(r.width * 0.5f, r.height * 0.5f) + _pan;
             float metresPerPixel = _baseScale / Mathf.Max(0.0001f, _zoom);
+            _projectionFrame = BuildMapFrame(_anchor);
 
+            DrawTerrain(painter, r, centre, metresPerPixel, _projectionFrame);
             DrawGrid(painter, r, centre, metresPerPixel);
             if (_showPollution) DrawPollution(painter, r, centre, metresPerPixel);
 
@@ -598,6 +714,101 @@ namespace VoxelEngine.UI
             }
 
             DrawMarkers(painter, r, centre, metresPerPixel);
+        }
+
+        private static void DrawTerrain(Painter2D painter, Rect r, Vector2 centre,
+            float metresPerPixel, in MapFrame frame)
+        {
+            if (frame.Body == null || frame.Sphere == null) return;
+            EnsureTerrainRaster(r, metresPerPixel, frame);
+
+            for (int i = 0; i < _terrainTiles.Count; i++)
+            {
+                TerrainTile tile = _terrainTiles[i];
+                Vector2 p = new(
+                    centre.x + tile.EastMetres / metresPerPixel,
+                    centre.y - tile.NorthMetres / metresPerPixel);
+                float halfX = tile.HalfEastMetres / metresPerPixel + 0.7f;
+                float halfY = tile.HalfNorthMetres / metresPerPixel + 0.7f;
+                if (!OnScreen(p, r, Mathf.Max(halfX, halfY))) continue;
+
+                painter.fillColor = tile.Colour;
+                painter.BeginPath();
+                painter.MoveTo(p + new Vector2(-halfX, -halfY));
+                painter.LineTo(p + new Vector2(halfX, -halfY));
+                painter.LineTo(p + new Vector2(halfX, halfY));
+                painter.LineTo(p + new Vector2(-halfX, halfY));
+                painter.ClosePath();
+                painter.Fill();
+            }
+        }
+
+        private static void EnsureTerrainRaster(Rect viewport, float metresPerPixel, in MapFrame frame)
+        {
+            Vector2 sizeMetres = new(viewport.width * metresPerPixel, viewport.height * metresPerPixel);
+            Vector2 viewCentre = new(-_pan.x * metresPerPixel, _pan.y * metresPerPixel);
+            float cellEast = Mathf.Max(1f, sizeMetres.x * 1.25f / TerrainRasterCells);
+            float cellNorth = Mathf.Max(1f, sizeMetres.y * 1.25f / TerrainRasterCells);
+            float centreThreshold = Mathf.Max(cellEast, cellNorth) * 0.45f;
+            bool stale = _terrainTiles.Count == 0
+                || _terrainBody != frame.Body
+                || (_terrainAnchor - frame.Anchor).sqrMagnitude > centreThreshold * centreThreshold
+                || (_terrainViewCentre - viewCentre).sqrMagnitude > centreThreshold * centreThreshold
+                || Mathf.Abs(_terrainMetresPerPixel - metresPerPixel) > metresPerPixel * 0.12f
+                || Mathf.Abs(_terrainViewportSize.x - viewport.width) > 24f
+                || Mathf.Abs(_terrainViewportSize.y - viewport.height) > 24f;
+            if (!stale) return;
+
+            _terrainTiles.Clear();
+            _terrainBody = frame.Body;
+            _terrainAnchor = frame.Anchor;
+            _terrainViewCentre = viewCentre;
+            _terrainViewportSize = viewport.size;
+            _terrainMetresPerPixel = metresPerPixel;
+
+            float radius = Mathf.Max(100f, Vector3.Distance(frame.Anchor, frame.Body.transform.position));
+            float halfEast = cellEast * 0.5f;
+            float halfNorth = cellNorth * 0.5f;
+            float startEast = viewCentre.x - cellEast * (TerrainRasterCells - 1) * 0.5f;
+            float startNorth = viewCentre.y - cellNorth * (TerrainRasterCells - 1) * 0.5f;
+
+            for (int y = 0; y < TerrainRasterCells; y++)
+            {
+                float northMetres = startNorth + y * cellNorth;
+                for (int x = 0; x < TerrainRasterCells; x++)
+                {
+                    float eastMetres = startEast + x * cellEast;
+                    Vector3 tangent = frame.East * eastMetres + frame.North * northMetres;
+                    float distance = tangent.magnitude;
+                    Vector3 worldDirection = frame.Up;
+                    if (distance > 0.001f)
+                    {
+                        float angle = distance / radius;
+                        worldDirection = frame.Up * Mathf.Cos(angle)
+                            + tangent / distance * Mathf.Sin(angle);
+                        worldDirection.Normalize();
+                    }
+
+                    Vector3 localDirection = frame.Body.transform.InverseTransformDirection(worldDirection).normalized;
+                    if (!frame.Sphere.TrySampleAnalyticMapSurface(localDirection,
+                        out float surfaceRadius, out byte surfaceMaterial, out bool ocean)) continue;
+
+                    Color colour = frame.Sphere.materialRegistry != null
+                        ? frame.Sphere.materialRegistry.GetColor(surfaceMaterial)
+                        : MaterialRegistry.DefaultColor((MaterialId)surfaceMaterial);
+                    float seaRadius = frame.Body.genParams.seaRadius;
+                    float shade = ocean
+                        ? 0.68f
+                        : Mathf.Lerp(0.70f, 1.08f, Mathf.InverseLerp(-4f, 160f, surfaceRadius - seaRadius));
+                    colour = new Color(
+                        Mathf.Clamp01(colour.r * shade),
+                        Mathf.Clamp01(colour.g * shade),
+                        Mathf.Clamp01(colour.b * shade),
+                        0.82f);
+                    _terrainTiles.Add(new TerrainTile(eastMetres, northMetres,
+                        halfEast, halfNorth, colour));
+                }
+            }
         }
 
         private static void DrawPollution(Painter2D painter, Rect r, Vector2 centre,
@@ -779,8 +990,11 @@ namespace VoxelEngine.UI
 
             Vector2 centre = new Vector2(r.width * 0.5f, r.height * 0.5f) + _pan;
             float metresPerPixel = _baseScale / Mathf.Max(0.0001f, _zoom);
+            _projectionFrame = BuildMapFrame(_anchor);
 
             int used = 0;
+            SetLabel(used++, new Vector2(r.width * 0.5f - 12f, 12f),
+                "N  ↑", new Color(0.62f, 0.72f, 0.78f), 9);
 
             // The scale readout, only while the grid itself is actually drawn.
             float step = GridStep(metresPerPixel);

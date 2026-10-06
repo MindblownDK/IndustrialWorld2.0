@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.66.2-dev`
-**Roadmap Version:** `14.66.2-dev`
-**Date:** 2026-10-06
+**Current Version:** `14.67.0-dev`
+**Roadmap Version:** `14.67.0-dev`
+**Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 14.67.0-dev - Weathering the Load
+- Local Logistics Map uses a spherical tangent frame and cached analytic terrain/biome raster beneath its optional pollution layer
+- Machine panels and setup-authored block tooltips report SI PM-equivalent emissions; routed maritime exhaust is aggregated at the engine
+- Orbital pollution bands/readouts, capped pollution-weather feedback, clearer forecast probabilities and lighter cloud coverage are live
+- Carbon Concentrate conversion is player-facing as Carbon to Graphite with internal IDs unchanged
 
 ### 14.66.2-dev - One Workshop
 - Setup Wizard actions are grouped by system and automatically numbered in display order; creature/boss and combat/weapon content are consolidated
@@ -428,7 +434,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev: sparse airborne cells, direct sources, wind/weather/recovery, save/network snapshots, optional local map layer, live orbital burden, reversible visuals/solar loss, and automated carbon capture through Setup Step 114. Runoff, climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and expanded in 14.67.0-dev: spherical terrain-backed local mapping, SI source telemetry/tooltips, orbital burden bands, capped pollution-weather response and automated carbon capture are live. Runoff, climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
 
 #### Pollution Sources
 

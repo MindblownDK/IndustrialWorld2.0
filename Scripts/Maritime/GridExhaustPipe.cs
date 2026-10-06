@@ -104,6 +104,9 @@ namespace VoxelEngine.Maritime
         private static readonly Collider[] s_engineProbe = new Collider[16];
         private readonly System.Collections.Generic.HashSet<GridMaritimeEngine> _foundEngines = new();
 
+        /// <summary>True when this pipe's adjacency/proximity scan identifies the given engine.</summary>
+        public bool ServesEngine(GridMaritimeEngine engine) => engine != null && _foundEngines.Contains(engine);
+
         public override void OnPlaced()
         {
             base.OnPlaced();

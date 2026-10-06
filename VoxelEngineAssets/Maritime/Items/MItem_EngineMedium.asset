@@ -17,12 +17,19 @@ MonoBehaviour:
   description: 'Heavy Fuel Oil Engine (2x3x2). FUEL: Heavy Fuel Oil (liquid, from
     refinery). Inline-4 cast iron block with medium torque and steady RPM. Vibrating
     belts, oil stains. REQUIRES adjacent Exhaust Pipe. Can fit 2 Small or Large Turbochargers.
-    Pair with a Gearbox before a Generator for best efficiency.'
+    Pair with a Gearbox before a Generator for best efficiency.
+
+
+    Routed air
+    emissions: 500 g/s PM-eq at full load before exhaust capture and scrubbing.'
   icon: {fileID: 21300000, guid: 59e5198b44e707dbe77229e7d2f6e543, type: 3}
   iconTint: {r: 0.4, g: 0.38, b: 0.35, a: 1}
   maxStack: 20
   massPerUnit: 1
   category: Maritime
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
   blockPrefab: {fileID: 4356412834793651524, guid: f817b2cea6c51c242a758297f0b7583b, type: 3}
