@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.69.0-dev`
+**Current Version:** `14.70.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.70.0-dev] Follow the Smoke
+
+**Pollution inspection now explains what is causing a hotspot and what to do next: severity-aware map hover cards rank active nearby contributors, environmental alerts forecast rising body thresholds, and cleanup guidance points directly at the correct recovery radius.**
+
+#### Added
+- **Live source attribution.** Active pollution emitters register in a lightweight runtime list. Hovering a polluted map cell ranks up to three nearby machines or exhaust outlets by combined air/runoff rate and reports each contributor in SI PM-equivalent and contaminant-equivalent flow units.
+- **Honest residual-load reporting.** Source attribution describes current contributors rather than inventing historical certainty. A plume or contaminated cell that remains after its machinery stops is explicitly labelled `NO ACTIVE SOURCE NEARBY · RESIDUAL LOAD`.
+- **Rising-threshold forecasts.** With the optional pollution layer enabled, the map compares replicated body trends against the next air or runoff severity boundary and raises an Environment Alert when that boundary is projected within two hours.
+- **Actionable environmental alerts.** Local SMOG/SEVERE air, TOXIC/SEVERE runoff and serious body-wide burden create colour-coded sidebar cards directing the player to hotspot cells, atmospheric capture, soil remediation or water-pump consequences.
+- **Cell-specific recovery guidance.** Polluted hover cards recommend air capture within 96 m, runoff remediation within 72 m, or combined powered recovery when both channels are elevated.
+
+#### Changed
+- Pollution and water hover titles now retain their severity words, including `HAZE`, `SMOG`, `TAINTED`, `TOXIC` and `SEVERE`, while contributor details expand beneath them.
+- Active-source discovery is registry-backed and allocation-conscious; map hover does not scan every object in the scene.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.70.0-dev`.
 
 ### [14.69.0-dev] What the Map Knows
 

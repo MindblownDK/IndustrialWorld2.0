@@ -20,6 +20,8 @@ namespace VoxelEngine.Environment
     /// </summary>
     public sealed class PollutionEmitter : MonoBehaviour
     {
+        private static readonly List<PollutionEmitter> s_active = new(128);
+
         public PollutionSourceProfile profile;
         [Min(0f)] public float emissionMultiplier = 1f;
         [Min(0.1f)] public float reportInterval = 1f;
@@ -69,6 +71,66 @@ namespace VoxelEngine.Environment
             if (emitter != null && !results.Contains(emitter)) results.Add(emitter);
         }
 
+        /// <summary>
+        /// Returns live, active outlets near a map cell, ordered by combined air/runoff rate.
+        /// This is current-source attribution rather than invented history: a residual plume
+        /// with every machine switched off correctly reports no active source nearby.
+        /// </summary>
+        public static void CollectActiveNear(Vector3 worldPosition, float radiusMetres,
+            List<PollutionSourceReading> results)
+        {
+            if (results == null) return;
+            results.Clear();
+            float radiusSq = Mathf.Max(1f, radiusMetres) * Mathf.Max(1f, radiusMetres);
+            for (int i = s_active.Count - 1; i >= 0; i--)
+            {
+                PollutionEmitter emitter = s_active[i];
+                if (emitter == null)
+                {
+                    s_active.RemoveAt(i);
+                    continue;
+                }
+                float air = emitter.CurrentAirbornePerSecond;
+                float runoff = emitter.CurrentRunoffPerSecond;
+                if (air + runoff <= 0.0001f) continue;
+                Vector3 releasePoint = emitter.ReleasePoint;
+                if ((releasePoint - worldPosition).sqrMagnitude > radiusSq) continue;
+                results.Add(new PollutionSourceReading(emitter.SourceDisplayName(), releasePoint,
+                    air, runoff));
+            }
+            results.Sort((a, b) => b.TotalPerSecond.CompareTo(a.TotalPerSecond));
+        }
+
+        public Vector3 ReleasePoint => profile != null
+            ? transform.TransformPoint(profile.localOffset)
+            : transform.position;
+
+        private string SourceDisplayName()
+        {
+            // Routed exhaust is an outlet shared by the engine room; its authored source
+            // name is more honest than calling the whole contribution merely "Exhaust Pipe".
+            if (_exhaust != null && profile != null && !string.IsNullOrWhiteSpace(profile.displayName))
+                return profile.displayName;
+
+            var placed = GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+            if (placed != null && placed.Item != null
+                && !string.IsNullOrWhiteSpace(placed.Item.displayName))
+                return placed.Item.displayName;
+
+            var gridBlock = GetComponentInParent<GridBlock>();
+            if (gridBlock != null)
+            {
+                if (gridBlock.SourceItem != null && !string.IsNullOrWhiteSpace(gridBlock.SourceItem.displayName))
+                    return gridBlock.SourceItem.displayName;
+                if (!string.IsNullOrWhiteSpace(gridBlock.blockName)) return gridBlock.blockName;
+            }
+
+            if (profile != null && !string.IsNullOrWhiteSpace(profile.displayName))
+                return profile.displayName;
+            string fallback = gameObject.name.Replace("(Clone)", string.Empty).Trim();
+            return string.IsNullOrEmpty(fallback) ? "Industrial Source" : fallback;
+        }
+
         private float _timer;
         private CoalGeneratorFuel _coal;
         private Furnace _furnace;
@@ -82,6 +144,16 @@ namespace VoxelEngine.Environment
         private FlareStack _flare;
         private GridFlareStack _gridFlare;
         private GridExhaustPipe _exhaust;
+
+        private void OnEnable()
+        {
+            if (!s_active.Contains(this)) s_active.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            s_active.Remove(this);
+        }
 
         private void Awake()
         {

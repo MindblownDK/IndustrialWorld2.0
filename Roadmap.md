@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.69.0-dev`
-**Roadmap Version:** `14.69.0-dev`
+**Current Version:** `14.70.0-dev`
+**Roadmap Version:** `14.70.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.70.0-dev - Follow the Smoke
+- Pollution hover ranks the three largest active nearby contributors with SI air/runoff rates and honest residual-load fallback
+- Optional map alerts forecast the next body severity boundary and expose local/body air or runoff hazards
+- Severity-aware hover guidance directs air capture, runoff remediation and combined recovery at their actual operating radii
+
 ### 14.69.0-dev - What the Map Knows
 - Logistics Map hover inspection names buildings and resolves their current owning team from replicated placer identity
 - Pollution cells expose exact air/runoff percentages and SI mass; ocean hover distinguishes clean from polluted water
@@ -49,9 +54,6 @@
 - Setup Wizard actions are grouped by system and automatically numbered in display order; creature/boss and combat/weapon content are consolidated
 - Duplicate spherical-water and obsolete standalone Sol setup paths are retired; missing Water Crossings and maintenance actions are available in the wizard
 - Airborne Pollution setup now creates or repairs canonical Graphite instead of blocking after Industrial Content
-
-### 14.66.1-dev - Modern Identity
-- Pollution emitter staggering uses Unity's current entity-ID API instead of obsolete instance IDs
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -345,7 +347,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev and its presentation pass shipped 14.67.0-dev. Phase 2 runoff foundations shipped 14.68.0-dev; 14.69.0-dev adds cell-level pollution/water hover inspection and replicated building-team identity. Climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev adds live active-source attribution, rising-threshold alerts and cleanup guidance. Historical attribution, climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
 
 #### Pollution Sources
 
@@ -361,7 +363,7 @@ Industrial activity creates pollution that spreads outward from its source and c
 - Forests, filters, scrubbers, sealed processing, cleaner fuel, and advanced Crusader technology reduce pollution.
 - Dormant regions simulate pollution at a reduced tick rate.
 - ~~Pollution map hover inspection reports local air, soil and water intensity with SI cell mass.~~ *(14.69.0-dev)*
-- Source direction, warning automation and predicted thresholds remain open.
+- ~~Live nearby-source rankings, warning cards and next-band forecasts.~~ *(14.70.0-dev)* Source direction and historical attribution remain open.
 
 #### Enemy Attraction
 
@@ -1761,7 +1763,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 16. **Pollution & Industrial Threat Director** - **PHASE 2 FOUNDATIONS SHIPPED (14.68.0-dev)**
    - ~~Sparse body-local airborne pollution, transport, cleanup, optional map telemetry and body burden~~ *(14.66.0-dev; Setup Step 114)*.
    - ~~Persistent runoff/soil-water transport, recovery, mapping and water-pump response~~ *(14.68.0-dev; Setup Step 114)*.
-   - Reduced-rate dormant-region transport, per-source attribution/history, warning thresholds and production-statistics integration remain open.
+   - Live nearby-source attribution and warning thresholds shipped 14.70.0-dev; historical attribution, dormant-region transport and production-statistics integration remain open.
    - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
    - Planet Ecology Profiles choose appropriate passive life, pollution responders, enemy tiers, and bosses.
 
@@ -1847,7 +1849,7 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Vents add or remove oxygen against the grid gas network.
 
 29. **Pollution Service** - **PHASE 2 FOUNDATIONS SHIPPED (14.68.0-dev)**
-    - Sparse body-local air and runoff emissions, weather transfer, spread, recovery, capture, sidecar persistence and host snapshots are live; source attribution and reduced-rate distant-region simulation remain open.
+    - Sparse body-local air/runoff simulation, persistence and host snapshots plus live nearby-source attribution are active; historical attribution and reduced-rate distant-region simulation remain open.
 
 30. **Ecology Registry**
     - ScriptableObject planet profiles containing passive species, hostile species, resistances, pollution responses, elites, bosses, loot tables, and spawn budgets.

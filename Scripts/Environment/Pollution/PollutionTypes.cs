@@ -136,6 +136,26 @@ namespace VoxelEngine.Environment
         }
     }
 
+    /// <summary>One live machine/outlet contributing near a map cell.</summary>
+    public readonly struct PollutionSourceReading
+    {
+        public readonly string Name;
+        public readonly Vector3 World;
+        public readonly float AirbornePerSecond;
+        public readonly float RunoffPerSecond;
+
+        public PollutionSourceReading(string name, Vector3 world,
+            float airbornePerSecond, float runoffPerSecond)
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? "Industrial Source" : name;
+            World = world;
+            AirbornePerSecond = Mathf.Max(0f, airbornePerSecond);
+            RunoffPerSecond = Mathf.Max(0f, runoffPerSecond);
+        }
+
+        public float TotalPerSecond => AirbornePerSecond + RunoffPerSecond;
+    }
+
     public readonly struct PollutionTelemetry
     {
         public readonly float LocalAir01;

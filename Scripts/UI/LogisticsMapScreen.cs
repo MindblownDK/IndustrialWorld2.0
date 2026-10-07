@@ -62,6 +62,7 @@ namespace VoxelEngine.UI
 
         private static float _refreshTimer;
         private static readonly List<PollutionMapCell> _pollutionCells = new(128);
+        private static readonly List<PollutionSourceReading> _sourceReadings = new(16);
 
         private const int TerrainRasterCells = 29;
         private static readonly List<TerrainTile> _terrainTiles = new(TerrainRasterCells * TerrainRasterCells);
@@ -128,6 +129,8 @@ namespace VoxelEngine.UI
         private static readonly Color PlayerInk = new(1.00f, 1.00f, 1.00f);
         private static readonly Color DepositInk = new(0.80f, 0.55f, 0.95f);
         private static readonly Color PollutionInk = new(0.88f, 0.48f, 0.20f);
+        private static readonly float[] AirAlertThresholds = { 0.05f, 0.20f, 0.45f, 0.70f };
+        private static readonly float[] RunoffAlertThresholds = { 0.03f, 0.18f, 0.42f, 0.70f };
 
         public static bool IsOpen => _open;
 
@@ -245,7 +248,7 @@ namespace VoxelEngine.UI
 
             _hoverCard = new VisualElement { name = "LogisticsMapHover" };
             _hoverCard.style.position = Position.Absolute;
-            _hoverCard.style.width = 270;
+            _hoverCard.style.width = 360;
             _hoverCard.style.paddingLeft = 11;
             _hoverCard.style.paddingRight = 11;
             _hoverCard.style.paddingTop = 8;
@@ -418,17 +421,20 @@ namespace VoxelEngine.UI
             BuildList();
 
             string pollution = string.Empty;
+            bool environmentAlert = false;
             if (_showPollution)
             {
                 PollutionTelemetry telemetry = PollutionService.TelemetryAt(ViewerPosition());
                 pollution = $"   ·   AIR {telemetry.Band} {telemetry.LocalAir01 * 100f:0}%" +
                     $"   ·   SOIL {telemetry.RunoffBand} {telemetry.LocalRunoff01 * 100f:0}%";
+                environmentAlert = HasEnvironmentAlert(telemetry);
             }
             _statusLabel.text =
                 $"{LogisticsMapData.RailCells} RAIL CELLS   ·   {LogisticsMapData.StationCount} STATIONS   ·   " +
                 $"{LogisticsMapData.TrainCount} TRAINS   ·   {LogisticsMapData.PortCount} PORTS   ·   " +
                 $"{LogisticsMapData.BuildingCount} BUILDINGS   ·   {LogisticsMapData.ZoneCount} BASES   ·   " +
-                $"{LogisticsMapData.DepositCount} DEPOSITS" + pollution;
+                $"{LogisticsMapData.DepositCount} DEPOSITS" + pollution
+                + (environmentAlert ? "   ·   ENVIRONMENT ALERT" : string.Empty);
 
             InvalidateView();
         }
@@ -526,6 +532,7 @@ namespace VoxelEngine.UI
             if (_showPollution)
             {
                 PollutionTelemetry telemetry = PollutionService.TelemetryAt(ViewerPosition());
+                AddEnvironmentAlerts(telemetry);
                 AddSection("AIR QUALITY");
                 var air = new Label(
                     $"{telemetry.Band}   ·   LOCAL {telemetry.LocalAir01 * 100f:0}%   ·   " +
@@ -607,6 +614,104 @@ namespace VoxelEngine.UI
                 row.style.marginBottom = 2;
                 _list.Add(row);
             }
+        }
+
+        private static bool HasEnvironmentAlert(PollutionTelemetry telemetry)
+        {
+            if (telemetry.LocalAir01 >= 0.45f || telemetry.LocalRunoff01 >= 0.42f
+                || telemetry.BodyAir01 >= 0.45f || telemetry.BodyRunoff01 >= 0.42f) return true;
+            return TryForecastBand(telemetry.BodyAir01, telemetry.TrendPerMinute, air: true,
+                    out _, out _)
+                || TryForecastBand(telemetry.BodyRunoff01, telemetry.RunoffTrendPerMinute, air: false,
+                    out _, out _);
+        }
+
+        private static void AddEnvironmentAlerts(PollutionTelemetry telemetry)
+        {
+            bool severeAir = telemetry.LocalAir01 >= 0.45f;
+            bool severeRunoff = telemetry.LocalRunoff01 >= 0.42f;
+            bool severeBodyAir = telemetry.BodyAir01 >= 0.45f;
+            bool severeBodyRunoff = telemetry.BodyRunoff01 >= 0.42f;
+            bool airForecast = TryForecastBand(telemetry.BodyAir01, telemetry.TrendPerMinute,
+                air: true, out string nextAir, out string airEta);
+            bool runoffForecast = TryForecastBand(telemetry.BodyRunoff01,
+                telemetry.RunoffTrendPerMinute, air: false, out string nextRunoff, out string runoffEta);
+            if (!severeAir && !severeRunoff && !severeBodyAir && !severeBodyRunoff
+                && !airForecast && !runoffForecast) return;
+
+            AddSection("ENVIRONMENT ALERTS");
+            if (severeAir)
+                AddEnvironmentAlert($"{AirBand(telemetry.LocalAir01)} AIR AT VIEWER",
+                    "Power an Atmospheric Carbon Harvester near the orange/red cells.",
+                    PollutionColour(telemetry.LocalAir01));
+            if (severeRunoff)
+                AddEnvironmentAlert($"{RunoffBand(telemetry.LocalRunoff01)} RUNOFF AT VIEWER",
+                    "Remediate brown/purple cells; contaminated water pumps lose throughput.",
+                    RunoffColour(telemetry.LocalRunoff01));
+            if (severeBodyAir && !severeAir)
+                AddEnvironmentAlert($"BODY AIR · {AirBand(telemetry.BodyAir01)}",
+                    "A major plume is active elsewhere; inspect orange/red map cells.",
+                    PollutionColour(telemetry.BodyAir01));
+            if (severeBodyRunoff && !severeRunoff)
+                AddEnvironmentAlert($"BODY RUNOFF · {RunoffBand(telemetry.BodyRunoff01)}",
+                    "Persistent contamination is active elsewhere; inspect brown/purple cells.",
+                    RunoffColour(telemetry.BodyRunoff01));
+            if (airForecast)
+                AddEnvironmentAlert("BODY AIR RISING",
+                    $"Projected to reach {nextAir} in {airEta} at the current trend.", T.AccentAmber);
+            if (runoffForecast)
+                AddEnvironmentAlert("BODY RUNOFF SPREADING",
+                    $"Projected to reach {nextRunoff} in {runoffEta} at the current trend.", T.AccentAmber);
+        }
+
+        private static bool TryForecastBand(float current, float trendPerMinute, bool air,
+            out string nextBand, out string eta)
+        {
+            nextBand = string.Empty;
+            eta = string.Empty;
+            if (trendPerMinute <= 0.00005f) return false;
+            float[] thresholds = air ? AirAlertThresholds : RunoffAlertThresholds;
+            float next = -1f;
+            for (int i = 0; i < thresholds.Length; i++)
+            {
+                if (thresholds[i] <= current + 0.0001f) continue;
+                next = thresholds[i];
+                break;
+            }
+            if (next < 0f) return false;
+            float minutes = (next - current) / trendPerMinute;
+            if (minutes <= 0f || minutes > 120f) return false;
+            nextBand = air ? AirBand(next) : RunoffBand(next);
+            eta = minutes < 1f ? "under 1 min" : $"about {Mathf.CeilToInt(minutes)} min";
+            return true;
+        }
+
+        private static void AddEnvironmentAlert(string title, string detail, Color colour)
+        {
+            var card = new VisualElement();
+            card.style.marginBottom = 4;
+            card.style.paddingLeft = 8;
+            card.style.paddingRight = 8;
+            card.style.paddingTop = 5;
+            card.style.paddingBottom = 5;
+            card.style.backgroundColor = new StyleColor(new Color(colour.r, colour.g, colour.b, 0.10f));
+            card.style.borderLeftWidth = 2;
+            card.style.borderLeftColor = new StyleColor(colour);
+            T.Radius(card, 4);
+
+            var heading = new Label(title);
+            heading.style.fontSize = 9;
+            heading.style.unityFontStyleAndWeight = FontStyle.Bold;
+            heading.style.letterSpacing = 0.8f;
+            heading.style.color = new StyleColor(colour);
+            card.Add(heading);
+
+            var body = new Label(detail);
+            body.style.fontSize = 9;
+            body.style.whiteSpace = WhiteSpace.Normal;
+            body.style.color = new StyleColor(T.TextMuted);
+            card.Add(body);
+            _list.Add(card);
         }
 
         private static void AddSection(string text)
@@ -764,11 +869,16 @@ namespace VoxelEngine.UI
                 if (hasPollution && pollution.RunoffUnits > 0f)
                     detail += "  ·  " + PollutionUnits.FormatContaminantMass(pollution.RunoffUnits);
                 if (_showPollution && hasPollution && pollution.Intensity01 >= 0.01f)
-                    detail += $"\nAIR ABOVE  ·  {pollution.Intensity01 * 100f:0.0}%  ·  "
+                    detail += $"\nAIR ABOVE  ·  {AirBand(pollution.Intensity01)}  ·  "
+                        + $"{pollution.Intensity01 * 100f:0.0}%  ·  "
                         + PollutionUnits.FormatMass(pollution.AirborneUnits);
+                if (hasPollution && runoff >= 0.01f)
+                    detail = AppendSourceGuidance(detail, pollution);
                 Color waterInk = runoff >= 0.01f ? RunoffColour(runoff) : new Color(0.38f, 0.76f, 0.94f);
-                ShowHover(runoff >= 0.01f ? "POLLUTED WATER" : "CLEAN WATER",
-                    detail, waterInk, r);
+                string title = runoff >= 0.01f
+                    ? $"POLLUTED WATER · {RunoffBand(runoff)}"
+                    : "CLEAN WATER";
+                ShowHover(title, detail, waterInk, r);
                 return;
             }
 
@@ -777,17 +887,21 @@ namespace VoxelEngine.UI
                 bool air = pollution.Intensity01 >= 0.01f;
                 bool runoff = pollution.Runoff01 >= 0.01f;
                 string title = air && runoff ? "MIXED POLLUTION"
-                    : air ? "AIR POLLUTION" : "SOIL / WATER POLLUTION";
+                    : air ? $"AIR POLLUTION · {AirBand(pollution.Intensity01)}"
+                    : $"SOIL / WATER · {RunoffBand(pollution.Runoff01)}";
                 string detail = string.Empty;
                 if (air)
-                    detail = $"AIR  ·  {pollution.Intensity01 * 100f:0.0}%  ·  "
+                    detail = $"AIR  ·  {AirBand(pollution.Intensity01)}  ·  "
+                        + $"{pollution.Intensity01 * 100f:0.0}%  ·  "
                         + PollutionUnits.FormatMass(pollution.AirborneUnits);
                 if (runoff)
                 {
                     if (!string.IsNullOrEmpty(detail)) detail += "\n";
-                    detail += $"RUNOFF  ·  {pollution.Runoff01 * 100f:0.0}%  ·  "
+                    detail += $"RUNOFF  ·  {RunoffBand(pollution.Runoff01)}  ·  "
+                        + $"{pollution.Runoff01 * 100f:0.0}%  ·  "
                         + PollutionUnits.FormatContaminantMass(pollution.RunoffUnits);
                 }
+                detail = AppendSourceGuidance(detail, pollution);
                 Color ink = runoff && !air ? RunoffColour(pollution.Runoff01)
                     : PollutionColour(pollution.Intensity01);
                 ShowHover(title, detail, ink, r);
@@ -843,6 +957,62 @@ namespace VoxelEngine.UI
             return found;
         }
 
+        private static string AppendSourceGuidance(string detail, PollutionMapCell cell)
+        {
+            PollutionEmitter.CollectActiveNear(cell.World, cell.SizeMetres * 1.75f, _sourceReadings);
+            if (_sourceReadings.Count == 0)
+            {
+                detail += "\nNO ACTIVE SOURCE NEARBY · RESIDUAL LOAD";
+            }
+            else
+            {
+                detail += "\nACTIVE CONTRIBUTORS";
+                int shown = Mathf.Min(3, _sourceReadings.Count);
+                for (int i = 0; i < shown; i++)
+                {
+                    PollutionSourceReading source = _sourceReadings[i];
+                    detail += $"\n{i + 1}. {source.Name}\n   ";
+                    bool wroteRate = false;
+                    if (source.AirbornePerSecond > 0.0001f)
+                    {
+                        detail += PollutionUnits.FormatRate(source.AirbornePerSecond);
+                        wroteRate = true;
+                    }
+                    if (source.RunoffPerSecond > 0.0001f)
+                    {
+                        if (wroteRate) detail += " · ";
+                        detail += PollutionUnits.FormatContaminantRate(source.RunoffPerSecond);
+                    }
+                }
+            }
+
+            if (cell.Runoff01 >= 0.18f && cell.Intensity01 >= 0.20f)
+                detail += "\nACTION · POWER AN ATMOSPHERIC CARBON HARVESTER NEARBY";
+            else if (cell.Runoff01 >= 0.18f)
+                detail += "\nACTION · REMEDIATE WITHIN 72 m";
+            else if (cell.Intensity01 >= 0.20f)
+                detail += "\nACTION · CAPTURE WITHIN 96 m";
+            return detail;
+        }
+
+        private static string AirBand(float intensity) => intensity switch
+        {
+            < 0.05f => "CLEAR",
+            < 0.20f => "TRACE",
+            < 0.45f => "HAZE",
+            < 0.70f => "SMOG",
+            _ => "SEVERE",
+        };
+
+        private static string RunoffBand(float intensity) => intensity switch
+        {
+            < 0.03f => "CLEAN",
+            < 0.18f => "TRACE",
+            < 0.42f => "TAINTED",
+            < 0.70f => "TOXIC",
+            _ => "SEVERE",
+        };
+
         private static bool IsOceanAt(Vector2 pointer, Vector2 centre, float metresPerPixel)
         {
             float east = (pointer.x - centre.x) * metresPerPixel;
@@ -871,7 +1041,7 @@ namespace VoxelEngine.UI
                 for (int i = 0; i < detail.Length; i++) if (detail[i] == '\n') lines++;
             float estimatedHeight = 39f + lines * 14f;
             float x = Mathf.Clamp(_pointerCanvas.x + 16f, 6f,
-                Mathf.Max(6f, viewport.width - 276f));
+                Mathf.Max(6f, viewport.width - 366f));
             float y = _pointerCanvas.y + 17f;
             if (y + estimatedHeight > viewport.height - 8f)
                 y = _pointerCanvas.y - estimatedHeight - 12f;
