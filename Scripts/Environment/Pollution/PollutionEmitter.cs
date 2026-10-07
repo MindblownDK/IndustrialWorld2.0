@@ -69,7 +69,7 @@ namespace VoxelEngine.Environment
                 if ((emitter.ReleasePoint - worldPosition).sqrMagnitude > radiusSq) continue;
 
                 float rate = emitter.CurrentAirbornePerSecond + emitter.CurrentRunoffPerSecond;
-                int id = emitter.GetInstanceID();
+                int id = emitter.GetEntityId().GetHashCode();
                 if (rate < bestRate || (Mathf.Approximately(rate, bestRate) && id >= bestId))
                     continue;
                 bestRate = rate;

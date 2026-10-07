@@ -1,9 +1,15 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.0-dev`
+**Current Version:** `14.73.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.73.1-dev] Current Entity Identity
+
+#### Fixed
+- Replaced the obsolete `Object.GetInstanceID()` tie-breaker in pollution-source selection with Unity's current `GetEntityId()` API, restoring compilation on the project's Unity version without changing source ranking or threat behaviour.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to patch version `14.73.1-dev`.
 
 ### [14.73.0-dev] They Follow the Smoke
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.0-dev`
-**Roadmap Version:** `14.73.0-dev`
+**Current Version:** `14.73.1-dev`
+**Roadmap Version:** `14.73.1-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.73.1-dev - Current Entity Identity
+- Pollution-source tie-breaking uses Unity's supported entity identity API
+- Source ranking and industrial threat behaviour remain unchanged
+- The 14.73.0-dev feature compiles without the obsolete Object API
+
 ### 14.73.0-dev - They Follow the Smoke
 - Active static pollution outlets attract host-authoritative Ghoul scouts to their exact machine
 - Scouts attack emitting blocks, but nearby players retain target priority and stopped sources lose the scent
@@ -48,11 +53,6 @@
 - Pollution hover ranks the three largest active nearby contributors with SI air/runoff rates and honest residual-load fallback
 - Optional map alerts forecast the next body severity boundary and expose local/body air or runoff hazards
 - Severity-aware hover guidance directs air capture, runoff remediation and combined recovery at their actual operating radii
-
-### 14.69.0-dev - What the Map Knows
-- Logistics Map hover inspection names buildings and resolves their current owning team from replicated placer identity
-- Pollution cells expose exact air/runoff percentages and SI mass; ocean hover distinguishes clean from polluted water
-- Additive ownership metadata persists, replicates and survives tier upgrades while legacy buildings remain explicitly unowned
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
