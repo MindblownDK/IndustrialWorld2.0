@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.2-dev`
+**Current Version:** `17.1.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.3-dev] Faster Water Waves and Quieter Shores
+
+**Type:** PATCH — save-compatible water-surface and shoreline meshing polish. No save schema, voxel format, liquid simulation/transfer behavior, terrain generation, or public API changes.
+
+**GitHub title:** `[17.1.3-dev] Faster water waves and quieter shores`
+
+#### Fixed and improved
+- Visible directional wave crests now travel roughly twice as fast across calm-to-storm settings. This is shader timing only; voxel-fluid simulation, solver cadence, and liquid transfer are unchanged.
+- All wave bands, phase-locked crest foam, flow foam, and caustics now fade more firmly near banks, using both voxel bank depth and the existing scene-depth sample. The previous shallow-wave floor is removed; no extra texture sample or render pass is added.
+- Marching tetrahedra now skips all-solid cubes whose extrapolated scalar field crosses zero without liquid, preventing detached bank slivers while retaining the reconstructed surface through mixed air/bank cubes.
+- The surface regression fixture now checks solid-only bank-sliver suppression. The Sand/Dust shader and boat-wake behavior are unchanged in this follow-up.
+
+#### Compatibility and validation
+- PATCH over 17.1.2-dev. Existing saves, voxel storage, generated terrain, fluid conservation/transfer behavior, setup content, public interfaces, and wake behavior are unchanged.
+- Thomas reports the 17.1.2-dev FluidValidation and SurfaceValidation fixtures PASS, FPS is good, and sand looks good. These are preceding-version results; this patch's new fixture assertion and Unity visual/compile checks remain open, with no new FPS measurement claimed.
+- `git diff --check` and lightweight C#/HLSL delimiter checks pass. No manual prefab, item, recipe, or research setup is required. Boat wakes remain deferred.
 
 ### [17.1.2-dev] Coherent Water Crests and Softer Shores
 
@@ -20,8 +37,8 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.1-dev. Existing saves and generated terrain remain valid; terrain revision, voxel data, fluid conservation, public runtime interfaces, setup content, and boat-wake behavior are unchanged.
-- Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. Unity C#/HLSL compilation, the updated fixture, real beach/water visuals, and target-hardware FPS still need validation. User-reported FPS was great on the preceding pass; no new measurement is claimed.
-- Boat wakes are intentionally deferred to a later pass. No manual content or prefab setup is required.
+- Thomas subsequently reports the FluidValidation and SurfaceValidation fixtures PASS on 17.1.2-dev, FPS is good, and sand looks good. The surface fixture excludes visual/FPS validation; the remaining slow wave animation and shore ripples are carried into 17.1.3.
+- Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. Boat wakes are intentionally deferred to a later pass. No manual content or prefab setup is required.
 
 ### [17.1.1-dev] Responsive Water, Cleaner Shores, and Restored Biomes
 

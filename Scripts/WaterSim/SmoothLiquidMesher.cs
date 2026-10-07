@@ -73,16 +73,20 @@ namespace VoxelEngine.WaterSim
                 if (!any) continue;
                 for(int z=0;z<S;z++) for(int y=0;y<S;y++) for(int x=0;x<S;x++)
                 {
-                    bool wet=false,positive=false,negative=false,known=true;
+                    bool wet=false,positive=false,negative=false,known=true,allSolid=true;
                     for(int c=0;c<8;c++)
                     {
                         Vector3Int q = new Vector3Int(x,y,z)+Corners[c];
                         int index=q.x+N*(q.y+N*q.z);
                         known &= IsKnown(snapshot,q);
+                        allSolid &= Read(snapshot,q).IsSolid;
                         values[c]=field[index]; positions[c]=(Vector3)(origin+q);
                         wet |= relevant[index]; positive |= values[c]>=0; negative |= values[c]<0;
                     }
-                    if (!known || !positive || !negative) continue;
+                    // Head extrapolation can cross zero entirely inside a solid-only cube
+                    // near water. Preserve mixed air/bank reconstruction, but never emit a
+                    // detached surface when all eight source samples are solid.
+                    if (!known || (!wet && allSolid) || !positive || !negative) continue;
                     float depth = BankDepth(new Vector3(x+0.5f,y+0.5f,z+0.5f), snapshot);
                     Color bank = new Color(Mathf.Clamp01(depth/3f),1f,Mathf.Clamp01(depth/8f),1f);
                     for(int t=0;t<6;t++)

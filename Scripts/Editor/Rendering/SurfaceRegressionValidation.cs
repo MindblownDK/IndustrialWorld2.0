@@ -29,6 +29,31 @@ namespace VoxelEngine.EditorTools
                 Require(a.colors[i].b>=0 && a.colors[i].b<=1,"depth channel");
             }
 
+            var bankSupport = new SmoothLiquidMesher.Snapshot
+            {
+                voxels = new Voxel[h*h*h],
+                known = new bool[h*h*h]
+            };
+            for(int z=-2;z<=34;z++) for(int y=-2;y<=34;y++) for(int x=-2;x<=34;x++)
+            {
+                int i=x+2+h*(y+2+h*(z+2));
+                bankSupport.known[i]=true;
+                bankSupport.voxels[i]=Voxel.Empty;
+            }
+            bankSupport.voxels[11+2+h*(10+2+h*(10+2))]
+                = new Voxel(-1,FluidMaterialUtility.WaterMaterial,255);
+            for(int z=10;z<=11;z++) for(int y=10;y<=11;y++) for(int x=12;x<=13;x++)
+                bankSupport.voxels[x+2+h*(y+2+h*(z+2))]=Voxel.Solid;
+            var bankMesh=SmoothLiquidMesher.Extract(bankSupport);
+            Require(bankMesh.vertices.Count>0,"bank-support water surface missing");
+            for(int i=0;i<bankMesh.vertices.Count;i++)
+            {
+                Vector3 p=bankMesh.vertices[i];
+                bool detachedBankSliver=p.x>12.0001f && p.x<13.0f
+                    && p.y>=10.0f && p.y<=11.0f && p.z>=10.0f && p.z<=11.0f;
+                Require(!detachedBankSliver,"solid-only support cube emitted a detached bank sliver");
+            }
+
             var shoreline = new SmoothLiquidMesher.Snapshot
             {
                 origin = new Vector3Int(0, 3200, 0),
@@ -54,7 +79,7 @@ namespace VoxelEngine.EditorTools
 
             Array.Clear(s.known,0,s.known.Length);
             Require(SmoothLiquidMesher.Extract(s).vertices.Count==0,"unknown boundary rendered");
-            Debug.Log("[SurfaceValidation] PASS: full pool, deterministic worker extraction, finite vertices, depth range, unknown boundaries, fractional sea-level film suppression. Visuals/FPS/mining/grass are NOT validated by this fixture.");
+            Debug.Log("[SurfaceValidation] PASS: full pool, deterministic worker extraction, finite vertices, depth range, solid-only bank sliver suppression, unknown boundaries, fractional sea-level film suppression. Visuals/FPS/mining/grass are NOT validated by this fixture.");
         }
         private static void Require(bool ok,string message) { if(!ok) throw new InvalidOperationException("Surface validation: "+message); }
     }

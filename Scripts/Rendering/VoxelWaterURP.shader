@@ -110,7 +110,7 @@ Shader "VoxelEngine/VoxelWaterURP"
             float4 _WeatherWindDirWS;
 
             float SeaAmp()   { return 1.0 + saturate(_WeatherSeaState) * 1.45; }   // wave height
-            float SeaSpeed() { return 1.0 + saturate(_WeatherSeaState) * 0.35; }   // waves run harder
+            float SeaSpeed() { return 2.0 + saturate(_WeatherSeaState) * 0.5; }   // faster visible crest travel
             float SeaChop(float chop) { return saturate(chop * (1.0 + saturate(_WeatherSeaState) * 1.10)); }
             float SeaFoam()  { return 1.0 + saturate(_WeatherSeaState) * 1.80; }   // whitecaps
 
@@ -201,7 +201,7 @@ Shader "VoxelEngine/VoxelWaterURP"
             }
 
             float3 DirectionalWaveNormal(float3 surfaceCoord, float3 radialUp,
-                float geometryDepth01, float tideMask, float t,
+                float shoreWaveFade, float tideMask, float t,
                 out float3 waveBearing, out float crestFoam)
             {
                 float seaState = saturate(_WeatherSeaState);
@@ -235,16 +235,14 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 crossTangent = crossWaveDir - radialUp * dot(crossWaveDir, radialUp);
                 float3 detailTangent = detailWaveDir - radialUp * dot(detailWaveDir, radialUp);
 
-                // Deep swell dies away over the authored bank-depth range. Short waves
-                // remain, but are deliberately gentler in the last metre at the beach.
-                float shoreFadeEnd = max(0.07, _ShoreBlendDistance / 8.0);
-                float shoreWaveFade = smoothstep(0.025, shoreFadeEnd, saturate(geometryDepth01));
+                // All wave bands and associated crests fade out in shallow/intersecting
+                // water; leaving a short-wave floor here caused the persistent beach rings.
                 float tide = 1.0 + saturate(tideMask) * max(_TideStrength, 0.0);
                 float waveEnergy = SeaAmp() * tide;
                 float deepAmp = max(_DeepWaveAmplitude, 0.0) * waveEnergy * shoreWaveFade;
                 float crossAmp = max(_SecondaryWaveAmplitude, 0.0) * waveEnergy * shoreWaveFade;
                 float detailAmp = max(_ShallowWaveAmplitude, 0.0) * tide
-                    * (1.0 + seaState * 0.35) * lerp(0.38, 0.92, shoreWaveFade);
+                    * (1.0 + seaState * 0.35) * shoreWaveFade;
 
                 float deepFreq = max(_DeepWaveFrequency, 0.001);
                 float crossFreq = max(_SecondaryWaveFrequency, 0.001);
@@ -335,16 +333,10 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 surfUV = float2(dot(surfaceCoord,float3(0.73,0.39,0.56)),dot(surfaceCoord,float3(-0.42,0.86,0.28)));
                 bool isSideFace = dot(geoN,radialUp) < 0.3;
 
-                float3 waveBearing;
-                float waveCrestFoam;
-                float3 waveN = DirectionalWaveNormal(surfaceCoord, radialUp, geometryDepth01,
-                    tideMask, t, waveBearing, waveCrestFoam);
-                float3 N = normalize(lerp(radialUp, waveN, saturate(_FlowNormalStrength)));
-                if (isSideFace) N = geoN;
-                float3 detailN = normalize(float3(dot(N,tanA), dot(N,radialUp), dot(N,tanB)));
-
+                // Use both voxel-authored bank thickness and the camera's actual terrain
+                // intersection. The latter catches sloped beaches where a cube-local bank
+                // sample reports deep water despite sand immediately below the surface.
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
-                float2 refractUV = screenUV + N.xz * _RefractionStrength;
                 float rawDepth = SampleSceneDepth(screenUV);
                 float sceneEyeDepth = LinearEyeDepth(rawDepth, _ZBufferParams);
                 float waterEyeDepth = i.scrPos.w;
@@ -353,6 +345,20 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float screenDepth01 = saturate(depthDiff / _DepthFade);
                 float deep01 = geometryDepth01;
                 float shoreAtten = saturate(shoreDepthMask);
+                float bankFadeEnd = max(0.07, _ShoreBlendDistance / 4.0);
+                float bankWaveFade = smoothstep(0.025, bankFadeEnd, geometryDepth01);
+                float sceneWaveFade = hasValidDepth ? smoothstep(0.25, 2.0, depthDiff) : 1.0;
+                float shoreWaveFade = min(bankWaveFade, sceneWaveFade);
+
+                float3 waveBearing;
+                float waveCrestFoam;
+                float3 waveN = DirectionalWaveNormal(surfaceCoord, radialUp, shoreWaveFade,
+                    tideMask, t, waveBearing, waveCrestFoam);
+                float3 N = normalize(lerp(radialUp, waveN, saturate(_FlowNormalStrength)));
+                if (isSideFace) N = geoN;
+                float3 detailN = normalize(float3(dot(N,tanA), dot(N,radialUp), dot(N,tanB)));
+
+                float2 refractUV = screenUV + N.xz * _RefractionStrength;
                 float3 refracted = SampleSceneColor(refractUV).rgb;
                 if (length(refracted) < 0.001f) refracted = _DeepColor.rgb;
 
@@ -377,7 +383,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 foamScrollUV = surfUV - windUV * t * 0.18;
                 // Solver velocity remains a low-weight foam cue only. It no longer steers
                 // surface normals, avoiding chunk-sized changes in the apparent wave bearing.
-                float flowFoam = smoothstep(1.0, 2.6, flowSpeed) * _FlowFoamStrength * 0.28;
+                float flowFoam = smoothstep(1.0, 2.6, flowSpeed) * _FlowFoamStrength * 0.28
+                    * shoreWaveFade;
                 flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
                 float wakeFoam = NativeWakeFoam(i.posWS, radialUp);
                 float foam = saturate(shoreFoam + crestFoam + flowFoam + wakeFoam);
@@ -394,7 +401,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5 * _SparkleStrength;
                 float sssWrap = pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);
-                float caustic = pow(saturate(FBM(surfUV * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);
+                float caustic = pow(saturate(FBM(surfUV * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0)
+                    * _CausticsIntensity * (1.0 - deep01) * shoreWaveFade;
 
                 float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.22;
                 refractWeight *= (1.0 - shoreFactor * 0.9);
