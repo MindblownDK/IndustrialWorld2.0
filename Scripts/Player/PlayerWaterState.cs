@@ -81,9 +81,9 @@ namespace VoxelEngine.Player
             Vector3 feet = transform.position;
             Vector3 head = feet + Vector3.up * 1.6f;
 
-            Vector3Int headVoxelPosition = world.WorldToVoxel(head);
+            Vector3Int flatHeadVoxelPosition = world.WorldToVoxel(head);
             var feetVoxel = world.GetVoxelWorld(world.WorldToVoxel(feet));
-            var headVoxel = world.GetVoxelWorld(headVoxelPosition);
+            var headVoxel = world.GetVoxelWorld(flatHeadVoxelPosition);
 
             WaterSurfaceY = SampleWaterSurface(world, feet);
             float flatSubmerged = WaterSurfaceY > -9000 ? (WaterSurfaceY - feet.y) : 0f;
@@ -91,7 +91,7 @@ namespace VoxelEngine.Player
 
             const float SWIM_DEPTH = 0.85f;
             IsSwimming       = feetInLiquid && (WaterSurfaceY <= -9000 || flatSubmerged > SWIM_DEPTH);
-            IsHeadUnderwater = IsPointSubmerged(world, head, headVoxelPosition, headVoxel);
+            IsHeadUnderwater = IsPointSubmerged(world, head, flatHeadVoxelPosition, headVoxel);
             WaterDepth       = IsSwimming ? Mathf.Clamp01(Mathf.Max(flatSubmerged, 1.8f) / 1.8f) : 0f;
 
             // 9.16.0 Part 3 — per-liquid state (flat fallback; planets use the radial branch).

@@ -14,6 +14,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 #### Improved
 - Solver-backed voxel-liquid surfaces now show a separate, gently curved crest/foam band and subtle flow-aligned normal cue while the existing smoothed movement vector is active. The cue follows the solver's direction/speed data and fades from its render snapshot.
 - Planetary flow direction is transformed into world space for rendering only. Accepted wind-driven surface waves, procedural ocean-patch waves, and boat-wake logic remain unchanged.
+- Fixed a C# local-name collision in the flat-world underwater-head check (`CS0136`); runtime behavior is unchanged.
 
 #### Compatibility and validation
 - PATCH over 17.1.5-dev. Existing flow simulation, transfer calculations, conservation, solver cadence, saves, terrain, voxel storage, and public APIs are unchanged.
@@ -454,7 +455,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 ### [14.64.2-dev] Clean Exit
 
-**Field-report round on 14.64.1: the one dynamic rigidbody behind the exit bounce, the beacon smash and the deck jitter is gone, the relative-dampener leash stops believing phantom frames, the look-at card finally hides, cut pieces stop spinning, and the death bag rides the ship it fell on.**
+**Field-report round on 14.64.1: the one dynamic rigidbody behind the exit bounce, the beacon smash and the deck jitter is gompener leash stops believing phantom frames, the look-at card finally hides, cut pieces stop spinning, and the death bag rides the ship it fell on.**
 
 #### Fixed
 - **Cockpit exit no longer bounces the ship or hurts the pilot.** Leaving a seat used to force the player rig's helper rigidbody DYNAMIC; from then on PhysX depenetration fought the character controller every frame - the exit shove that torqued the hull and dealt impact damage, blocks "rammed" at walking speed, and the residual deck jitter all traced to that one body. Exit now RESTORES the pre-seat kinematic state, and if the body really was dynamic it leaves co-moving with the hull instead of carrying stale velocity.
@@ -535,6 +536,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 **Feature round: leaving a ship now behaves like it should in space, and grid blocks can finally be REPAIRED - a welder tool to mirror the grinder, plus self-healing for two more script-loss victims.**
 
 - Ship exit inherits velocity. Stepping out of a cockpit used to zero the player against the WORLD: the cruising hull instantly sailed away (or slammed into you). The player now leaves the seat co-moving with the ship.
+- Mawith the ship.
 - Magnetic boots (automatic, no new equipment). While the jetpack is OFF and your feet touch a grid, you ride it: the hull's linear and rotational motion is applied to you every frame - walk the deck of a flying ship, stay put through turns. In low gravity the boots provide the "down": the hull contact normal becomes your up and a boot force replaces gravity, so you can walk the plating of a ship in deep space. Step off the edge and the boots release - zero-g drift as designed. Jetpack on = boots off.
 - Grid-relative inertial dampeners. While flying near a grid, the jetpack's dampeners null your velocity RELATIVE TO THAT GRID instead of the world - hovering beside a cruising ship means matching its speed. Far from any grid nothing changes.
 - Welder tool. The grinder's constructive twin: hold LMB on a damaged grid block to restore hit points. Repairs are paid for in material as HP flows back (pay-as-you-weld; welding stops honestly when the material runs out). The top-left look-at card shows the FULL repair cost of the block under the crosshair while a welder is in hand. Crack visuals heal as HP returns. Setup step 113 authors the tool + Assembler recipe non-destructively (default material: Iron Ingot; 4 Iron + 2 Copper to craft).
