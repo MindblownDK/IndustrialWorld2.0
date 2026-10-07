@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.3-dev`
-**Roadmap Version:** `14.73.3-dev`
+**Current Version:** `14.74.0-dev`
+**Roadmap Version:** `14.74.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.74.0-dev - Planet Ecology, Designer-Owned
+- Theme profiles own native abundance, pollution response and livestock suitability
+- Supplemental and biome-scattered Ghouls share profile habitat rules
+- Centralized setup creates missing profiles while preserving authored tuning
+
 ### 14.73.3-dev - Unity-Compatible Map Cursor Input
 - Logistics Map wheel zoom reads the pointer through the Unity-supported mouse-position API
 - Cursor-anchored zoom behaviour remains unchanged
@@ -48,11 +53,6 @@
 - Active static pollution outlets attract host-authoritative Ghoul scouts to their exact machine
 - Scouts attack emitting blocks, but nearby players retain target priority and stopped sources lose the scent
 - Dedicated hosts can anchor supplemental hostile population to replicated players without a local avatar
-
-### 14.72.0-dev - Scatter, Sorted
-- Biome-folder prefabs synchronize into independent environment, enemy, passive and building scatter categories
-- Re-runnable centralized setup preserves existing entry tuning and gives defaults only to newly discovered prefabs
-- Generated base nature is retired while themed placeholders move into their owning biome folders
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -377,7 +377,7 @@ Industrial activity creates pollution that spreads outward from its source and c
 
 ### Planet-Specific Hostile & Passive Ecology
 
-The first shared body-theme ecology catalogue shipped in 14.71.0-dev: conventional livestock now obeys atmosphere, oxygen, temperature and pollution suitability, while living flora and hostile pressure use the same local reading. Dedicated `EcologyProfile` assets with bespoke creatures, predators, elites, bosses, resistances, loot and spawn rules remain open.
+The first shared body-theme ecology catalogue shipped in 14.71.0-dev: conventional livestock now obeys atmosphere, oxygen, temperature and pollution suitability, while living flora and hostile pressure use the same local reading. ~~Theme-resolved `EcologyProfile` assets configure native abundance, pollution response, livestock suitability and Ghoul habitat.~~ *(14.74.0-dev; `EcologyProfile` and `EcologyPressure`, authored by centralized planet ecology setup.)* Bespoke creatures, predators, elites, bosses, resistances, loot and species-specific spawn rules remain open.
 
 | Planet Theme | Passive Life | Standard Threats | Elites / Bosses |
 |--------------|--------------|------------------|-----------------|

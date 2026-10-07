@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.3-dev`
+**Current Version:** `14.74.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.74.0-dev] Planet Ecology, Designer-Owned
+
+#### Added
+- Theme-resolved EcologyProfile assets configure native abundance, pollution sensitivity, conventional livestock oxygen/temperature suitability and Ghoul atmosphere requirements.
+- Centralized Voxel Engine Setup creates missing profiles for all fourteen body themes and preserves every existing profile and authored value.
+
+#### Changed
+- Scatter, supplemental livestock and map telemetry share profile-backed ecology readings, with legacy defaults when setup has not yet run.
+- Supplemental and biome-scattered Ghouls obey the same habitat gate; atmospheric suitability no longer differs between their spawn paths. Existing creatures are not removed by this gate.
+- Runtime profiles are resource-resolved and cached; play-session cache reset also supports disabled domain reload. No save format, machine balance, prefab or recipe changes.
+- GameVersion, changelog and roadmap synchronized to 14.74.0-dev.
+
+#### Scope
+- Bespoke creature rosters, elites, resistances, loot and boss rules remain future work. Profiles configure existing ecology and Ghoul spawn suitability only.
+- Unity compilation and in-editor/play-mode verification require the full project and have not been executed in this script-only workspace.
 
 ### [14.73.3-dev] Unity-Compatible Map Cursor Input
 

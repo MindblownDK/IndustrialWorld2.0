@@ -61,10 +61,12 @@ namespace VoxelEngine.Environment
                     supportsNativeEcology: false, supportsLivestock: false, status: "NO BIOSPHERE");
 
             PlanetSkyKind kind = PlanetSkyCatalog.ResolveKind(settings);
-            float nativeAbundance = NativeAbundance(kind);
-            float sensitivity = PollutionSensitivity(kind);
+            var profile = IndustrialWorld.Simulation.EcologyProfiles.Resolve(kind);
+            float nativeAbundance = profile != null ? Mathf.Max(0f, profile.nativeAbundance) : NativeAbundance(kind);
+            float sensitivity = profile != null ? Mathf.Max(0f, profile.pollutionSensitivity) : PollutionSensitivity(kind);
             bool supportsEcology = nativeAbundance > 0.001f;
-            bool supportsLivestock = SupportsConventionalLivestock(settings, kind);
+            bool supportsLivestock = profile != null ? profile.SupportsLivestock(settings)
+                : SupportsConventionalLivestock(settings, kind);
 
             // Runoff weighs slightly more because it directly reaches roots and
             // drinking water. Max() prevents one clean channel from hiding a

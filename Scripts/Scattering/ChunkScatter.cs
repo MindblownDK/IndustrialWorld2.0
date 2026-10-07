@@ -140,6 +140,10 @@ namespace VoxelEngine.Scattering
 
                         bool isBuilding = categoryPass == 0 || IsBuildingPrefab(entry.prefab);
                         bool isEnemy = categoryPass == 2 || IsEnemyPrefab(entry.prefab);
+                        if (isEnemy && entry.prefab.GetComponentInChildren<VoxelEngine.Combat.EnemyGhoul>(true) != null
+                            && !IndustrialWorld.Simulation.EcologyProfiles.AllowsGhoul(
+                                VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+                                    ? VoxelEngine.Cosmos.GravityProvider.ActiveBody.settings : null)) continue;
                         bool isPassiveAnimal = categoryPass == 3 || IsPassiveAnimalPrefab(entry.prefab);
                         bool isLivingFlora = !isBuilding && !isEnemy && !isPassiveAnimal
                             && IsLivingFloraPrefab(entry.prefab);

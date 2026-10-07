@@ -64,6 +64,9 @@ namespace VoxelEngine.Combat
             if (VoxelEngine.Cosmos.GravityProvider.ActiveBody == null
                 || VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(ppos)) return;
 
+            if (!IndustrialWorld.Simulation.EcologyProfiles.AllowsGhoul(
+                    VoxelEngine.Cosmos.GravityProvider.ActiveBody.settings)) return;
+
             EcologyReading ecology = EcologyPressure.Sample(ppos);
             if (Time.time < _nextSpawn) return;
             _nextSpawn = Time.time + spawnInterval / ecology.HostilePressureMultiplier;
