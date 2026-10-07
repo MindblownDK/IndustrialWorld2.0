@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `15.0.0-dev`
-**Roadmap Version:** `15.0.0-dev`
+**Current Version:** `16.0.0-dev`
+**Roadmap Version:** `16.0.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 16.0.0-dev - Regional Biomes, Named PBR and Conservative Water
+- ~~Regional mountain masks and shared temperate biome windows~~ *(16.0.0-dev)*
+- ~~Named triplanar PBR library with per-material legacy fallback~~ *(16.0.0-dev)*
+- ~~Conservative fluid transfers and world-grid liquid mesh replacement~~ *(16.0.0-dev)*
+
 ### 15.0.0-dev - Mountains, Coastlines and Grounded Grass
 - CPU/GPU terrain includes broader mountain uplift and local relief; fresh worlds required
 - Coastal palm gates, hashed scatter sampling and centralized desert-reference repair are implemented
@@ -48,11 +53,6 @@
 - Logistics Map wheel zoom reads the pointer through the Unity-supported mouse-position API
 - Cursor-anchored zoom behaviour remains unchanged
 - The 14.73.2-dev map, ruin-inspection and machine-scrolling patch compiles past this API mismatch
-
-### 14.73.2-dev - Maps and Panels Stay Put
-- Logistics Map zoom follows the pointer, retains its same-body view and uses a fixed terrain-tile origin
-- Ruin inspection exposes authored ruin names and never the CosmosBootstrap runtime root
-- Expanded emissions telemetry scrolls instead of compressing or clipping machine controls
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -2608,3 +2608,9 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
 
 ---
+
+## Landscape and water validation still open
+- [ ] Unity/Burst/HLSL compilation and runtime conservation fixture *(16.0.0-dev)*
+- [ ] Fresh-seed biome coverage and mountain-region review *(16.0.0-dev)*
+- [ ] Shoreline, thin-stream, pump/boat and save/reload acceptance *(16.0.0-dev)*
+- [ ] Grass/streaming/fluid frame-time and texture-memory profiling *(16.0.0-dev)*

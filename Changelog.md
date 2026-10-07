@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `15.0.0-dev`
+**Current Version:** `16.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [16.0.0-dev] Regional Biomes, Named PBR and Conservative Water
+
+#### Breaking
+- Fresh world required, including worlds generated with 15.0.0-dev. Terrain mountain masks, climate selection and generated coastline water coverage changed. Old chunks are not migrated. Chunk-store identity compares terrain revision 16; mismatched older stores follow the existing quarantine path rather than silently mixing terrain. This does not migrate world-level buildings or inventories.
+
+#### Added
+- Named per-material PBR library built from albedo, OpenGL RGB tangent-normal, roughness, metallic and AO image files. Terrain uses triplanar texture arrays without requiring mesh UVs or hand-built Unity materials.
+- Missing named albedo leaves the existing procedural material/color path active. Normal and scalar maps are optional. Runtime Resources binding includes the generated library in builds; centralized setup rebuilds the library after image changes.
+- Centralized editor conservation fixture covers loaded chunk seams, closed/unloaded boundaries, negative coordinates and separate water/oil volumes. This fixture is supplied but has not been executed in Unity here.
+
+#### Fixed
+- Beach/ocean/coast identities no longer compete for inland terrain climate. Surface sand is a thin sea-relative top layer, while marble resolves to stone and desert subsurface resolves to stone.
+- Terrain and scatter share runtime climate windows and body-theme exclusions. Plains, forest and taiga receive separate moderate, wet and cold climate windows; broad specialized world biomes are excluded from Earth climate selection.
+- Landscape repair creates a missing Taiga asset, preserving an existing one, seeds scenery from existing tundra content, and appends missing temperate biome connections to applicable registries/Earth templates. Missing source prefabs still require authored content.
+- Mountain rock climate selection no longer consumes temperate grassland. Mountain geometry uses narrow contiguous belts, a separate regional envelope and continental-interior gating; CPU and GPU source formulas are mirrored.
+- Grass roots cover full candidate cells instead of small isolated clusters. Each root is collider-grounded and material-checked, with bounded progressive batches. Three leaves are actually fanned around the root rather than stacked in coincident planes.
+
+#### Replaced
+- FluidManager now calls a conservative hydraulic-head solver instead of FluidSimJob. Transfers directly subtract/add real cell volumes across loaded chunk boundaries; unloaded boundaries remain closed. Different liquids remain separate, with conservative full-cell density swaps.
+- Edit notifications wake a budgeted queue rather than synchronously solving dozens of chunks. Existing place, drain, pump and level APIs and the voxel volume store remain intact.
+- Removed the dominant-axis liquid heightfield, radial clamp and chunk skirts. World-grid marching tetrahedra extracts continuous surfaces from shared eight-cell samples. Loaded neighbours are completed before reads and existing adjacent meshes are refreshed when new chunks arrive.
+- Water waves use fixed body-centred phase coordinates rather than the collapsing per-vertex radial tangent projection. Radial world-space displacement is bounded, shallow depth comes from bank sampling, and ripples are applied in the tangent frame. Water-specific foam, refraction and sparkle defaults are restrained; oil/coolant profiles remain distinct.
+
+#### Validation and limitations
+- Delivered C# parser checks and git whitespace checks passed. Source-wiring, CPU/GPU regional mask/climate checks, canonical biome probes and exhaustive reference transfer-arithmetic checks passed.
+- Unity API compilation, Burst/HLSL compilation, the supplied Unity conservation fixture, actual per-seed biome/mountain distribution, save/reload, pump/boat integration, shoreline screenshots and profiling are not verified in this workspace.
+- The new solver is a bounded cellular hydraulic-head model, not a full incompressible fluid solver. Visual velocity is chunk-smoothed; voxel waterLevel remains the gameplay volume. Byte quantization, unloaded edges and thin streams require in-engine review.
+- Texture arrays use 512-pixel slices, mipmaps and a default 2-metre tile size. Source images remain untouched; setup temporarily changes then restores importer type/color-space settings to read raw maps. With all 23 solid-material sets populated, arrays use approximately 92 MiB before optional platform compression; profile target hardware.
+- No measured visual, frame-rate or loading-time improvement is claimed. This development delivery requires Unity validation before visual acceptance.
 
 ### [15.0.0-dev] Mountains, Coastlines and Grounded Grass
 

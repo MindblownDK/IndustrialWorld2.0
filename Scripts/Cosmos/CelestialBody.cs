@@ -186,7 +186,7 @@ namespace VoxelEngine.Cosmos
                 RemapSurfaceForRealism(ref data, def.biomeName);
                 list.Add(data);
             }
-            if (list.Count == 0)
+            if (list.Count == 0 || !list.Exists(b => b.isOceanic == 0))
             {
                 // Never leave a body with zero biomes — fall back to a plains-like default.
                 list.Add(new BiomeData
@@ -195,7 +195,7 @@ namespace VoxelEngine.Cosmos
                     humidRange = new Unity.Mathematics.float2(0, 1),
                     priority = 0,
                     heightOffset = 0, heightAmplitude = 12, heightFrequency = 0.02f, ridgedness = 0,
-                    surfaceMat = (byte)Materials.MaterialId.Grass, surfaceDepth = 1,
+                    surfaceMat = (byte)(list.Count > 0 ? Materials.MaterialId.Stone : Materials.MaterialId.Grass), surfaceDepth = 1,
                     subsurfaceMat = (byte)Materials.MaterialId.Clay, subsurfaceDepth = 4,
                     allowBeach = 1, isOceanic = 0,
                 });
@@ -218,7 +218,7 @@ namespace VoxelEngine.Cosmos
             return result;
         }
 
-        private bool IsBiomeCompatibleWithPlanet(BiomeDefinition def, string bodyName, float temperature, bool hasAtmosphere)
+        public bool IsBiomeCompatibleWithPlanet(BiomeDefinition def, string bodyName, float temperature, bool hasAtmosphere)
         {
             if (def == null) return false;
             string bName = def.biomeName ?? string.Empty;
@@ -260,7 +260,8 @@ namespace VoxelEngine.Cosmos
             }
             if (isDesert)
             {
-                return bName.IndexOf("Desert", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                return bName.IndexOf("Martian", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Desert", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                        bName.IndexOf("Sand", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                        bName.IndexOf("Dune", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                        bName.IndexOf("Canyon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -287,11 +288,29 @@ namespace VoxelEngine.Cosmos
                        bName.IndexOf("Rust", System.StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
+            if (bodyName.IndexOf("Greek", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || bodyName.IndexOf("Olymp", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return bName.IndexOf("Marble", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (bodyName.IndexOf("Crystal", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return bName.IndexOf("Crystal", System.StringComparison.OrdinalIgnoreCase) >= 0 || bName.IndexOf("Geode", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (bodyName.IndexOf("Venus", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return bName.IndexOf("Venus", System.StringComparison.OrdinalIgnoreCase) >= 0 || bName.IndexOf("Ash", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (bodyName.IndexOf("Desolate", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return bName.IndexOf("Desolate", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
             // Earthlike / Home planet: exclude specialized moon/volcanic/acid/pirate biomes
             if (bName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Lunar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Martian", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Venus", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Frozen Glacier", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Marble", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Crystal", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Geode", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Desolate", System.StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
 
             return true;
@@ -314,7 +333,7 @@ namespace VoxelEngine.Cosmos
         /// Grass biomes (Plains/Forest/Steppes) get green Grass, Desert gets Sand, Tundra gets
         /// Clay (frozen dirt). Runs at BUILD TIME so it works regardless of what the .asset says.
         /// </summary>
-        private static void RemapSurfaceForRealism(ref BiomeData data, string biomeName)
+        public static void RemapSurfaceForRealism(ref BiomeData data, string biomeName)
         {
             if (string.IsNullOrEmpty(biomeName)) return;
             string n = biomeName.ToLowerInvariant();
@@ -328,30 +347,51 @@ namespace VoxelEngine.Cosmos
             if (n.Contains("crystal") || n.Contains("geode")) { data.surfaceMat = (byte)Materials.MaterialId.CrystalGeode; data.subsurfaceMat = (byte)Materials.MaterialId.CrystalGeode; return; }
             if (n.Contains("pirate")) { data.surfaceMat = (byte)Materials.MaterialId.Clay; data.subsurfaceMat = (byte)Materials.MaterialId.Clay; return; }
             if (n.Contains("desolate")) { data.surfaceMat = (byte)Materials.MaterialId.Clay; data.subsurfaceMat = (byte)Materials.MaterialId.Clay; return; }
-            if (n.Contains("greek") || n.Contains("marble")) { data.surfaceMat = (byte)Materials.MaterialId.Sand; data.subsurfaceMat = (byte)Materials.MaterialId.Sand; return; }
+            if (n.Contains("greek") || n.Contains("marble")) { data.surfaceMat = (byte)Materials.MaterialId.Stone; data.subsurfaceMat = (byte)Materials.MaterialId.Stone; return; }
             if (n.Contains("ice") || n.Contains("frozen") || n.Contains("glacial")) { data.surfaceMat = (byte)Materials.MaterialId.Ice; data.subsurfaceMat = (byte)Materials.MaterialId.Clay; return; }
-            if (n.Contains("water") || n.Contains("ocean")) { data.surfaceMat = (byte)Materials.MaterialId.Sand; data.subsurfaceMat = (byte)Materials.MaterialId.Sand; return; }
+            if (n.Contains("beach") || n.Contains("ocean") || n.Contains("coast"))
+            {
+                // Coastal identities are scatter overlays, never inland climate competitors.
+                data.isOceanic = 1;
+                data.surfaceMat = (byte)Materials.MaterialId.Sand;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Stone;
+                return;
+            }
+            data.isOceanic = 0;
+            if (n.Contains("taiga"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Grass;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
+                data.tempRange = new Unity.Mathematics.float2(0.12f, 0.43f);
+                data.humidRange = new Unity.Mathematics.float2(0.32f, 0.85f);
+                data.priority = 2;
+                return;
+            }
 
             if (n.Contains("forest") || n.Contains("meadow"))
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Grass;
                 data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
-                data.priority = 3;  // boost so Forest wins in humid temperate zones (over Plains)
-                // WIDEN the climate window so Forest actually spawns. The authored asset has
-                // T[0.3-0.65] H[0.55-0.95] which is too narrow. Widen to cover temperate-tropical.
-                data.tempRange = new Unity.Mathematics.float2(0.2f, 0.85f);
-                data.humidRange = new Unity.Mathematics.float2(0.4f, 1.0f);
+                data.priority = 3;
+                // Wet temperate window leaves moderate humidity to plains and cold to taiga.
+                data.tempRange = new Unity.Mathematics.float2(0.35f, 0.85f);
+                data.humidRange = new Unity.Mathematics.float2(0.58f, 1.0f);
             }
             else if (n.Contains("plains") || n.Contains("steppe") || n.Contains("grass"))
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Grass;
                 data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
-                data.priority = 1;
+                data.priority = 2;
+                data.tempRange = new Unity.Mathematics.float2(0.32f, 0.85f);
+                data.humidRange = new Unity.Mathematics.float2(0.22f, 0.62f);
             }
-            else if (n.Contains("desert") || n.Contains("wasteland") || n.Contains("dune"))
+            else if (n.Contains("desert") || n.Contains("dune"))
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Sand;
-                data.subsurfaceMat = (byte)Materials.MaterialId.Sand;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Stone;
+                data.tempRange = new Unity.Mathematics.float2(0.58f, 1f);
+                data.humidRange = new Unity.Mathematics.float2(0f, 0.28f);
+                data.priority = 1;
             }
             else if (n.Contains("tundra") || n.Contains("taiga"))
             {
@@ -362,17 +402,14 @@ namespace VoxelEngine.Cosmos
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Stone;
                 data.subsurfaceMat = (byte)Materials.MaterialId.Stone;
+                data.priority = -10000; // Geometry/slope owns mountain rock, not climate.
             }
             else if (n.Contains("snow") || n.Contains("ice"))
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Ice;
                 data.subsurfaceMat = (byte)Materials.MaterialId.Stone;
             }
-            else if (n.Contains("beach") || n.Contains("ocean") || n.Contains("sea") || n.Contains("coast"))
-            {
-                data.surfaceMat = (byte)Materials.MaterialId.Sand;
-                data.subsurfaceMat = (byte)Materials.MaterialId.Sand;
-            }
+
         }
     }
 }

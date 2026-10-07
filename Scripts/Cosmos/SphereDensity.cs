@@ -68,7 +68,7 @@ namespace VoxelEngine.Cosmos
             //   ~30° (lat 0.5)    = dry (desert belts)
             //   ~50° (lat 0.75)   = moderate-wet (temperate forest)
             //   poles (lat 1)     = dry (tundra)
-            float hLat = math.cos(lat * 3.0f) * 0.3f + 0.55f;     // oscillating: wet-dry-wet-dry
+            float hLat = math.cos(lat * 9.0f) * 0.28f + 0.5f;     // oscillating: wet-dry-wet-dry
             hLat = math.saturate(hLat);
 
             // Blend latitude climate with regional noise.
@@ -135,6 +135,7 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public static float Score(in BiomeData b, float2 climate)
         {
+            if (b.isOceanic == 1) return -1000000f;
             float tCenter = (b.tempRange.x + b.tempRange.y) * 0.5f;
             float tHalf   = math.max(0.001f, (b.tempRange.y - b.tempRange.x) * 0.5f);
             float tDist   = (climate.x - tCenter) / tHalf;
@@ -389,7 +390,7 @@ namespace VoxelEngine.Cosmos
                 // Beach band: ONLY right at the waterline (±1m, top 2 voxels). The old band was
                 // ±2.5m × 4 deep which covered the entire surface when terrain sat near sea level.
                 if (biome.allowBeach == 1 &&
-                    radius >= prm.seaRadius - 1f && radius <= prm.seaRadius + 1f && depth < 2)
+                    altitudeAboveSea >= -2f && altitudeAboveSea <= 1.5f && depth < 1)
                 {
                     material = (byte)MaterialId.Sand;
                 }
@@ -473,7 +474,7 @@ namespace VoxelEngine.Cosmos
                 bool genuineOcean = column.surfaceRadius < prm.seaRadius - 2f
                                     || column.landMask < 0.30f
                                     || surfaceRadius < prm.seaRadius - 5f;
-                if (genuineOcean && surfaceRadius < prm.seaRadius - 1f && radius <= prm.seaRadius)
+                if (genuineOcean && surfaceRadius < prm.seaRadius && radius <= prm.seaRadius)
                 {
                     // Crude oil is authored separately as one coherent surface seep, tapered
                     // funnel, and deep reservoir — never as random submerged noise patches.

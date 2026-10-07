@@ -39,6 +39,8 @@ namespace VoxelEngine.Persistence
         public int    formatVersion = FormatVersion;
         public string bodyName          = "";
         public int    seed;
+        // Zero in older stores; compared so terrain algorithm changes cannot mix chunks.
+        public int    terrainRevision;
         public float  radiusWorld;
         public float  baseHeight;
         public float  seaRadius;
@@ -75,6 +77,7 @@ namespace VoxelEngine.Persistence
 
             if (formatVersion != other.formatVersion)
                 Note("store format", formatVersion, other.formatVersion);
+            if (terrainRevision != other.terrainRevision) Note("terrain revision", terrainRevision, other.terrainRevision);
             if (seed != other.seed) Note("seed", seed, other.seed);
             if (!Close(radiusWorld, other.radiusWorld, 0.5f)) Note("radius", $"{radiusWorld:0} m", $"{other.radiusWorld:0} m");
             if (!Close(baseHeight, other.baseHeight, 0.5f)) Note("base height", $"{baseHeight:0} m", $"{other.baseHeight:0} m");

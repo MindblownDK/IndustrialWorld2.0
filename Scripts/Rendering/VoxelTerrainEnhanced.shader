@@ -95,6 +95,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
             // -- 9.17.0 per-material surface texturing (shared with VoxelTerrainURP) --
             #include "VoxelSurfaceTextures.hlsl"
+            #include "TerrainPbrTextures.hlsl"
 
             // Published by SphereWorld. Body-local coordinates keep terrain detail,
             // slope shading, and material variation wrapped around offset planets.
@@ -218,8 +219,8 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 // to the classic restrained grain. Relief gradients perturb the normal
                 // so ripples, cracks and facets genuinely catch the sun.
                 // Material id rides the vertex-colour alpha (0..255). PURE FLOAT on
-                // purpose: these shaders compile without an explicit target pragma and
-                // legacy profiles forbid integer arithmetic (the 9.17.1 pink fix).
+                // purpose: the procedural surface class path uses float material ids.
+                // Texture arrays require the explicit Shader Model 3.5 target.
                 float  matId        = floor(IN.color.a * 255.0 + 0.5);
                 float3 vsxAlbedo    = float3(1, 1, 1);
                 float2 vsxGrad      = float2(0, 0);
@@ -265,6 +266,11 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 }
 
                 // -- Full PBR lighting --
+                float pbrSmooth = smoothness;
+                float pbrMetal = saturate(_Metallic + vsxMetalAdd);
+                float pbrOcclusion = 1.0;
+                TerrainPbr(matId, terrainCoord, worldNormal, baseColor, pbrSmooth, pbrMetal, pbrOcclusion);
+
                 InputData inputData = (InputData)0;
                 inputData.positionWS        = worldPos;
                 inputData.normalWS          = worldNormal;
@@ -276,11 +282,11 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 SurfaceData surface = (SurfaceData)0;
                 surface.albedo              = baseColor;
                 surface.specular            = float3(0, 0, 0);
-                surface.metallic            = saturate(_Metallic + vsxMetalAdd);
-                surface.smoothness          = smoothness;
+                surface.metallic            = pbrMetal;
+                surface.smoothness          = pbrSmooth;
                 surface.normalTS            = float3(0, 0, 1);
                 surface.emission            = vsxEmission;
-                surface.occlusion           = 1.0;
+                surface.occlusion           = pbrOcclusion;
                 surface.alpha               = 1.0;
                 surface.clearCoatMask       = 0.0;
                 surface.clearCoatSmoothness = 0.0;
@@ -352,6 +358,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             Tags { "LightMode"="DepthOnly" }
             ZWrite On ColorMask 0
             HLSLPROGRAM
+            #pragma target 3.5
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing

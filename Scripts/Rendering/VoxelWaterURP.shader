@@ -219,31 +219,20 @@ Shader "VoxelEngine/VoxelWaterURP"
 
             float3 PlanetWave(float3 worldPos, float3 radialUp, float2 flow, float deepAmp, float shoreAtten, float tideMask, float t)
             {
-                float3 tangentA = cross(radialUp, float3(0,1,0));
-                if (dot(tangentA, tangentA) < 0.001) tangentA = cross(radialUp, float3(0,0,1));
-                tangentA = normalize(tangentA);
-                float3 tangentB = normalize(cross(radialUp, tangentA));
-                float2 uv = float2(dot(worldPos, tangentA), dot(worldPos, tangentB));
+                // Fixed body-centred 3D phase. Projecting the radial position on a
+                // per-vertex tangent plane collapses the coordinates and creates streaks.
+                float3 p = worldPos - _VoxelWaterBodyCenter.xyz;
                 float tide = 1.0 + tideMask * _TideStrength;
-
-                // Storm response: taller, faster, choppier swell running with the wind.
-                float seaAmp = SeaAmp();
-                float seaSpeed = SeaSpeed();
-                float seaChop = SeaChop(_WaveChop);
-                float2 windUV = float2(dot(_WeatherWindDirWS.xyz, tangentA), dot(_WeatherWindDirWS.xyz, tangentB));
-                windUV = dot(windUV, windUV) > 0.0001 ? normalize(windUV) : float2(1.0, 0.0);
-
-                float3 deep = 0;
-                deep += Gerstner(uv, SeaDir(float2( 1.00,  0.23), windUV), deepAmp * tide * seaAmp, _DeepWaveFrequency, _DeepWaveSpeed * seaSpeed, seaChop, t);
-                deep += Gerstner(uv, SeaDir(float2(-0.42,  0.91), windUV), _SecondaryWaveAmplitude * tide * seaAmp, _SecondaryWaveFrequency, _SecondaryWaveSpeed * seaSpeed, seaChop, t);
-                deep += Gerstner(uv, SeaDir(float2( 0.18, -0.98), windUV), _SecondaryWaveAmplitude * 0.45 * tide * seaAmp, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9 * seaSpeed, seaChop, t);
-
-                float shallowPhase = dot(uv, normalize(float2(0.7, -0.3))) * _ShallowWaveFrequency + t * _ShallowWaveSpeed;
-                float shallow = sin(shallowPhase) * _ShallowWaveAmplitude;
-                float3 shallowVec = radialUp * shallow;
-
-                float3 local = lerp(shallowVec, deep, shoreAtten);
-                return radialUp * local.y + tangentA * local.x + tangentB * local.z;
+                float3 d1 = normalize(float3(1.0, 0.23, 0.37));
+                float3 d2 = normalize(float3(-0.42, 0.61, 0.91));
+                float3 wind = _WeatherWindDirWS.xyz;
+                if (dot(wind,wind)>0.001) d1=normalize(lerp(d1,normalize(wind),saturate(_WeatherSeaState)*0.6));
+                float phase1 = dot(p,d1)*_DeepWaveFrequency + t*_DeepWaveSpeed*SeaSpeed();
+                float phase2 = dot(p,d2)*_SecondaryWaveFrequency + t*_SecondaryWaveSpeed*SeaSpeed();
+                float height = sin(phase1)*deepAmp + sin(phase2)*_SecondaryWaveAmplitude;
+                height += sin(dot(p,normalize(float3(0.7,-0.3,0.5)))*_ShallowWaveFrequency+t*_ShallowWaveSpeed)*_ShallowWaveAmplitude;
+                // Radial-only displacement keeps banks and shared intersections stable.
+                return radialUp * clamp(height * tide * SeaAmp(), -0.2, 0.2) * shoreAtten;
             }
 
             float3 FlowMappedNormal(float2 worldXZ, float2 flowDir, float flowSpeed, float t)
@@ -269,7 +258,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 worldPos = TransformObjectToWorld(posOS);
 
                 float3 radialUp = NativeWaterUp(worldPos);
-                float topFacing = saturate(max(i.normOS.y, dot(normalize(i.normOS), radialUp)));
+                float topFacing = saturate(dot(TransformObjectToWorldNormal(i.normOS), radialUp));
                 float shoreDepthMask = saturate(i.color.r);
                 float tideMask = i.color.g;
                 float shoreAtten = saturate(shoreDepthMask * (_ShoreBlendDistance / max(_ShoreBlendDistance, 0.0001)));
@@ -290,8 +279,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                     flatW += Gerstner(worldPos.xz, SeaDir(float2( 0.18, -0.98), windXZ), _SecondaryWaveAmplitude * 0.45 * seaAmpF, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9 * seaSpeedF, seaChopF, t);
                     float3 planetW = PlanetWave(worldPos, radialUp, i.uv2, deepAmp, shoreAtten, tideMask, t);
                     float3 w = lerp(flatW, planetW, _PlanetWaveBlend);
-                    posOS += w;
-                    worldPos = TransformObjectToWorld(posOS);
+                    worldPos += w;
                 }
 
                 // Wake displacement stays deliberately subtle; foam carries most of the
@@ -328,8 +316,9 @@ Shader "VoxelEngine/VoxelWaterURP"
                 if (dot(tanA, tanA) < 0.001) tanA = cross(radialUp, float3(0,0,1));
                 tanA = normalize(tanA);
                 float3 tanB = normalize(cross(radialUp, tanA));
-                float2 surfUV = float2(dot(i.posWS, tanA), dot(i.posWS, tanB));
-                bool isSideFace = false;
+                float3 surfaceCoord = i.posWS - _VoxelWaterBodyCenter.xyz;
+                float2 surfUV = float2(dot(surfaceCoord,float3(0.73,0.39,0.56)),dot(surfaceCoord,float3(-0.42,0.86,0.28)));
+                bool isSideFace = dot(geoN,radialUp) < 0.3;
 
                 float3 detailN = FlowMappedNormal(surfUV, flowDir, flowSpeed, t);
                 float3 worldDetailN = normalize(tanA * detailN.x + radialUp * detailN.y + tanB * detailN.z);
@@ -344,7 +333,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 rippleN = normalize(float3((ripA - ripBx) * _DetailStrength * 1.6,
                                                    1.0,
                                                    (ripA - ripBz) * _DetailStrength * 1.6));
-                N = normalize(N + rippleN * _DetailStrength * 0.35);
+                N = normalize(N + (tanA * rippleN.x + tanB * rippleN.z) * _DetailStrength * 0.35);
+                if (isSideFace) N = geoN;
 
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
@@ -354,7 +344,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 bool hasValidDepth = rawDepth > 0.00001f && rawDepth < 0.99999f;
                 float depthDiff = hasValidDepth ? max(0, sceneEyeDepth - waterEyeDepth) : 15.0f;
                 float screenDepth01 = saturate(depthDiff / _DepthFade);
-                float deep01 = hasValidDepth ? max(screenDepth01, geometryDepth01 * 0.85) : geometryDepth01;
+                float deep01 = hasValidDepth ? screenDepth01 : geometryDepth01;
                 float shoreAtten = saturate(shoreDepthMask);
                 float3 refracted = SampleSceneColor(refractUV).rgb;
                 if (length(refracted) < 0.001f) refracted = _DeepColor.rgb;

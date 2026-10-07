@@ -356,6 +356,7 @@ namespace VoxelEngine.Cosmos
             {
                 bodyName          = forBody.settings.bodyName,
                 seed              = prm.seed,
+                terrainRevision   = 16,
                 radiusWorld       = prm.radiusWorld,
                 baseHeight        = prm.baseHeight,
                 seaRadius         = prm.seaRadius,
@@ -1148,6 +1149,17 @@ namespace VoxelEngine.Cosmos
             // must never allocate a LiquidSurface object just because they streamed in.
             if (ChunkHasGeneratedLiquid(p.chunk))
                 VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
+            // Shared scalar corners change when a neighbour becomes available.
+            for (int nz=-1;nz<=1;nz++) for(int ny=-1;ny<=1;ny++) for(int nx=-1;nx<=1;nx++)
+            {
+                if(nx==0 && ny==0 && nz==0) continue;
+                if(TryGetChunk(p.chunk.coord + new Vector3Int(nx,ny,nz), out Chunk neighbour)
+                    && neighbour != null && neighbour.isGenerated && neighbour.waterMeshGO != null)
+                {
+                    VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(neighbour);
+                    VoxelEngine.WaterSim.FluidManager.Instance?.MarkActive(neighbour.coord);
+                }
+            }
 
             if (initialSurfaceChunk)
             {

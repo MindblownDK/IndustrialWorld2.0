@@ -132,7 +132,10 @@ namespace VoxelEngine.GpuVoxel
 
             // 5 ── mountains: ridged crests, masked to continental uplift zones.
             float mountFreq = math.max(1.6f, radiusWorld / 950f);
-            float uplift = math.smoothstep(-0.12f, 0.38f, Fbm(seed, wd, contFreq * 2.6f, 3, 70));
+            // Narrow contiguous range belts, with a separate regional envelope.
+            float belt = 1f - math.smoothstep(0.045f, 0.16f, math.abs(Fbm(seed, wd, contFreq * 2.6f, 3, 70)));
+            float region = math.smoothstep(0.02f, 0.30f, Fbm(seed, wd, contFreq * 1.4f, 3, 73));
+            float uplift = belt * region * math.smoothstep(0.10f, 0.26f, cont);
             float mountains = Ridged(seed, wd, mountFreq, 5, 80) * uplift
                               * (MountainBase * math.max(0.05f, mountainScale));
 

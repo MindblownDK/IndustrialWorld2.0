@@ -465,23 +465,25 @@ namespace VoxelEngine.Scattering
             foreach (BiomeDefinition biome in registry.biomes)
             {
                 if (biome == null) continue;
-                bool beach = biome.biomeName != null && (biome.biomeName ?? "").IndexOf("beach",
-                    System.StringComparison.OrdinalIgnoreCase) >= 0;
-                if (beach && (heightAboveSea > 12f || material != (byte)MaterialId.Sand)) continue;
-                float tCenter = (biome.minTemperature + biome.maxTemperature) * 0.5f;
-                float tHalf = math.max(0.001f, (biome.maxTemperature - biome.minTemperature) * 0.5f);
-                float tDist = (climate.x - tCenter) / tHalf;
-                float hCenter = (biome.minHumidity + biome.maxHumidity) * 0.5f;
-                float hHalf = math.max(0.001f, (biome.maxHumidity - biome.minHumidity) * 0.5f);
-                float hDist = (climate.y - hCenter) / hHalf;
-                // Match SphereDensity.Score: scatter must select the same dominant biome as
-                // the generated terrain column, not merely the nearest rectangular window.
-                float fit = 1f - math.sqrt(tDist * tDist + hDist * hDist) + biome.priority * 0.05f;
-                if (fit > bestScore)
+                string identity = (biome.biomeName ?? "").ToLowerInvariant();
+                bool beach = identity.Contains("beach") || identity.Contains("ocean") || identity.Contains("coast");
+                if (beach && (heightAboveSea > 1.5f || material != (byte)MaterialId.Sand)) continue;
+                var data = BiomeData.FromDefinition(biome);
+                CelestialBody.RemapSurfaceForRealism(ref data, biome.biomeName);
+                var body = (ActiveWorld.Current as SphereWorld)?.body;
+                if (body != null && body.settings != null && !body.IsBiomeCompatibleWithPlanet(biome,
+                    body.DisplayName, body.settings.temperature, body.settings.HasAtmosphere)) continue;
+                if (body != null && body.settings != null)
                 {
-                    bestScore = fit;
-                    best = biome;
+                    var allowed = body.settings.allowedBiomes;
+                    if (allowed != null && allowed.Length > 0 && System.Array.IndexOf(allowed, biome) < 0) continue;
+                    if (body.settings.temperature < -5f && biome.minTemperature > 0.55f) continue;
+                    if (body.settings.temperature > 35f && biome.maxTemperature < 0.45f) continue;
                 }
+                bool mountain = (biome.biomeName ?? "").IndexOf("mountain", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                float score = beach ? 10f : mountain && heightAboveSea > 60f && material == (byte)MaterialId.Stone
+                    ? 5f : SphereDensity.Score(data, climate);
+                if (score > bestScore) { bestScore = score; best = biome; }
             }
             return best;
         }

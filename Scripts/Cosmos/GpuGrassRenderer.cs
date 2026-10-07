@@ -298,6 +298,7 @@ namespace VoxelEngine.Cosmos
             var candidates = new List<Matrix4x4>(Mathf.CeilToInt(Mathf.PI * range * range / (step * step)) * 24);
 
             int processedCells = 0;
+            int processedRoots = 0;
             // Every candidate begins on a tangent plane around the viewer, then is projected
             // along the radial direction onto the true spherical voxel surface. This avoids
             // the old top-of-planet XZ scan that made grass vanish or lie incorrectly elsewhere.
@@ -334,19 +335,33 @@ namespace VoxelEngine.Cosmos
                 float patch = Mathf.PerlinNoise(surfaceLocal.x * 0.045f + surfaceLocal.y * 0.019f,
                     surfaceLocal.z * 0.045f + 41f);
                 int bladeCount = Mathf.Clamp(Mathf.RoundToInt(density * step * step
-                    * Mathf.Lerp(0.55f, 1.15f, patch)), 1, 24);
+                    * Mathf.Lerp(0.8f, 1.15f, patch)), 1, 48);
                 Vector3 tuftSurface = surfaceLocal;
                 Vector3 tuftUp = radialUpLocal;
                 if (!TryGroundTuft(world, ref tuftSurface, ref tuftUp)) continue;
                 GetTangentBasis(tuftUp, out Vector3 tuftA, out Vector3 tuftB);
-                // One terrain hit anchors a compact patch. Three leaves per matrix supply
-                // coverage without repeated expensive density evaluations or collider probes.
+                // Spread roots over the full cell, then ground each against the collider.
+                // Both cell discovery and root probes are yielded in bounded batches.
                 for (int blade = 0; blade < bladeCount; blade++)
                 {
+                    if (++processedRoots % 48 == 0)
+                    {
+                        yield return null;
+                        if (body == null || viewer == null || ActiveWorld.Current != world)
+                        { _fieldBuild = null; yield break; }
+                    }
                     Vector3 anchor = tuftSurface - tuftUp * 0.02f
-                        + tuftA * rng.NextFloat(-0.65f, 0.65f) + tuftB * rng.NextFloat(-0.65f, 0.65f);
-                    Quaternion rotation = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), tuftUp)
-                        * Quaternion.FromToRotation(Vector3.up, tuftUp);
+                        + tuftA * rng.NextFloat(-step * 0.5f, step * 0.5f)
+                        + tuftB * rng.NextFloat(-step * 0.5f, step * 0.5f);
+                    Vector3 rootUp = tuftUp;
+                    if (!TryGroundTuft(world, ref anchor, ref rootUp)) continue;
+                    Vector3Int rootVoxel = Vector3Int.RoundToInt((anchor - rootUp * 0.35f) / VoxelConstants.VOXEL_SIZE);
+                    Voxel rootGround = world.GetVoxelWorld(rootVoxel);
+                    if (rootGround.material != (byte)MaterialId.Grass
+                        && !(rootGround.material == (byte)MaterialId.Clay && ecology.SupportsLivestock)) continue;
+                    anchor -= rootUp * 0.02f;
+                    Quaternion rotation = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), rootUp)
+                        * Quaternion.FromToRotation(Vector3.up, rootUp);
                     float height = bladeHeight * Mathf.Lerp(0.72f, 1.18f, patch)
                         * (1f + rng.NextFloat(-heightVariance, heightVariance));
                     candidates.Add(Matrix4x4.TRS(anchor, rotation,
@@ -386,7 +401,7 @@ namespace VoxelEngine.Cosmos
                 if (!sphere.TryGetChunk(coord, out Chunk chunk) || chunk == null
                     || chunk.meshCollider == null || !chunk.meshCollider.enabled
                     || chunk.meshCollider.sharedMesh == null) continue;
-                if (!chunk.meshCollider.Raycast(ray, out RaycastHit hit, 10f)) return false;
+                if (!chunk.meshCollider.Raycast(ray, out RaycastHit hit, 10f)) continue;
                 if (Vector3.Dot(hit.normal, up) < 0.65f) return false;
                 localSurface = body.transform.InverseTransformPoint(hit.point);
                 localUp = body.transform.InverseTransformDirection(hit.normal).normalized;
@@ -490,8 +505,8 @@ namespace VoxelEngine.Cosmos
                     Vector3 v = verts[vertex];
                     // Keep basal spread small; most of the volume comes from leaf curvature.
                     float bend = v.y * v.y * 0.12f;
-                    tuftVertices.Add(new Vector3(v.x + Mathf.Cos(angle) * bend * 4f,
-                        v.y * height, v.z * Mathf.Sin(angle)));
+                    tuftVertices.Add(new Vector3(v.x * Mathf.Cos(angle) - (v.z + bend) * Mathf.Sin(angle),
+                        v.y * height, v.x * Mathf.Sin(angle) + (v.z + bend) * Mathf.Cos(angle)));
                     tuftUvs.Add(uvs[vertex]);
                 }
                 foreach (int index in tris) tuftTriangles.Add(leaf * verts.Length + index);

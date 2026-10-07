@@ -86,6 +86,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
 
             // -- 9.17.0 per-material surface texturing (shared with VoxelTerrainEnhanced) --
             #include "VoxelSurfaceTextures.hlsl"
+            #include "TerrainPbrTextures.hlsl"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
@@ -196,6 +197,11 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 albedo *= vsxAlbedo;
                 worldNormal = VsxApplyRelief(worldNormal, vsxGrad, terrainUp);
 
+                float pbrSmooth = saturate(_Smoothness + vsxSmoothAdd);
+                float pbrMetal = saturate(_Metallic + vsxMetalAdd);
+                float pbrOcclusion = 1.0;
+                TerrainPbr(matId, TerrainMappingPosition(IN.positionWS), worldNormal, albedo, pbrSmooth, pbrMetal, pbrOcclusion);
+
                 InputData inputData = (InputData)0;
                 inputData.positionWS        = IN.positionWS;
                 inputData.normalWS          = worldNormal;
@@ -206,11 +212,11 @@ Shader "VoxelEngine/VoxelTerrainURP"
 
                 SurfaceData surface = (SurfaceData)0;
                 surface.albedo     = albedo;
-                surface.metallic   = saturate(_Metallic + vsxMetalAdd);
-                surface.smoothness = saturate(_Smoothness + vsxSmoothAdd);
+                surface.metallic   = pbrMetal;
+                surface.smoothness = pbrSmooth;
                 surface.emission   = vsxEmission;
                 surface.alpha      = 1.0;
-                surface.occlusion  = 1.0;
+                surface.occlusion  = pbrOcclusion;
                 surface.normalTS   = float3(0,0,1);
 
                 half4 finalColor = UniversalFragmentPBR(inputData, surface);
@@ -278,6 +284,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
             Tags { "LightMode"="DepthOnly" }
             ZWrite On ColorMask 0
             HLSLPROGRAM
+            #pragma target 3.5
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing

@@ -152,7 +152,9 @@ namespace VoxelEngine.EditorTools
                 Setup("Build celestial worlds, themed biomes and Sol registration", BuildCelestialWorldsContent),
                 Setup("Sync custom scatter folders to biome categories", () => VoxelEngine.EditorTools.CustomBiomeScatterSetup.Run()),
                 Setup("Balance landscape coverage and rare ruins", () => IndustrialWorld.EditorTools.LandscapeBalanceSetup.Run()),
-                Setup("Repair planet landscapes (15.0.0 fresh worlds)", () => IndustrialWorld.EditorTools.PlanetLandscapeSetup.Run()),
+                Setup("Repair planet landscapes (16.0.0 fresh worlds)", () => IndustrialWorld.EditorTools.PlanetLandscapeSetup.Run()),
+                Setup("Build named terrain PBR texture library", () => TerrainTextureLibrarySetup.Run()),
+                Setup("Validate conservative fluid transfers", () => FluidConservationValidation.Run()),
                 Setup("Initialize atmosphere and space profiles", BuildAtmosphereSpaceProfiles),
                 Setup("Author planet skies and space ambiance", BuildPlanetSkyProfiles),
                 Setup("Author black hole and quasar remnants", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52()),
@@ -11533,7 +11535,7 @@ root =>
             var bVenus    = MakeThemedBiome("Biome_VenusianAsh",    "Venusian Ash Lowlands",  new Color(0.80f,0.70f,0.30f), MaterialId.VenusAsh,       0.00008f, "Ruin_Venus_PressureDome","Ruin_Venus_SulfurRefinery","Ruin_Venus_AshCitadel");
             var bAcid     = MakeThemedBiome("Biome_AcidBog",        "Acid Bog",               new Color(0.40f,0.60f,0.25f), MaterialId.AcidBog,        0.00008f, "Ruin_Acid_CorrodedVault","Ruin_Acid_CrystalSpire","Ruin_Acid_DissolvedLab");
             var bPirate   = MakeThemedBiome("Biome_PirateScrap",    "Pirate Scrap Badlands",  new Color(0.50f,0.45f,0.40f), MaterialId.Clay,           0.00008f, "Ruin_Pirate_ScrapFort","Ruin_Pirate_WreckCamp","Ruin_Pirate_NeonDen","Ruin_Pirate_LootCache","Ruin_Pirate_JunkTower");
-            var bGreek    = MakeThemedBiome("Biome_GreekMarble",    "Olympian Marble Hills",     new Color(0.90f,0.88f,0.80f), MaterialId.Sand,           0.00008f, "Ruin_Greek_TreasuryTemple","Ruin_Greek_OracleShrine");
+            var bGreek    = MakeThemedBiome("Biome_GreekMarble",    "Olympian Marble Hills",     new Color(0.90f,0.88f,0.80f), MaterialId.Stone,           0.00008f, "Ruin_Greek_TreasuryTemple","Ruin_Greek_OracleShrine");
             var bIce      = MakeThemedBiome("Biome_FrozenGlacier",  "Frozen Glacier",         new Color(0.80f,0.90f,1.00f), MaterialId.Ice,            0.00008f, "Ruin_Ice_GlacialDome","Ruin_Ice_FrozenBunker","Ruin_Ice_CryoStation");
             var bWater    = MakeThemedBiome("Biome_OceanShelf",     "Ocean Shelf",            new Color(0.30f,0.50f,0.70f), MaterialId.Sand,           0.00008f, "Ruin_Water_StiltPlatform","Ruin_Water_SunkenDome");
             var bDesolate = MakeThemedBiome("Biome_DesolateWastes", "Desolate Wastes",        new Color(0.60f,0.55f,0.45f), MaterialId.Clay,           0.00008f, "Ruin_Desolate_DryOutpost");

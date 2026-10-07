@@ -173,7 +173,9 @@ float SurfaceRadiusF(float3 dir)
     float hills = Fbm(_Seed, wd, hillFreq, 4, 60) * HILL_AMPLITUDE;
 
     float mountFreq = max(1.6, _RadiusWorld / 950.0);
-    float uplift = smoothstep(-0.12, 0.38, Fbm(_Seed, wd, contFreq * 2.6, 3, 70));
+    float belt = 1.0 - smoothstep(0.045, 0.16, abs(Fbm(_Seed, wd, contFreq * 2.6, 3, 70)));
+    float region = smoothstep(0.02, 0.30, Fbm(_Seed, wd, contFreq * 1.4, 3, 73));
+    float uplift = belt * region * smoothstep(0.10, 0.26, cont);
     float mountains = Ridged(_Seed, wd, mountFreq, 5, 80) * uplift
                       * (MOUNTAIN_BASE * max(0.05, _MountainScale));
 
@@ -203,7 +205,7 @@ float2 SampleClimate(float3 dir)
 
     float lat  = abs(dir.y);
     float tLat = saturate(1.0 - lat * 1.25);
-    float hLat = saturate(cos(lat * 3.0) * 0.3 + 0.55);
+    float hLat = saturate(cos(lat * 9.0) * 0.28 + 0.5);
 
     float t = lerp(tNoise, tLat, 0.55);
     float h = lerp(hNoise, hLat, 0.55 * 0.7);
@@ -298,7 +300,7 @@ void CSField(uint3 id : SV_DispatchThreadID)
         bool atSurface = depth < (float)surfD;
 
         material = 1; // Stone
-        if (beachOk == 1 && radius >= _SeaRadius - 1.0 && radius <= _SeaRadius + 1.0 && depth < 2.0)
+        if (beachOk == 1 && altSea >= -2.0 && altSea <= 1.5 && depth < 1.0)
             material = 2; // Sand — beach band right at the waterline
         else if (depth < (float)surfD)
             material = surfMat;
