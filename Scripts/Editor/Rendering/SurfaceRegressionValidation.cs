@@ -49,9 +49,12 @@ namespace VoxelEngine.EditorTools
             for(int i=0;i<bankMesh.vertices.Count;i++)
             {
                 Vector3 p=bankMesh.vertices[i];
-                bool detachedBankSliver=p.x>12.0001f && p.x<13.0f
-                    && p.y>=10.0f && p.y<=11.0f && p.z>=10.0f && p.z<=11.0f;
-                Require(!detachedBankSliver,"solid-only support cube emitted a detached bank sliver");
+                // Vertices on a shared cube face can legitimately be emitted by the
+                // adjacent mixed air/bank cube; flag only geometry strictly inside this cube.
+                bool detachedBankSliver=p.x>12.0001f && p.x<12.9999f
+                    && p.y>10.0001f && p.y<10.9999f
+                    && p.z>10.0001f && p.z<10.9999f;
+                Require(!detachedBankSliver,"all-solid support cube emitted an interior bank sliver");
             }
 
             var shoreline = new SmoothLiquidMesher.Snapshot

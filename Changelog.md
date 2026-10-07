@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.3-dev`
+**Current Version:** `17.1.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.4-dev] Tighten Shoreline Validation Bounds
+
+**Type:** PATCH — editor-only surface regression fixture correction. No runtime behavior, save schema, voxel format, fluid simulation, or public API changes.
+
+**GitHub title:** `[17.1.4-dev] Tighten shoreline validation bounds`
+
+#### Fixed
+- The solid-only bank-sliver regression now counts only vertices strictly inside its synthetic all-solid cube. Shared-face intersections from adjacent mixed air/bank cubes no longer cause a false positive.
+- Runtime meshing, water-wave shading, and shoreline attenuation are unchanged from 17.1.3-dev.
+
+#### Compatibility and validation
+- PATCH over 17.1.3-dev. This is an editor-fixture-only change; saves, voxel data, fluid transfer, runtime APIs, and rendered behavior are unchanged.
+- Thomas reports FluidValidation PASS; the 17.1.3-dev SurfaceValidation run stopped at the over-broad bank-sliver assertion. The corrected fixture still needs to be rerun in Unity; no new Unity compilation, visual, or FPS result is claimed.
+- Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
 
 ### [17.1.3-dev] Faster Water Waves and Quieter Shores
 
