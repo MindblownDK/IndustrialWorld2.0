@@ -152,6 +152,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build celestial worlds, themed biomes and Sol registration", BuildCelestialWorldsContent),
                 Setup("Sync custom scatter folders to biome categories", () => VoxelEngine.EditorTools.CustomBiomeScatterSetup.Run()),
                 Setup("Balance landscape coverage and rare ruins", () => IndustrialWorld.EditorTools.LandscapeBalanceSetup.Run()),
+                Setup("Repair planet landscapes (15.0.0 fresh worlds)", () => IndustrialWorld.EditorTools.PlanetLandscapeSetup.Run()),
                 Setup("Initialize atmosphere and space profiles", BuildAtmosphereSpaceProfiles),
                 Setup("Author planet skies and space ambiance", BuildPlanetSkyProfiles),
                 Setup("Author black hole and quasar remnants", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52()),

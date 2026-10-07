@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.74.1-dev`
-**Roadmap Version:** `14.74.1-dev`
+**Current Version:** `15.0.0-dev`
+**Roadmap Version:** `15.0.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 15.0.0-dev - Mountains, Coastlines and Grounded Grass
+- CPU/GPU terrain includes broader mountain uplift and local relief; fresh worlds required
+- Coastal palm gates, hashed scatter sampling and centralized desert-reference repair are implemented
+- Progressive collider-grounded grass and completion-first chunk scheduling are implemented
+
 ### 14.74.1-dev - Grounded Worlds, Rare Discoveries
 - Grass uses full-disk, terrain-resampled tufts and suitable clay coverage
 - Ruin placement applies one-tenth authored probability
@@ -48,11 +53,6 @@
 - Logistics Map zoom follows the pointer, retains its same-body view and uses a fixed terrain-tile origin
 - Ruin inspection exposes authored ruin names and never the CosmosBootstrap runtime root
 - Expanded emissions telemetry scrolls instead of compressing or clipping machine controls
-
-### 14.73.1-dev - Current Entity Identity
-- Pollution-source tie-breaking uses Unity's supported entity identity API
-- Source ranking and industrial threat behaviour remain unchanged
-- The 14.73.0-dev feature compiles without the obsolete Object API
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

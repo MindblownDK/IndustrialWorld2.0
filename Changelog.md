@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.74.1-dev`
+**Current Version:** `15.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [15.0.0-dev] Mountains, Coastlines and Grounded Grass
+
+#### Breaking
+- Fresh world required. The deterministic terrain field changed on both CPU and GPU; existing chunk data is not migrated. Back up old worlds and do not load them with this terrain version.
+
+#### Changed
+- Raised the terrain hill amplitude from 9 m to 24 m and mountain amplitude from 62 m to 240 m before authored mountain scaling. Broadened the uplift mask and added bounded metre-scale surface relief. CPU and GPU formulas remain mirrored, with conservative elevation bounds covering the extra detail.
+- Palms require coastal sand in beach/ocean biomes, within 12 m of sea level, and use at most 0.001 probability per candidate. The previous landscape action can no longer raise their density back to forest levels.
+- Scatter uses a hashed quarter-sample instead of an even-only XYZ lattice that could miss entire surfaces at odd voxel heights. Rotating the first prefab considered avoids permanent list-order preference.
+- Centralized planet-landscape repair re-synchronizes folder prefabs, repairs missing desert entries through the existing synchronizer, reports empty deserts, and applies a versioned palm/desert balancing pass. Zero-density entries, scale/height settings and creature categories remain unchanged.
+- Grass roots sample actual local terrain colliders instead of relying solely on the analytic sphere radius. Steep slopes and submerged surfaces are excluded. Three curved leaves per matrix provide fuller tufts without tripling draw calls.
+- Removed double application of the graphics density multiplier. Grass uses a 48 m detail footprint and rebuilds progressively in batches of 24 candidate cells while retaining the previous field until replacement. Periodic refresh picks up newly streamed terrain.
+- Completed chunk jobs are finalized before dispatch, allowing newly completed generation to enter meshing in the same update and freeing occupied job slots before scheduling. Worker jobs are explicitly flushed after dispatch.
+
+#### Validation and limitations
+- Changed C# files passed parser-based syntax checks; whitespace, version, CPU/GPU parameter parity and analytical elevation-bound checks passed.
+- Unity API compilation, Burst/compute-shader compilation, visual quality, runtime terrain parity and performance measurements remain unverified in this workspace. No measured frame-rate or loading-speed gain is claimed.
+- Terrain remains continuous voxel geometry, not block-stepped terrain. This pass adds relief; it does not add a new terrain texture/material library. Higher mountains are region-dependent, not guaranteed at the spawn point.
+- Version, changelog and roadmap synchronized to 15.0.0-dev.
 
 ### [14.74.1-dev] Grounded Worlds, Rare Discoveries
 

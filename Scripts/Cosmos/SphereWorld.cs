@@ -604,9 +604,11 @@ namespace VoxelEngine.Cosmos
             UpdateStreaming();
             UpdateMeshedBubble();
             QueueNearbyDetailMeshes();
+            // Reclaim completed slots before dispatch; completed generation can mesh this frame.
+            CompleteFinishedJobs();
             DispatchGenerationJobs();
             DispatchMeshingJobs();
-            CompleteFinishedJobs();
+            JobHandle.ScheduleBatchedJobs();
             RefreshColliderWindow();
             VoxelEngine.Generation.OilReservoirDecorator.Tick(this);
             

@@ -27,8 +27,8 @@ namespace VoxelEngine.GpuVoxel
         // ── Field constants (mirrored in PlanetFieldGpu.compute) ─────────────
         public const float WarpFrequency   = 1.31f;
         public const float WarpStrength    = 0.18f;
-        public const float HillAmplitude   = 9f;
-        public const float MountainBase    = 62f;
+        public const float HillAmplitude   = 24f;
+        public const float MountainBase    = 240f;
         public const float LandPlateau     = 2f;
         public const float ShelfDepth      = 5f;
 
@@ -132,12 +132,15 @@ namespace VoxelEngine.GpuVoxel
 
             // 5 ── mountains: ridged crests, masked to continental uplift zones.
             float mountFreq = math.max(1.6f, radiusWorld / 950f);
-            float uplift = math.smoothstep(0.15f, 0.75f, Fbm(seed, wd, contFreq * 2.6f, 3, 70));
+            float uplift = math.smoothstep(-0.12f, 0.38f, Fbm(seed, wd, contFreq * 2.6f, 3, 70));
             float mountains = Ridged(seed, wd, mountFreq, 5, 80) * uplift
                               * (MountainBase * math.max(0.05f, mountainScale));
 
+            // Metre-scale relief breaks up otherwise featureless smooth slopes.
+            float detail = Fbm(seed, wd, math.max(8f, radiusWorld / 18f), 2, 96) * 2f;
+
             // 6 ── compose: shore blend between the ocean floor and the land stack.
-            float elevation = math.lerp(ocean, LandPlateau + hills + mountains, land);
+            float elevation = math.lerp(ocean, LandPlateau + hills + mountains + detail, land);
             return radiusWorld + baseHeight + elevation;
         }
 

@@ -57,13 +57,7 @@ namespace VoxelEngine.Cosmos
             var grass = FindAnyObjectByType<GpuGrassRenderer>();
             if (grass != null)
             {
-                grass.qualityDensityMul = new float[]
-                {
-                    GraphicsPreset.GrassDensityMul * 0.35f,  // Low - sparse but visible (9.18.0)
-                    GraphicsPreset.GrassDensityMul * 0.6f,   // Mid
-                    GraphicsPreset.GrassDensityMul * 1f,     // High
-                    GraphicsPreset.GrassDensityMul * 1.5f,   // Ultra
-                };
+                grass.qualityDensityMul = new float[] { 0.45f, 0.6f, 1.2f, 1.8f };
                 // Force rebuild with the new density.
                 grass.enabled = false;
                 grass.enabled = true;

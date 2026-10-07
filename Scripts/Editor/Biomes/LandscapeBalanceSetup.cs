@@ -59,7 +59,8 @@ namespace IndustrialWorld.EditorTools
                         string key = biome.name.ToLowerInvariant();
                         if (key.Contains("lunar") || key.Contains("desolate")) floor *= 0.55f;
                         else if (key.Contains("forest") || key.Contains("acid") || key.Contains("ocean")) floor *= 1.3f;
-                        entry.density = Mathf.Max(entry.density, floor);
+                        entry.density = entry.prefab.name.IndexOf("palm", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            ? Mathf.Min(entry.density, 0.001f) : Mathf.Max(entry.density, floor);
                         biome.scatter[i] = entry;
                     }
                 }

@@ -56,10 +56,9 @@ namespace VoxelEngine.Scattering
             }
 
             const int S = VoxelConstants.CHUNK_SIZE;
-            // Scatter is intentionally sampled on a 2 m lattice. Trees receive explicit
-            // canopy separation below, so evaluating every one-metre solid voxel only creates
-            // redundant rejected candidates and large streaming hitches.
-            const int CandidateStride = 2;
+            // A hashed quarter-sample retains roughly one candidate per 4 square metres
+            // without the height/parity blind spots of the previous 2 m XYZ lattice.
+            const int CandidateStride = 1;
             var holder = new GameObject("__scatter");
             // Chunk placement is complete before deferred scatter runs. Keep the holder at the
             // chunk origin so its children remain body-relative if the planet transform moves.
@@ -79,6 +78,11 @@ namespace VoxelEngine.Scattering
             {
                 Voxel voxel = chunk.GetVoxelLocal(x, y, z);
                 if (!voxel.IsSolid || IsLiquid(voxel)) continue;
+                // Sample one quarter of cells by world identity, not coordinate parity.
+                // An even-only lattice could miss entire level surfaces at odd heights.
+                uint candidateHash = math.hash(new int3(chunk.coord.x * S + x,
+                    chunk.coord.y * S + y, chunk.coord.z * S + z));
+                if ((candidateHash & 3u) != 0u) continue;
 
                 int worldX = chunk.coord.x * S + x;
                 int worldY = chunk.coord.y * S + y;
@@ -113,7 +117,7 @@ namespace VoxelEngine.Scattering
                 float2 climate = isSphere
                     ? SphereDensity.SampleClimate(seed, (float3)upDir)
                     : VoxelEngine.Biomes.BiomePicker.SampleClimate(seed, worldX, worldZ);
-                BiomeDefinition biome = PickBiome(registry, climate);
+                BiomeDefinition biome = PickBiome(registry, climate, altitude - world.SeaLevel, topMat);
                 if (biome == null || !HasAnyScatter(biome)) continue;
                 bool hasEcologyReading = false;
                 EcologyReading ecologyReading = default;
@@ -133,8 +137,10 @@ namespace VoxelEngine.Scattering
                     };
                     if (entries == null || entries.Length == 0) continue;
 
-                    foreach (var entry in entries)
+                    int firstEntry = rng.NextInt(entries.Length);
+                    for (int entryOffset = 0; entryOffset < entries.Length; entryOffset++)
                     {
+                        var entry = entries[(firstEntry + entryOffset) % entries.Length];
                         if (entry.prefab == null || entry.density <= 0f) continue;
                         if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
 
@@ -159,7 +165,13 @@ namespace VoxelEngine.Scattering
                         // worlds, but it is still unsuitable soil for living flora or livestock.
                         if (topMat == (byte)MaterialId.Stone && (isLivingFlora || isPassiveAnimal))
                             continue;
-                        float effectiveDensity = entry.density;
+                        bool isPalm = entry.prefab.name.IndexOf("palm", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                        // Palms belong on coastal sand, never inland clay plains.
+                        if (isPalm && (topMat != (byte)MaterialId.Sand
+                            || altitude - world.SeaLevel > 12f
+                            || ((biome.biomeName ?? "").IndexOf("beach", System.StringComparison.OrdinalIgnoreCase) < 0
+                                && (biome.biomeName ?? "").IndexOf("ocean", System.StringComparison.OrdinalIgnoreCase) < 0))) continue;
+                        float effectiveDensity = isPalm ? Mathf.Min(entry.density, 0.001f) : entry.density;
                         // Ruins are discoveries, not background scenery. Apply once at runtime
                         // so existing assets and future setup actions cannot undo the balance.
                         bool isRuin = entry.prefab.GetComponentInChildren<VoxelEngine.Exploration.RuinChest>(true) != null
@@ -446,13 +458,16 @@ namespace VoxelEngine.Scattering
                    voxel.waterLevel > 0;
         }
 
-        private static BiomeDefinition PickBiome(BiomeRegistry registry, float2 climate)
+        private static BiomeDefinition PickBiome(BiomeRegistry registry, float2 climate, float heightAboveSea, byte material)
         {
             BiomeDefinition best = null;
             float bestScore = float.NegativeInfinity;
             foreach (BiomeDefinition biome in registry.biomes)
             {
                 if (biome == null) continue;
+                bool beach = biome.biomeName != null && (biome.biomeName ?? "").IndexOf("beach",
+                    System.StringComparison.OrdinalIgnoreCase) >= 0;
+                if (beach && (heightAboveSea > 12f || material != (byte)MaterialId.Sand)) continue;
                 float tCenter = (biome.minTemperature + biome.maxTemperature) * 0.5f;
                 float tHalf = math.max(0.001f, (biome.maxTemperature - biome.minTemperature) * 0.5f);
                 float tDist = (climate.x - tCenter) / tHalf;

@@ -112,8 +112,8 @@ StructuredBuffer<uint> _ClimateLut;    // 8×8 packed biome LUT (see GpuPlanetEn
 // ─────────────────────────── Field (mirror of PlanetField.cs) ───────────────────────────
 static const float WARP_FREQUENCY = 1.31;
 static const float WARP_STRENGTH  = 0.18;
-static const float HILL_AMPLITUDE = 9.0;
-static const float MOUNTAIN_BASE  = 62.0;
+static const float HILL_AMPLITUDE = 24.0;
+static const float MOUNTAIN_BASE  = 240.0;
 static const float LAND_PLATEAU   = 2.0;
 static const float SHELF_DEPTH    = 5.0;
 
@@ -173,11 +173,12 @@ float SurfaceRadiusF(float3 dir)
     float hills = Fbm(_Seed, wd, hillFreq, 4, 60) * HILL_AMPLITUDE;
 
     float mountFreq = max(1.6, _RadiusWorld / 950.0);
-    float uplift = smoothstep(0.15, 0.75, Fbm(_Seed, wd, contFreq * 2.6, 3, 70));
+    float uplift = smoothstep(-0.12, 0.38, Fbm(_Seed, wd, contFreq * 2.6, 3, 70));
     float mountains = Ridged(_Seed, wd, mountFreq, 5, 80) * uplift
                       * (MOUNTAIN_BASE * max(0.05, _MountainScale));
 
-    float elevation = lerp(ocean, LAND_PLATEAU + hills + mountains, land);
+    float detail = Fbm(_Seed, wd, max(8.0, _RadiusWorld / 18.0), 2, 96) * 2.0;
+    float elevation = lerp(ocean, LAND_PLATEAU + hills + mountains + detail, land);
     return _RadiusWorld + _BaseHeight + elevation;
 }
 
