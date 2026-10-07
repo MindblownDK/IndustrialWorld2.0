@@ -172,7 +172,7 @@ namespace VoxelEngine.UI
                 {
                     // Keep the world point under the mouse fixed. Merely changing metres per
                     // pixel around the viewport centre made every nearby chunk appear to slide.
-                    Vector2 pointer = _canvas.WorldToLocal((Vector2)e.position);
+                    Vector2 pointer = _canvas.WorldToLocal(e.mousePosition);
                     Rect viewport = _canvas.contentRect;
                     Vector2 viewportCentre = new(viewport.width * 0.5f, viewport.height * 0.5f);
                     Vector2 mapCentre = viewportCentre + _pan;

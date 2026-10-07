@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.2-dev`
-**Roadmap Version:** `14.73.2-dev`
+**Current Version:** `14.73.3-dev`
+**Roadmap Version:** `14.73.3-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.73.3-dev - Unity-Compatible Map Cursor Input
+- Logistics Map wheel zoom reads the pointer through the Unity-supported mouse-position API
+- Cursor-anchored zoom behaviour remains unchanged
+- The 14.73.2-dev map, ruin-inspection and machine-scrolling patch compiles past this API mismatch
+
 ### 14.73.2-dev - Maps and Panels Stay Put
 - Logistics Map zoom follows the pointer, retains its same-body view and uses a fixed terrain-tile origin
 - Ruin inspection exposes authored ruin names and never the CosmosBootstrap runtime root
@@ -48,11 +53,6 @@
 - Biome-folder prefabs synchronize into independent environment, enemy, passive and building scatter categories
 - Re-runnable centralized setup preserves existing entry tuning and gives defaults only to newly discovered prefabs
 - Generated base nature is retired while themed placeholders move into their owning biome folders
-
-### 14.71.0-dev - Worlds That Breathe
-- Canonical biomes gain 21 setup-authored identity props through the existing deterministic spherical scatter pass
-- Reversible local ecology pressure suppresses living flora and compatible livestock while raising capped host-authoritative hostile cadence
-- The optional pollution map layer reports ecology vitality, wildlife activity, hostile pressure and serious-decline alerts
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

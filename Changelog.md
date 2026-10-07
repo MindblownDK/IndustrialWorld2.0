@@ -1,9 +1,15 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.2-dev`
+**Current Version:** `14.73.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.73.3-dev] Unity-Compatible Map Cursor Input
+
+#### Fixed
+- Replaced the unsupported `WheelEvent.position` access in Logistics Map cursor-anchored zoom with the compatible `WheelEvent.mousePosition` panel coordinate, restoring compilation while preserving zoom beneath the mouse pointer.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to patch version `14.73.3-dev`.
 
 ### [14.73.2-dev] Maps and Panels Stay Put
 
