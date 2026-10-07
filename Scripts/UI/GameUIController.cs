@@ -67,6 +67,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
         private Furnace        _openFurnace;
         private readonly List<PollutionEmitter> _displayPollutionEmitters = new(4);
+        private bool _pollutionTelemetryExpanded;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
         private VoxelEngine.Power.CoalGeneratorFuel _openCoalGen;
@@ -1596,11 +1597,18 @@ namespace VoxelEngine.UI
             float routedFallback = routedEngine != null && routedEngine.routedPollutionProfile != null
                 ? Mathf.Max(0f, routedEngine.routedPollutionProfile.perSecond.airborneSmog)
                 : 0f;
-            if (_displayPollutionEmitters.Count == 0 && routedFallback <= 0f) return;
+            float routedRunoffFallback = routedEngine != null && routedEngine.routedPollutionProfile != null
+                ? Mathf.Max(0f, routedEngine.routedPollutionProfile.perSecond.runoff)
+                : 0f;
+            if (_displayPollutionEmitters.Count == 0
+                && routedFallback <= 0f && routedRunoffFallback <= 0f) return;
 
             float current = 0f;
             float rated = 0f;
             float lifetime = 0f;
+            float currentRunoff = 0f;
+            float ratedRunoff = 0f;
+            float lifetimeRunoff = 0f;
             for (int i = 0; i < _displayPollutionEmitters.Count; i++)
             {
                 var emitter = _displayPollutionEmitters[i];
@@ -1608,9 +1616,13 @@ namespace VoxelEngine.UI
                 current += emitter.CurrentAirbornePerSecond;
                 rated += emitter.RatedAirbornePerSecond;
                 lifetime += emitter.LifetimeAirborneOutput;
+                currentRunoff += emitter.CurrentRunoffPerSecond;
+                ratedRunoff += emitter.RatedRunoffPerSecond;
+                lifetimeRunoff += emitter.LifetimeRunoffOutput;
             }
             if (rated <= 0f) rated = routedFallback;
-            if (rated <= 0f) return;
+            if (ratedRunoff <= 0f) ratedRunoff = routedRunoffFallback;
+            if (rated <= 0f && ratedRunoff <= 0f) return;
 
             var card = new VisualElement { name = "MachinePollutionTelemetry" };
             card.style.marginTop = 8;
@@ -1625,26 +1637,58 @@ namespace VoxelEngine.UI
             card.style.borderLeftWidth = 2;
             card.style.borderLeftColor = new StyleColor(new Color(0.95f, 0.63f, 0.19f));
 
-            var heading = new Label("AIR EMISSIONS · PM-EQUIVALENT");
-            heading.style.color = new StyleColor(new Color(1f, 0.76f, 0.34f));
-            heading.style.unityFontStyleAndWeight = FontStyle.Bold;
-            heading.style.fontSize = 11;
-            card.Add(heading);
-
-            var currentLabel = new Label($"Current     {PollutionUnits.FormatRate(current)}");
-            currentLabel.style.color = new StyleColor(new Color(0.91f, 0.94f, 0.95f));
-            currentLabel.style.marginTop = 4;
-            card.Add(currentLabel);
-
-            var ratedLabel = new Label($"Full load   {PollutionUnits.FormatRate(rated)}");
-            ratedLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
-            card.Add(ratedLabel);
-
-            if (!VoxelEngine.Networking.NetworkSession.SimulationIsRemote)
+            var foldout = new Foldout
             {
-                var totalLabel = new Label($"This session {PollutionUnits.FormatMass(lifetime)} emitted");
-                totalLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
-                card.Add(totalLabel);
+                text = "AIR EMISSIONS",
+                value = _pollutionTelemetryExpanded,
+                name = "MachinePollutionFoldout",
+            };
+            foldout.style.color = new StyleColor(new Color(1f, 0.76f, 0.34f));
+            foldout.style.unityFontStyleAndWeight = FontStyle.Bold;
+            foldout.style.fontSize = 11;
+            foldout.RegisterValueChangedCallback(e => _pollutionTelemetryExpanded = e.newValue);
+            card.Add(foldout);
+
+            if (rated > 0f)
+            {
+                var currentLabel = new Label($"Current     {PollutionUnits.FormatRate(current)}");
+                currentLabel.style.color = new StyleColor(new Color(0.91f, 0.94f, 0.95f));
+                currentLabel.style.marginTop = 4;
+                foldout.Add(currentLabel);
+
+                var ratedLabel = new Label($"Full load   {PollutionUnits.FormatRate(rated)}");
+                ratedLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
+                foldout.Add(ratedLabel);
+
+                if (!VoxelEngine.Networking.NetworkSession.SimulationIsRemote)
+                {
+                    var totalLabel = new Label($"This session {PollutionUnits.FormatMass(lifetime)} emitted");
+                    totalLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
+                    foldout.Add(totalLabel);
+                }
+            }
+
+            if (ratedRunoff > 0f)
+            {
+                var effluentHeading = new Label("SOIL / WATER EFFLUENT");
+                effluentHeading.style.color = new StyleColor(new Color(0.71f, 0.78f, 0.46f));
+                effluentHeading.style.unityFontStyleAndWeight = FontStyle.Bold;
+                effluentHeading.style.fontSize = 9;
+                effluentHeading.style.marginTop = 6;
+                foldout.Add(effluentHeading);
+
+                var runoffCurrentLabel = new Label($"Current     {PollutionUnits.FormatContaminantRate(currentRunoff)}");
+                runoffCurrentLabel.style.color = new StyleColor(new Color(0.91f, 0.94f, 0.95f));
+                foldout.Add(runoffCurrentLabel);
+                var runoffRatedLabel = new Label($"Full load   {PollutionUnits.FormatContaminantRate(ratedRunoff)}");
+                runoffRatedLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
+                foldout.Add(runoffRatedLabel);
+                if (!VoxelEngine.Networking.NetworkSession.SimulationIsRemote)
+                {
+                    var runoffTotalLabel = new Label($"This session {PollutionUnits.FormatContaminantMass(lifetimeRunoff)} released");
+                    runoffTotalLabel.style.color = new StyleColor(new Color(0.72f, 0.76f, 0.78f));
+                    foldout.Add(runoffTotalLabel);
+                }
             }
 
             // Machine builders generally place their scrolling content inside the panel.

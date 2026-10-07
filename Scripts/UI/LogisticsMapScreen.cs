@@ -54,6 +54,7 @@ namespace VoxelEngine.UI
         private static bool _showDrones = true;
         private static bool _showZones = true;
         private static bool _showRoads = true;
+        private static bool _showBuildings = true;
         private static bool _showDeposits = true;
         // Pollution is telemetry, not a permanent HUD treatment: explicitly opt in.
         private static bool _showPollution;
@@ -115,6 +116,7 @@ namespace VoxelEngine.UI
         private static readonly Color RailInk = new(0.72f, 0.76f, 0.84f, 0.95f);
         private static readonly Color DroneInk = new(0.42f, 0.74f, 0.96f, 0.80f);
         private static readonly Color RoadInk = new(0.30f, 0.32f, 0.36f, 0.85f);
+        private static readonly Color BuildingInk = new(0.62f, 0.68f, 0.72f, 0.78f);
         private static readonly Color ZoneInk = new(0.95f, 0.72f, 0.28f, 0.55f);
         private static readonly Color StationInk = new(1.00f, 0.78f, 0.32f);
         private static readonly Color TrainInk = new(0.40f, 0.92f, 0.58f);
@@ -241,6 +243,7 @@ namespace VoxelEngine.UI
             AddLayerToggle("DRONE ROUTES", DroneInk, () => _showDrones, v => _showDrones = v);
             AddLayerToggle("BASE ZONES", ZoneInk, () => _showZones, v => _showZones = v);
             AddLayerToggle("ROADS", RoadInk, () => _showRoads, v => _showRoads = v);
+            AddLayerToggle("BUILDINGS", BuildingInk, () => _showBuildings, v => _showBuildings = v);
             AddLayerToggle("DEPOSITS", DepositInk, () => _showDeposits, v => _showDeposits = v);
             AddLayerToggle("POLLUTION", PollutionInk, () => _showPollution, v => _showPollution = v);
 
@@ -311,7 +314,7 @@ namespace VoxelEngine.UI
             _refreshTimer -= Time.unscaledDeltaTime;
             if (_refreshTimer <= 0f)
             {
-                _refreshTimer = 0.5f;
+                _refreshTimer = 1f;
                 Refresh();
             }
         }
@@ -357,12 +360,14 @@ namespace VoxelEngine.UI
             if (_showPollution)
             {
                 PollutionTelemetry telemetry = PollutionService.TelemetryAt(ViewerPosition());
-                pollution = $"   ·   AIR {telemetry.Band} {telemetry.LocalAir01 * 100f:0}%";
+                pollution = $"   ·   AIR {telemetry.Band} {telemetry.LocalAir01 * 100f:0}%" +
+                    $"   ·   SOIL {telemetry.RunoffBand} {telemetry.LocalRunoff01 * 100f:0}%";
             }
             _statusLabel.text =
                 $"{LogisticsMapData.RailCells} RAIL CELLS   ·   {LogisticsMapData.StationCount} STATIONS   ·   " +
                 $"{LogisticsMapData.TrainCount} TRAINS   ·   {LogisticsMapData.PortCount} PORTS   ·   " +
-                $"{LogisticsMapData.ZoneCount} BASES   ·   {LogisticsMapData.DepositCount} DEPOSITS" + pollution;
+                $"{LogisticsMapData.BuildingCount} BUILDINGS   ·   {LogisticsMapData.ZoneCount} BASES   ·   " +
+                $"{LogisticsMapData.DepositCount} DEPOSITS" + pollution;
 
             InvalidateView();
         }
@@ -417,6 +422,14 @@ namespace VoxelEngine.UI
                 Include(links[i].A);
                 Include(links[i].B);
             }
+            var buildings = LogisticsMapData.Buildings;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                Include(buildings[i].World + frame.East * buildings[i].RadiusMetres);
+                Include(buildings[i].World - frame.East * buildings[i].RadiusMetres);
+                Include(buildings[i].World + frame.North * buildings[i].RadiusMetres);
+                Include(buildings[i].World - frame.North * buildings[i].RadiusMetres);
+            }
 
             Rect r = _canvas.contentRect;
             float w = r.width > 10 ? r.width : 900f;
@@ -466,6 +479,23 @@ namespace VoxelEngine.UI
                 detail.style.color = new StyleColor(T.TextMuted);
                 detail.style.marginBottom = 2;
                 _list.Add(detail);
+
+                AddSection("SOIL / WATER");
+                var runoff = new Label(
+                    $"{telemetry.RunoffBand}   ·   LOCAL {telemetry.LocalRunoff01 * 100f:0}%   ·   " +
+                    $"BODY {telemetry.BodyRunoff01 * 100f:0.0}%");
+                runoff.style.fontSize = 10;
+                runoff.style.color = new StyleColor(RunoffColour(telemetry.LocalRunoff01));
+                runoff.style.marginBottom = 2;
+                _list.Add(runoff);
+                string runoffTrend = Mathf.Abs(telemetry.RunoffTrendPerMinute) < 0.005f ? "STABLE"
+                    : telemetry.RunoffTrendPerMinute > 0f ? "SPREADING" : "RECOVERING";
+                var runoffDetail = new Label(runoffTrend + "   ·   RAIN TRANSFERS SMOG TO RUNOFF");
+                runoffDetail.style.fontSize = 9;
+                runoffDetail.style.whiteSpace = WhiteSpace.Normal;
+                runoffDetail.style.color = new StyleColor(T.TextMuted);
+                runoffDetail.style.marginBottom = 2;
+                _list.Add(runoffDetail);
             }
 
             AddSection("RAIL");
@@ -635,6 +665,7 @@ namespace VoxelEngine.UI
             _projectionFrame = BuildMapFrame(_anchor);
 
             DrawTerrain(painter, r, centre, metresPerPixel, _projectionFrame);
+            if (_showBuildings) DrawBuildings(painter, r, centre, metresPerPixel);
             DrawGrid(painter, r, centre, metresPerPixel);
             if (_showPollution) DrawPollution(painter, r, centre, metresPerPixel);
 
@@ -714,6 +745,28 @@ namespace VoxelEngine.UI
             }
 
             DrawMarkers(painter, r, centre, metresPerPixel);
+        }
+
+        private static void DrawBuildings(Painter2D painter, Rect r, Vector2 centre,
+            float metresPerPixel)
+        {
+            var buildings = LogisticsMapData.Buildings;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                MapFootprint building = buildings[i];
+                Vector2 p = Project(building.World, centre, metresPerPixel);
+                float half = Mathf.Clamp(building.RadiusMetres / metresPerPixel, 1.5f, 80f);
+                if (!OnScreen(p, r, half)) continue;
+
+                painter.fillColor = building.Ink;
+                painter.BeginPath();
+                painter.MoveTo(p + new Vector2(0f, -half));
+                painter.LineTo(p + new Vector2(half, 0f));
+                painter.LineTo(p + new Vector2(0f, half));
+                painter.LineTo(p + new Vector2(-half, 0f));
+                painter.ClosePath();
+                painter.Fill();
+            }
         }
 
         private static void DrawTerrain(Painter2D painter, Rect r, Vector2 centre,
@@ -821,17 +874,31 @@ namespace VoxelEngine.UI
                 float half = Mathf.Max(2f, cell.SizeMetres / metresPerPixel * 0.5f);
                 if (!OnScreen(p, r, half)) continue;
 
-                Color colour = PollutionColour(cell.Intensity01);
-                colour.a = Mathf.Lerp(0.10f, 0.52f, cell.Intensity01);
-                painter.fillColor = colour;
-                painter.BeginPath();
-                painter.MoveTo(p + new Vector2(-half, -half));
-                painter.LineTo(p + new Vector2(half, -half));
-                painter.LineTo(p + new Vector2(half, half));
-                painter.LineTo(p + new Vector2(-half, half));
-                painter.ClosePath();
-                painter.Fill();
+                if (cell.Runoff01 >= 0.01f)
+                {
+                    Color runoff = RunoffColour(cell.Runoff01);
+                    runoff.a = Mathf.Lerp(0.12f, 0.58f, cell.Runoff01);
+                    FillPollutionCell(painter, p, half, runoff);
+                }
+                if (cell.Intensity01 >= 0.01f)
+                {
+                    Color air = PollutionColour(cell.Intensity01);
+                    air.a = Mathf.Lerp(0.08f, 0.46f, cell.Intensity01);
+                    FillPollutionCell(painter, p, half * 0.88f, air);
+                }
             }
+        }
+
+        private static void FillPollutionCell(Painter2D painter, Vector2 p, float half, Color colour)
+        {
+            painter.fillColor = colour;
+            painter.BeginPath();
+            painter.MoveTo(p + new Vector2(-half, -half));
+            painter.LineTo(p + new Vector2(half, -half));
+            painter.LineTo(p + new Vector2(half, half));
+            painter.LineTo(p + new Vector2(-half, half));
+            painter.ClosePath();
+            painter.Fill();
         }
 
         private static Color PollutionColour(float intensity)
@@ -842,6 +909,16 @@ namespace VoxelEngine.UI
             if (intensity < 0.70f)
                 return Color.Lerp(new Color(0.95f, 0.78f, 0.22f), new Color(0.88f, 0.38f, 0.12f), (intensity - 0.35f) / 0.35f);
             return Color.Lerp(new Color(0.88f, 0.38f, 0.12f), new Color(0.70f, 0.12f, 0.12f), (intensity - 0.70f) / 0.30f);
+        }
+
+        private static Color RunoffColour(float intensity)
+        {
+            intensity = Mathf.Clamp01(intensity);
+            if (intensity < 0.40f)
+                return Color.Lerp(new Color(0.54f, 0.61f, 0.30f), new Color(0.62f, 0.44f, 0.16f), intensity / 0.40f);
+            if (intensity < 0.75f)
+                return Color.Lerp(new Color(0.62f, 0.44f, 0.16f), new Color(0.46f, 0.20f, 0.48f), (intensity - 0.40f) / 0.35f);
+            return Color.Lerp(new Color(0.46f, 0.20f, 0.48f), new Color(0.22f, 0.07f, 0.20f), (intensity - 0.75f) / 0.25f);
         }
 
         private static bool OnScreen(Vector2 p, Rect r, float margin)

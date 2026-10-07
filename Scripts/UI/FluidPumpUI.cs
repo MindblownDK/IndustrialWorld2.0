@@ -126,6 +126,14 @@ namespace VoxelEngine.UI
                 sourceCard.Add(UITheme.Spacer(6));
                 sourceCard.Add(UITheme.StatRow("◎", "Pool Volume", $"{pump.SourceLitres:0} L", accent));
                 sourceCard.Add(UITheme.StatRow("▦", "Pool Voxels", $"{pump.SourceVoxels}", accent));
+                if (!isOil)
+                {
+                    Color quality = pump.SourceContamination01 < 0.18f
+                        ? UITheme.AccentGreen
+                        : pump.SourceContamination01 < 0.50f ? UITheme.AccentAmber : UITheme.AccentRed;
+                    sourceCard.Add(UITheme.StatRow("", "Water Quality", $"{pump.WaterQuality01 * 100f:0}%", quality));
+                    sourceCard.Add(UITheme.StatRow("", "Runoff Contamination", $"{pump.SourceContamination01 * 100f:0}%", quality));
+                }
 
                 // Progress bar to infinite threshold
                 if (!pump.SourceInfinite)
@@ -142,7 +150,8 @@ namespace VoxelEngine.UI
             p.Add(UITheme.Spacer(8));
 
             // ── Pump rates ─────────────────────────────────────────────────
-            p.Add(UITheme.StatRow("↯", "Intake Rate", $"{pump.pumpLps:0} L/s", accent));
+            p.Add(UITheme.StatRow("↯", "Intake Rate",
+                $"{pump.pumpLps * pump.PollutionEfficiency01:0} / {pump.pumpLps:0} L/s", accent));
             p.Add(UITheme.StatRow("⇒", "Output Rate", $"{pump.outputLps:0} L/s", accent));
             p.Add(UITheme.StatRow("⇄", "Pipe Network", pump.network != null ? $"{pump.network.nodes.Count} nodes" : "No network",
                 pump.network != null ? UITheme.AccentGreen : UITheme.TextMuted));
@@ -164,6 +173,7 @@ namespace VoxelEngine.UI
             p.Add(UITheme.Muted(
                 "Place the pump above or beside a connected pool. Large oceans automatically become ∞ infinite — " +
                 "the pump spawns new liquid without draining the source. Finite pools are drained voxel-by-voxel. " +
+                "Runoff contamination can reduce water intake by up to 35%; crude oil is unaffected. " +
                 "Connect liquid pipes to tanks and machines to transport the liquid."));
 
             IndustrialTheme.Frame(p);

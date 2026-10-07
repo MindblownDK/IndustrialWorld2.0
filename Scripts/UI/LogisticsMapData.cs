@@ -38,6 +38,7 @@ namespace VoxelEngine.UI
         DronePort,
         BaseZone,
         Road,
+        Building,
         Player,
         /// <summary>A deep ore deposit revealed by an orbital resource scanner.</summary>
         Deposit,
@@ -71,6 +72,21 @@ namespace VoxelEngine.UI
         }
     }
 
+    /// <summary>Coarse footprint of one player-placed static building.</summary>
+    public readonly struct MapFootprint
+    {
+        public readonly Vector3 World;
+        public readonly float RadiusMetres;
+        public readonly Color Ink;
+
+        public MapFootprint(Vector3 world, float radiusMetres, Color ink)
+        {
+            World = world;
+            RadiusMetres = Mathf.Max(0.75f, radiusMetres);
+            Ink = ink;
+        }
+    }
+
     /// <summary>A circular area of influence: a base zone around a cluster of logistic chests.</summary>
     public readonly struct MapZone
     {
@@ -89,10 +105,12 @@ namespace VoxelEngine.UI
     {
         private static readonly List<MapMarker> _markers = new(128);
         private static readonly List<MapLink> _links = new(512);
+        private static readonly List<MapFootprint> _buildings = new(1024);
         private static readonly List<MapZone> _zones = new(16);
 
         public static IReadOnlyList<MapMarker> Markers => _markers;
         public static IReadOnlyList<MapLink> Links => _links;
+        public static IReadOnlyList<MapFootprint> Buildings => _buildings;
         public static IReadOnlyList<MapZone> Zones => _zones;
 
         /// <summary>Bounds of everything gathered, so the map can frame itself on open.</summary>
@@ -103,6 +121,7 @@ namespace VoxelEngine.UI
         public static int StationCount { get; private set; }
         public static int TrainCount { get; private set; }
         public static int PortCount { get; private set; }
+        public static int BuildingCount => _buildings.Count;
 
         /// <summary>Deposits currently revealed by orbital scanners.</summary>
         public static int DepositCount { get; private set; }
@@ -120,6 +139,7 @@ namespace VoxelEngine.UI
 
         private static readonly List<AsphaltRoad> _roadScratch = new(256);
         private static readonly List<Chest> _chestScratch = new(64);
+        private static readonly HashSet<GameObject> _buildingSeen = new();
 
         /// <summary>
         /// Rebuilds every overlay. Called when the map opens and on a slow refresh tick,
@@ -129,6 +149,7 @@ namespace VoxelEngine.UI
         {
             _markers.Clear();
             _links.Clear();
+            _buildings.Clear();
             _zones.Clear();
 
             bool any = false;
@@ -146,6 +167,7 @@ namespace VoxelEngine.UI
             GatherDrones(Grow);
             GatherZones(Grow);
             GatherRoads(Grow);
+            GatherBuildings(Grow);
             GatherDeposits(Grow);
 
             _markers.Add(new MapMarker(MapOverlayKind.Player, viewer, "YOU", "", false));
@@ -321,6 +343,63 @@ namespace VoxelEngine.UI
                 grow(centre + new Vector3(radius, 0f, radius));
                 grow(centre - new Vector3(radius, 0f, radius));
             }
+        }
+
+        // ── Player-placed static buildings ───────────────────────────────────────
+        // Buildings are a quiet footprint layer rather than labelled contacts: a mature
+        // factory can contain thousands of blocks, and naming each one would bury every
+        // rail station and alert. Footprints still make the base itself readable on terrain.
+        private static void GatherBuildings(System.Action<Vector3> grow)
+        {
+            _buildingSeen.Clear();
+            var placed = Object.FindObjectsByType<PlacedBlock>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < placed.Length; i++)
+            {
+                var block = placed[i];
+                if (block == null || block.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) continue;
+                if (block.GetComponent<AsphaltRoad>() != null) continue; // already represented by the road layer
+                AddBuilding(block.gameObject, block.Item != null ? block.Item.category : string.Empty,
+                    _buildingSeen, grow);
+            }
+
+            var tiered = Object.FindObjectsByType<VoxelEngine.Building.Tiered.PlacedTieredBlock>(
+                FindObjectsInactive.Exclude);
+            for (int i = 0; i < tiered.Length; i++)
+            {
+                var block = tiered[i];
+                if (block == null || block.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) continue;
+                AddBuilding(block.gameObject, "Structure", _buildingSeen, grow);
+            }
+        }
+
+        private static void AddBuilding(GameObject root, string category, HashSet<GameObject> seen,
+            System.Action<Vector3> grow)
+        {
+            if (root == null || !seen.Add(root)) return;
+            Bounds bounds = new(root.transform.position, Vector3.one * 1.5f);
+            var collider = root.GetComponentInChildren<Collider>(true);
+            if (collider != null && collider.enabled) bounds = collider.bounds;
+            else
+            {
+                var renderer = root.GetComponentInChildren<Renderer>(true);
+                if (renderer != null && renderer.enabled) bounds = renderer.bounds;
+            }
+
+            Vector3 extents = bounds.extents;
+            float largest = Mathf.Max(extents.x, Mathf.Max(extents.y, extents.z));
+            float smallest = Mathf.Min(extents.x, Mathf.Min(extents.y, extents.z));
+            float secondLargest = extents.x + extents.y + extents.z - largest - smallest;
+            float radius = Mathf.Clamp(secondLargest * 1.2f, 0.75f, 40f);
+            string lower = category?.ToLowerInvariant() ?? string.Empty;
+            Color ink = lower.Contains("power") ? new Color(0.95f, 0.66f, 0.25f, 0.78f)
+                : lower.Contains("machine") || lower.Contains("station")
+                    ? new Color(0.34f, 0.78f, 0.82f, 0.76f)
+                    : lower.Contains("storage")
+                        ? new Color(0.50f, 0.68f, 0.94f, 0.76f)
+                        : new Color(0.62f, 0.68f, 0.72f, 0.62f);
+            _buildings.Add(new MapFootprint(bounds.center, radius, ink));
+            grow(bounds.min);
+            grow(bounds.max);
         }
 
         // ── Deep deposits ────────────────────────────────────────────────────────

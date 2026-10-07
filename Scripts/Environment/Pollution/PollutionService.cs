@@ -25,6 +25,7 @@ namespace VoxelEngine.Environment
         private const float SimulationStepSeconds = 1f;
         private const float SaveIntervalSeconds = 60f;
         private const float LocalAirScale = 80f;
+        private const float LocalRunoffScale = 110f;
         private const float BodyAirScale = 12000f;
         private const float MinimumStoredLoad = 0.001f;
         private const float MaxCellLoad = 1000000f;
@@ -38,8 +39,22 @@ namespace VoxelEngine.Environment
             = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, float> _airTrendPerMinute
             = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, float> _runoffTrendPerMinute
+            = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<CaptureCandidate> _captureScratch = new(128);
         private readonly List<string> _bodyNameScratch = new(16);
+        private static readonly Vector3Int[] s_tangentAroundX =
+        {
+            Vector3Int.up, Vector3Int.down, Vector3Int.forward, Vector3Int.back,
+        };
+        private static readonly Vector3Int[] s_tangentAroundY =
+        {
+            Vector3Int.right, Vector3Int.left, Vector3Int.forward, Vector3Int.back,
+        };
+        private static readonly Vector3Int[] s_tangentAroundZ =
+        {
+            Vector3Int.right, Vector3Int.left, Vector3Int.up, Vector3Int.down,
+        };
 
         private float _simulationAccumulator;
         private float _saveTimer;
@@ -114,8 +129,8 @@ namespace VoxelEngine.Environment
             if (service == null) return;
             if (!service.TryResolveBodyAt(worldPosition, out var body) || body.settings == null) return;
 
-            // Airborne pollution cannot accumulate where there is no air. Other channels
-            // remain valid extension seams for later runoff/climate/debris phases.
+            // Airborne pollution cannot accumulate where there is no air. Surface runoff
+            // remains valid on airless bodies; climate/debris retain their extension seams.
             if (!body.settings.HasAtmosphere) amount.airborneSmog = 0f;
             if (amount.Total <= 0f) return;
 
@@ -149,15 +164,7 @@ namespace VoxelEngine.Environment
                 service._captureScratch.Add(new CaptureCandidate { key = pair.Key, distanceSq = distanceSq });
             }
 
-            service._captureScratch.Sort((a, b) =>
-            {
-                int distance = a.distanceSq.CompareTo(b.distanceSq);
-                if (distance != 0) return distance;
-                int x = a.key.x.CompareTo(b.key.x);
-                if (x != 0) return x;
-                int y = a.key.y.CompareTo(b.key.y);
-                return y != 0 ? y : a.key.z.CompareTo(b.key.z);
-            });
+            service.SortCaptureScratch();
 
             float removed = 0f;
             for (int i = 0; i < service._captureScratch.Count && removed < maxUnits; i++)
@@ -180,9 +187,72 @@ namespace VoxelEngine.Environment
             return removed;
         }
 
+        /// <summary>
+        /// Removes persistent soil/water contamination around a powered remediation machine.
+        /// Runoff is captured nearest-cell-first and remains host/offline authoritative.
+        /// </summary>
+        public static float CaptureRunoff(Vector3 worldPosition, float radiusMetres, float maxUnits)
+        {
+            var service = Instance;
+            if (!CanSimulate || service == null || maxUnits <= 0f || radiusMetres <= 0f) return 0f;
+            if (!service.TryResolveBodyAt(worldPosition, out var body) || body.settings == null) return 0f;
+            if (!service._cells.TryGetValue(body.settings.bodyName, out var cells) || cells.Count == 0) return 0f;
+
+            service._captureScratch.Clear();
+            float radiusSq = radiusMetres * radiusMetres;
+            foreach (var pair in cells)
+            {
+                if (pair.Value.runoff <= 0f) continue;
+                Vector3 centre = body.transform.TransformPoint(CellCentre(pair.Key));
+                float distanceSq = (centre - worldPosition).sqrMagnitude;
+                if (distanceSq > radiusSq) continue;
+                service._captureScratch.Add(new CaptureCandidate { key = pair.Key, distanceSq = distanceSq });
+            }
+
+            service.SortCaptureScratch();
+            float removed = 0f;
+            for (int i = 0; i < service._captureScratch.Count && removed < maxUnits; i++)
+            {
+                Vector3Int key = service._captureScratch[i].key;
+                if (!cells.TryGetValue(key, out var load)) continue;
+                float take = Mathf.Min(load.runoff, maxUnits - removed);
+                load.runoff -= take;
+                removed += take;
+                if (load.Total < MinimumStoredLoad) cells.Remove(key);
+                else cells[key] = load;
+            }
+
+            if (removed > 0f)
+            {
+                if (cells.Count == 0) service._cells.Remove(body.settings.bodyName);
+                service.MarkChanged();
+                service.RecalculateBodyRecords(0f);
+            }
+            return removed;
+        }
+
+        private void SortCaptureScratch()
+        {
+            _captureScratch.Sort((a, b) =>
+            {
+                int distance = a.distanceSq.CompareTo(b.distanceSq);
+                if (distance != 0) return distance;
+                int x = a.key.x.CompareTo(b.key.x);
+                if (x != 0) return x;
+                int y = a.key.y.CompareTo(b.key.y);
+                return y != 0 ? y : a.key.z.CompareTo(b.key.z);
+            });
+        }
+
         // ── Queries (safe on host, offline and snapshot-driven clients) ──────────
 
         public static float SampleAirborne01(Vector3 worldPosition)
+            => SampleLocal01(worldPosition, runoff: false);
+
+        public static float SampleRunoff01(Vector3 worldPosition)
+            => SampleLocal01(worldPosition, runoff: true);
+
+        private static float SampleLocal01(Vector3 worldPosition, bool runoff)
         {
             var service = Instance;
             if (service == null || !service.TryResolveBodyAt(worldPosition, out var body)
@@ -207,11 +277,12 @@ namespace VoxelEngine.Environment
                 float weight = (x == 0 ? 1f - tx : tx)
                     * (y == 0 ? 1f - ty : ty)
                     * (z == 0 ? 1f - tz : tz);
-                if (cells.TryGetValue(new Vector3Int(x0 + x, y0 + y, z0 + z), out var load))
-                    units += Mathf.Max(0f, load.airborneSmog) * weight;
+                if (!cells.TryGetValue(new Vector3Int(x0 + x, y0 + y, z0 + z), out var load)) continue;
+                units += Mathf.Max(0f, runoff ? load.runoff : load.airborneSmog) * weight;
             }
 
-            return Concentration01(units);
+            float scale = runoff ? LocalRunoffScale : LocalAirScale;
+            return 1f - Mathf.Exp(-Mathf.Max(0f, units) / scale);
         }
 
         public static float AirborneBurdenFor(string bodyName)
@@ -221,18 +292,29 @@ namespace VoxelEngine.Environment
                 ? Mathf.Clamp01(record.airborneBurden01) : 0f;
         }
 
+        public static float RunoffBurdenFor(string bodyName)
+        {
+            if (Instance == null || string.IsNullOrEmpty(bodyName)) return 0f;
+            return Instance._bodyRecords.TryGetValue(bodyName, out var record)
+                ? Mathf.Clamp01(record.runoffBurden01) : 0f;
+        }
+
         public static PollutionTelemetry TelemetryAt(Vector3 worldPosition)
         {
             var service = Instance;
             if (service == null || !service.TryResolveBodyAt(worldPosition, out var body)
                 || body.settings == null)
-                return new PollutionTelemetry(0f, 0f, 0f, 0);
+                return new PollutionTelemetry(0f, 0f, 0f, 0f, 0f, 0f, 0);
 
             string name = body.settings.bodyName;
             float burden = AirborneBurdenFor(name);
+            float runoffBurden = RunoffBurdenFor(name);
             float trend = service._airTrendPerMinute.TryGetValue(name, out float value) ? value : 0f;
+            float runoffTrend = service._runoffTrendPerMinute.TryGetValue(name, out float runoffValue)
+                ? runoffValue : 0f;
             int count = service._cells.TryGetValue(name, out var cells) ? cells.Count : 0;
-            return new PollutionTelemetry(SampleAirborne01(worldPosition), burden, trend, count);
+            return new PollutionTelemetry(SampleAirborne01(worldPosition), burden,
+                SampleRunoff01(worldPosition), runoffBurden, trend, runoffTrend, count);
         }
 
         public static void GetActiveBodyMapCells(List<PollutionMapCell> output)
@@ -247,9 +329,10 @@ namespace VoxelEngine.Environment
             foreach (var pair in cells)
             {
                 float intensity = Concentration01(pair.Value.airborneSmog);
-                if (intensity < 0.01f) continue;
+                float runoff = 1f - Mathf.Exp(-Mathf.Max(0f, pair.Value.runoff) / LocalRunoffScale);
+                if (intensity < 0.01f && runoff < 0.01f) continue;
                 Vector3 world = body.transform.TransformPoint(CellCentre(pair.Key));
-                output.Add(new PollutionMapCell(world, intensity, CellSizeMetres));
+                output.Add(new PollutionMapCell(world, intensity, runoff, CellSizeMetres));
             }
         }
 
@@ -405,8 +488,9 @@ namespace VoxelEngine.Environment
 
         private void ReplaceFrom(PollutionStateData data, bool remote)
         {
-            var previous = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-            foreach (var pair in _bodyRecords) previous[pair.Key] = pair.Value.airborneBurden01;
+            var previous = new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in _bodyRecords)
+                previous[pair.Key] = new Vector2(pair.Value.airborneBurden01, pair.Value.runoffBurden01);
 
             ClearState();
             _loadedPath = remote ? "<remote>" : _loadedPath;
@@ -437,8 +521,11 @@ namespace VoxelEngine.Environment
 
             foreach (var pair in _bodyRecords)
             {
-                float old = previous.TryGetValue(pair.Key, out float value) ? value : pair.Value.airborneBurden01;
-                _airTrendPerMinute[pair.Key] = (pair.Value.airborneBurden01 - old) * 30f;
+                Vector2 old = previous.TryGetValue(pair.Key, out Vector2 value)
+                    ? value
+                    : new Vector2(pair.Value.airborneBurden01, pair.Value.runoffBurden01);
+                _airTrendPerMinute[pair.Key] = (pair.Value.airborneBurden01 - old.x) * 30f;
+                _runoffTrendPerMinute[pair.Key] = (pair.Value.runoffBurden01 - old.y) * 30f;
             }
             _dirty = !remote;
         }
@@ -478,23 +565,40 @@ namespace VoxelEngine.Environment
                     : Mathf.Clamp(localWind.magnitude * dt / CellSizeMetres, 0f, 0.22f);
 
                 float airRetention = Mathf.Exp(-0.00096f * dt);
-                if (isActive && rain > 0f) airRetention *= Mathf.Exp(-0.004f * rain * dt);
+                float washShare = isActive && rain > 0f
+                    ? 1f - Mathf.Exp(-0.004f * rain * dt)
+                    : 0f;
                 float runoffRetention = Mathf.Exp(-0.00026f * dt);
+                float runoffSpreadShare = Mathf.Clamp((0.0008f + (isActive ? rain * 0.008f : 0f)) * dt,
+                    0f, 0.03f);
                 float climateRetention = Mathf.Exp(-0.000048f * dt);
                 float debrisRetention = Mathf.Exp(-0.000016f * dt);
 
                 foreach (var pair in source)
                 {
+                    float naturallyRetainedAir = pair.Value.airborneSmog * airRetention;
+                    float washedFromAir = naturallyRetainedAir * washShare;
                     PollutionLoad retained = new()
                     {
-                        airborneSmog = pair.Value.airborneSmog * airRetention,
-                        runoff = pair.Value.runoff * runoffRetention,
+                        airborneSmog = naturallyRetainedAir - washedFromAir,
+                        runoff = pair.Value.runoff * runoffRetention + washedFromAir * 0.85f,
                         climateLoad = pair.Value.climateLoad * climateRetention,
                         orbitalDebris = pair.Value.orbitalDebris * debrisRetention,
                     };
 
                     float movedAir = retained.airborneSmog * moveShare;
                     retained.airborneSmog -= movedAir;
+
+                    float movedRunoff = retained.runoff * runoffSpreadShare;
+                    Vector3Int[] seepSteps = TangentialSteps(pair.Key);
+                    float runoffPart = movedRunoff * 0.25f;
+                    if (runoffPart > MinimumStoredLoad)
+                    {
+                        retained.runoff -= movedRunoff;
+                        for (int step = 0; step < seepSteps.Length; step++)
+                            Add(next, pair.Key + seepSteps[step], new PollutionLoad { runoff = runoffPart });
+                    }
+
                     Add(next, pair.Key, retained);
                     if (movedAir > MinimumStoredLoad)
                         Add(next, pair.Key + windStep, new PollutionLoad { airborneSmog = movedAir });
@@ -512,8 +616,9 @@ namespace VoxelEngine.Environment
 
         private void RecalculateBodyRecords(float dt)
         {
-            var previous = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-            foreach (var pair in _bodyRecords) previous[pair.Key] = pair.Value.airborneBurden01;
+            var previous = new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in _bodyRecords)
+                previous[pair.Key] = new Vector2(pair.Value.airborneBurden01, pair.Value.runoffBurden01);
             _bodyRecords.Clear();
 
             foreach (var bodyPair in _cells)
@@ -532,10 +637,13 @@ namespace VoxelEngine.Environment
 
                 if (dt > 0f)
                 {
-                    float old = previous.TryGetValue(bodyPair.Key, out float value)
-                        ? value : record.airborneBurden01;
+                    Vector2 old = previous.TryGetValue(bodyPair.Key, out Vector2 value)
+                        ? value
+                        : new Vector2(record.airborneBurden01, record.runoffBurden01);
                     _airTrendPerMinute[bodyPair.Key]
-                        = (record.airborneBurden01 - old) * (60f / dt);
+                        = (record.airborneBurden01 - old.x) * (60f / dt);
+                    _runoffTrendPerMinute[bodyPair.Key]
+                        = (record.runoffBurden01 - old.y) * (60f / dt);
                 }
             }
 
@@ -543,7 +651,10 @@ namespace VoxelEngine.Environment
             foreach (var pair in _airTrendPerMinute)
                 if (!_bodyRecords.ContainsKey(pair.Key)) _bodyNameScratch.Add(pair.Key);
             for (int i = 0; i < _bodyNameScratch.Count; i++)
+            {
                 _airTrendPerMinute.Remove(_bodyNameScratch[i]);
+                _runoffTrendPerMinute.Remove(_bodyNameScratch[i]);
+            }
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────
@@ -576,6 +687,7 @@ namespace VoxelEngine.Environment
             _cells.Clear();
             _bodyRecords.Clear();
             _airTrendPerMinute.Clear();
+            _runoffTrendPerMinute.Clear();
             _simulationAccumulator = 0f;
             _saveTimer = 0f;
             _dirty = false;
@@ -623,6 +735,15 @@ namespace VoxelEngine.Environment
             (key.x + 0.5f) * CellSizeMetres,
             (key.y + 0.5f) * CellSizeMetres,
             (key.z + 0.5f) * CellSizeMetres);
+
+        private static Vector3Int[] TangentialSteps(Vector3Int key)
+        {
+            int x = Mathf.Abs(key.x);
+            int y = Mathf.Abs(key.y);
+            int z = Mathf.Abs(key.z);
+            if (x >= y && x >= z) return s_tangentAroundX;
+            return y >= z ? s_tangentAroundY : s_tangentAroundZ;
+        }
 
         private static Vector3Int DominantStep(Vector3 direction)
         {

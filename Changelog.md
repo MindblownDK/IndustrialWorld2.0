@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.67.0-dev`
+**Current Version:** `14.68.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.68.0-dev] What the Rain Leaves Behind
+
+**Pollution Phase 2 begins with persistent industrial runoff: rain now moves part of airborne smog into soil and water instead of simply deleting it, direct process effluent spreads slowly across the surface, water pumps report and react to contamination, and the existing powered recovery machine extracts the burden into manageable sludge.**
+
+#### Added
+- **Persistent soil and water contamination.** The existing save-compatible `runoff` channel is now fully simulated, queried, trended, persisted and replicated. Direct industrial effluent and rain-washed airborne load accumulate in sparse body-local cells, seep gradually into neighbouring surface cells and recover much more slowly than open-air smog.
+- **Runoff recovery loop.** The Atmospheric Carbon Harvester now also remediates nearby soil and water while powered. Captured runoff is conserved into the new `remediation_sludge` item; the setup-authored `Stabilize Remediation Sludge` Assembler recipe converts four sludge into one Stone. The same non-destructive pass guarantees a missing canonical Stone item, and stored runoff uses the existing machine process-state save seam.
+- **Water-quality gameplay.** Water pumps sample local runoff, display water quality and contamination, and lose at most 35 percent of intake throughput in severely contaminated areas. Crude-oil pumping is unaffected.
+- **Placed-building map layer.** The Logistics Map now gathers player-placed static blocks and tiered structures into a toggleable, category-coloured `BUILDINGS` footprint layer beneath routes and pollution. Roads remain on their dedicated layer instead of being counted twice.
+- **Runoff telemetry on both maps.** The optional local pollution layer renders persistent soil/water cells beneath the smaller airborne overlay and reports local/body burden plus trend. Orbital body rows now include live soil contamination alongside atmospheric burden.
+
+#### Changed
+- **Air emissions are collapsible.** Every emitting-machine panel keeps a compact `AIR EMISSIONS` foldout header; opening it reveals current/rated air output, session mass and any soil/water effluent. Its expanded state survives the panel's live 4 Hz rebuilds.
+- **Source tooltips include effluent.** Re-running Pollution Recovery setup fills missing runoff rates non-destructively and appends SI `contaminant-eq` output to linked machine and engine descriptions while preserving authored multipliers and internal IDs.
+- **Rain has a consequence rather than a free deletion.** Precipitation still clears air gradually, but 85 percent of the washed load transfers into runoff where powered remediation or slow natural recovery must handle it.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.68.0-dev`.
 
 ### [14.67.0-dev] Weathering the Load
 

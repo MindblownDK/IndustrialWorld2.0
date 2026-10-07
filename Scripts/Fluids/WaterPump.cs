@@ -14,6 +14,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.Environment;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
 using VoxelEngine.WaterSim;
@@ -62,6 +63,11 @@ namespace VoxelEngine.Fluids
         public int SourceVoxels => _sourceVoxels;
         public float InternalFill01 => internalCapacityLitres > 0 ? Mathf.Clamp01(internalLitres / internalCapacityLitres) : 0f;
         public bool IsPowered => _power == null || _power.IsPowered;
+        public float SourceContamination01 { get; private set; }
+        public float WaterQuality01 => liquidType == LiquidType.Water ? 1f - SourceContamination01 : 1f;
+        public float PollutionEfficiency01 => liquidType == LiquidType.Water
+            ? Mathf.Lerp(1f, 0.65f, SourceContamination01)
+            : 1f;
         public string SourceStatus => !_hasSource ? "No pool detected"
             : (_sourceInfinite ? "∞ Infinite pool" : $"Finite pool: {_sourceLitres:0} L ({_sourceVoxels} voxels)");
 
@@ -102,7 +108,7 @@ namespace VoxelEngine.Fluids
 
             // Pump from pool into internal buffer
             float space = Mathf.Max(0f, internalCapacityLitres - internalLitres);
-            float want = Mathf.Min(space, pumpLps * Time.deltaTime);
+            float want = Mathf.Min(space, pumpLps * PollutionEfficiency01 * Time.deltaTime);
             if (want > 0.01f)
             {
                 float gained = _sourceInfinite ? want : DrainFromFinitePool(want);
@@ -143,6 +149,9 @@ namespace VoxelEngine.Fluids
             _sourceLitres = 0f;
             _sourceVoxels = 0;
             _poolCells.Clear();
+            SourceContamination01 = liquidType == LiquidType.Water
+                ? PollutionService.SampleRunoff01(transform.position)
+                : 0f;
 
             var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;

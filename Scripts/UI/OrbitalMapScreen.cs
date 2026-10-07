@@ -476,6 +476,10 @@ namespace VoxelEngine.UI
                 pol.style.fontSize = 9;
                 pol.style.color = new StyleColor(PollutionBandColour(entry.Pollution01));
                 row.Add(pol);
+                var runoff = new Label($"SOIL {RunoffBand(entry.Runoff01)}   ·   {(entry.Runoff01 * 100d):0.0}% CONTAMINANT BURDEN");
+                runoff.style.fontSize = 9;
+                runoff.style.color = new StyleColor(RunoffBandColour(entry.Runoff01));
+                row.Add(runoff);
             }
 
             // Full telemetry is what an expensive device buys you. A basic unit stops here.
@@ -579,6 +583,25 @@ namespace VoxelEngine.UI
             < 0.70d => "SMOG",
             _ => "SEVERE",
         };
+
+        private static string RunoffBand(double burden) => burden switch
+        {
+            < 0.03d => "CLEAN",
+            < 0.18d => "TRACE",
+            < 0.42d => "TAINTED",
+            < 0.70d => "TOXIC",
+            _ => "SEVERE",
+        };
+
+        private static Color RunoffBandColour(double burden)
+        {
+            float value = Mathf.Clamp01((float)burden);
+            if (value < 0.40f)
+                return Color.Lerp(new Color(0.54f, 0.66f, 0.34f), new Color(0.70f, 0.48f, 0.18f), value / 0.40f);
+            if (value < 0.75f)
+                return Color.Lerp(new Color(0.70f, 0.48f, 0.18f), new Color(0.56f, 0.25f, 0.60f), (value - 0.40f) / 0.35f);
+            return Color.Lerp(new Color(0.56f, 0.25f, 0.60f), new Color(0.30f, 0.08f, 0.24f), (value - 0.75f) / 0.25f);
+        }
 
         private static Color PollutionBandColour(double burden)
         {

@@ -1,6 +1,6 @@
 // Assets/Scripts/Editor/Environment/PollutionSystemSetup.cs
 //
-// Phase 1 airborne pollution content setup (RunStep114 is retained as a stable API).
+// Airborne pollution + Phase 2 runoff recovery setup (RunStep114 is retained as a stable API).
 // Non-destructive: creates missing assets/components, reconnects missing references,
 // and preserves authored tuning.
 
@@ -39,11 +39,14 @@ namespace VoxelEngine.EditorTools
         private const string CatalogPath = "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset";
 
         private const string CarbonPath = ItemsFolder + "/Item_CarbonConcentrate.asset";
+        private const string SludgePath = ItemsFolder + "/Item_RemediationSludge.asset";
+        private const string StonePath = ItemsFolder + "/Item_Stone.asset";
         private const string GraphitePath = Root + "/Industrial/Items/Item_Graphite.asset";
         private const string HarvesterPrefabPath = PrefabsFolder + "/AtmosphericCarbonHarvester.prefab";
         private const string HarvesterBlockPath = BlocksFolder + "/Block_AtmosphericCarbonHarvester.asset";
         private const string HarvesterRecipePath = RecipesFolder + "/Recipe_AtmosphericCarbonHarvester.asset";
         private const string GraphiteRecipePath = RecipesFolder + "/Recipe_CarbonConcentrateToGraphite.asset";
+        private const string SludgeRecipePath = RecipesFolder + "/Recipe_StabilizeRemediationSludge.asset";
         private const string ResearchNodePath = NodesFolder + "/ResNode_AtmosphericCarbonCapture.asset";
 
         public static void RunStep114()
@@ -71,33 +74,35 @@ namespace VoxelEngine.EditorTools
 
                 var combustion = EnsureProfile(ProfilesFolder + "/PollutionSource_Combustion.asset",
                     "combustion", "Solid-Fuel Combustion",
-                    new PollutionLoad { airborneSmog = 4f, climateLoad = 0.08f },
+                    new PollutionLoad { airborneSmog = 4f, runoff = 0.04f, climateLoad = 0.08f },
                     new Vector3(0f, 2.2f, 0f), ref created, ref repaired, ref preserved);
                 var process = EnsureProfile(ProfilesFolder + "/PollutionSource_IndustrialProcess.asset",
                     "industrial_process", "Industrial Process Emissions",
-                    new PollutionLoad { airborneSmog = 1.2f, runoff = 0.02f, climateLoad = 0.03f },
+                    new PollutionLoad { airborneSmog = 1.2f, runoff = 0.01f, climateLoad = 0.03f },
                     new Vector3(0f, 2.5f, 0f), ref created, ref repaired, ref preserved);
                 var flare = EnsureProfile(ProfilesFolder + "/PollutionSource_Flare.asset",
                     "flare", "Flare Combustion",
-                    new PollutionLoad { airborneSmog = 3f, climateLoad = 0.1f },
+                    new PollutionLoad { airborneSmog = 3f, runoff = 0.03f, climateLoad = 0.1f },
                     new Vector3(0f, 5.5f, 0f), ref created, ref repaired, ref preserved);
                 var exhaust = EnsureProfile(ProfilesFolder + "/PollutionSource_RoutedExhaust.asset",
                     "routed_exhaust", "Routed Engine Exhaust",
-                    new PollutionLoad { airborneSmog = 5f, climateLoad = 0.12f },
+                    new PollutionLoad { airborneSmog = 5f, runoff = 0.08f, climateLoad = 0.12f },
                     new Vector3(0f, 0.5f, 0f), ref created, ref repaired, ref preserved);
                 var smelting = EnsureProfile(ProfilesFolder + "/PollutionSource_ElectricSmelting.asset",
                     "electric_smelting", "Electric Smelting Process",
-                    new PollutionLoad { airborneSmog = 0.7f, climateLoad = 0.01f },
+                    new PollutionLoad { airborneSmog = 0.7f, runoff = 0.01f, climateLoad = 0.01f },
                     new Vector3(0f, 2f, 0f), ref created, ref repaired, ref preserved);
 
                 var carbon = EnsureCarbonItem(ref created, ref repaired, ref preserved);
-                var prefab = EnsureHarvesterPrefab(carbon, ref created, ref repaired, ref preserved);
+                var sludge = EnsureSludgeItem(ref created, ref repaired, ref preserved);
+                var prefab = EnsureHarvesterPrefab(carbon, sludge, ref created, ref repaired, ref preserved);
                 var block = EnsureHarvesterBlock(prefab, ref created, ref repaired, ref preserved);
 
                 ItemDefinition steel = FindItem("steel_ingot", "Item_SteelIngot")
                     ?? FindItem("steel_plate", "Item_SteelPlate");
                 ItemDefinition wire = FindItem("copper_wire", "Item_CopperWire");
                 ItemDefinition circuit = FindItem("circuit", "Item_Circuit");
+                ItemDefinition stone = EnsureStoneItem(ref created, ref repaired, ref preserved);
 
                 var harvesterRecipe = EnsureRecipe(HarvesterRecipePath, "Atmospheric Carbon Harvester",
                     block, 1, 35f, false,
@@ -107,11 +112,18 @@ namespace VoxelEngine.EditorTools
                     graphite, 1, 8f, false,
                     new[] { new RecipeIngredient { item = carbon, count = 4 } }, registry,
                     ref created, ref repaired, ref preserved);
+                var sludgeRecipe = EnsureRecipe(SludgeRecipePath, "Stabilize Remediation Sludge",
+                    stone, 1, 12f, false,
+                    new[] { new RecipeIngredient { item = sludge, count = 4 } }, registry,
+                    ref created, ref repaired, ref preserved);
 
                 EnsurePersisted(graphite);
                 EnsurePersisted(carbon);
+                EnsurePersisted(sludge);
+                EnsurePersisted(stone);
                 EnsurePersisted(block);
-                EnsureResearch(harvesterRecipe, graphiteRecipe, ref created, ref repaired, ref preserved);
+                EnsureResearch(harvesterRecipe, graphiteRecipe, sludgeRecipe,
+                    ref created, ref repaired, ref preserved);
                 int sources = WireSourcePrefabs(combustion, process, flare, exhaust, smelting,
                     ref repaired, ref preserved);
 
@@ -119,13 +131,13 @@ namespace VoxelEngine.EditorTools
                 AssetDatabase.Refresh();
                 Debug.Log($"[PollutionSetup] Complete. Created {created}, repaired {repaired}, " +
                           $"preserved {preserved}; {sources} emitting prefab(s) audited.");
-                EditorUtility.DisplayDialog("Airborne Pollution Setup",
-                    "Phase 1 pollution content is ready.\n\n" +
+                EditorUtility.DisplayDialog("Pollution Recovery Setup",
+                    "Airborne pollution and Phase 2 runoff recovery content are ready.\n\n" +
                     "Created/reconnected:\n" +
-                    "  - Data-driven profiles on combustion, process, flare and exhaust prefabs\n" +
-                    "  - Graphite, Atmospheric Carbon Harvester + Carbon Concentrate\n" +
-                    "  - Carbon to Graphite recipe\n" +
-                    "  - Atmospheric Carbon Capture research\n\n" +
+                    "  - Air and soil/water effluent profiles on industrial sources\n" +
+                    "  - Graphite, Carbon Concentrate and Remediation Sludge\n" +
+                    "  - Carbon to Graphite and sludge stabilization recipes\n" +
+                    "  - Combined atmospheric capture and soil remediation\n\n" +
                     $"Created: {created}   Repaired: {repaired}   Preserved: {preserved}\n" +
                     $"Source prefabs audited: {sources}", "OK");
             }
@@ -158,6 +170,13 @@ namespace VoxelEngine.EditorTools
                 if (string.IsNullOrWhiteSpace(profile.sourceId)) { profile.sourceId = id; dirty = true; }
                 if (string.IsNullOrWhiteSpace(profile.displayName)) { profile.displayName = display; dirty = true; }
                 if (profile.perSecond.Total <= 0f) { profile.perSecond = defaultLoad; dirty = true; }
+                else if (profile.perSecond.runoff <= 0f && defaultLoad.runoff > 0f)
+                {
+                    var load = profile.perSecond;
+                    load.runoff = defaultLoad.runoff;
+                    profile.perSecond = load;
+                    dirty = true;
+                }
                 if (dirty) { repaired++; EditorUtility.SetDirty(profile); }
                 else preserved++;
             }
@@ -217,6 +236,47 @@ namespace VoxelEngine.EditorTools
             return existing;
         }
 
+        private static ItemDefinition EnsureStoneItem(ref int created, ref int repaired, ref int preserved)
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<ItemDefinition>(StonePath)
+                ?? FindItem("stone", "Item_Stone");
+            if (existing == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(StonePath) != null)
+                    throw new InvalidOperationException("Stone asset path is occupied by a non-item asset: " + StonePath);
+
+                existing = ScriptableObject.CreateInstance<ItemDefinition>();
+                existing.itemId = "stone";
+                existing.displayName = "Stone";
+                existing.description = "Core mineral resource used by construction and stabilized industrial recovery.";
+                existing.category = "Resources";
+                existing.maxStack = 999;
+                existing.massPerUnit = 1f;
+                existing.iconTint = new Color(0.55f, 0.55f, 0.58f);
+                AssetDatabase.CreateAsset(existing, StonePath);
+                created++;
+                return existing;
+            }
+
+            bool dirty = false;
+            if (string.IsNullOrWhiteSpace(existing.itemId)) { existing.itemId = "stone"; dirty = true; }
+            if (string.IsNullOrWhiteSpace(existing.displayName)) { existing.displayName = "Stone"; dirty = true; }
+            if (string.IsNullOrWhiteSpace(existing.description))
+            {
+                existing.description = "Core mineral resource used by construction and stabilized industrial recovery.";
+                dirty = true;
+            }
+            if (existing.maxStack <= 0) { existing.maxStack = 999; dirty = true; }
+            if (existing.massPerUnit <= 0f) { existing.massPerUnit = 1f; dirty = true; }
+            if (dirty)
+            {
+                repaired++;
+                EditorUtility.SetDirty(existing);
+            }
+            else preserved++;
+            return existing;
+        }
+
         private static ResourceItem EnsureCarbonItem(ref int created, ref int repaired, ref int preserved)
         {
             var item = AssetDatabase.LoadAssetAtPath<ResourceItem>(CarbonPath);
@@ -254,7 +314,44 @@ namespace VoxelEngine.EditorTools
             return item;
         }
 
-        private static GameObject EnsureHarvesterPrefab(ItemDefinition carbon,
+        private static ResourceItem EnsureSludgeItem(ref int created, ref int repaired, ref int preserved)
+        {
+            var item = AssetDatabase.LoadAssetAtPath<ResourceItem>(SludgePath);
+            bool isNew = item == null;
+            if (isNew)
+            {
+                item = ScriptableObject.CreateInstance<ResourceItem>();
+                item.itemId = "remediation_sludge";
+                item.displayName = "Remediation Sludge";
+                item.description = "Captured soil and water contamination. Stabilize it at an Assembler before reuse.";
+                item.category = "Resources";
+                item.subcategory = ResourceCategory.Raw;
+                item.maxStack = 300;
+                item.massPerUnit = 4f;
+                item.fuelSeconds = 0f;
+                item.iconTint = new Color(0.39f, 0.46f, 0.20f);
+                AssetDatabase.CreateAsset(item, SludgePath);
+                created++;
+            }
+            else
+            {
+                bool dirty = false;
+                if (item.itemId != "remediation_sludge") { item.itemId = "remediation_sludge"; dirty = true; }
+                if (string.IsNullOrWhiteSpace(item.displayName)) { item.displayName = "Remediation Sludge"; dirty = true; }
+                if (string.IsNullOrWhiteSpace(item.description))
+                {
+                    item.description = "Captured soil and water contamination. Stabilize it at an Assembler before reuse.";
+                    dirty = true;
+                }
+                if (item.maxStack <= 0) { item.maxStack = 300; dirty = true; }
+                if (item.massPerUnit <= 0f) { item.massPerUnit = 4f; dirty = true; }
+                if (dirty) repaired++; else preserved++;
+            }
+            EditorUtility.SetDirty(item);
+            return item;
+        }
+
+        private static GameObject EnsureHarvesterPrefab(ItemDefinition carbon, ItemDefinition sludge,
             ref int created, ref int repaired, ref int preserved)
         {
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(HarvesterPrefabPath);
@@ -283,6 +380,11 @@ namespace VoxelEngine.EditorTools
             if (harvester.carbonConcentrate == null)
             {
                 harvester.carbonConcentrate = carbon;
+                dirty = true;
+            }
+            if (harvester.remediationSludge == null)
+            {
+                harvester.remediationSludge = sludge;
                 dirty = true;
             }
 
@@ -334,7 +436,7 @@ namespace VoxelEngine.EditorTools
                 item = ScriptableObject.CreateInstance<BlockItem>();
                 item.itemId = "atmospheric_carbon_harvester";
                 item.displayName = "Atmospheric Carbon Harvester";
-                item.description = "Powered collector that removes airborne smog from nearby cells and outputs Carbon Concentrate automatically.";
+                item.description = "Powered collector that removes airborne smog and local soil/water contamination, outputting Carbon Concentrate and Remediation Sludge automatically.";
                 item.category = "Machines";
                 item.maxStack = 20;
                 item.massPerUnit = 240f;
@@ -352,6 +454,8 @@ namespace VoxelEngine.EditorTools
                 bool dirty = false;
                 if (item.itemId != "atmospheric_carbon_harvester") { item.itemId = "atmospheric_carbon_harvester"; dirty = true; }
                 if (string.IsNullOrWhiteSpace(item.displayName)) { item.displayName = "Atmospheric Carbon Harvester"; dirty = true; }
+                const string description = "Powered collector that removes airborne smog and local soil/water contamination, outputting Carbon Concentrate and Remediation Sludge automatically.";
+                if (!string.Equals(item.description, description, StringComparison.Ordinal)) { item.description = description; dirty = true; }
                 if (item.placedPrefab == null) { item.placedPrefab = prefab; dirty = true; }
                 if (item.maxStack <= 0) { item.maxStack = 20; dirty = true; }
                 if (item.blockHealth <= 0) { item.blockHealth = 650; dirty = true; }
@@ -400,7 +504,7 @@ namespace VoxelEngine.EditorTools
         }
 
         private static void EnsureResearch(RecipeDefinition harvester, RecipeDefinition graphite,
-            ref int created, ref int repaired, ref int preserved)
+            RecipeDefinition sludge, ref int created, ref int repaired, ref int preserved)
         {
             var node = AssetDatabase.LoadAssetAtPath<ResearchNode>(ResearchNodePath);
             bool isNew = node == null;
@@ -423,9 +527,22 @@ namespace VoxelEngine.EditorTools
             }
 
             bool dirty = false;
+            const string researchName = "Industrial Pollution Recovery";
+            const string researchDescription = "Powered atmospheric capture, soil and water remediation, automatic recovered-material handling, Graphite production and sludge stabilization.";
+            if (!string.Equals(node.displayName, researchName, StringComparison.Ordinal))
+            {
+                node.displayName = researchName;
+                dirty = true;
+            }
+            if (!string.Equals(node.description, researchDescription, StringComparison.Ordinal))
+            {
+                node.description = researchDescription;
+                dirty = true;
+            }
             var unlocks = new List<RecipeDefinition>(node.unlocksRecipes ?? Array.Empty<RecipeDefinition>());
             if (harvester != null && !unlocks.Contains(harvester)) { unlocks.Add(harvester); dirty = true; }
             if (graphite != null && !unlocks.Contains(graphite)) { unlocks.Add(graphite); dirty = true; }
+            if (sludge != null && !unlocks.Contains(sludge)) { unlocks.Add(sludge); dirty = true; }
             node.unlocksRecipes = unlocks.ToArray();
 
             var flareNode = AssetDatabase.LoadAssetAtPath<ResearchNode>(NodesFolder + "/ResNode_FlareDisposal.asset");
@@ -534,16 +651,24 @@ namespace VoxelEngine.EditorTools
         private static void AppendRatedEmissionsToLinkedItems(GameObject prefab,
             PollutionSourceProfile profile, float emissionMultiplier, bool routedEngine, ref int repaired)
         {
-            float ratedAirborne = profile != null
-                ? profile.perSecond.airborneSmog * Mathf.Max(0f, emissionMultiplier)
-                : 0f;
-            if (prefab == null || ratedAirborne <= 0f) return;
+            float multiplier = Mathf.Max(0f, emissionMultiplier);
+            float ratedAirborne = profile != null ? profile.perSecond.airborneSmog * multiplier : 0f;
+            float ratedRunoff = profile != null ? profile.perSecond.runoff * multiplier : 0f;
+            if (prefab == null || (ratedAirborne <= 0f && ratedRunoff <= 0f)) return;
             string[] itemGuids = AssetDatabase.FindAssets("t:ItemDefinition", new[] { Root });
             string prefix = routedEngine ? "Routed air emissions: " : "Rated air emissions: ";
             string suffix = routedEngine
                 ? " at full load before exhaust capture and scrubbing."
                 : " at full load.";
-            string authoredLine = prefix + PollutionUnits.FormatRate(ratedAirborne) + suffix;
+            string authoredAir = ratedAirborne > 0f
+                ? prefix + PollutionUnits.FormatRate(ratedAirborne) + suffix
+                : string.Empty;
+            string authoredRunoff = ratedRunoff > 0f
+                ? "Rated soil/water effluent: " + PollutionUnits.FormatContaminantRate(ratedRunoff) + " at full load."
+                : string.Empty;
+            string authoredLines = string.IsNullOrEmpty(authoredAir) ? authoredRunoff
+                : string.IsNullOrEmpty(authoredRunoff) ? authoredAir
+                : authoredAir + "\n" + authoredRunoff;
 
             for (int i = 0; i < itemGuids.Length; i++)
             {
@@ -559,13 +684,14 @@ namespace VoxelEngine.EditorTools
                 for (int line = 0; line < lines.Length; line++)
                 {
                     if (lines[line].StartsWith("Rated air emissions: ", StringComparison.Ordinal)
-                        || lines[line].StartsWith("Routed air emissions: ", StringComparison.Ordinal)) continue;
+                        || lines[line].StartsWith("Routed air emissions: ", StringComparison.Ordinal)
+                        || lines[line].StartsWith("Rated soil/water effluent: ", StringComparison.Ordinal)) continue;
                     kept.Add(lines[line]);
                 }
                 string baseDescription = string.Join("\n", kept).TrimEnd();
                 string updated = string.IsNullOrEmpty(baseDescription)
-                    ? authoredLine
-                    : baseDescription + "\n\n" + authoredLine;
+                    ? authoredLines
+                    : baseDescription + "\n\n" + authoredLines;
                 if (item.description == updated) continue;
                 item.description = updated;
                 EditorUtility.SetDirty(item);

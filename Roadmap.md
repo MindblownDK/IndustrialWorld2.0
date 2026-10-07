@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.67.0-dev`
-**Roadmap Version:** `14.67.0-dev`
+**Current Version:** `14.68.0-dev`
+**Roadmap Version:** `14.68.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.68.0-dev - What the Rain Leaves Behind
+- Persistent runoff/soil-water cells, rain wash transfer, lateral seepage, slow recovery and host/client telemetry are active
+- Pollution Harvester extracts runoff into Remediation Sludge; water pumps expose quality and capped contamination throughput loss
+- Emissions panels collapse into a foldout; Logistics Map includes toggleable placed-building footprints and dual air/runoff overlays
+
 ### 14.67.0-dev - Weathering the Load
 - Local Logistics Map uses a spherical tangent frame and cached analytic terrain/biome raster beneath its optional pollution layer
 - Machine panels and setup-authored block tooltips report SI PM-equivalent emissions; routed maritime exhaust is aggregated at the engine
@@ -48,99 +53,6 @@
 - Direct source profiles wired to combustion, process, routed exhaust, scrubber capture and flare activity; electricity is not double-counted
 - Atmospheric Carbon Harvester closes the powered cleanup -> Carbon Concentrate -> Graphite loop; Setup Step 114 authors all content non-destructively
 - Optional Logistics Map heat layer, functional orbital burden, reversible smog visuals and local solar attenuation
-
-### 14.65.2-dev - Station Keeping
-- Boots yaw-carry measures grid rotation, not the player's look (deck stutter fix)
-- Seat exit with no deck below auto-enables the jetpack; REL-locked flight frame-follows the hull (high-speed exit stutter + re-entry fix)
-- Spawner waits for registry + local load + orbital clock before resolving the save; streaming re-targeted from the spawner path; deck proximity proves a save
-- Clock restored first in load order; grids before player; anchored grids get a second-chance placement once the cosmos settles
-- NO DATA LOSS part two: restored grids that die in the load-settling window keep their record in the save; impact damage grace after scene load
-
-### 14.65.1-dev - Nothing Lost
-- WorldStatePersistence NO DATA LOSS law: per-grid try/catch in RestoreGrids with loud LogError; _unrestoredGrids/_unrestoredPlaced carry failed records verbatim into SaveGrids/SavePlacedBlocks; per-block try/catch in RestoreGridBlocks; Grid Control import guarded; placed-block missing-item drop now loud + carried.
-- PlayerSpawner: savedOnGrid detection (GridDeckAt OverlapSphere 4 m) skips WaitForChunkAt + LiftSavedPositionOutOfGround + the 250 m park for deck saves; wakes with boots LockReference + hull point velocity.
-- GridEntity.HasSupportBelow: support = static world only (any GridEntity parent or dynamic rigidbody below is NOT ground) - kills the continuous 4 Hz StabilizeGroundAlignment slerp on severed pieces hovering over their parent hull.
-- GridEntity.IgnoreSeamCollisions: bounds-based pair collection (island collider bounds expanded 1.2 cells vs all parent colliders intersecting), fuse 8192 - covers multi-cell blocks the 26-neighborhood missed.
-
-### 14.65.0-dev - True Position
-- GridEntity.FixedUpdate: speed-adaptive rigidbody interpolation - None above 30 m/s (collider/visual gap at speed), Interpolate below 20 m/s; kinematic bodies untouched.
-- Grid Control persistence: SavedGrid gains controlBar + terminalGroups (JSON, cell-addressed block targets); BuildSavedGrid exports, RestoreGrid imports after both block passes - record doubles as the join snapshot, so joining clients get toolbars for free.
-- GridControlHud.ExportBar/ImportBar + GridMasterTerminal.ExportGroups/ImportGroups (whole-state, empty payload = cleared); live-edit announce via new GridControlSync (BagSync pattern: GridControlBarBroadcast, host relay, IsApplyingRemote echo guard) wired into NetworkBootstrap.
-- SpaceOrigin.ShiftWorld: IsRiderOf(root, keepRoot) - player rigs with boots attached or REL-locked to the kept hull skip the shift (warp riders).
-- PlayerImpactDamage: GridMinSpeed 8 -> 30, GridLethalSpeed 32 -> 60; jolt-frame guard (SpaceOrigin.LastJoltTime 1.5 s); live hull velocity via Body.GetPointVelocity, pose-delta tracker only for kinematic replicas.
-- WelderTool.repairHPPerSecond 45 -> 150; WelderSetup heals assets still at the old default (<= 45).
-- Toolbar/groups follow-up (save + share) DONE - remove from parked list.
-
-### 14.64.3-dev - Nose First
-- PlayerController: Newtonian 240 m/s ceiling now clamps velocity relative to the dampener reference (dampRef) instead of world speed; new public ForceDampenersOn() called from GridCockpit.Exit.
-- MagneticBoots: flyReferenceRange 14 -> 60 m with a runtime floor (Mathf.Max) guarding stale serialized values.
-- GridEntity seam grace v2: 26-neighborhood pair collection (edge/corner contacts), fuse 4096; RestoreSeamCollisions re-arms each pair only after >4 cm separation (0.5 s polls, 120 s deadline, flush pairs stay ignored); grid rigidbodies get maxDepenetrationVelocity = 2.
-- NavFlightAutopilot.BestThrustWorldAxis: among axes within 2% of the strongest, prefer alignment with HelmForwardLocal() (ActiveCockpit, else first GridCockpit block, else grid +Z).
-- GridControlHud editor tab strip: fixed height 40, NoWrap, hard 26 px buttons, centered.
-
-### 14.64.2-dev - Clean Exit
-- GridCockpit: Enter captures / Exit restores the rig rigidbody's kinematic state (never forces dynamic); dynamic restores inherit hull point velocity. Exit drop spot overlap-tested via OverlapCapsuleNonAlloc over five candidate offsets.
-- MagneticBoots: lock leash requires two consecutive out-of-range samples (0.5 s cadence) before release; in-range or re-lock resets the strike count.
-- LcdHudTheme.YieldWhileBlocking: optional baseOpacity callback - the yield scheduler dims below the owner's intended opacity instead of forcing 1; WorldInspectionHud passes its visibility.
-- GridEntity.SplitIslandIntoGrid: Physics.IgnoreCollision across cut-seam collider pairs (island cell vs adjacent parent block) for a 1.5 s grace, re-enabled by coroutine on the island; pair count fused at 2048.
-- GridImpact: player filter extended to PlayerController rig root alongside CharacterController.
-- DeathLootBag.Create: OverlapSphere (3 m) grid probe; bag parents to the nearest hull with world pose kept - applies to live, replicated and restored bags.
-- GridControlHud: tab strip flexShrink 0 / minHeight 38 / centered keys; slot cells 108x74 with min-height rows.
-
-### 14.64.1-dev - Wake On Deck
-Grid-cryobed live wake: PlayerSpawner.TryFindClaimedGridBed (prefers an online claimed GridCryobed) + WakeAtGridBed coroutine (no chunk wait, no ground snap, no altitude pull-down; re-pins to the moving hull over 5 settle frames, inherits hull point velocity, MagneticBoots.LockReference to the ship, heals bedSpawnPoint + sidecar) - used by BOTH the load path (before the stored-record branch, with the offline-death tail preserved) and Respawn(). Weightless-on-foot: WalkUpdate gives zero input authority and no friction when !_grounded, gravity < 0.5 and boots disengaged. Landing jitter: MagneticBoots smooths UpDirection (snap on first contact, exp slerp, ignore <1.5 deg). Zero-g split rotation: StabilizeGroundAlignment requires HasSupportBelow (non-self hit within max(6 m, 4 cells) along gravity) unless gear-locked/wheel-grounded; SplitIslandIntoGrid zeroes island velocity when the parent is at rest. Seat exit: GridCockpit.Exit relative-locks the pilot's boots to the grid (announce toast). Grid Control editor: mounts on the HUD layer, card absolute insets (14/14/8/9%), ESC/Inventory key close + auto-close when UIState stops blocking + GameUIController.CloseAll hook; slot cells 108x64 with fixed-height rows and a backgrounded state chip; GridMasterTerminal.IsListedBlock (armor + water/gas pipe filter) shared by the terminal list, editor tabs and category resolution.
-
-### 14.64.0-dev - Grid Control
-Grid Control HUD: GridControlHud.cs (toolbar + editor) - per-grid 9-slot action bar keyed by entity id, rendered bottom-centre while a control seat is active, digits 1-9 fire slots (GameUIController.CheckHotbarKey yields digits while piloting unless the inventory is open); EDIT HUD button in the terminal opens the slot editor (ALL BLOCKS / CATEGORIES / GROUPS tabs, live search filter, pointer-drag with ghost OR click-source-then-slot, per-drop action picker); actions resolve members at press time, convergent toggles; per-type actions for landing gear (lock/unlock/autolock), batteries (mode cycle), tanks (mode cycle). Terminal renamed GRID CONTROL/GCC-01; GridMasterTerminal exposes CategoryLabel + PlayerGroups; ShipToolHud lifted to bottom 96. Fix batch: kinematic reference bodies count as zero velocity (MagneticBoots.FlyReferenceVelocity, GridEntity.DampenerRestVelocity, GravityPullHud REL line) - kills the REL-lock drift-away; relative lock auto-releases >200 m from the locked grid's closest block (TickLockLeash, 2 Hz); boots are zero-g-only (release when field gravity >= lowGravityThreshold) and re-anchor AFTER movement (CaptureAnchor from PlayerController), legacy deck carry disabled while boots engaged - single-carry rule ends the on-grid jitter; SplitIslandIntoGrid rebases the island origin to its min cell (cells + GridPos re-keyed, exact world pose preserved, body woken); PassiveAnimalSpawner gains the EnemySpawner 14.60.0 surface gates (world + gravity >= 0.5 + ground raycast, never on grid hulls, snap to ground); WorldInspectionHud drops stuck inventory hovers when no UI is blocking; cockpit orbit camera: yaw seamless 360, total elevation clamped +-85 (no more pole flip).
-
-### 14.63.0-dev - Clean Break
-Grid splitting: PruneDisconnectedIslands now moves each disconnected component onto a new GridEntity (SplitIslandIntoGrid: same origin/rotation/cells, blocks reparented, RecalculateMass both, velocity inherited via GetPointVelocity at the island's centre of mass + angular velocity; cockpit-first/largest keeps the original identity; host/offline only - clients converge via host structure records). Dampeners-off jetpack integrates GravVec (no free hover; falls in gravity). GravityPullHud third pass: single full-width LCD glass (LOCAL PULL left, SPEED right, blue REL line only while referenced), BODY + DAMPENERS status row, REF/WORLD REST row removed.
-
-### 14.62.1-dev - One Instrument
-Motion telemetry merged into GravityPullHud (PlayerMotionHud.cs deleted): speed + REL line on the gravity LCD glass under the LOCAL PULL readout; surface-reference meter removed, its column now shows BODY / DAMPENERS (phosphor-amber-blue state) / REF (WORLD REST, grid name, or LOCK name); card narrowed to 184 px - one compact bottom-left instrument.
-
-### 14.62.0-dev - Relative Rest
-Mining yield honesty: VoxelEditor credits drops ONLY on fully removed voxels (the old per-graze credit flooded stone and buried ore; one-shot log warning when a mineable material has no dropItem). Jetpack dampener now damps in REFERENCE space (subtract ref velocity, damp relative, add back) - accelerating ships no longer pull away from hovering crew. Personal inertia dampeners (InputAction.Dampeners, default Z, auto-listed in keybinds): OFF = Newtonian drift (thrust integrates, no braking) and the MagneticBoots deck carry obeys the PLAYER's switch, never the ship's. Relative dampeners via Ctrl+Z: on foot, MagneticBoots.LockedReference overrides the proximity scan at any range (linear velocity reference); piloted, GridEntity.DampenerReferenceGrid makes ApplyAutonomousDampenerThrust brake toward the target grid's velocity (GridCockpit.ToggleDampenerReference; helm console ignores Ctrl+Z). PlayerMotionHud (MON-02): on-foot LCD instrument beside the gravity monitor - measured world speed, dampener reference + relative speed, dampener state.
-
-### 14.61.0-dev - Boots On The Hull
-Ship-exit velocity inheritance (GridCockpit.Exit -> PlayerController.SetVelocity with the hull's point velocity); MagneticBoots component (auto-added by PlayerController): grid carry (linear + yaw) while jetpack off and feet on a grid, low-g hull-stick (contact normal becomes up via PlayerController UpVec/GravVec override, boot force replaces gravity), release on step-off; jetpack dampeners null velocity relative to the nearest grid within 14 m (world rest otherwise). WelderTool (grinder's twin): hold-LMB repair at repairHPPerSecond, pay-as-you-weld material cost (hpPerMaterialUnit), full repair cost on the top-left look-at card while held; setup step 113 (non-destructive, Assembler recipe). ItemScriptHealer: editor-load YAML m_Script GUID re-point for Item_WirelessTerminal + Item_CrusaderShield (data preserved).
-
-### 14.60.7-dev - Waking Up On Time
-Load-order fixes for bed spawns at world load: SpawnRoutine waits (bounded) for SpaceOrigin + CosmicRegistry readiness before resolving the bed record (previously degraded silently to last session's stale scene Vector3 - the "11 km from the bed" host spawn); WorldStatePersistence defers the orbital-clock restore until the registry is ready instead of silently skipping it (session no longer stuck at t=0 phase); bed spawns re-resolve and re-anchor once after the chunk wait if the settled universe moved the point.
-
-### 14.60.6-dev - One Writer, One Frame
-Same-planet bed/cryobed respawn regression fixed: WorldSession.RefreshBedCosmic is the single writer of the bed cosmic record (bed, cryobed, grid cryobed, dry-spawn relocation all call it - cryobeds previously left a stale record behind); resolver refuses legacy absolute records near a planet; cosmic respawn reserved for cross-world beds (same-world uses the classic scene path, re-derived from the live body-relative record); death screen self-heals missing/unresolvable records from the verified scene point. Guest scene-frame alignment: avatar mirror also reports the owner's frame body + its scene position; pure guests shift their world so a shared planet sits exactly where the host holds it (SpaceOrigin.AlignFrameScene, translation only) - fixes the offset ghost surface after cross-planet teleports.
-
-### 14.60.5-dev - Planets Move
-Body-relative coordinates for everything cross-planet: avatars replicate (body name + double offset km) resolved against the reader's live registry (orbital clock drift immune; absolute only in deep space); beds store the same record in the spawn sidecar with a shared live resolver; death screen routes bed choices through the new cosmic respawn (PlayerStats.RespawnAtCosmic -> PlayerSpawner.RespawnAtCosmic: re-anchor origin, frame + streaming re-target, then normal landing) - the death path (RespawnRoutine) was previously unpatched; bed exists/cryobed-O2 scene scans gated to same-world beds (they cleared healthy cross-world links). CosmicRegistry.FindBodyByName added. Relink cross-planet beds once.
-
-### 14.60.4-dev - Coordinates That Travel
-Cross-planet teleport + bed respawn fixed at the root: scene positions are frame-local, so remote-avatar transforms and stored bed points meant nothing across planets. Avatars now replicate owner cosmic km (SyncVar doubles, 2 Hz); teleport-to-player uses them through the portal-grade cosmic teleport (frame + streaming re-pick on arrival, legacy beside-the-avatar fallback). Beds record cosmic km at link time (persisted in the spawn sidecar); cosmic respawns re-anchor the origin onto the bed before the landing flow, so the bed planet streams. Pre-existing bed links upgrade on next sleep.
-
-### 14.60.3-dev - Teleport, Impact and the Honest Map
-Teammate teleport (Teams tab button, allowTeammateTeleport world rule default ON, owner's rule-free TELEPORT per player card in Server Administration; portal-path cosmic move, refused while piloting); player impact damage vs terrain/buildings/static blocks (closing-speed-into-surface, landings stay fall damage's, no terrain craters from players); orbital map pushes airborne craft markers out of body-disc minimum radii; GPU planet engines track the live camera always (colliders + LOD refinement before frame entry - no more flying through rendered planets).
-
-### 14.60.2-dev - Where the Moon Actually Is
-Moon physics root cause: raw parent-relative body positions were read as absolute by the gravity solver, dominance query, frame-velocity blend, nearest-body query and hold checks - moons were simulated at a phantom point near the solar origin (planets immune: no parent). All sites now use the absolute parent-chain accessor; frame-velocity blend also uses parent-chained velocities. Autopilot flip-and-burn: overspeed on the brake curve steers the strongest thrust axis onto the velocity error (main-engine braking) with hysteresis.
-
-### 14.60.1-dev - The Hold That Holds
-Moon capture fixed at the root: the proximity hold now overrides frame-switch dominance - it uses the hold body's own pull, bypasses the release rule and hysteresis, and switches the frame while armed and in range (previously the parent planet's dominance vetoed the switch every tick and the moon drifted away). Frame evaluator no longer early-outs past the hold when the dominant body's scene proxy is missing; hold log fires once per armed body.
-
-### 14.60.0-dev - Live-Test Bug Round
-Nine live-test fixes: true-3D melee gates on ground enemies (no more sky-strikes); spawner requires world + gravity + terrain footing (no ghouls in space, never on hulls); locked warp arrivals computed on the NEAR side from the planet's live position at fire time (far-side overshoot and stale-confirm drift both fixed); planet lock allowed anywhere outside the arrival shell (no more can't-jump-back trap); proximity capture engages at max(hold range, 2.5x body radius) with a fixed 50 km leave-guard (moons now take over); grid impacts ignore LOD helper colliders and hold fire 1.5 s after origin/frame jolts (no phantom deep-space damage); block removal prunes disconnected hull islands (kept part = cockpit's, else largest); look-at card hidden while piloting.
-
-### 14.59.0-dev - No Planet Left Behind
-Multi-planet terrain catch-up (closes the 14.8.0 deferral): a guest's body change triggers a catch-up request and the host streams that planet's edited chunks - from the live world when standing on it, else straight from the per-body chunk store on disk. Re-arrival heals mid-session divergence (live ops still skip other planets by design); a per-connection served-ledger dedupes the arrival request against the join push and throttles to one serve per planet per 30 s; body names are validated as store-folder names so requests cannot walk the host's disk. Remaining milestone-4 deferral: fluid-sim state only.
-
-### 14.58.0-dev - One Simulation
-Host-authoritative machine simulation: importers, exporters, the auto-crafter and the disk manipulator tick only where the simulation lives (host/offline; mismatched-world guests keep their own), via the new NetworkSession.SimulationIsRemote gate. Guests keep rack-search and tooltip stats and render replicated outcomes; player edits (queue a craft, change filters, slot disks) still ride the interaction announce the host acts on. Ends the host-echo tug-of-war that could flicker counts or dupe stacks when two machines moved the same items.
-
-### 14.57.0-dev - Who Goes There
-Security hardening part two: lock intents are cross-checked against the connection's admitted identity (no more spoofable PlayerId fields); locked doors obey only authorized players host-side, with denied toggles corrected by a true-state re-announce; container overwrites into Security-Block-guarded networks are host-validated against the same PRIVATE/TEAM/GLOBAL rules, denied writes converged away by re-announcing the host's contents; rejoin snapshot merges keep the host's door state on locked pieces and skip guarded container records. No wire format changes.
-
-### 14.56.0-dev - Nobody Knows the Code
-Code-lock security hardening: combinations rest as salted SHA-256 (`sha256:salt:hash`), hashed on the typing machine; the wire and join snapshots carry a hash-stripped public form, so guests hold the salt but never the hash. Keypad attempts, code setting and lock toggles from guests are host-validated intents with an addressed verdict (CHECKING... state, 4 s timeout); guest-authored lock announces are accepted only as plain fits onto uncoded locks, removals checked against authorization, rejoin snapshot merges keep the host's secrets. Legacy plaintext saves canonicalize on first load. Remaining accepted gaps: door USE check and lock fit stay client-authored until the intent-conversion pass.
-
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -434,7 +346,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev and expanded in 14.67.0-dev: spherical terrain-backed local mapping, SI source telemetry/tooltips, orbital burden bands, capped pollution-weather response and automated carbon capture are live. Runoff, climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and its presentation pass shipped 14.67.0-dev. Phase 2 runoff foundations shipped 14.68.0-dev: direct effluent, rain wash transfer, persistent seepage/recovery, maps, water-pump quality and powered sludge recovery are live. Climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
 
 #### Pollution Sources
 
@@ -446,7 +358,7 @@ Industrial activity creates pollution that spreads outward from its source and c
 #### Spread, Persistence & Cleanup
 
 - Wind carries airborne pollution downwind and storms can spread or temporarily dilute it.
-- Water and soil can retain contamination longer than open air.
+- ~~Water and soil retain sparse runoff contamination longer than open air.~~ *(14.68.0-dev)*
 - Forests, filters, scrubbers, sealed processing, cleaner fuel, and advanced Crusader technology reduce pollution.
 - Dormant regions simulate pollution at a reduced tick rate.
 - Pollution maps and sensors show source intensity, spread direction, local danger, and predicted thresholds.
@@ -1846,10 +1758,10 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Step 59 Setup Wizard:** Non-destructive generation of scanner tool items, craft bench recipes, and registration. (Implemented 9.26.0-dev)
    - Terrain core drill and acoustic seismic survey rig. (Upcoming)
 
-16. **Pollution & Industrial Threat Director** - **PHASE 1 SHIPPED (14.66.0-dev)**
+16. **Pollution & Industrial Threat Director** - **PHASE 2 FOUNDATIONS SHIPPED (14.68.0-dev)**
    - ~~Sparse body-local airborne pollution, transport, cleanup, optional map telemetry and body burden~~ *(14.66.0-dev; Setup Step 114)*.
-   - Runoff/soil/water contamination and reduced-rate dormant-region transport remain open.
-   - Per-source attribution/history, warning thresholds and production-statistics integration remain open.
+   - ~~Persistent runoff/soil-water transport, recovery, mapping and water-pump response~~ *(14.68.0-dev; Setup Step 114)*.
+   - Reduced-rate dormant-region transport, per-source attribution/history, warning thresholds and production-statistics integration remain open.
    - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
    - Planet Ecology Profiles choose appropriate passive life, pollution responders, enemy tiers, and bosses.
 
@@ -1934,8 +1846,8 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Tracks oxygen level and pressure per room; charge is carried across hull edits and saves.
     - Vents add or remove oxygen against the grid gas network.
 
-29. **Pollution Service** - **PHASE 1 SHIPPED (14.66.0-dev)**
-    - Sparse body-local airborne emissions, wind spread, precipitation dilution, recovery, capture, sidecar persistence and host snapshots are live; contamination attribution and reduced-rate distant-region simulation remain open.
+29. **Pollution Service** - **PHASE 2 FOUNDATIONS SHIPPED (14.68.0-dev)**
+    - Sparse body-local air and runoff emissions, weather transfer, spread, recovery, capture, sidecar persistence and host snapshots are live; source attribution and reduced-rate distant-region simulation remain open.
 
 30. **Ecology Registry**
     - ScriptableObject planet profiles containing passive species, hostile species, resistances, pollution responses, elites, bosses, loot tables, and spawn budgets.

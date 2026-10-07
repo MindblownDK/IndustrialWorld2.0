@@ -197,7 +197,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Wire visible block damage, plume hazards and suit temperature", () => VoxelEngine.EditorTools.BlockDamageVisualSetup.RunStep62()),
                 Setup("Wire engine-room atmosphere, exhaust and scrubbers", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep63()),
                 Setup("Tune volume-aware ventilation", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep64()),
-                Setup("Build airborne pollution and atmospheric carbon capture", () => VoxelEngine.EditorTools.PollutionSystemSetup.RunStep114()));
+                Setup("Build pollution recovery (air, runoff and carbon capture)", () => VoxelEngine.EditorTools.PollutionSystemSetup.RunStep114()));
 
             AddSetupGroup(parent, ref number, "Grids, Ships & Navigation",
                 "Ship blocks, maritime systems, displays, travel, refuelling and station infrastructure.", false,

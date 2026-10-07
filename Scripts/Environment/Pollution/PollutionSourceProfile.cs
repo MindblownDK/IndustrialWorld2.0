@@ -5,8 +5,8 @@ using UnityEngine;
 namespace VoxelEngine.Environment
 {
     /// <summary>
-    /// Data-driven direct emission profile. Electricity use is deliberately absent:
-    /// power demand is not pollution, while combustion, process loss and routed exhaust are.
+    /// Data-driven direct air and effluent profile. Electricity use is deliberately absent:
+    /// power demand is not pollution, while combustion, process loss, runoff and routed exhaust are.
     /// </summary>
     [CreateAssetMenu(menuName = "Voxel Engine/Environment/Pollution Source Profile",
         fileName = "PollutionSource_New")]

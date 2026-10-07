@@ -88,6 +88,8 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Live body-wide airborne pollution burden, 0..1.</summary>
         public readonly double Pollution01;
+        /// <summary>Live body-wide soil/water contamination burden, 0..1.</summary>
+        public readonly double Runoff01;
 
         /// <summary>Radius in km, for drawing bodies to scale. Zero for craft.</summary>
         public readonly double RadiusKm;
@@ -103,7 +105,7 @@ namespace VoxelEngine.Cosmos
             double periapsisKm, double periodSeconds, double inclinationDeg, double speedMs,
             double radiusKm, GridEntity grid, bool inRange,
             double raanRad, double argPeriapsisRad, double trueAnomalyRad,
-            Color bodyColor, double pollution01)
+            Color bodyColor, double pollution01, double runoff01 = 0d)
         {
             Name = name; Kind = kind; Motion = motion; PositionKm = positionKm;
             Parent = parent; ParentName = parentName; AltitudeKm = altitudeKm;
@@ -111,7 +113,7 @@ namespace VoxelEngine.Cosmos
             InclinationDeg = inclinationDeg; SpeedMs = speedMs; RadiusKm = radiusKm;
             Grid = grid; InRange = inRange;
             RaanRad = raanRad; ArgPeriapsisRad = argPeriapsisRad; TrueAnomalyRad = trueAnomalyRad;
-            BodyColor = bodyColor; Pollution01 = pollution01;
+            BodyColor = bodyColor; Pollution01 = pollution01; Runoff01 = runoff01;
         }
 
         public bool IsBody => Kind == MapEntryKind.Sun || Kind == MapEntryKind.Planet
@@ -226,6 +228,7 @@ namespace VoxelEngine.Cosmos
 
                 Color bodyColor = body.settings != null ? body.settings.displayColor : default;
                 double pollution = PollutionFor(body);
+                double runoff = RunoffFor(body);
 
                 _entries.Add(new MapEntry(
                     body.DisplayName,
@@ -237,7 +240,7 @@ namespace VoxelEngine.Cosmos
                     math.length(body.velocityKmS) * 1000d,
                     radiusKm, null, true,
                     raan, argP, nu,
-                    bodyColor, pollution));
+                    bodyColor, pollution, runoff));
             }
         }
 
@@ -246,6 +249,12 @@ namespace VoxelEngine.Cosmos
         {
             if (body?.settings == null) return 0d;
             return PollutionService.AirborneBurdenFor(body.settings.bodyName);
+        }
+
+        private static double RunoffFor(BodyInstance body)
+        {
+            if (body?.settings == null) return 0d;
+            return PollutionService.RunoffBurdenFor(body.settings.bodyName);
         }
 
         // ── Player constructs ────────────────────────────────────────────────────

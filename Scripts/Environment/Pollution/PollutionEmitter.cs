@@ -26,9 +26,14 @@ namespace VoxelEngine.Environment
 
         public float Activity01 { get; private set; }
         public float CurrentAirbornePerSecond { get; private set; }
+        public float CurrentRunoffPerSecond { get; private set; }
         public float LifetimeAirborneOutput { get; private set; }
+        public float LifetimeRunoffOutput { get; private set; }
         public float RatedAirbornePerSecond => profile != null
             ? Mathf.Max(0f, profile.perSecond.airborneSmog * emissionMultiplier)
+            : 0f;
+        public float RatedRunoffPerSecond => profile != null
+            ? Mathf.Max(0f, profile.perSecond.runoff * emissionMultiplier)
             : 0f;
 
         /// <summary>
@@ -105,6 +110,9 @@ namespace VoxelEngine.Environment
                 CurrentAirbornePerSecond = profile != null
                     ? Mathf.Max(0f, profile.perSecond.airborneSmog * emissionMultiplier * Activity01)
                     : 0f;
+                CurrentRunoffPerSecond = profile != null
+                    ? Mathf.Max(0f, profile.perSecond.runoff * emissionMultiplier * Activity01)
+                    : 0f;
                 return;
             }
 
@@ -118,16 +126,19 @@ namespace VoxelEngine.Environment
             if (profile == null || Activity01 <= 0f || emissionMultiplier <= 0f)
             {
                 CurrentAirbornePerSecond = 0f;
+                CurrentRunoffPerSecond = 0f;
                 return;
             }
 
             float scale = Activity01 * emissionMultiplier;
             PollutionLoad perSecond = profile.perSecond * scale;
             CurrentAirbornePerSecond = Mathf.Max(0f, perSecond.airborneSmog);
+            CurrentRunoffPerSecond = Mathf.Max(0f, perSecond.runoff);
             PollutionLoad amount = perSecond * elapsed;
             Vector3 releasePoint = transform.TransformPoint(profile.localOffset);
             PollutionService.Emit(releasePoint, amount);
             LifetimeAirborneOutput += Mathf.Max(0f, amount.airborneSmog);
+            LifetimeRunoffOutput += Mathf.Max(0f, amount.runoff);
         }
 
         private float ExhaustActivity01()

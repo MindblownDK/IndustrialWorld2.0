@@ -1057,6 +1057,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Environment.AtmosphericCarbonHarvester
   carbonConcentrate: {fileID: 11400000, guid: ab8159c68c855274bb6c4e22494d7e06, type: 2}
+  remediationSludge: {fileID: 11400000, guid: 300ad20cf01c89743ba5b39e9b1aabe2, type: 2}
   outputC:
     _name: Container
     _slots: []
@@ -1065,6 +1066,9 @@ MonoBehaviour:
   captureRadius: 96
   maxCaptureUnitsPerSecond: 8
   pollutionUnitsPerItem: 60
+  runoffCaptureRadius: 72
+  maxRunoffCaptureUnitsPerSecond: 3
+  runoffUnitsPerSludgeItem: 80
   wattsPerSecond: 420
   captureInterval: 1
   userEnabled: 1

@@ -148,14 +148,24 @@ namespace VoxelEngine.UI
 
             content.Add(T.StatRow("", "Local Air", $"{harvester.LocalAirPollution01 * 100f:0}%",
                 harvester.LocalAirPollution01 < 0.2f ? T.AccentGreen : T.AccentAmber));
-            content.Add(T.StatRow("", "Capture Rate", $"{harvester.CurrentCaptureRate:0.0} units/s",
+            content.Add(T.StatRow("", "Local Soil / Water", $"{harvester.LocalRunoffPollution01 * 100f:0}%",
+                harvester.LocalRunoffPollution01 < 0.18f ? T.AccentGreen : T.AccentAmber));
+            content.Add(T.StatRow("", "Air Capture", PollutionUnits.FormatRate(harvester.CurrentCaptureRate),
                 running ? accent : T.TextMuted));
-            content.Add(T.StatRow("", "Stored Carbon", $"{harvester.StoredPollutionUnits:0.0} units",
+            content.Add(T.StatRow("", "Runoff Capture", PollutionUnits.FormatContaminantRate(harvester.CurrentRunoffCaptureRate),
+                running ? accent : T.TextMuted));
+            content.Add(T.StatRow("", "Stored Carbon", PollutionUnits.FormatMass(harvester.StoredPollutionUnits),
+                T.TextSecondary));
+            content.Add(T.StatRow("", "Stored Runoff", PollutionUnits.FormatContaminantMass(harvester.StoredRunoffUnits),
                 T.TextSecondary));
             content.Add(T.StatRow("", "Power Draw", $"{harvester.wattsPerSecond:0} W",
                 harvester.IsPowered ? T.AccentGold : T.TextMuted));
             var (airBar, _) = T.ProgressBar(harvester.LocalAirPollution01, accent, 9, false);
             content.Add(airBar);
+            var runoffAccent = new Color(0.58f, 0.66f, 0.28f);
+            var (runoffBar, _) = T.ProgressBar(harvester.LocalRunoffPollution01, runoffAccent, 9, false);
+            runoffBar.style.marginTop = 3;
+            content.Add(runoffBar);
             content.Add(T.Spacer(6));
 
             content.Add(T.SmallButton(harvester.userEnabled ? "SWITCH OFF" : "SWITCH ON", () =>
@@ -164,10 +174,10 @@ namespace VoxelEngine.UI
                 GameUIController.Instance?.RequestRefresh();
             }, harvester.userEnabled ? T.AccentAmber : T.AccentGreen));
             content.Add(T.Divider());
-            content.Add(T.Subtitle("Carbon Concentrate Output"));
+            content.Add(T.Subtitle("Recovered Pollution Output"));
             content.Add(T.SlotCard("Output", SlotGrid(harvester.outputC, slot)));
             content.Add(T.Spacer(8));
-            content.Add(T.Muted("Runs automatically while powered. Captured smog becomes Carbon Concentrate; route it to an Assembler for Graphite. No disposable filter is required."));
+            content.Add(T.Muted("Runs automatically while powered. Smog becomes Carbon Concentrate for Graphite; soil and water contamination becomes Remediation Sludge for stabilization at an Assembler. No disposable filter is required."));
             IndustrialTheme.Frame(panel);
             return panel;
         }
