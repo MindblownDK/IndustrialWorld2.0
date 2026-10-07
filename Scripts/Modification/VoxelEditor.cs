@@ -51,6 +51,41 @@ namespace VoxelEngine.Modification
             return Apply(world, registry, worldPos, radius, strength, subtract:false, fillMaterial);
         }
 
+        /// <summary>Pick the nearest solid lattice sample on the inside of the hit.
+        /// Surface nets can lie up to a cell away from the floor-rounded hit coordinate.</summary>
+        public static bool TryResolveMiningPoint(IVoxelWorld world, Vector3 hit, Vector3 normal,
+            Vector3 rayDirection, out Vector3 point)
+        {
+            point = hit + rayDirection.normalized * 0.35f;
+            if (world == null) return false;
+            var sphere = world as VoxelEngine.Cosmos.SphereWorld;
+            Vector3 localHit = sphere != null && sphere.body != null
+                ? sphere.body.transform.InverseTransformPoint(hit) / VoxelConstants.VOXEL_SIZE : hit / VoxelConstants.VOXEL_SIZE;
+            Vector3 localNormal = sphere != null && sphere.body != null
+                ? sphere.body.transform.InverseTransformDirection(normal).normalized : normal.normalized;
+            Vector3Int center = Vector3Int.RoundToInt(localHit);
+            float best = float.PositiveInfinity;
+            Vector3Int chosen = default;
+            for (int z=-2;z<=2;z++) for(int y=-2;y<=2;y++) for(int x=-2;x<=2;x++)
+            {
+                Vector3Int q = center + new Vector3Int(x,y,z);
+                Vector3 delta = (Vector3)q - localHit;
+                if (delta.sqrMagnitude > 3.1f || Vector3.Dot(delta, localNormal) > 0.35f) continue;
+                Voxel voxel;
+                if (sphere != null) { if (!sphere.TryGetVoxelReady(q, out voxel)) continue; }
+                else voxel = world.GetVoxelWorld(q);
+                if (!voxel.IsSolid) continue;
+                float score = delta.sqrMagnitude;
+                if (score >= best) continue;
+                best = score; chosen = q;
+            }
+            if (float.IsPositiveInfinity(best)) return false;
+            // Small interior offset makes WorldToVoxel(floor) recover this exact lattice index.
+            Vector3 local = ((Vector3)chosen + Vector3.one * 0.01f) * VoxelConstants.VOXEL_SIZE;
+            point = sphere != null && sphere.body != null ? sphere.body.transform.TransformPoint(local) : local;
+            return true;
+        }
+
         private static EditResult Apply(IVoxelWorld world, MaterialRegistry registry,
                                         Vector3 worldPos, float radius, float strength,
                                         bool subtract, MaterialId fillMaterial = MaterialId.Stone,
@@ -169,7 +204,7 @@ namespace VoxelEngine.Modification
                 // 9.18.2 - one bump per player edit batch: the GPU grass field (and any
                 // other surface-caching visual) rebuilds exactly when the player changes
                 // terrain, instead of waiting for them to walk 12 m.
-                VoxelEngine.Cosmos.SphereWorld.Instance?.NotifyPlayerEdit();
+                (world as VoxelEngine.Cosmos.SphereWorld)?.NotifyPlayerEdit(center, r);
                 // Surface nets and border padding depend on one cell beyond the brush.
                 // Floor both bounds: this also handles negative coordinates correctly.
                 int cs = VoxelConstants.CHUNK_SIZE;

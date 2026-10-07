@@ -463,22 +463,13 @@ namespace VoxelEngine.Cosmos
             }
             else
             {
-                // Only true ocean basins receive generated water. A cave excavated below the
-                // mathematical sea shell on otherwise dry land must remain air: players should
-                // encounter water only in oceans, intentional lakes, or placed/pumped liquid.
-                // 9.7.7 gate v2: at the WATERLINE the land mask sits near ~0.6 (the
-                // smoothstep midpoint maps to positive elevation), so 0.45 still let
-                // beach chunks flood isolated dips. Water now requires the CHUNK to be
-                // ocean-centred (centre surface below sea − 2), or clearly open ocean
-                // mask, or a genuinely deep local basin.
-                bool genuineOcean = column.surfaceRadius < prm.seaRadius - 2f
-                                    || column.landMask < 0.30f
-                                    || surfaceRadius < prm.seaRadius - 5f;
-                if (genuineOcean && surfaceRadius < prm.seaRadius && radius <= prm.seaRadius)
+                // Unedited exterior water only. A local terrain column, never chunk-centre
+                // classification, determines coverage all the way to a shallow bank.
+                float fill = math.saturate(prm.seaRadius - radius + 0.5f);
+                if (surfaceRadius < prm.seaRadius && radius >= surfaceRadius && fill > 0f)
                 {
-                    // Crude oil is authored separately as one coherent surface seep, tapered
-                    // funnel, and deep reservoir — never as random submerged noise patches.
-                    return new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
+                    byte level = (byte)math.clamp((int)math.round(fill * 255f), 1, 255);
+                    return new Voxel(-5, (byte)MaterialId.WaterLiquid, level);
                 }
                 int scaledDensity = (int)math.round(density * 32f);
                 sbyte densityByte = (sbyte)math.clamp(scaledDensity, -127, -1);

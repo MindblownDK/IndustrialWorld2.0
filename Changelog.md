@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `16.0.1-dev`
+**Current Version:** `17.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.0.0-dev] Stable Grass Patches, Mining Targets and Snapshot Water
+
+#### Breaking
+- Fresh world required: generated exterior shoreline water now uses local terrain height and fractional sea fill rather than the chunk-wide ocean gate. Chunk-store terrain revision is 17; existing saves are not migrated.
+
+#### Implemented
+- Grass anchors are sampled deterministically from applied terrain triangles and cached per chunk. Edit bounds remove only nearby anchors; replacements wait for applied terrain meshes. Triangle area replaces the sparse viewer-centred sample grid.
+- Both mining tools resolve a nearby solid lattice sample inside the hit. Backward ray offsets are removed; cave/undercut terrain normals are no longer forcibly flipped radially outward.
+- Liquid extraction uses owned managed snapshots on at most two workers, with one main-thread capture and upload per frame. Epoch/world checks reject recycled outputs; initial nearby water meshes receive priority. Unknown chunk boundaries are not treated as dry.
+- Bank scalar reconstruction extends observed liquid head into adjacent solids; isolated supported thin films remain visible. Water depth is stored in the blue channel read by the shader. Vertex waves are removed to prevent duplicate edge positions separating; normal-only waves use cheaper analytic slopes.
+- Fluid tick work is spread across frames without multi-chunk catch-up bursts. Liquid solver/spring writes no longer flag terrain dirty. Named PBR image mapping, pumps, liquid types and boat APIs remain unchanged.
+- Central Setup includes a snapshot surface regression fixture. Fluid conservation fixture remains available.
+
+#### Validation and limitations
+- Changed C# files passed local syntax parsing and whitespace checks only. Unity/API/Burst/HLSL compilation is unavailable here; new fixture is authored, not executed in Unity.
+- User conservation PASS applies to 16.0.1, not proof of 17 rendering or integration. FPS, shoreline visuals, grass density, sustained mining and machine/boat behaviour require fresh-world testing.
+- Fluid simulation remains main-thread work, capped to one chunk per frame. Snapshot capture, mesh upload and grass draw calls can still cost frame time. Bank-depth attributes remain cube-local (no geometry displacement); exact lighting continuity needs visual review. No migration/repair of existing floating scenery.
 
 ### [16.0.1-dev] Streaming, Grass and Shoreline Corrections
 

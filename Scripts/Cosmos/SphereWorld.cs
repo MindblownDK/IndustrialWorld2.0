@@ -95,7 +95,22 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public int PlayerEditVersion { get; private set; }
 
+        public event System.Action<Bounds> TerrainEdited;
         public void NotifyPlayerEdit() => PlayerEditVersion++;
+        public void NotifyPlayerEdit(Vector3Int center, int radius)
+        {
+            PlayerEditVersion++;
+            TerrainEdited?.Invoke(new Bounds((Vector3)center * VoxelConstants.VOXEL_SIZE,
+                Vector3.one * ((radius + 2) * 2f * VoxelConstants.VOXEL_SIZE)));
+        }
+        public bool IsTerrainMeshPending(Chunk chunk)
+        {
+            if (chunk == null || chunk.isDirty || _queuedForMeshing.Contains(chunk)) return true;
+            for (int i=0;i<_pendingMesh.Count;i++)
+                if (_pendingMesh[i].chunk == chunk && _pendingMesh[i].epoch == chunk.streamEpoch) return true;
+            return false;
+        }
+        public bool CanReadVoxels(Chunk chunk) => chunk != null && chunk.isGenerated && !IsGenJobPending(chunk);
 
         /// <summary>Sea level in body-local voxel space (for scatter placement).</summary>
         public int SeaLevel => body != null ? Mathf.RoundToInt(body.genParams.seaRadius / VoxelConstants.VOXEL_SIZE) : 96;
@@ -356,7 +371,7 @@ namespace VoxelEngine.Cosmos
             {
                 bodyName          = forBody.settings.bodyName,
                 seed              = prm.seed,
-                terrainRevision   = 16,
+                terrainRevision   = 17,
                 radiusWorld       = prm.radiusWorld,
                 baseHeight        = prm.baseHeight,
                 seaRadius         = prm.seaRadius,
@@ -1114,6 +1129,7 @@ namespace VoxelEngine.Cosmos
                         MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                     mesh.bounds = p.bounds[0];
                     p.chunk.meshFilter.sharedMesh = mesh;
+                    p.chunk.terrainMeshRevision++;
                     ApplyColliderState(p.chunk, mesh, p.counts[1] > 0, contentChanged: true);
                 }
                 else
@@ -1154,7 +1170,8 @@ namespace VoxelEngine.Cosmos
             {
                 if(nx==0 && ny==0 && nz==0) continue;
                 if(TryGetChunk(p.chunk.coord + new Vector3Int(nx,ny,nz), out Chunk neighbour)
-                    && neighbour != null && neighbour.isGenerated && neighbour.waterMeshGO != null)
+                    && neighbour != null && neighbour.isGenerated
+                    && (neighbour.waterMeshGO != null || ChunkHasGeneratedLiquid(neighbour)))
                 {
                     VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(neighbour);
                     VoxelEngine.WaterSim.FluidManager.Instance?.MarkActive(neighbour.coord);
@@ -1646,6 +1663,7 @@ namespace VoxelEngine.Cosmos
                         MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                     mesh.bounds = p.bounds[0];
                     p.chunk.meshFilter.sharedMesh = mesh;
+                    p.chunk.terrainMeshRevision++;
                     ApplyColliderState(p.chunk, mesh, p.counts[1] > 0, contentChanged: true);
                 }
                 else
@@ -1916,7 +1934,7 @@ namespace VoxelEngine.Cosmos
                 Mathf.FloorToInt(localVoxel.x / (float)VoxelConstants.CHUNK_SIZE),
                 Mathf.FloorToInt(localVoxel.y / (float)VoxelConstants.CHUNK_SIZE),
                 Mathf.FloorToInt(localVoxel.z / (float)VoxelConstants.CHUNK_SIZE));
-            if (!_chunks.TryGetValue(coord, out Chunk chunk) || chunk == null || !chunk.isGenerated)
+            if (!_chunks.TryGetValue(coord, out Chunk chunk) || chunk == null || !CanReadVoxels(chunk))
             {
                 voxel = Voxel.Empty;
                 return false;
@@ -1956,6 +1974,7 @@ namespace VoxelEngine.Cosmos
             int ly = worldVoxel.y - chunkCoord.y * S;
             int lz = worldVoxel.z - chunkCoord.z * S;
             c.SetVoxelLocal(lx, ly, lz, v);
+            c.terrainRevision++;
             c.isModified = true;
 
             // ── Border write-through (9.5.5 — the last mining ghost wall) ──
@@ -1983,6 +2002,7 @@ namespace VoxelEngine.Cosmos
                     CompleteGenJobFor(n); CompleteMeshJobFor(n);
                     int px = lx - dx * S, py = ly - dy * S, pz = lz - dz * S;
                     n.voxels[Chunk.LocalToPaddedIndex(px, py, pz)] = v;
+                    n.terrainRevision++;
                     n.isModified = true;
                     // 9.7.7: ALWAYS remesh a neighbour whose padding changed — batched
                     // callers (remesh:false, e.g. the oil decorator) only reflush the

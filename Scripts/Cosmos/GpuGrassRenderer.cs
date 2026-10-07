@@ -68,23 +68,25 @@ namespace VoxelEngine.Cosmos
         // Graphics.RenderMeshInstanced refuses more than 1023 instances per call.
         private const int InstanceBatchSize = 1000;
 
-        // -- Runtime --
-        private Vector3 _lastRebuildPos = new Vector3(float.MaxValue, 0, 0);
-        private Matrix4x4 _lastBodyLocalToWorld;
-        private NativeArray<Matrix4x4> _localMatrices;   // body-local anchors (stable)
-        private NativeArray<Matrix4x4> _matrices;        // world-space projection
-        private int _instanceCount;
-        private bool _built;
-        private int _lastEditVersion = -1;
-        private float _lastRebuildTime;
-        private float _nextEcologySample;
-        private float _lastEcologyMultiplier = -1f;
-        private float _lastQualityMultiplier = -1f;
-        private bool _ownsBladeMesh;
-        private float _nextStreamingRefresh;
+        private sealed class Patch
+        {
+            public Chunk chunk;
+            public int epoch, meshRevision = -1;
+            public readonly List<Matrix4x4> roots = new();
+            public NativeArray<Matrix4x4> worldMatrices;
+            public Matrix4x4 bodyMatrix;
+            public bool dirty = true, hasEditBounds;
+            public Bounds editBounds;
+            public void Dispose() { if (worldMatrices.IsCreated) worldMatrices.Dispose(); }
+        }
+        private readonly Dictionary<Vector3Int, Patch> _patches = new();
+        private readonly List<Vector3Int> _retire = new();
+        private SphereWorld _world;
         private Coroutine _fieldBuild;
-        private Color _healthyBaseColor;
-        private Color _healthyTipColor;
+        private float _nextScan, _nextEcologySample;
+        private float _lastEcologyMultiplier = 1f, _lastQualityMultiplier = -1f;
+        private bool _supportsClay, _ownsBladeMesh;
+        private Color _healthyBaseColor, _healthyTipColor;
 
         // Render params (reused - no per-frame GC).
         private RenderParams _renderParams;
@@ -112,137 +114,199 @@ namespace VoxelEngine.Cosmos
             }
         }
 
-        private void OnDisable()
-        {
-            if (_fieldBuild != null) StopCoroutine(_fieldBuild);
-            _fieldBuild = null;
-            _built = false;
-            DisposeField();
-        }
-
+        private void OnDisable() => ResetPatches();
         private void OnDestroy()
         {
-            DisposeField();
+            ResetPatches();
             if (grassMaterial != null) Destroy(grassMaterial);
             if (_ownsBladeMesh && grassBladeMesh != null) Destroy(grassBladeMesh);
         }
 
-        private void DisposeField()
+        private void ResetPatches()
         {
-            if (_matrices.IsCreated) _matrices.Dispose();
-            if (_localMatrices.IsCreated) _localMatrices.Dispose();
-            _matrices = default;
-            _localMatrices = default;
-            _instanceCount = 0;
+            if (_fieldBuild != null) StopCoroutine(_fieldBuild);
+            _fieldBuild = null;
+            if (_world != null) _world.TerrainEdited -= OnTerrainEdited;
+            _world = null;
+            foreach (Patch patch in _patches.Values) patch.Dispose();
+            _patches.Clear();
+        }
+
+        private void OnTerrainEdited(Bounds bounds)
+        {
+            // Keep every unaffected anchor exactly where it was. Only roots in the edit halo
+            // disappear; their patch rebuild waits for the new terrain mesh to be applied.
+            foreach (Patch patch in _patches.Values)
+            {
+                var chunkBounds = new Bounds(patch.chunk.WorldOrigin + Vector3.one * 16f, Vector3.one * 36f);
+                if (!chunkBounds.Intersects(bounds)) continue;
+                if (patch.hasEditBounds) patch.editBounds.Encapsulate(bounds);
+                else { patch.editBounds = bounds; patch.hasEditBounds = true; }
+                patch.dirty = true;
+                patch.roots.RemoveAll(m => bounds.Contains(m.GetColumn(3)));
+                Upload(patch);
+            }
         }
 
         private void Update()
         {
-            if (body == null || viewer == null || grassBladeMesh == null || grassMaterial == null) return;
-            if (VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(viewer.position)
-                || GravityProvider.ActiveBody == null)
-            {
-                if (_fieldBuild != null) StopCoroutine(_fieldBuild);
-                _fieldBuild = null;
-                _built = false;
-                if (_instanceCount > 0) DisposeField();
-                return;
-            }
-
-            // Pollution pressure is slow-moving. Sample it on the same low cadence as
-            // other environmental visuals, recolour immediately, and rebuild only after
-            // a meaningful density change so the GPU field does not churn every frame.
+            var current = ActiveWorld.Current as SphereWorld;
+            if (current != _world) { ResetPatches(); _world = current; if (_world != null) _world.TerrainEdited += OnTerrainEdited; }
+            if (_world == null || body == null || viewer == null || grassBladeMesh == null || grassMaterial == null) return;
+            if (body != _world.body) { ResetPatches(); return; }
+            if (VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(viewer.position))
+            { ResetPatches(); return; }
             if (Time.unscaledTime >= _nextEcologySample)
             {
                 _nextEcologySample = Time.unscaledTime + 2.5f;
                 EcologyReading ecology = EcologyPressure.Sample(viewer.position);
                 ApplyEcologyColour(ecology);
-                float multiplier = ecology.FloraSpawnMultiplier;
-                bool densityChanged = _lastEcologyMultiplier >= 0f
-                    && Mathf.Abs(multiplier - _lastEcologyMultiplier) >= 0.08f;
-                _lastEcologyMultiplier = multiplier;
-                if (densityChanged && _built && Time.unscaledTime - _lastRebuildTime >= 0.6f)
+                float quality = GetQualityDensityMul();
+                if (Mathf.Abs(_lastEcologyMultiplier - ecology.FloraSpawnMultiplier) > 0.08f
+                    || !Mathf.Approximately(_lastQualityMultiplier, quality))
+                    foreach (Patch patch in _patches.Values) patch.dirty = true;
+                _lastEcologyMultiplier = ecology.FloraSpawnMultiplier;
+                _lastQualityMultiplier = quality;
+                _supportsClay = ecology.SupportsLivestock;
+            }
+            if (Time.unscaledTime >= _nextScan)
+            {
+                _nextScan = Time.unscaledTime + 0.5f;
+                ScanPatches();
+            }
+            if (_fieldBuild == null)
+            {
+                Patch nearest = null; float best = float.PositiveInfinity;
+                Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+                foreach (Patch patch in _patches.Values)
                 {
-                    RebuildField();
-                    _lastRebuildPos = viewer.position;
-                    _lastRebuildTime = Time.unscaledTime;
+                    if (!patch.dirty || !Ready(patch)) continue;
+                    float d = (patch.chunk.WorldOrigin + Vector3.one * 16f - viewerLocal).sqrMagnitude;
+                    if (d < best) { best = d; nearest = patch; }
                 }
+                if (nearest != null) _fieldBuild = StartCoroutine(BuildPatch(nearest));
             }
-
-            // 9.18.2 - PLAYER EDITS rebuild the field: mining grass (or the ground under
-            // it) must remove its blades immediately, not when the player next walks 12 m.
-            // Bumped once per edit batch; cancel obsolete candidates before publishing again.
-            var sphere = SphereWorld.Instance;
-            if (sphere != null && sphere.PlayerEditVersion != _lastEditVersion)
+            Matrix4x4 bodyMatrix = body.transform.localToWorldMatrix;
+            foreach (Patch patch in _patches.Values)
             {
-                DisposeField(); // Never draw anchors from terrain preceding this edit.
-                _lastEditVersion = sphere.PlayerEditVersion;
-                RebuildField();
-                _lastRebuildPos = viewer.position;
-                _lastRebuildTime = Time.unscaledTime;
-                _built = true;
-            }
-
-            // Density preset changes must also rebuild an already populated field.
-            float qualityMultiplier = GetQualityDensityMul();
-            if (!Mathf.Approximately(_lastQualityMultiplier, qualityMultiplier))
-            {
-                _lastQualityMultiplier = qualityMultiplier;
-                _built = false;
-            }
-
-            // Rebuild when the viewer has moved enough.
-            if (Vector3.Distance(viewer.position, _lastRebuildPos) > rebuildThreshold || !_built
-                || (_fieldBuild == null && Time.unscaledTime >= _nextStreamingRefresh))
-            {
-                RebuildField();
-                _lastRebuildPos = viewer.position;
-                _lastRebuildTime = Time.unscaledTime;
-                _built = true;
-            }
-
-            // Floating-origin safety: if the body moved in the world (rebase/frame switch),
-            // re-project the stored body-local anchors to the new world space.
-            Matrix4x4 bodyLW = body.transform.localToWorldMatrix;
-            if (_instanceCount > 0 && _matrices.IsCreated && bodyLW != _lastBodyLocalToWorld)
-            {
-                for (int i = 0; i < _instanceCount; i++)
-                    _matrices[i] = bodyLW * _localMatrices[i];
-            }
-            _lastBodyLocalToWorld = bodyLW;
-
-            // Push the current wind vector to the grass shader (VoxelGrass.shader uses _WindDir).
-            // GUSTS: the strength breathes with layered time-noise (slow swells +
-            // quick flutters) and the direction meanders a few degrees - the whole field
-            // moves like living grass instead of a metronome.
-            var wind = WindField.Instance;
-            if (wind != null && grassMaterial != null)
-            {
-                float t = Time.time;
-                float gust = 0.65f
-                           + 0.45f * (Mathf.PerlinNoise(t * 0.11f, 13.7f) - 0.5f) * 2f
-                           + 0.18f * (Mathf.PerlinNoise(t * 0.9f, 71.3f) - 0.5f) * 2f;
-                float meander = (Mathf.PerlinNoise(t * 0.05f, 3.1f) - 0.5f) * 0.6f;   // +/- ~17 deg
-                Vector3 dir = Quaternion.AngleAxis(meander * Mathf.Rad2Deg,
-                    body != null ? (transform.position - body.transform.position).normalized : Vector3.up)
-                    * wind.Direction;
-                grassMaterial.SetVector("_WindDir", dir);
-                grassMaterial.SetFloat("_WindStrength", Mathf.Clamp01(wind.strength * 0.4f * Mathf.Max(0.15f, gust)));
-            }
-
-            // Draw every blade in batched GPU-instanced draw calls (1000 per call).
-            if (_instanceCount > 0 && _matrices.IsCreated)
-            {
-                int drawn = 0;
-                while (drawn < _instanceCount)
-                {
-                    int slice = Mathf.Min(InstanceBatchSize, _instanceCount - drawn);
+                if (!patch.worldMatrices.IsCreated) continue;
+                if (patch.bodyMatrix != bodyMatrix) Upload(patch);
+                for (int i=0;i<patch.worldMatrices.Length;i+=InstanceBatchSize)
                     Graphics.RenderMeshInstanced(_renderParams, grassBladeMesh, 0,
-                        _matrices.GetSubArray(drawn, slice));
-                    drawn += slice;
-                }
+                        patch.worldMatrices.GetSubArray(i, Mathf.Min(InstanceBatchSize, patch.worldMatrices.Length-i)));
+            }
+            var wind = WindField.Instance;
+            if (wind != null)
+            {
+                grassMaterial.SetVector("_WindDir", wind.Direction);
+                grassMaterial.SetFloat("_WindStrength", Mathf.Clamp01(wind.strength * 0.4f));
             }
         }
+
+        private bool Ready(Patch patch) => _world != null && patch.chunk.streamEpoch == patch.epoch
+            && patch.chunk.isGenerated && patch.chunk.meshFilter != null
+            && patch.chunk.meshFilter.sharedMesh != null && !_world.IsTerrainMeshPending(patch.chunk);
+
+        private void ScanPatches()
+        {
+            Vector3 local = body.transform.InverseTransformPoint(viewer.position);
+            Vector3Int center = _world.WorldToChunk(viewer.position);
+            int r = Mathf.CeilToInt(range / 32f) + 1;
+            _retire.Clear();
+            foreach (var pair in _patches)
+                if (!_world.TryGetChunk(pair.Key, out Chunk c) || c != pair.Value.chunk
+                    || c.streamEpoch != pair.Value.epoch || (c.WorldOrigin + Vector3.one*16f-local).sqrMagnitude > (range+40f)*(range+40f))
+                    _retire.Add(pair.Key);
+            foreach (Vector3Int key in _retire) { _patches[key].Dispose(); _patches.Remove(key); }
+            for (int z=-r;z<=r;z++) for(int y=-r;y<=r;y++) for(int x=-r;x<=r;x++)
+            {
+                Vector3Int coord = center + new Vector3Int(x,y,z);
+                if (!_world.TryGetChunk(coord, out Chunk c) || !c.isGenerated || c.meshFilter == null
+                    || c.meshFilter.sharedMesh == null || c.meshFilter.sharedMesh.vertexCount < 3) continue;
+                if ((c.WorldOrigin + Vector3.one*16f-local).sqrMagnitude > (range+28f)*(range+28f)) continue;
+                if (!_patches.TryGetValue(coord, out Patch patch))
+                    _patches.Add(coord, patch = new Patch { chunk=c, epoch=c.streamEpoch });
+                if (patch.meshRevision != c.terrainMeshRevision) patch.dirty = true;
+            }
+        }
+
+        private void Upload(Patch patch)
+        {
+            patch.Dispose();
+            patch.bodyMatrix = body.transform.localToWorldMatrix;
+            if (patch.roots.Count == 0) return;
+            patch.worldMatrices = new NativeArray<Matrix4x4>(patch.roots.Count, Allocator.Persistent);
+            for(int i=0;i<patch.roots.Count;i++) patch.worldMatrices[i] = patch.bodyMatrix * patch.roots[i];
+        }
+
+        private IEnumerator BuildPatch(Patch patch)
+        {
+            yield return null;
+            if (!Ready(patch)) { _fieldBuild = null; yield break; }
+            int revision = patch.chunk.terrainMeshRevision, editVersion = patch.chunk.terrainRevision;
+            Mesh mesh = patch.chunk.meshFilter.sharedMesh;
+            Vector3[] vertices = mesh.vertices;
+            int[] triangles = mesh.triangles;
+            Color32[] colors = mesh.colors32;
+            var roots = new List<Matrix4x4>();
+            bool partial = patch.hasEditBounds;
+            Bounds editBounds = patch.editBounds;
+            if (partial) roots.AddRange(patch.roots);
+            Vector3 origin = patch.chunk.WorldOrigin;
+            double start = Time.realtimeSinceStartupAsDouble;
+            float density = Mathf.Max(0, baseDensity * GetQualityDensityMul() * _lastEcologyMultiplier);
+            for (int t=0;t<triangles.Length;t+=3)
+            {
+                if (Time.realtimeSinceStartupAsDouble-start >= 0.002)
+                {
+                    yield return null;
+                    start = Time.realtimeSinceStartupAsDouble;
+                    if (!Ready(patch) || revision != patch.chunk.terrainMeshRevision || editVersion != patch.chunk.terrainRevision
+                        || !_patches.TryGetValue(patch.chunk.coord, out Patch live) || live != patch)
+                    { _fieldBuild = null; yield break; }
+                }
+                int ia=triangles[t], ib=triangles[t+1], ic=triangles[t+2];
+                if (colors.Length != vertices.Length) continue;
+                int suitable = (IsSoil(colors[ia].a)?1:0) + (IsSoil(colors[ib].a)?1:0) + (IsSoil(colors[ic].a)?1:0);
+                if (suitable < 2) continue;
+                Vector3 a=vertices[ia]+origin, b=vertices[ib]+origin, c=vertices[ic]+origin;
+                Vector3 cross = Vector3.Cross(b-a,c-a);
+                float area = cross.magnitude * 0.5f;
+                if (area < 0.0001f) continue;
+                Vector3 radial = ((a+b+c)/3f).normalized;
+                Vector3 normal = cross.normalized;
+                if (Vector3.Dot(normal,radial) < 0.72f) continue;
+                uint hash = (uint)(patch.chunk.coord.x*73856093 ^ patch.chunk.coord.y*19349663 ^ patch.chunk.coord.z*83492791 ^ (t+1)*104729);
+                var rng = new Unity.Mathematics.Random(math.max(1u,hash));
+                float expected = density * area;
+                int count = Mathf.FloorToInt(expected) + (rng.NextFloat() < expected%1f ? 1 : 0);
+                for (int j=0;j<count;j++)
+                {
+                    float u=Mathf.Sqrt(rng.NextFloat()), v=rng.NextFloat();
+                    Vector3 root = a*(1-u)+b*(u*(1-v))+c*(u*v);
+                    if (partial && !editBounds.Contains(root)) continue;
+                    // Sample above the actual triangle, not below an analytic sphere. Round
+                    // because density is stored at integer lattice points, not cell centres.
+                    Vector3Int q = Vector3Int.RoundToInt((root+radial*0.6f)/VoxelConstants.VOXEL_SIZE);
+                    if (!_world.TryGetVoxelReady(q,out Voxel above) || above.waterLevel > 0) continue;
+                    Quaternion rotation = Quaternion.AngleAxis(rng.NextFloat(0,360),radial) * Quaternion.FromToRotation(Vector3.up,radial);
+                    float height = bladeHeight * (1f+rng.NextFloat(-heightVariance,heightVariance));
+                    float width = bladeWidth * rng.NextFloat(0.8f,1.2f);
+                    roots.Add(Matrix4x4.TRS(root-radial*0.025f,rotation,new Vector3(width,height,width)));
+                }
+            }
+            if (Ready(patch) && revision == patch.chunk.terrainMeshRevision && editVersion == patch.chunk.terrainRevision
+                && _patches.TryGetValue(patch.chunk.coord,out Patch current) && current == patch)
+            {
+                patch.roots.Clear(); patch.roots.AddRange(roots);
+                patch.meshRevision = revision; patch.dirty = false; patch.hasEditBounds = false;
+                Upload(patch);
+            }
+            _fieldBuild = null;
+        }
+
+        private bool IsSoil(byte material) => material == (byte)MaterialId.Grass
+            || (_supportsClay && material == (byte)MaterialId.Clay);
 
         private void ApplyEcologyColour(EcologyReading ecology)
         {
@@ -254,205 +318,6 @@ namespace VoxelEngine.Cosmos
                 grassMaterial.SetColor("_BaseColor", Color.Lerp(_healthyBaseColor, stressedBase, stress * 0.86f));
             if (grassMaterial.HasProperty("_TipColor"))
                 grassMaterial.SetColor("_TipColor", Color.Lerp(_healthyTipColor, stressedTip, stress * 0.86f));
-        }
-
-        // -- Field rebuild --
-        private void RebuildField()
-        {
-            if (_fieldBuild != null) StopCoroutine(_fieldBuild);
-            _fieldBuild = StartCoroutine(BuildFieldProgressively());
-        }
-
-        private IEnumerator BuildFieldProgressively()
-        {
-            // Start on the next frame so the coroutine handle is assigned even on early exit.
-            yield return null;
-            _nextStreamingRefresh = Time.unscaledTime + 4f;
-            var world = ActiveWorld.Current;
-            if (world == null || body == null || viewer == null) { _instanceCount = 0; _fieldBuild = null; yield break; }
-
-            float densityMul = GetQualityDensityMul();
-            EcologyReading ecology = EcologyPressure.Sample(viewer.position);
-            _lastEcologyMultiplier = ecology.FloraSpawnMultiplier;
-            ApplyEcologyColour(ecology);
-            float density = baseDensity * densityMul * ecology.FloraSpawnMultiplier;
-            if (density <= 0.01f)
-            {
-                Debug.Log($"[Grass] field empty (quality density {densityMul:0.00}).");
-                DisposeField();
-                _fieldBuild = null; yield break;
-            }
-            Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
-            Vector3 localUp = viewerLocal.sqrMagnitude > 0.0001f ? viewerLocal.normalized : Vector3.up;
-            GetTangentBasis(localUp, out Vector3 tangentA, out Vector3 tangentB);
-
-            int voxelRange = Mathf.CeilToInt(range);
-            int densityStep = density > 1.5f ? 1 : 2;
-            int sampleBudget = Mathf.Max(256, maxSurfaceSamples);
-            int budgetStep = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(
-                Mathf.PI * range * range / sampleBudget)));
-            // At least 3 m cells keep the default 48 m field below 850 base probes.
-            // A uniform per-cell cap fills every quadrant instead of truncating one side.
-            int step = Mathf.Max(3, Mathf.Max(densityStep, budgetStep));
-            var candidates = new List<Matrix4x4>(Mathf.CeilToInt(Mathf.PI * range * range / (step * step)) * 24);
-
-            var cells = new List<Vector2Int>();
-            for (int v = -voxelRange; v <= voxelRange; v += step)
-            for (int u = -voxelRange; u <= voxelRange; u += step)
-                if (u * u + v * v <= range * range) cells.Add(new Vector2Int(u, v));
-            cells.Sort((a, b) => a.sqrMagnitude.CompareTo(b.sqrMagnitude));
-            DisposeField();
-            int capacity = Mathf.Max(1, cells.Count * 48);
-            _localMatrices = new NativeArray<Matrix4x4>(capacity, Allocator.Persistent);
-            _matrices = new NativeArray<Matrix4x4>(capacity, Allocator.Persistent);
-            double sliceStart = Time.realtimeSinceStartupAsDouble;
-            foreach (Vector2Int cell in cells)
-            {
-                int u = cell.x, v = cell.y;
-                if (Time.realtimeSinceStartupAsDouble - sliceStart >= 0.002)
-                {
-                    PublishGrass(candidates);
-                    yield return null;
-                    sliceStart = Time.realtimeSinceStartupAsDouble;
-                    if (body == null || viewer == null || ActiveWorld.Current != world)
-                    { _fieldBuild = null; yield break; }
-                }
-                Vector3 probeLocal = viewerLocal + tangentA * u + tangentB * v;
-                Vector3 radial = probeLocal.sqrMagnitude > 0.0001f ? probeLocal.normalized : localUp;
-                if (!TryFindRadialGrassSurface(world, radial, out Vector3Int surfaceVoxel,
-                        out Vector3 surfaceLocal, out Vector3 radialUpLocal, out byte surfaceMaterial))
-                    continue;
-                if (surfaceMaterial != (byte)MaterialId.Grass
-                    && !(surfaceMaterial == (byte)MaterialId.Clay && ecology.SupportsLivestock)) continue;
-                Vector3Int outward = surfaceVoxel + Vector3Int.RoundToInt(radialUpLocal);
-                var above = world.GetVoxelWorld(outward);
-                if (above.waterLevel > 0) continue;
-
-                // Keep blades perpendicular to the planet's radial frame. Surface-net gradient
-                // estimates can tilt wildly across a Cartesian chunk seam, making grass look
-                // flat relative to world Y instead of wrapped around the sphere.
-
-                uint hash = (uint)(surfaceVoxel.x * 73856093 ^ surfaceVoxel.y * 19349663 ^ surfaceVoxel.z * 83492791);
-                var rng = new Unity.Mathematics.Random(math.max(1u, hash));
-                // Broad body-local patches, not identical evenly spaced grass cards.
-                float patch = Mathf.PerlinNoise(surfaceLocal.x * 0.045f + surfaceLocal.y * 0.019f,
-                    surfaceLocal.z * 0.045f + 41f);
-                int bladeCount = Mathf.Clamp(Mathf.RoundToInt(density * step * step
-                    * Mathf.Lerp(0.8f, 1.15f, patch)), 1, 48);
-                Vector3 tuftSurface = surfaceLocal;
-                Vector3 tuftUp = radialUpLocal;
-                if (!TryGroundTuft(world, ref tuftSurface, ref tuftUp)) continue;
-                GetTangentBasis(tuftUp, out Vector3 tuftA, out Vector3 tuftB);
-                // Spread roots over the full cell, then ground each against the collider.
-                // Both cell discovery and root probes are yielded in bounded batches.
-                for (int blade = 0; blade < bladeCount; blade++)
-                {
-                    if (Time.realtimeSinceStartupAsDouble - sliceStart >= 0.002)
-                    {
-                        PublishGrass(candidates);
-                        yield return null;
-                        sliceStart = Time.realtimeSinceStartupAsDouble;
-                        if (body == null || viewer == null || ActiveWorld.Current != world)
-                        { _fieldBuild = null; yield break; }
-                    }
-                    Vector3 anchor = tuftSurface - tuftUp * 0.02f
-                        + tuftA * rng.NextFloat(-step * 0.5f, step * 0.5f)
-                        + tuftB * rng.NextFloat(-step * 0.5f, step * 0.5f);
-                    Vector3 rootUp = tuftUp;
-                    if (!TryGroundTuft(world, ref anchor, ref rootUp)) continue;
-                    Vector3Int rootVoxel = Vector3Int.RoundToInt((anchor - rootUp * 0.35f) / VoxelConstants.VOXEL_SIZE);
-                    Voxel rootGround = world.GetVoxelWorld(rootVoxel);
-                    if (rootGround.material != (byte)MaterialId.Grass
-                        && !(rootGround.material == (byte)MaterialId.Clay && ecology.SupportsLivestock)) continue;
-                    anchor -= rootUp * 0.02f;
-                    Quaternion rotation = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), rootUp)
-                        * Quaternion.FromToRotation(Vector3.up, rootUp);
-                    float height = bladeHeight * Mathf.Lerp(0.72f, 1.18f, patch)
-                        * (1f + rng.NextFloat(-heightVariance, heightVariance));
-                    float width = bladeWidth * rng.NextFloat(0.7f, 1.25f);
-                    candidates.Add(Matrix4x4.TRS(anchor, rotation, new Vector3(width, height, width)));
-                }
-            }
-
-            PublishGrass(candidates);
-            _fieldBuild = null;
-            _nextStreamingRefresh = Time.unscaledTime + 4f;
-        }
-
-        private void PublishGrass(List<Matrix4x4> candidates)
-        {
-            Matrix4x4 bodyLW = body.transform.localToWorldMatrix;
-            for (int i = _instanceCount; i < candidates.Count; i++)
-            {
-                _localMatrices[i] = candidates[i];
-                _matrices[i] = bodyLW * candidates[i];
-            }
-            _instanceCount = candidates.Count;
-        }
-
-        private bool TryGroundTuft(IVoxelWorld world, ref Vector3 localSurface, ref Vector3 localUp)
-        {
-            if (!(world is SphereWorld sphere)) return true;
-            Vector3 root = body.transform.TransformPoint(localSurface);
-            Vector3 up = body.transform.TransformDirection(localUp).normalized;
-            Ray ray = new Ray(root + up * 5f, -up);
-            // Resolve the local chunk across a radial boundary; at most one raycast per cell.
-            Chunk previousChunk = null;
-            for (int offset = 2; offset >= -2; offset--)
-            {
-                Vector3 sample = localSurface + localUp * offset;
-                Vector3Int coord = Vector3Int.FloorToInt(sample /
-                    (VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE));
-                if (!sphere.TryGetChunk(coord, out Chunk chunk) || chunk == null
-                    || chunk.isDirty || chunk.meshCollider == null || !chunk.meshCollider.enabled
-                    || chunk.meshCollider.sharedMesh == null) continue;
-                if (chunk == previousChunk) continue;
-                previousChunk = chunk;
-                if (!chunk.meshCollider.Raycast(ray, out RaycastHit hit, 10f)) continue;
-                if (Vector3.Dot(hit.normal, up) < 0.65f) return false;
-                localSurface = body.transform.InverseTransformPoint(hit.point);
-                localUp = body.transform.InverseTransformDirection(hit.normal).normalized;
-                return localSurface.magnitude > sphere.SeaLevel + 0.15f;
-            }
-            return false;
-        }
-
-        private bool TryFindRadialGrassSurface(IVoxelWorld world, Vector3 radial,
-            out Vector3Int surfaceVoxel, out Vector3 surfaceLocal, out Vector3 radialUp, out byte surfaceMaterial)
-        {
-            surfaceVoxel = default;
-            surfaceLocal = Vector3.zero;
-            radialUp = radial.sqrMagnitude > 0.0001f ? radial.normalized : Vector3.up;
-            surfaceMaterial = 0;
-
-            // SphereWorld resolves the generated column directly.
-            if (world is SphereWorld sphere)
-                return sphere.TrySampleExteriorSurface(radial, out surfaceVoxel, out surfaceLocal, out radialUp, out surfaceMaterial);
-
-            // Legacy compatibility only; new planet generation never takes this path.
-            float estimate = body.SurfaceRadius / VoxelConstants.VOXEL_SIZE;
-            for (int offset = 48; offset >= -96; offset--)
-            {
-                Vector3Int voxel = Vector3Int.RoundToInt(radialUp * (estimate + offset));
-                Voxel value = world.GetVoxelWorld(voxel);
-                if (!value.IsSolid) continue;
-                Vector3Int outward = voxel + Vector3Int.RoundToInt(radialUp);
-                Voxel above = world.GetVoxelWorld(outward);
-                if (above.IsSolid || above.waterLevel > 0) continue;
-                surfaceVoxel = voxel;
-                surfaceMaterial = value.material;
-                surfaceLocal = ((Vector3)voxel + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE;
-                radialUp = surfaceLocal.sqrMagnitude > 0.0001f ? surfaceLocal.normalized : radialUp;
-                return true;
-            }
-            return false;
-        }
-
-        private static void GetTangentBasis(Vector3 up, out Vector3 tangentA, out Vector3 tangentB)
-        {
-            Vector3 reference = Mathf.Abs(Vector3.Dot(up, Vector3.up)) < 0.9f ? Vector3.up : Vector3.right;
-            tangentA = Vector3.Cross(reference, up).normalized;
-            tangentB = Vector3.Cross(up, tangentA).normalized;
         }
 
         private float GetQualityDensityMul()

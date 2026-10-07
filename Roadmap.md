@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `16.0.1-dev`
-**Roadmap Version:** `16.0.1-dev`
+**Current Version:** `17.0.0-dev`
+**Roadmap Version:** `17.0.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 17.0.0-dev - Surface Stability Pass
+- Cached triangle grass and solid-sample mining implemented
+- Snapshot liquid extraction and revision-17 generation implemented
+- Fresh-world Unity compilation, performance and visual acceptance open
 
 ### 16.0.1-dev - Streaming, Grass and Shoreline Corrections
 - Progressive nearest-first grass, narrow edit remesh bounds and unchanged-material fast path implemented

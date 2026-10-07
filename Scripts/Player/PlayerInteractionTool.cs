@@ -2299,15 +2299,10 @@ namespace VoxelEngine.Player
 
             // Resolve a point just inside the terrain. Mesh hit normals are radial on planets,
             // so this stays reliable while mining from any latitude or while submerged.
-            Vector3 miningPoint = hit.point - hit.normal.normalized * 0.22f;
+            Vector3 miningPoint = hit.point;
+            VoxelEditor.TryResolveMiningPoint(world, hit.point, hit.normal, ray.direction, out miningPoint);
             var hitVoxelPos = world.WorldToVoxel(miningPoint);
             var v = world.GetVoxelWorld(hitVoxelPos);
-            if (v.density <= 0)
-            {
-                miningPoint = hit.point - ray.direction.normalized * 0.35f;
-                hitVoxelPos = world.WorldToVoxel(miningPoint);
-                v = world.GetVoxelWorld(hitVoxelPos);
-            }
             if (v.density > 0)
             {
                 var def = registry.Get(v.material);

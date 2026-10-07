@@ -5,6 +5,8 @@
 // SmoothLiquidMesher extracts a shared world-grid scalar surface for all seven liquids.
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using VoxelEngine.Cosmos;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VoxelEngine.Core;
@@ -29,8 +31,17 @@ namespace VoxelEngine.WaterSim
             }
         }
 
-        private static readonly Queue<QueuedChunk> _queue = new();
-        private static readonly Dictionary<Chunk, int> _queuedEpoch = new();
+        private sealed class Pending
+        {
+            public Chunk chunk;
+            public int epoch, worldGeneration;
+            public Task<SmoothLiquidMesher.Surface> task;
+        }
+        private static readonly List<Pending> _pending = new();
+        private static readonly Dictionary<Chunk,int> _queuedEpoch = new();
+        private static int _worldGeneration;
+        private static readonly Unity.Profiling.ProfilerMarker SnapshotMarker = new("Voxel.WaterSnapshot");
+        private static readonly Unity.Profiling.ProfilerMarker UploadMarker = new("Voxel.WaterUpload");
         private static Material _waterMat;
         private static Material _oilMat;
         private static Material _externalWaterMat;
@@ -61,7 +72,7 @@ namespace VoxelEngine.WaterSim
 
         public static void ResetForNewWorld()
         {
-            _queue.Clear();
+            _worldGeneration++;
             _queuedEpoch.Clear();
             // 9.16.0 — reset the whole 7-slot registry; profiles rebuild on demand.
             for (int i = 0; i < _liquidMats.Length; i++)
@@ -85,44 +96,84 @@ namespace VoxelEngine.WaterSim
         public static void Schedule(Chunk c)
         {
             if (!RenderingEnabled || c == null) return;
-            int epoch = c.streamEpoch;
-            if (_queuedEpoch.TryGetValue(c, out int queuedEpoch) && queuedEpoch == epoch) return;
-            _queuedEpoch[c] = epoch;
-            _queue.Enqueue(new QueuedChunk(c));
+            _queuedEpoch[c] = c.streamEpoch;
         }
 
         public static void Pump(int budget)
         {
-            if (!RenderingEnabled)
+            // Completed workers own managed snapshots only; world resets/pool reuse cannot
+            // invalidate their memory. Old outputs are discarded on the main thread.
+            int uploaded = 0;
+            for(int i=_pending.Count-1;i>=0;i--)
             {
-                _queue.Clear();
-                _queuedEpoch.Clear();
-                return;
-            }
-            EnsureMats();
-            int done = 0;
-            while (done < budget && _queue.Count > 0)
-            {
-                QueuedChunk queued = _queue.Dequeue();
-                Chunk c = queued.chunk;
-                if (c == null || c.streamEpoch != queued.epoch || c.go == null || !c.go.activeSelf) continue;
-                if (_queuedEpoch.TryGetValue(c, out int queuedEpoch) && queuedEpoch == queued.epoch)
-                    _queuedEpoch.Remove(c);
-                if (!c.isGenerated) continue;
-
-                // Water mesh generation reads voxel NativeArrays on the main thread. Make sure
-                // world generation/terrain meshing jobs are complete first, especially for
-                // spherical worlds where SphereChunkGenJob can still own the voxel buffer.
-                var world = ActiveWorld.Current;
-                if (world != null)
+                Pending p=_pending[i];
+                if(!p.task.IsCompleted) continue;
+                if(p.task.IsFaulted)
+                { Debug.LogException(p.task.Exception); _pending.RemoveAt(i); continue; }
+                if(uploaded >= 1 && p.worldGeneration == _worldGeneration) continue;
+                if(RenderingEnabled && p.worldGeneration == _worldGeneration && p.chunk != null
+                    && p.chunk.streamEpoch == p.epoch && p.chunk.go != null && p.chunk.go.activeSelf)
                 {
-                    world.CompleteGenJobForChunk(c);
-                    world.CompleteMeshJobForChunk(c);
+                    using(UploadMarker.Auto())
+                    { EnsureGO(p.chunk); SmoothLiquidMesher.Apply(p.chunk,p.task.Result); }
+                    uploaded++;
                 }
-
-                Build(c);
-                done++;
+                _pending.RemoveAt(i);
             }
+            if(!RenderingEnabled) { _queuedEpoch.Clear(); return; }
+            var world=ActiveWorld.Current;
+            if(world == null) return;
+            EnsureMats();
+            // At most two owned snapshots and one main-thread capture per frame. Near-first
+            // initial meshes outrank refreshes, preventing settled ocean refresh starvation.
+            if(_pending.Count >= 2 || _queuedEpoch.Count == 0) return;
+            Vector3 viewer = world.Viewer != null ? (Vector3)world.WorldToVoxel(world.Viewer.position) : Vector3.zero;
+            Chunk nearest=null; float best=float.PositiveInfinity;
+            var dead = new List<Chunk>();
+            foreach(var pair in _queuedEpoch)
+            {
+                Chunk c=pair.Key;
+                if(c==null || c.streamEpoch!=pair.Value || c.go==null || !c.go.activeSelf)
+                { dead.Add(c); continue; }
+                if(!c.isGenerated) continue;
+                bool running=false;
+                foreach(Pending p in _pending) if(p.chunk==c && p.epoch==c.streamEpoch) { running=true; break; }
+                if(running) continue;
+                float distance=((Vector3)(c.coord*VoxelConstants.CHUNK_SIZE)+Vector3.one*16f-viewer).sqrMagnitude;
+                if(c.waterMesh == null) distance *= 0.25f;
+                if(distance<best) { best=distance; nearest=c; }
+            }
+            foreach(Chunk c in dead) _queuedEpoch.Remove(c);
+            if(nearest==null) return;
+            SmoothLiquidMesher.Snapshot snapshot;
+            using(SnapshotMarker.Auto()) snapshot=Capture(world,nearest);
+            if(snapshot==null) return;
+            _queuedEpoch.Remove(nearest);
+            _pending.Add(new Pending { chunk=nearest, epoch=nearest.streamEpoch, worldGeneration=_worldGeneration,
+                task=Task.Run(()=>SmoothLiquidMesher.Extract(snapshot)) });
+        }
+
+        private static SmoothLiquidMesher.Snapshot Capture(IVoxelWorld world,Chunk chunk)
+        {
+            const int S=VoxelConstants.CHUNK_SIZE, H=SmoothLiquidMesher.HaloSize;
+            var neighbours=new Chunk[27];
+            for(int z=-1;z<=1;z++) for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++)
+            {
+                if(!world.TryGetChunk(chunk.coord+new Vector3Int(x,y,z),out Chunk c) || c==null || !c.isGenerated) continue;
+                if(world is SphereWorld sphere && !sphere.CanReadVoxels(c)) return null;
+                // Mesh jobs read voxels only: concurrent main-thread reads need no Complete().
+                neighbours[x+1+3*(y+1+3*(z+1))]=c;
+            }
+            var snapshot=new SmoothLiquidMesher.Snapshot { origin=chunk.coord*S, planet=world is SphereWorld,
+                velocity=ConservativeFluidSolver.GetFlow(chunk), voxels=new Voxel[H*H*H], known=new bool[H*H*H] };
+            for(int z=-2;z<=S+2;z++) for(int y=-2;y<=S+2;y++) for(int x=-2;x<=S+2;x++)
+            {
+                int dx=x<0?-1:x>=S?1:0,dy=y<0?-1:y>=S?1:0,dz=z<0?-1:z>=S?1:0;
+                Chunk c=neighbours[dx+1+3*(dy+1+3*(dz+1))];
+                snapshot.known[x+2+H*(y+2+H*(z+2))] = c!=null;
+                snapshot.voxels[x+2+H*(y+2+H*(z+2))] = c==null ? Voxel.Empty : c.GetVoxelLocal(x-dx*S,y-dy*S,z-dz*S);
+            }
+            return snapshot;
         }
 
         public static void SetMaterialOverrides(Material waterMaterial, Material oilMaterial)
@@ -184,6 +235,9 @@ namespace VoxelEngine.WaterSim
             if (_externalWaterMat != null) _liquidMats[0] = _externalWaterMat;
             if (_externalOilMat != null) _liquidMats[1] = _externalOilMat;
 
+            bool missing = false;
+            for (int i=0;i<7;i++) missing |= _liquidMats[i] == null;
+            if (!missing) return;
             Material runtimeTemplate = Resources.Load<Material>("VoxelEngineRuntime/VoxelWaterRuntime");
             var sh = runtimeTemplate != null ? runtimeTemplate.shader : null;
             if (sh == null || !sh.isSupported)
@@ -255,21 +309,12 @@ namespace VoxelEngine.WaterSim
             mat.SetColor("_Color", new Color(0.08f, 0.52f, 0.82f, 0.88f));
         }
 
-        private static void Build(Chunk c)
-        {
-            EnsureGO(c);
-            SmoothLiquidMesher.Build(c);
-        }
-
         public static int GetChunkLodStride(Chunk c) => 1;
 
         private static void EnsureGO(Chunk c)
         {
             if (c.waterMeshGO != null)
             {
-                foreach (var col in c.waterMeshGO.GetComponents<Collider>()) Object.Destroy(col);
-                var existingLod = c.waterMeshGO.GetComponent<WaterSurfaceLodController>();
-                if (existingLod != null) existingLod.Configure(c);
                 return;
             }
             c.waterMeshGO = new GameObject("LiquidSurface");
@@ -278,7 +323,7 @@ namespace VoxelEngine.WaterSim
             c.waterMeshRenderer = c.waterMeshGO.AddComponent<MeshRenderer>();
             c.waterMeshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             c.waterMeshRenderer.receiveShadows = false;
-            c.waterMeshGO.AddComponent<WaterSurfaceLodController>().Configure(c);
+
         }
 
     }

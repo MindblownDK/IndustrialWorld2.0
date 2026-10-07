@@ -235,20 +235,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 return radialUp * clamp(height * tide * SeaAmp(), -0.2, 0.2) * shoreAtten;
             }
 
-            float3 FlowMappedNormal(float2 worldXZ, float2 flowDir, float flowSpeed, float t)
+            float3 FlowMappedNormal(float2 uv, float2 flowDir, float flowSpeed, float t)
             {
-                float2 dir = flowDir; float speed = length(dir);
-                dir = speed > 0.001f ? normalize(dir) : float2(0.04, 0.03);
-                float flowTime = t * (0.35 + speed * 1.5);
-                float2 uv1 = worldXZ * 0.14 + dir * flowTime * 0.8;
-                float2 uv2 = worldXZ * 0.38 + dir * flowTime * 0.5 + float2(5.3, 7.1);
-                float2 uv3 = worldXZ * 0.85 - dir * flowTime * 0.3;
-                float h  = FBM(uv1 * 4.0) * 0.50 + FBM(uv2 * 6.0) * 0.35 + FBM(uv3 * 10.0) * 0.15;
-                float eps = 0.05;
-                float hx = FBM((uv1 + float2(eps, 0)) * 4.0) * 0.50 + FBM((uv2 + float2(eps, 0)) * 6.0) * 0.35 + FBM((uv3 + float2(eps, 0)) * 10.0) * 0.15;
-                float hz = FBM((uv1 + float2(0, eps)) * 4.0) * 0.50 + FBM((uv2 + float2(0, eps)) * 6.0) * 0.35 + FBM((uv3 + float2(0, eps)) * 10.0) * 0.15;
-                float strength = _NormalScale * (1.0 + speed * _FlowNormalStrength * 2.0);
-                return normalize(float3((h - hx) * strength, 1.0, (h - hz) * strength));
+                float2 p = uv - flowDir * t * 0.12;
+                float a = dot(p,float2(0.35,0.17))+t*0.6;
+                float b = dot(p,float2(-0.19,0.42))-t*0.45;
+                float2 slope = float2(cos(a)*0.35-cos(b)*0.19,cos(a)*0.17+cos(b)*0.42);
+                return normalize(float3(-slope.x*_NormalScale*0.14,1,-slope.y*_NormalScale*0.14));
             }
 
             V2F vert(A2V i)
@@ -263,33 +256,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float tideMask = i.color.g;
                 float shoreAtten = saturate(shoreDepthMask * (_ShoreBlendDistance / max(_ShoreBlendDistance, 0.0001)));
 
-                if (topFacing > 0.15)
-                {
-                    float t = _Time.y;
-                    float deepAmp = _DeepWaveAmplitude * topFacing;
-                    float3 flatW = 0;
-                    float seaAmpF = SeaAmp();
-                    float seaSpeedF = SeaSpeed();
-                    float seaChopF = SeaChop(_WaveChop);
-                    float2 windXZ = _WeatherWindDirWS.xz;
-                    windXZ = dot(windXZ, windXZ) > 0.0001 ? normalize(windXZ) : float2(1.0, 0.0);
-
-                    flatW += Gerstner(worldPos.xz, SeaDir(float2( 1.00,  0.23), windXZ), deepAmp * seaAmpF, _DeepWaveFrequency, _DeepWaveSpeed * seaSpeedF, seaChopF, t);
-                    flatW += Gerstner(worldPos.xz, SeaDir(float2(-0.42,  0.91), windXZ), _SecondaryWaveAmplitude * seaAmpF, _SecondaryWaveFrequency, _SecondaryWaveSpeed * seaSpeedF, seaChopF, t);
-                    flatW += Gerstner(worldPos.xz, SeaDir(float2( 0.18, -0.98), windXZ), _SecondaryWaveAmplitude * 0.45 * seaAmpF, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9 * seaSpeedF, seaChopF, t);
-                    float3 planetW = PlanetWave(worldPos, radialUp, i.uv2, deepAmp, shoreAtten, tideMask, t);
-                    float3 w = lerp(flatW, planetW, _PlanetWaveBlend);
-                    worldPos += w;
-                }
-
-                // Wake displacement stays deliberately subtle; foam carries most of the
-                // readable boat trail while this keeps the surface tied to radial planet up.
-                float wakeDisplacement = NativeWakeFoam(worldPos, radialUp);
-                worldPos += radialUp * wakeDisplacement * 0.055;
-
+                // Topology is voxel-owned. Per-triangle depth and normals MUST NOT move
+                // duplicate edge vertices apart; surface motion is normal-only.
                 o.posWS  = worldPos;
                 o.posCS  = TransformWorldToHClip(worldPos);
-                o.normWS = NativeWaterUp(worldPos);
+                o.normWS = TransformObjectToWorldNormal(i.normOS);
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
                 o.flowUV = i.uv2;
@@ -327,13 +298,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                 // -- Fine ripple layer (9.16.0): a tighter animated noise octave riding on
                 // the detail normal so every liquid reads as textured, never as glass. --
                 float2 ripBase = surfUV * _DetailScale + float2(t * 0.34, -t * 0.21);
-                float ripA  = FBM6(ripBase);
-                float ripBx = FBM6(ripBase + float2(0.06 * _DetailScale, 0.0));
-                float ripBz = FBM6(ripBase + float2(0.0, 0.06 * _DetailScale));
-                float3 rippleN = normalize(float3((ripA - ripBx) * _DetailStrength * 1.6,
-                                                   1.0,
-                                                   (ripA - ripBz) * _DetailStrength * 1.6));
-                N = normalize(N + (tanA * rippleN.x + tanB * rippleN.z) * _DetailStrength * 0.35);
                 if (isSideFace) N = geoN;
 
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
@@ -356,7 +320,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 waterCol.rgb = lerp(waterCol.rgb, waterCol.rgb * float3(0.82, 0.92, 1.08), tidalTint);
                 // -- Colour patchiness (9.16.0): slow large-scale brightness variation so
                 // broad surfaces never look like one flat fill. --
-                waterCol.rgb *= 1.0 + (FBM6(surfUV * 0.07 + t * 0.02) - 0.5) * _Patchiness;
+                waterCol.rgb *= 1.0 + (FBM(surfUV * 0.07) - 0.5) * min(_Patchiness,0.12);
 
                 float validDepth = step(0.05, depthDiff);
                 float shoreFoamFade = saturate(1.0 - depthDiff / (_ShoreFoamWidth * 0.7));
@@ -381,7 +345,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 H = normalize(V + L);
                 float specBroad = pow(saturate(dot(N, H)), lerp(80.0, 900.0, _Gloss)) * 0.7;
                 float specTight = pow(saturate(dot(N, H)), 2400.0) * 1.2;
-                float glitterMask = pow(saturate(FBM6(surfUV * 2.8 + t * 0.15)), 8.0);
+                float glitterMask = 0.0;
                 float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5 * _SparkleStrength;
                 float sssWrap = pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);

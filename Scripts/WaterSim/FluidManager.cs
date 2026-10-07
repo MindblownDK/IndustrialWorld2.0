@@ -41,6 +41,8 @@ namespace VoxelEngine.WaterSim
         private readonly Queue<Vector3Int> _workQueue = new();
         private float _timer;
         private int _simulationStep;
+        private int _tickRemaining;
+        private static readonly Unity.Profiling.ProfilerMarker StepMarker = new("Voxel.FluidStep");
 
         // Compute Volumetric Layer
         private ComputeShader _fluidSimShader;
@@ -227,7 +229,7 @@ namespace VoxelEngine.WaterSim
         public void RegisterSpring(Vector3Int worldVoxel) => _springs.Add(worldVoxel);
 
         /// <summary>Forget every spring (world/body switch).</summary>
-        public void ClearSprings() { _springs.Clear(); _springScratch.Clear(); _springCursor = 0; _activeChunks.Clear(); _workQueue.Clear(); ConservativeFluidSolver.Reset(); }
+        public void ClearSprings() { _springs.Clear(); _springScratch.Clear(); _springCursor = 0; _activeChunks.Clear(); _workQueue.Clear(); ConservativeFluidSolver.Reset(); _tickRemaining = 0; _timer = 0; }
 
         private void RefillSprings(IVoxelWorld world)
         {
@@ -259,7 +261,7 @@ namespace VoxelEngine.WaterSim
 
                 FluidMaterialUtility.SetLiquid(ref v, VoxelEngine.Items.LiquidType.Water, 255);
                 world.SetVoxelWorld(s, v, remesh: false);
-                chunk.isDirty = true;
+                // Liquid state does not invalidate the terrain mesh.
                 MarkActive(chunkCoord);
                 WaterMeshBuilder.Schedule(chunk);
                 budget--;
@@ -268,36 +270,28 @@ namespace VoxelEngine.WaterSim
 
         private void Update()
         {
-            _timer += Time.deltaTime;
-            float interval = 1f / Mathf.Max(0.1f, tickRate);
-            if (_timer < interval) return;
-            _timer -= interval;
-
             var world = ActiveWorld.Current;
             if (world == null) return;
-
-            RefillSprings(world);
-
-            int budget = maxChunksPerTick;
-            int processed = 0;
-            int simulationStep = ++_simulationStep;
-
-            int queueSize = _workQueue.Count;
-            for (int q = 0; q < queueSize && processed < budget; q++)
+            _timer += Time.deltaTime;
+            float interval = 1f / Mathf.Max(0.1f, tickRate);
+            if (_tickRemaining <= 0 && _timer >= interval)
             {
-                var coord = _workQueue.Dequeue();
-                if (!world.TryGetChunk(coord, out var chunk) || !chunk.isGenerated)
-                {
-                    _activeChunks.Remove(coord);
-                    continue;
-                }
-
-                if (StepChunkNow(world, coord, chunk, simulationStep))
-                    _workQueue.Enqueue(coord);   // still flowing — keep it hot
-                else
-                    _activeChunks.Remove(coord);  // settled — sleep until woken by an edit
-
-                processed++;
+                _timer = Mathf.Min(_timer - interval, interval);
+                RefillSprings(world);
+                _simulationStep++;
+                _tickRemaining = Mathf.Min(maxChunksPerTick, _workQueue.Count);
+            }
+            if (_tickRemaining <= 0 || _workQueue.Count == 0) { _tickRemaining = 0; return; }
+            // One chunk per rendered frame, never an eight-chunk catch-up burst. Simulation
+            // falls behind wall time under load rather than freezing input to catch up.
+            _tickRemaining--;
+            var coord = _workQueue.Dequeue();
+            if (!world.TryGetChunk(coord, out var chunk) || !chunk.isGenerated)
+            { _activeChunks.Remove(coord); return; }
+            using (StepMarker.Auto())
+            {
+                if (StepChunkNow(world, coord, chunk, _simulationStep)) _workQueue.Enqueue(coord);
+                else _activeChunks.Remove(coord);
             }
         }
 
@@ -316,7 +310,7 @@ namespace VoxelEngine.WaterSim
 
             if (didChange)
             {
-                chunk.isDirty = true;
+                // Liquid state does not invalidate the terrain mesh.
                 WakeNeighbour(world, coord + new Vector3Int(1, 0, 0));
                 WakeNeighbour(world, coord + new Vector3Int(-1, 0, 0));
                 WakeNeighbour(world, coord + new Vector3Int(0, 0, 1));

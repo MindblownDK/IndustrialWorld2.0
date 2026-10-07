@@ -155,6 +155,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Repair planet landscapes (16.0.0 fresh worlds)", () => IndustrialWorld.EditorTools.PlanetLandscapeSetup.Run()),
                 Setup("Build named terrain PBR texture library", () => TerrainTextureLibrarySetup.Run()),
                 Setup("Validate conservative fluid transfers", () => FluidConservationValidation.Run()),
+                Setup("Validate snapshot liquid surfaces", () => VoxelEngine.EditorTools.SurfaceRegressionValidation.Run()),
                 Setup("Initialize atmosphere and space profiles", BuildAtmosphereSpaceProfiles),
                 Setup("Author planet skies and space ambiance", BuildPlanetSkyProfiles),
                 Setup("Author black hole and quasar remnants", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52()),

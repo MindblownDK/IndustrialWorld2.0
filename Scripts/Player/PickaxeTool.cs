@@ -63,11 +63,14 @@ namespace VoxelEngine.Player
             }
 
             Vector3 point = mine
-                ? hit.point - ray.direction.normalized * 0.2f
+                ? hit.point + ray.direction.normalized * 0.35f
                 : hit.point + hit.normal * 0.2f;
 
             if (mine)
+            {
+                VoxelEditor.TryResolveMiningPoint(world, hit.point, hit.normal, ray.direction, out point);
                 VoxelEditor.Subtract(world, registry, point, brushRadius, strength);
+            }
             else
                 VoxelEditor.Add(world, registry, point, brushRadius, strength, buildMaterial);
 

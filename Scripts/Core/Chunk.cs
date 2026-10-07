@@ -36,6 +36,8 @@ namespace VoxelEngine.Core
         // with queued work so an old queue entry can never generate/mesh a later coordinate
         // after fast movement has recycled the same Chunk object.
         public int streamEpoch;
+        public int terrainRevision;
+        public int terrainMeshRevision;
 
         public VoxelEngine.Fluids.FluidGrid fluidGrid;
         public VoxelEngine.Fluids.OilGrid oilGrid;      // lazy-allocated when oil is placed
