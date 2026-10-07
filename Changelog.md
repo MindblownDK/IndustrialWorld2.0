@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.71.0-dev`
+**Current Version:** `14.72.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.72.0-dev] Scatter, Sorted
+
+**Biome scatter is now folder-driven and designer-owned: every prefab added beneath a biome's custom scatter folder can be synchronized through one centralized Setup Wizard action, while environment, enemy, passive and building spawns remain separately editable and pollution-aware.**
+
+#### Added
+- **Folder-to-biome scatter synchronization.** The new centralized `Sync custom scatter folders to biome categories` action scans every `Assets/VoxelEngineAssets/Scatter/<Biome>` folder and attaches all prefab assets to the matching `Biome_<Name>` definition. Nested non-category folders remain environment scatter, so existing collections such as `Tundra/snow` work without restructuring.
+- **Four explicit biome scatter categories.** `BiomeDefinition` now exposes Environment Scatter, Enemy Spawns, Passive Spawns and Building Spawns as independent arrays. The synchronization action also creates `Enemies`, `Passive` and `Buildings` subfolders under every biome folder for future drag-and-drop authoring.
+- **Safe category migration.** Existing livestock, rideable animals, hostile creatures and ruins are recognized from their prefab components and moved out of legacy environment scatter without changing their authored density, scale or height range. Missing prefab references left by retired procedural assets are removed.
+- **Sensible first-time defaults.** Newly discovered environment assets receive biome-aware densities; enemies default to `0.001`, passive creatures to `0.003`, and buildings to `0.00008`. Defaults apply only when a prefab has no existing entry.
+
+#### Changed
+- **Scatter tuning is designer-owned.** Re-running custom scatter synchronization, celestial-world setup, livestock setup, enemy setup or ruin setup never overwrites an existing entry's density, scale or height values. Different prefab assets remain separate entries even when their visuals are duplicates.
+- **Create All Assets no longer makes placeholder nature.** The base setup action no longer creates `Cactus`, procedural rocks, Oak/Pine/Dead trees or their generated materials, and no longer replaces biome scatter arrays. Custom assets under the biome folders are now the sole base-world scenery source.
+- **Themed placeholders live with their biomes.** All 21 generated themed-world placeholder prefabs and materials moved from the generic `ThemedWorlds` folder into Acid Bog, Crystal Geode, Desolate Wastes, Frozen Glacier, Greek Marble, Lunar Highlands, Martian Dust, Ocean Shelf, Pirate Scrap, Venusian Ash and Volcanic Basalt. They remain fallback assets that can coexist with custom replacements.
+- **All four categories use the existing deterministic scatter budget.** Rare buildings receive first claim on a surface candidate, environment follows, then host-authoritative enemies and passive creatures. Clients rely on `HostileSync` and `AnimalSync` replicas rather than creating local biome populations.
+- **Pollution remains category-aware.** Living custom flora and GPU grass lose density/vitality under air and runoff pressure, passive-category density follows body habitability and pollution, enemy-category density rises with hostile pressure, and building scatter remains unaffected.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.72.0-dev`.
 
 ### [14.71.0-dev] Worlds That Breathe
 

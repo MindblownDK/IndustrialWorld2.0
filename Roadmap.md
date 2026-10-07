@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.71.0-dev`
-**Roadmap Version:** `14.71.0-dev`
+**Current Version:** `14.72.0-dev`
+**Roadmap Version:** `14.72.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.72.0-dev - Scatter, Sorted
+- Biome-folder prefabs synchronize into independent environment, enemy, passive and building scatter categories
+- Re-runnable centralized setup preserves existing entry tuning and gives defaults only to newly discovered prefabs
+- Generated base nature is retired while themed placeholders move into their owning biome folders
+
 ### 14.71.0-dev - Worlds That Breathe
 - Canonical biomes gain 21 setup-authored identity props through the existing deterministic spherical scatter pass
 - Reversible local ecology pressure suppresses living flora and compatible livestock while raising capped host-authoritative hostile cadence
@@ -48,12 +53,6 @@
 - Persistent runoff/soil-water cells, rain wash transfer, lateral seepage, slow recovery and host/client telemetry are active
 - Pollution Harvester extracts runoff into Remediation Sludge; water pumps expose quality and capped contamination throughput loss
 - Emissions panels collapse into a foldout; Logistics Map includes toggleable placed-building footprints and dual air/runoff overlays
-
-### 14.67.0-dev - Weathering the Load
-- Local Logistics Map uses a spherical tangent frame and cached analytic terrain/biome raster beneath its optional pollution layer
-- Machine panels and setup-authored block tooltips report SI PM-equivalent emissions; routed maritime exhaust is aggregated at the engine
-- Orbital pollution bands/readouts, capped pollution-weather feedback, clearer forecast probabilities and lighter cloud coverage are live
-- Carbon Concentrate conversion is player-facing as Carbon to Graphite with internal IDs unchanged
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

@@ -29,10 +29,25 @@ MonoBehaviour:
   subsurfaceDepth: 8
   allowBeach: 0
   isOceanic: 0
-  scatter:
-  - prefab: {fileID: 7563350559415239235, guid: 0ad3dd8ecfd74224fb28e6d23d8db195, type: 3}
-    density: 0.05
-    minScale: 0.7
-    maxScale: 1.8
+  scatter: []
+  enemyScatter:
+  - prefab: {fileID: 7705280374425304022, guid: 2678b42cb8900b04691194c213471487, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
     minHeight: 0
     maxHeight: 9999
+  passiveScatter:
+  - prefab: {fileID: 5419255512880390965, guid: 3417898b3d43f1d43b799c2c422b4be9, type: 3}
+    density: 0.003
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 6336955043505880145, guid: 73785e1aa7f10fb46a448571b6e8106e, type: 3}
+    density: 0.003
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  buildingScatter: []

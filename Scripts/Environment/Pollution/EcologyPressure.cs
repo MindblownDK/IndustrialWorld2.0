@@ -90,9 +90,10 @@ namespace VoxelEngine.Environment
         {
             if (prefab == null) return false;
             string name = prefab.name.ToLowerInvariant();
-            if (ContainsAny(name, "dead", "dry", "rock", "boulder", "stone", "ruin",
+            if (ContainsAny(name, "dead", "dry", "fallen", "rock", "boulder", "stone", "ruin",
                     "scrap", "crystal", "spire", "basalt", "vent", "marble", "ice"))
                 return false;
+            if (prefab.GetComponentInChildren<VoxelEngine.Trees.Tree>(true) != null) return true;
             return ContainsAny(name, "tree", "cactus", "shrub", "bush", "reed",
                 "fern", "fung", "moss", "palm", "cypress", "flora", "plant");
         }

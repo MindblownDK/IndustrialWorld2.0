@@ -30,13 +30,28 @@ MonoBehaviour:
   allowBeach: 0
   isOceanic: 0
   scatter:
-  - prefab: {fileID: 6499093662100146665, guid: 8b49f90b024f7d04886fe1a182dbb5c2, type: 3}
-    density: 1e-20
-    minScale: 1.1
-    maxScale: 1.6
+  - prefab: {fileID: 6015121966796815854, guid: 80efa04011f40fd4badec50464898d4a, type: 3}
+    density: 0.065
+    minScale: 0.75
+    maxScale: 1.65
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 2210946415882263544, guid: 3a29967c1fc7a4a4996b94a99572b505, type: 3}
+  - prefab: {fileID: 5718565879783103294, guid: bf375d132201a35429e4c12d4e05a20f, type: 3}
+    density: 0.025
+    minScale: 0.55
+    maxScale: 1.15
+    minHeight: 0
+    maxHeight: 9999
+  enemyScatter:
+  - prefab: {fileID: 7705280374425304022, guid: 82449220531b9d647b0bcb4310f78be1, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  passiveScatter: []
+  buildingScatter:
+  - prefab: {fileID: 3914609699023085981, guid: 6874c61d3e268104891a80315f3cb837, type: 3}
     density: 1e-20
     minScale: 1.1
     maxScale: 1.6
@@ -48,21 +63,15 @@ MonoBehaviour:
     maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 3914609699023085981, guid: 6874c61d3e268104891a80315f3cb837, type: 3}
+  - prefab: {fileID: 2210946415882263544, guid: 3a29967c1fc7a4a4996b94a99572b505, type: 3}
     density: 1e-20
     minScale: 1.1
     maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 6015121966796815854, guid: 80efa04011f40fd4badec50464898d4a, type: 3}
-    density: 0.065
-    minScale: 0.75
-    maxScale: 1.65
-    minHeight: 0
-    maxHeight: 9999
-  - prefab: {fileID: 5718565879783103294, guid: bf375d132201a35429e4c12d4e05a20f, type: 3}
-    density: 0.025
-    minScale: 0.55
-    maxScale: 1.15
+  - prefab: {fileID: 6499093662100146665, guid: 8b49f90b024f7d04886fe1a182dbb5c2, type: 3}
+    density: 1e-20
+    minScale: 1.1
+    maxScale: 1.6
     minHeight: 0
     maxHeight: 9999

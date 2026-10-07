@@ -150,6 +150,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Author or repair the Earth planet template", () => VoxelEngine.EditorTools.CosmosAuthoring.AuthorEarthTemplate()),
                 Setup("Build celestial ruins", BuildCelestialRuinsContent),
                 Setup("Build celestial worlds, themed biomes and Sol registration", BuildCelestialWorldsContent),
+                Setup("Sync custom scatter folders to biome categories", () => VoxelEngine.EditorTools.CustomBiomeScatterSetup.Run()),
                 Setup("Initialize atmosphere and space profiles", BuildAtmosphereSpaceProfiles),
                 Setup("Author planet skies and space ambiance", BuildPlanetSkyProfiles),
                 Setup("Author black hole and quasar remnants", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52()),
@@ -573,63 +574,11 @@ namespace VoxelEngine.EditorTools
             MakeBiome("Mountains",  new Color(0.55f,0.55f,0.60f),  0.20f,0.70f, 0.20f,0.85f,  4,  35f, 60f, 0.015f, 0.85f,MaterialId.Stone,   1, MaterialId.Stone,   8, false, false);
             MakeBiome("SnowyPeaks", new Color(0.95f,0.97f,1.00f),  0.00f,0.25f, 0.30f,0.85f,  5,  45f, 65f, 0.014f, 0.90f,MaterialId.Ice,     2, MaterialId.Stone,   8, false, false);
 
-            // --- Scatter prefabs (procedural, share materials so GPU Resident Drawer batches them) ---
-            string scatterFolder = ASSET_ROOT + "/Scatter";
-            if (!AssetDatabase.IsValidFolder(scatterFolder))
-                AssetDatabase.CreateFolder(ASSET_ROOT, "Scatter");
-
-            Material trunkMat   = MakeColoredMat(scatterFolder, "Mat_Trunk",   new Color(0.30f,0.20f,0.10f));
-            Material leafMatA   = MakeColoredMat(scatterFolder, "Mat_LeafOak", new Color(0.18f,0.45f,0.20f));
-            Material leafMatB   = MakeColoredMat(scatterFolder, "Mat_LeafPine",new Color(0.10f,0.32f,0.18f));
-            Material rockMat    = MakeColoredMat(scatterFolder, "Mat_Rock",    new Color(0.50f,0.48f,0.46f));
-            Material cactusMat  = MakeColoredMat(scatterFolder, "Mat_Cactus",  new Color(0.30f,0.55f,0.32f));
-            Material deadMat    = MakeColoredMat(scatterFolder, "Mat_DeadWood",new Color(0.42f,0.30f,0.22f));
-            Material snowRock   = MakeColoredMat(scatterFolder, "Mat_SnowRock",new Color(0.85f,0.88f,0.92f));
-
-            GameObject treeOak    = MakeTreePrefab(scatterFolder, "Tree_Oak",    trunkMat,  leafMatA, 1.0f, 1.6f, false);
-            GameObject treePine   = MakeTreePrefab(scatterFolder, "Tree_Pine",   trunkMat,  leafMatB, 1.4f, 1.0f, true);
-            GameObject treeDead   = MakeTreePrefab(scatterFolder, "Tree_Dead",   deadMat,   deadMat,  1.1f, 0.4f, false);
-            GameObject rockSmall  = MakeRockPrefab(scatterFolder, "Rock_Small",  rockMat,   0.6f);
-            GameObject rockLarge  = MakeRockPrefab(scatterFolder, "Rock_Large",  rockMat,   1.6f);
-            GameObject cactus     = MakeCactusPrefab(scatterFolder, "Cactus",    cactusMat);
-            GameObject snowRockGo = MakeRockPrefab(scatterFolder, "Rock_Snow",   snowRock, 1.0f);
-
-            // Helper to apply scatter entries to a named biome.
-            void Apply(string biomeName, params BiomeDefinition.ScatterEntry[] entries)
-            {
-                foreach (var b in biomeRegistry.biomes)
-                    if (b.biomeName == biomeName) { b.scatter = entries; EditorUtility.SetDirty(b); break; }
-            }
-
-            Apply("Forest",
-                new BiomeDefinition.ScatterEntry { prefab = treeOak,   density = 0.10f, minScale = 0.9f, maxScale = 1.5f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = treePine,  density = 0.04f, minScale = 1.0f, maxScale = 1.8f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = rockSmall, density = 0.02f, minScale = 0.5f, maxScale = 1.2f, minHeight = 0,   maxHeight = 9999 });
-
-            Apply("Plains",
-                new BiomeDefinition.ScatterEntry { prefab = treeOak,   density = 0.012f,minScale = 0.8f, maxScale = 1.3f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = rockSmall, density = 0.006f,minScale = 0.4f, maxScale = 1.0f, minHeight = 0,   maxHeight = 9999 });
-
-            Apply("Wasteland",
-                new BiomeDefinition.ScatterEntry { prefab = treeDead,  density = 0.03f, minScale = 0.8f, maxScale = 1.4f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = rockLarge, density = 0.02f, minScale = 0.7f, maxScale = 1.6f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = rockSmall, density = 0.04f, minScale = 0.4f, maxScale = 1.1f, minHeight = 0,   maxHeight = 9999 });
-
-            Apply("Desert",
-                new BiomeDefinition.ScatterEntry { prefab = cactus,    density = 0.02f, minScale = 0.8f, maxScale = 1.5f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = rockSmall, density = 0.01f, minScale = 0.4f, maxScale = 0.9f, minHeight = 0,   maxHeight = 9999 });
-
-            Apply("Tundra",
-                new BiomeDefinition.ScatterEntry { prefab = treePine,  density = 0.015f,minScale = 0.7f, maxScale = 1.2f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = snowRockGo,density = 0.03f, minScale = 0.5f, maxScale = 1.4f, minHeight = 0,   maxHeight = 9999 });
-
-            Apply("Mountains",
-                new BiomeDefinition.ScatterEntry { prefab = rockLarge, density = 0.04f, minScale = 0.8f, maxScale = 2.0f, minHeight = 0,   maxHeight = 9999 },
-                new BiomeDefinition.ScatterEntry { prefab = treePine,  density = 0.01f, minScale = 0.7f, maxScale = 1.2f, minHeight = 0,   maxHeight = 200  });
-
-            Apply("SnowyPeaks",
-                new BiomeDefinition.ScatterEntry { prefab = snowRockGo,density = 0.05f, minScale = 0.7f, maxScale = 1.8f, minHeight = 0,   maxHeight = 9999 });
-
+            // Scatter is designer-owned. Create All Assets deliberately does not generate
+            // cactus/rock/tree prefabs or their materials and never rewrites ScatterEntry
+            // values. Add prefabs beneath Scatter/<Biome> (or its category folders), then
+            // run Worlds, Biomes & Space -> Sync custom scatter folders to biome categories.
+            EnsureFolder(ASSET_ROOT + "/Scatter");
             EditorUtility.SetDirty(biomeRegistry);
 
             // --- Planet ---
@@ -5621,47 +5570,24 @@ namespace VoxelEngine.EditorTools
                     foreach (var biome in br.biomes)
                     {
                         if (biome == null) continue;
-                        bool isTarget = biome.biomeName == "Wasteland" || biome.biomeName == "Plains" || biome.biomeName == "Steppes" || biome.biomeName == "Desert" || biome.biomeName == "Forest" || biome.biomeName == "Beach";
+                        bool isTarget = biome.biomeName == "Wasteland" || biome.biomeName == "Plains"
+                            || biome.biomeName == "Steppes" || biome.biomeName == "Desert"
+                            || biome.biomeName == "Forest" || biome.biomeName == "Beach";
                         if (!isTarget) continue;
-                        var existing = biome.scatter != null ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter) : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                        // Avoid duplicating ruins if already present
-                        bool hasRuin = false;
-                        foreach (var e in existing) if (e.prefab != null && e.prefab.name.Contains("Ruin_")) { hasRuin = true; break; }
-                        if (hasRuin)
-                        {
-                            // Re-run: sync existing ruin scatter density to the current rare value.
-                            for (int ri = 0; ri < existing.Count; ri++)
-                            {
-                                var e = existing[ri];
-                                if (e.prefab == ruinWarehouse || e.prefab == ruinFactory || e.prefab == ruinBunker)
-                                {
-                                    e.density = 0.00008f;
-                                    existing[ri] = e;
-                                }
-                            }
-                            biome.scatter = existing.ToArray();
-                            EditorUtility.SetDirty(biome);
-                            continue;
-                        }
-                        // PREMIUM RARE — easy numbers to tweak (user request: not 0.005(something) confusing)
-                        // User said WAYYYY too frequent at 0.0085, then 0.002 still too frequent.
-                        // Now VERY RARE: 0.0008 = 0.08% per surface voxel = ~1 ruin per 6-8 chunks.
-                        // To make rarer: lower to 0.0004, to make more common: raise to 0.0015
-                        // EASY NUMBERS: 0.0008, 0.0005, 0.0006 — simple, readable, no 0.005(x) confusion
-                        const float RUIN_DENSITY_WAREHOUSE = 0.00008f; // rare (~1 per 50+ chunks)
-                        const float RUIN_DENSITY_FACTORY = 0.00008f;   // rare
-                        const float RUIN_DENSITY_BUNKER = 0.00008f;    // rare
-                        if (ruinWarehouse != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = RUIN_DENSITY_WAREHOUSE, minScale = 1.2f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
-                        if (ruinFactory != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = RUIN_DENSITY_FACTORY, minScale = 1.3f, maxScale = 1.8f, minHeight = 0, maxHeight = 9999 });
-                        if (ruinBunker != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = RUIN_DENSITY_BUNKER, minScale = 1.1f, maxScale = 1.5f, minHeight = 0, maxHeight = 9999 });
-                        biome.scatter = existing.ToArray();
-                        EditorUtility.SetDirty(biome);
+
+                        const float RuinDensity = 0.00008f;
+                        VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                            VoxelEngine.EditorTools.BiomeScatterCategory.Buildings,
+                            ruinWarehouse, RuinDensity, 1.2f, 1.6f);
+                        VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                            VoxelEngine.EditorTools.BiomeScatterCategory.Buildings,
+                            ruinFactory, RuinDensity, 1.3f, 1.8f);
+                        VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                            VoxelEngine.EditorTools.BiomeScatterCategory.Buildings,
+                            ruinBunker, RuinDensity, 1.1f, 1.5f);
                     }
                     EditorUtility.SetDirty(br);
-                    Debug.Log("[VoxelEngineSetup] Crusader ruins injected/synced — rare density 0.00008 (~1 per 50+ chunks).");
+                    Debug.Log("[VoxelEngineSetup] Crusader ruins linked to Building Spawns; existing scatter tuning preserved.");
                 }
             }
             catch (System.Exception ex) { Debug.LogWarning("[VoxelEngineSetup] Ruins biome injection failed: " + ex.Message); }
@@ -6479,7 +6405,7 @@ root =>
                 "OK");
         }
 
-        // ===== Procedural scatter-prefab helpers =====
+        // ===== Shared setup material helper =====
         private static Material MakeColoredMat(string folder, string name, Color c)
         {
             EnsureFolder(folder);
@@ -6497,98 +6423,6 @@ root =>
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", c);
             AssetDatabase.CreateAsset(material, path);
             return material;
-        }
-
-        private static GameObject MakeTreePrefab(string folder, string name, Material trunkMat, Material leafMat,
-                                                 float trunkHeight, float leafSize, bool conifer)
-        {
-            var root = new GameObject(name);
-            // Trunk
-            var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            trunk.name = "Trunk";
-            trunk.transform.SetParent(root.transform, false);
-            trunk.transform.localScale    = new Vector3(0.4f, trunkHeight, 0.4f);
-            trunk.transform.localPosition = new Vector3(0, trunkHeight, 0);
-            trunk.GetComponent<Renderer>().sharedMaterial = trunkMat;
-            Object.DestroyImmediate(trunk.GetComponent<Collider>());
-
-            // Foliage
-            if (conifer)
-            {
-                for (int i = 0; i < 3; i++)
-                {
-                    var cone = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    cone.name = $"Leaves_{i}";
-                    cone.transform.SetParent(root.transform, false);
-                    float s = leafSize * (1.4f - i * 0.35f);
-                    cone.transform.localScale    = new Vector3(s, 0.6f, s);
-                    cone.transform.localPosition = new Vector3(0, trunkHeight * 1.6f + i * 1.0f, 0);
-                    cone.GetComponent<Renderer>().sharedMaterial = leafMat;
-                    Object.DestroyImmediate(cone.GetComponent<Collider>());
-                }
-            }
-            else
-            {
-                var leaves = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                leaves.name = "Leaves";
-                leaves.transform.SetParent(root.transform, false);
-                leaves.transform.localScale    = Vector3.one * leafSize * 2.4f;
-                leaves.transform.localPosition = new Vector3(0, trunkHeight * 2.0f + 0.6f, 0);
-                leaves.GetComponent<Renderer>().sharedMaterial = leafMat;
-                Object.DestroyImmediate(leaves.GetComponent<Collider>());
-            }
-
-            string path = $"{folder}/{name}.prefab";
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-            Object.DestroyImmediate(root);
-            return prefab;
-        }
-
-        private static GameObject MakeRockPrefab(string folder, string name, Material mat, float size)
-        {
-            var root = new GameObject(name);
-            var rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            rock.name = "Rock";
-            rock.transform.SetParent(root.transform, false);
-            rock.transform.localScale    = new Vector3(size * 1.0f, size * 0.7f, size * 1.2f);
-            rock.transform.localRotation = Quaternion.Euler(Random.Range(-15f,15f), Random.Range(0f,360f), Random.Range(-15f,15f));
-            rock.transform.localPosition = new Vector3(0, size * 0.3f, 0);
-            rock.GetComponent<Renderer>().sharedMaterial = mat;
-            Object.DestroyImmediate(rock.GetComponent<Collider>());
-
-            string path = $"{folder}/{name}.prefab";
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-            Object.DestroyImmediate(root);
-            return prefab;
-        }
-
-        private static GameObject MakeCactusPrefab(string folder, string name, Material mat)
-        {
-            var root = new GameObject(name);
-            var stem = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            stem.name = "Stem";
-            stem.transform.SetParent(root.transform, false);
-            stem.transform.localScale    = new Vector3(0.6f, 1.6f, 0.6f);
-            stem.transform.localPosition = new Vector3(0, 1.6f, 0);
-            stem.GetComponent<Renderer>().sharedMaterial = mat;
-            Object.DestroyImmediate(stem.GetComponent<Collider>());
-
-            for (int i = 0; i < 2; i++)
-            {
-                var arm = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                arm.name = $"Arm_{i}";
-                arm.transform.SetParent(root.transform, false);
-                arm.transform.localScale    = new Vector3(0.4f, 0.6f, 0.4f);
-                arm.transform.localPosition = new Vector3(i == 0 ? 0.5f : -0.5f, 2.0f, 0);
-                arm.transform.localRotation = Quaternion.Euler(0, 0, i == 0 ? -25f : 25f);
-                arm.GetComponent<Renderer>().sharedMaterial = mat;
-                Object.DestroyImmediate(arm.GetComponent<Collider>());
-            }
-
-            string path = $"{folder}/{name}.prefab";
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-            Object.DestroyImmediate(root);
-            return prefab;
         }
 
         private void BuildGridSystemContent()
@@ -11463,12 +11297,18 @@ root =>
             // setup-owned props are deliberately simple, low-poly silhouettes: they are cheap at
             // spherical-world scale and remain editable prefabs after generation. Existing assets
             // and materials are always preserved, including designer-authored replacements.
-            const string THEMED_SCATTER_DIR = ASSET_ROOT + "/Scatter/ThemedWorlds";
-            EnsureFolder(THEMED_SCATTER_DIR);
-
-            GameObject EnsureThemedProp(string name, string style, Color primary, Color accent)
+            // Placeholders live beside custom assets in the owning biome folder; a legacy
+            // ThemedWorlds copy is moved in-place with its GUID preserved.
+            GameObject EnsureThemedProp(string biomeFolder, string name, string style,
+                Color primary, Color accent)
             {
-                string path = $"{THEMED_SCATTER_DIR}/{name}.prefab";
+                string scatterFolder = ASSET_ROOT + "/Scatter/" + biomeFolder;
+                EnsureFolder(scatterFolder);
+                var migrated = VoxelEngine.EditorTools.CustomBiomeScatterSetup
+                    .TryMigrateThemedPlaceholder(name, biomeFolder);
+                if (migrated != null) return migrated;
+
+                string path = $"{scatterFolder}/{name}.prefab";
                 var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (existing != null) return existing;
                 if (AssetDatabase.LoadMainAssetAtPath(path) != null)
@@ -11477,8 +11317,8 @@ root =>
                     return null;
                 }
 
-                Material main = MakeColoredMat(THEMED_SCATTER_DIR, "Mat_" + name, primary);
-                Material detail = MakeColoredMat(THEMED_SCATTER_DIR, "Mat_" + name + "_Accent", accent);
+                Material main = MakeColoredMat(scatterFolder, "Mat_" + name, primary);
+                Material detail = MakeColoredMat(scatterFolder, "Mat_" + name + "_Accent", accent);
                 var root = new GameObject(name);
 
                 void Part(string partName, PrimitiveType primitive, Vector3 position,
@@ -11578,23 +11418,9 @@ root =>
             void AddScatter(BiomeDefinition biome, GameObject prefab, float density,
                 float minScale = 0.85f, float maxScale = 1.35f)
             {
-                if (biome == null || prefab == null) return;
-                var list = biome.scatter != null
-                    ? new List<BiomeDefinition.ScatterEntry>(biome.scatter)
-                    : new List<BiomeDefinition.ScatterEntry>();
-                foreach (var entry in list)
-                    if (entry.prefab == prefab) return; // preserve designer density/scale tuning
-                list.Add(new BiomeDefinition.ScatterEntry
-                {
-                    prefab = prefab,
-                    density = density,
-                    minScale = minScale,
-                    maxScale = maxScale,
-                    minHeight = 0,
-                    maxHeight = 9999
-                });
-                biome.scatter = list.ToArray();
-                EditorUtility.SetDirty(biome);
+                VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                    VoxelEngine.EditorTools.BiomeScatterCategory.Environment,
+                    prefab, density, minScale, maxScale);
             }
 
             // Create/update a themed biome: wide climate window + themed surface + ruin scatter.
@@ -11620,17 +11446,16 @@ root =>
                 {
                     b.biomeName = displayName;
                 }
-                // Scatter: non-destructive append of this world's themed ruins
-                var list = (b.scatter != null) ? new List<BiomeDefinition.ScatterEntry>(b.scatter) : new List<BiomeDefinition.ScatterEntry>();
+                // Building scatter: append missing themed ruins without touching a designer's
+                // existing density, scale or height values.
                 foreach (var rn in ruinNames)
                 {
                     var ruin = LoadRuin(rn);
                     if (ruin == null) { Debug.LogWarning($"[CelestialWorlds] Ruin prefab not found: {rn} (run Worlds, Biomes & Space -> Build celestial ruins first)"); continue; }
-                    bool has = false;
-                    foreach (var e in list) if (e.prefab == ruin) { has = true; break; }
-                    if (!has) list.Add(new BiomeDefinition.ScatterEntry { prefab = ruin, density = density, minScale = 1.1f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(b,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Buildings,
+                        ruin, density, 1.1f, 1.6f);
                 }
-                b.scatter = list.ToArray();
                 EditorUtility.SetDirty(b);
                 return b;
             }
@@ -11716,27 +11541,27 @@ root =>
             // Geological worlds remain sparse but gain recognizable silhouettes; viable worlds
             // receive native flora. Entries are append-only so a designer's density and scale
             // survive every later Setup Wizard run.
-            var lunarRock = EnsureThemedProp("Prop_LunarCraterRock", "boulder", new Color(0.38f,0.39f,0.43f), new Color(0.56f,0.57f,0.60f));
-            var marsRock = EnsureThemedProp("Prop_MartianBoulder", "boulder", new Color(0.46f,0.18f,0.09f), new Color(0.72f,0.31f,0.13f));
-            var marsShrub = EnsureThemedProp("Prop_MartianDryShrub", "shrub", new Color(0.28f,0.15f,0.08f), new Color(0.48f,0.25f,0.10f));
-            var venusVent = EnsureThemedProp("Prop_VenusSulfurVent", "vent", new Color(0.44f,0.36f,0.19f), new Color(0.88f,0.72f,0.18f));
-            var venusRock = EnsureThemedProp("Prop_VenusAshBoulder", "boulder", new Color(0.35f,0.30f,0.22f), new Color(0.62f,0.51f,0.25f));
-            var acidFungus = EnsureThemedProp("Prop_AcidGlowFungus", "fungus", new Color(0.22f,0.42f,0.16f), new Color(0.52f,0.92f,0.22f));
-            var acidReeds = EnsureThemedProp("Prop_AcidReeds", "reeds", new Color(0.18f,0.38f,0.12f), new Color(0.68f,0.84f,0.16f));
-            var pirateScrap = EnsureThemedProp("Prop_PirateScrapPile", "scrap", new Color(0.29f,0.25f,0.22f), new Color(0.62f,0.28f,0.10f));
-            var pirateRock = EnsureThemedProp("Prop_PirateErodedRock", "boulder", new Color(0.33f,0.29f,0.23f), new Color(0.49f,0.39f,0.26f));
-            var olympusCypress = EnsureThemedProp("Prop_OlympusCypress", "cypress", new Color(0.37f,0.23f,0.11f), new Color(0.13f,0.35f,0.16f));
-            var olympusMarble = EnsureThemedProp("Prop_OlympusMarbleFragments", "marble", new Color(0.82f,0.81f,0.74f), new Color(0.95f,0.92f,0.83f));
-            var iceSpire = EnsureThemedProp("Prop_IceSpire", "crystal", new Color(0.48f,0.72f,0.88f), new Color(0.78f,0.94f,1.00f));
-            var frostRock = EnsureThemedProp("Prop_FrostBoulder", "boulder", new Color(0.50f,0.62f,0.70f), new Color(0.78f,0.86f,0.91f));
-            var oceanReeds = EnsureThemedProp("Prop_OceanReeds", "reeds", new Color(0.22f,0.46f,0.25f), new Color(0.72f,0.66f,0.25f));
-            var oceanPalm = EnsureThemedProp("Prop_OceanPalm", "palm", new Color(0.42f,0.27f,0.12f), new Color(0.16f,0.52f,0.24f));
-            var desolateShrub = EnsureThemedProp("Prop_DesolateDeadShrub", "shrub", new Color(0.31f,0.23f,0.15f), new Color(0.48f,0.37f,0.24f));
-            var desolateRock = EnsureThemedProp("Prop_DesolateErodedRock", "boulder", new Color(0.40f,0.34f,0.26f), new Color(0.58f,0.48f,0.34f));
-            var basaltColumns = EnsureThemedProp("Prop_VolcanicBasaltColumns", "basalt", new Color(0.10f,0.09f,0.10f), new Color(0.24f,0.12f,0.09f));
-            var volcanicVent = EnsureThemedProp("Prop_VolcanicVent", "vent", new Color(0.14f,0.11f,0.10f), new Color(0.74f,0.18f,0.05f));
-            var crystalCluster = EnsureThemedProp("Prop_CrystalCluster", "crystal", new Color(0.30f,0.18f,0.52f), new Color(0.72f,0.48f,0.95f));
-            var crystalShard = EnsureThemedProp("Prop_CrystalShard", "crystal", new Color(0.20f,0.42f,0.58f), new Color(0.58f,0.90f,0.98f));
+            var lunarRock = EnsureThemedProp("LunarHighlands", "Prop_LunarCraterRock", "boulder", new Color(0.38f,0.39f,0.43f), new Color(0.56f,0.57f,0.60f));
+            var marsRock = EnsureThemedProp("MartianDust", "Prop_MartianBoulder", "boulder", new Color(0.46f,0.18f,0.09f), new Color(0.72f,0.31f,0.13f));
+            var marsShrub = EnsureThemedProp("MartianDust", "Prop_MartianDryShrub", "shrub", new Color(0.28f,0.15f,0.08f), new Color(0.48f,0.25f,0.10f));
+            var venusVent = EnsureThemedProp("VenusianAsh", "Prop_VenusSulfurVent", "vent", new Color(0.44f,0.36f,0.19f), new Color(0.88f,0.72f,0.18f));
+            var venusRock = EnsureThemedProp("VenusianAsh", "Prop_VenusAshBoulder", "boulder", new Color(0.35f,0.30f,0.22f), new Color(0.62f,0.51f,0.25f));
+            var acidFungus = EnsureThemedProp("AcidBog", "Prop_AcidGlowFungus", "fungus", new Color(0.22f,0.42f,0.16f), new Color(0.52f,0.92f,0.22f));
+            var acidReeds = EnsureThemedProp("AcidBog", "Prop_AcidReeds", "reeds", new Color(0.18f,0.38f,0.12f), new Color(0.68f,0.84f,0.16f));
+            var pirateScrap = EnsureThemedProp("PirateScrap", "Prop_PirateScrapPile", "scrap", new Color(0.29f,0.25f,0.22f), new Color(0.62f,0.28f,0.10f));
+            var pirateRock = EnsureThemedProp("PirateScrap", "Prop_PirateErodedRock", "boulder", new Color(0.33f,0.29f,0.23f), new Color(0.49f,0.39f,0.26f));
+            var olympusCypress = EnsureThemedProp("GreekMarble", "Prop_OlympusCypress", "cypress", new Color(0.37f,0.23f,0.11f), new Color(0.13f,0.35f,0.16f));
+            var olympusMarble = EnsureThemedProp("GreekMarble", "Prop_OlympusMarbleFragments", "marble", new Color(0.82f,0.81f,0.74f), new Color(0.95f,0.92f,0.83f));
+            var iceSpire = EnsureThemedProp("FrozenGlacier", "Prop_IceSpire", "crystal", new Color(0.48f,0.72f,0.88f), new Color(0.78f,0.94f,1.00f));
+            var frostRock = EnsureThemedProp("FrozenGlacier", "Prop_FrostBoulder", "boulder", new Color(0.50f,0.62f,0.70f), new Color(0.78f,0.86f,0.91f));
+            var oceanReeds = EnsureThemedProp("OceanShelf", "Prop_OceanReeds", "reeds", new Color(0.22f,0.46f,0.25f), new Color(0.72f,0.66f,0.25f));
+            var oceanPalm = EnsureThemedProp("OceanShelf", "Prop_OceanPalm", "palm", new Color(0.42f,0.27f,0.12f), new Color(0.16f,0.52f,0.24f));
+            var desolateShrub = EnsureThemedProp("DesolateWastes", "Prop_DesolateDeadShrub", "shrub", new Color(0.31f,0.23f,0.15f), new Color(0.48f,0.37f,0.24f));
+            var desolateRock = EnsureThemedProp("DesolateWastes", "Prop_DesolateErodedRock", "boulder", new Color(0.40f,0.34f,0.26f), new Color(0.58f,0.48f,0.34f));
+            var basaltColumns = EnsureThemedProp("VolcanicBasalt", "Prop_VolcanicBasaltColumns", "basalt", new Color(0.10f,0.09f,0.10f), new Color(0.24f,0.12f,0.09f));
+            var volcanicVent = EnsureThemedProp("VolcanicBasalt", "Prop_VolcanicVent", "vent", new Color(0.14f,0.11f,0.10f), new Color(0.74f,0.18f,0.05f));
+            var crystalCluster = EnsureThemedProp("CrystalGeode", "Prop_CrystalCluster", "crystal", new Color(0.30f,0.18f,0.52f), new Color(0.72f,0.48f,0.95f));
+            var crystalShard = EnsureThemedProp("CrystalGeode", "Prop_CrystalShard", "crystal", new Color(0.20f,0.42f,0.58f), new Color(0.58f,0.90f,0.98f));
 
             AddScatter(bMoon, lunarRock, 0.050f, 0.65f, 1.45f);
             AddScatter(bMars, marsRock, 0.065f, 0.75f, 1.65f);
@@ -12241,13 +12066,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Wasteland" && biome.biomeName != "Forest" && biome.biomeName != "Desert") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ghoul");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.005f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        prefab, 0.005f, 0.9f, 1.2f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -12449,14 +12270,10 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Forest" && biome.biomeName != "Plains" && biome.biomeName != "Steppes") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && (e.prefab.name == "Cow" || e.prefab.name == "Sheep" || e.prefab.name == "Pig"));
                     foreach (var pf in livestockPrefabs)
-                        list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = pf, density = 0.004f, minScale = 0.9f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                        VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                            VoxelEngine.EditorTools.BiomeScatterCategory.Passive,
+                            pf, 0.004f, 0.9f, 1.15f);
                 }
                 EditorUtility.SetDirty(biomeRegistry);
             }
@@ -12585,13 +12402,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Plains" && biome.biomeName != "Steppes") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Horse");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = horsePrefab, density = 0.003f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Passive,
+                        horsePrefab, 0.003f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -12749,13 +12562,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Desert" && biome.biomeName != "Wasteland") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Manticore");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = manticorePrefab, density = 0.003f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        manticorePrefab, 0.003f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -12905,13 +12714,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Mountains" && biome.biomeName != "Steppes") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Griffin");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = griffinPrefab, density = 0.0025f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        griffinPrefab, 0.0025f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -13052,13 +12857,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Steppes" && biome.biomeName != "Desert") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Karkadann");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.002f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        prefab, 0.002f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -13194,13 +12995,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Desert" && biome.biomeName != "Wasteland") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ifrit");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.002f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        prefab, 0.002f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -13337,13 +13134,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Mountains" && biome.biomeName != "Steppes") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Roc");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.0008f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        prefab, 0.0008f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -13482,13 +13275,9 @@ root =>
                 {
                     if (biome == null) continue;
                     if (biome.biomeName != "Forest" && biome.biomeName != "Steppes") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Basilisk");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.0025f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    VoxelEngine.EditorTools.CustomBiomeScatterSetup.EnsureEntry(biome,
+                        VoxelEngine.EditorTools.BiomeScatterCategory.Enemies,
+                        prefab, 0.0025f, 0.95f, 1.15f);
                 }
                 EditorUtility.SetDirty(br);
             }

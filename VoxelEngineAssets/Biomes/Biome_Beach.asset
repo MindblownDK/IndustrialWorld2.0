@@ -60,10 +60,25 @@ MonoBehaviour:
     maxScale: 1.8
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 2840626043030929448, guid: 792d4441611a9474d93007dfe984eb09, type: 3}
+  enemyScatter:
+  - prefab: {fileID: 5038194977618012362, guid: e49513e289e69ff4ca5b7b331edb7de3, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 7705280374425304022, guid: 6ecb95d81c6d58f408d5ee9e14418587, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  passiveScatter: []
+  buildingScatter:
+  - prefab: {fileID: 3989074441054824097, guid: ecc13005e189d7746b35dfc6728d6e8f, type: 3}
     density: 0.00008
-    minScale: 1.2
-    maxScale: 1.6
+    minScale: 1.1
+    maxScale: 1.5
     minHeight: 0
     maxHeight: 9999
   - prefab: {fileID: 5528508906178096084, guid: 99242c8156eabac4b8af792252a4d160, type: 3}
@@ -72,9 +87,9 @@ MonoBehaviour:
     maxScale: 1.8
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 3989074441054824097, guid: ecc13005e189d7746b35dfc6728d6e8f, type: 3}
+  - prefab: {fileID: 2840626043030929448, guid: 792d4441611a9474d93007dfe984eb09, type: 3}
     density: 0.00008
-    minScale: 1.1
-    maxScale: 1.5
+    minScale: 1.2
+    maxScale: 1.6
     minHeight: 0
     maxHeight: 9999

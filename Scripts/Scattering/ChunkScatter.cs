@@ -31,6 +31,8 @@ namespace VoxelEngine.Scattering
         private static readonly Dictionary<IChunkScatterWorld, List<Reservation>> s_reservations = new();
         private static readonly Dictionary<GameObject, bool> s_livingPrefabCache = new();
         private static readonly Dictionary<GameObject, bool> s_passivePrefabCache = new();
+        private static readonly Dictionary<GameObject, bool> s_enemyPrefabCache = new();
+        private static readonly Dictionary<GameObject, bool> s_buildingPrefabCache = new();
         private static readonly Collider[] s_overlapBuffer = new Collider[32];
 
         /// <summary>Release cached runtime reservations when a streamed world is destroyed.</summary>
@@ -112,91 +114,126 @@ namespace VoxelEngine.Scattering
                     ? SphereDensity.SampleClimate(seed, (float3)upDir)
                     : VoxelEngine.Biomes.BiomePicker.SampleClimate(seed, worldX, worldZ);
                 BiomeDefinition biome = PickBiome(registry, climate);
-                if (biome == null || biome.scatter == null || biome.scatter.Length == 0) continue;
+                if (biome == null || !HasAnyScatter(biome)) continue;
                 bool hasEcologyReading = false;
                 EcologyReading ecologyReading = default;
+                bool placed = false;
 
-                foreach (var entry in biome.scatter)
+                // Structures get first claim on a candidate so common scenery cannot hide a
+                // rare ruin. The remaining categories share the same deterministic RNG and
+                // one-result-per-surface-point budget as the original scatter array.
+                for (int categoryPass = 0; categoryPass < 4; categoryPass++)
                 {
-                    if (entry.prefab == null || entry.density <= 0f) continue;
-                    if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
-
-                    bool isLivingFlora = IsLivingFloraPrefab(entry.prefab);
-                    bool isPassiveAnimal = IsPassiveAnimalPrefab(entry.prefab);
-                    // Exposed stone is valid authored terrain on the Moon and other rocky
-                    // worlds, but it is still unsuitable soil for living flora or livestock.
-                    if (topMat == (byte)MaterialId.Stone && (isLivingFlora || isPassiveAnimal))
-                        continue;
-                    float effectiveDensity = entry.density;
-                    if (isLivingFlora || isPassiveAnimal)
+                    BiomeDefinition.ScatterEntry[] entries = categoryPass switch
                     {
-                        if (!hasEcologyReading)
+                        0 => biome.buildingScatter,
+                        1 => biome.scatter,
+                        2 => biome.enemyScatter,
+                        _ => biome.passiveScatter,
+                    };
+                    if (entries == null || entries.Length == 0) continue;
+
+                    foreach (var entry in entries)
+                    {
+                        if (entry.prefab == null || entry.density <= 0f) continue;
+                        if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
+
+                        bool isBuilding = categoryPass == 0 || IsBuildingPrefab(entry.prefab);
+                        bool isEnemy = categoryPass == 2 || IsEnemyPrefab(entry.prefab);
+                        bool isPassiveAnimal = categoryPass == 3 || IsPassiveAnimalPrefab(entry.prefab);
+                        bool isLivingFlora = !isBuilding && !isEnemy && !isPassiveAnimal
+                            && IsLivingFloraPrefab(entry.prefab);
+
+                        // Dynamic creatures are born only on the simulation owner. Clients receive
+                        // their HostileSync/AnimalSync replicas and never create a competing local
+                        // population from deterministic chunk scatter.
+                        if ((isEnemy || isPassiveAnimal)
+                            && VoxelEngine.Networking.NetworkSession.Mode
+                                == VoxelEngine.Networking.SessionMode.Client) continue;
+
+                        // Exposed stone is valid authored terrain on the Moon and other rocky
+                        // worlds, but it is still unsuitable soil for living flora or livestock.
+                        if (topMat == (byte)MaterialId.Stone && (isLivingFlora || isPassiveAnimal))
+                            continue;
+                        float effectiveDensity = entry.density;
+                        if (isLivingFlora || isPassiveAnimal || isEnemy)
                         {
-                            Transform ecologyRoot = chunk.go.transform.parent;
-                            Vector3 ecologyPosition = ecologyRoot != null
-                                ? ecologyRoot.TransformPoint(localSurface)
-                                : localSurface;
-                            ecologyReading = EcologyPressure.Sample(ecologyPosition);
-                            hasEcologyReading = true;
+                            if (!hasEcologyReading)
+                            {
+                                Transform ecologyRoot = chunk.go.transform.parent;
+                                Vector3 ecologyPosition = ecologyRoot != null
+                                    ? ecologyRoot.TransformPoint(localSurface)
+                                    : localSurface;
+                                ecologyReading = EcologyPressure.Sample(ecologyPosition);
+                                hasEcologyReading = true;
+                            }
+                            effectiveDensity *= isEnemy
+                                ? ecologyReading.HostilePressureMultiplier
+                                : isPassiveAnimal
+                                    ? ecologyReading.PassiveActivity01
+                                    : ecologyReading.FloraSpawnMultiplier;
                         }
-                        effectiveDensity *= isPassiveAnimal
-                            ? ecologyReading.PassiveActivity01
-                            : ecologyReading.FloraSpawnMultiplier;
+                        if (rng.NextFloat() > Mathf.Clamp01(effectiveDensity)) continue;
+
+                        float scale = rng.NextFloat(entry.minScale, entry.maxScale);
+                        if (scale <= 0f) continue;
+
+                        Vector3 localBodyPos = localSurface;
+                        if (!isSphere)
+                        {
+                            // Flat compatibility only. New planet work never uses this path.
+                            localBodyPos += new Vector3(rng.NextFloat(-0.4f, 0.4f), 0f, rng.NextFloat(-0.4f, 0.4f));
+                        }
+
+                        Quaternion randomYaw = isSphere
+                            ? Quaternion.AngleAxis(rng.NextFloat(0f, 360f), upDir)
+                            : Quaternion.Euler(0f, rng.NextFloat(0f, 360f), 0f);
+                        Quaternion localBodyRot = isSphere
+                            ? randomYaw * Quaternion.FromToRotation(Vector3.up, upDir)
+                            : randomYaw;
+
+                        Transform rootTransform = chunk.go.transform.parent;
+                        Vector3 worldPos = rootTransform != null ? rootTransform.TransformPoint(localBodyPos) : localBodyPos;
+                        Vector3 worldUp = rootTransform != null ? rootTransform.TransformDirection(upDir).normalized : upDir;
+                        Quaternion worldRot = rootTransform != null ? rootTransform.rotation * localBodyRot : localBodyRot;
+
+                        bool isTree = IsTreePrefab(entry.prefab);
+                        // Tree roots use a generous per-tree footprint, then reservation checks add
+                        // the two radii together. Oak/pine canopies therefore retain a visible gap
+                        // instead of merely avoiding trunk overlap.
+                        float clearRadius = isBuilding
+                            ? Mathf.Max(4f, scale * 3f)
+                            : isTree
+                                ? Mathf.Max(2.4f, scale * 2.25f)
+                                : (isEnemy || isPassiveAnimal)
+                                    ? Mathf.Max(1f, scale)
+                                    : Mathf.Max(0.55f, scale * 0.70f);
+                        if (IsBlocked(world, holder.transform, worldPos, worldUp, clearRadius)) continue;
+
+                        GameObject instance = Object.Instantiate(entry.prefab, worldPos, worldRot, holder.transform);
+                        instance.transform.localScale = Vector3.one * scale;
+                        if (isLivingFlora && instance.GetComponentInChildren<PollutionSensitiveFlora>(true) == null)
+                            instance.AddComponent<PollutionSensitiveFlora>();
+                        if (isTree && instance.GetComponentInChildren<VoxelEngine.Trees.Tree>(true) == null)
+                        {
+                            var t = instance.AddComponent<VoxelEngine.Trees.Tree>();
+                            t.maxHp = 80;
+                            t.hp = 80;
+                            t.minLogs = 2;
+                            t.maxLogs = 4;
+                        }
+                        if (instance.GetComponentInChildren<Collider>() == null)
+                        {
+                            var col = instance.AddComponent<CapsuleCollider>();
+                            col.height = isTree ? 4f : 1.5f;
+                            col.radius = isTree ? 0.6f : 0.45f;
+                            col.center = new Vector3(0f, col.height * 0.5f, 0f);
+                        }
+                        Register(world, instance, worldPos, clearRadius);
+                        placed = true;
+                        break; // one authored scatter choice per validated surface point
                     }
-                    if (rng.NextFloat() > Mathf.Clamp01(effectiveDensity)) continue;
-
-                    float scale = rng.NextFloat(entry.minScale, entry.maxScale);
-                    if (scale <= 0f) continue;
-
-                    Vector3 localBodyPos = localSurface;
-                    if (!isSphere)
-                    {
-                        // Flat compatibility only. New planet work never uses this path.
-                        localBodyPos += new Vector3(rng.NextFloat(-0.4f, 0.4f), 0f, rng.NextFloat(-0.4f, 0.4f));
-                    }
-
-                    Quaternion randomYaw = isSphere
-                        ? Quaternion.AngleAxis(rng.NextFloat(0f, 360f), upDir)
-                        : Quaternion.Euler(0f, rng.NextFloat(0f, 360f), 0f);
-                    Quaternion localBodyRot = isSphere
-                        ? randomYaw * Quaternion.FromToRotation(Vector3.up, upDir)
-                        : randomYaw;
-
-                    Transform rootTransform = chunk.go.transform.parent;
-                    Vector3 worldPos = rootTransform != null ? rootTransform.TransformPoint(localBodyPos) : localBodyPos;
-                    Vector3 worldUp = rootTransform != null ? rootTransform.TransformDirection(upDir).normalized : upDir;
-                    Quaternion worldRot = rootTransform != null ? rootTransform.rotation * localBodyRot : localBodyRot;
-
-                    bool isTree = IsTreePrefab(entry.prefab);
-                    // Tree roots use a generous per-tree footprint, then reservation checks add
-                    // the two radii together. Oak/pine canopies therefore retain a visible gap
-                    // instead of merely avoiding trunk overlap.
-                    float clearRadius = isTree
-                        ? Mathf.Max(2.4f, scale * 2.25f)
-                        : Mathf.Max(0.55f, scale * 0.70f);
-                    if (IsBlocked(world, holder.transform, worldPos, worldUp, clearRadius)) continue;
-
-                    GameObject instance = Object.Instantiate(entry.prefab, worldPos, worldRot, holder.transform);
-                    instance.transform.localScale = Vector3.one * scale;
-                    if (isLivingFlora && instance.GetComponent<PollutionSensitiveFlora>() == null)
-                        instance.AddComponent<PollutionSensitiveFlora>();
-                    if (isTree && instance.GetComponentInChildren<VoxelEngine.Trees.Tree>() == null)
-                    {
-                        var t = instance.AddComponent<VoxelEngine.Trees.Tree>();
-                        t.maxHp = 80;
-                        t.hp = 80;
-                        t.minLogs = 2;
-                        t.maxLogs = 4;
-                    }
-                    if (instance.GetComponentInChildren<Collider>() == null)
-                    {
-                        var col = instance.AddComponent<CapsuleCollider>();
-                        col.height = isTree ? 4f : 1.5f;
-                        col.radius = isTree ? 0.6f : 0.45f;
-                        col.center = new Vector3(0f, col.height * 0.5f, 0f);
-                    }
-                    Register(world, instance, worldPos, clearRadius);
-                    break; // one authored scatter choice per validated surface point
+                    if (placed) break;
                 }
             }
         }
@@ -321,10 +358,19 @@ namespace VoxelEngine.Scattering
             }
         }
 
+        private static bool HasAnyScatter(BiomeDefinition biome)
+        {
+            return biome != null
+                && ((biome.scatter != null && biome.scatter.Length > 0)
+                    || (biome.enemyScatter != null && biome.enemyScatter.Length > 0)
+                    || (biome.passiveScatter != null && biome.passiveScatter.Length > 0)
+                    || (biome.buildingScatter != null && biome.buildingScatter.Length > 0));
+        }
+
         private static bool IsTreePrefab(GameObject prefab)
         {
             if (prefab == null) return false;
-            if (prefab.GetComponent<VoxelEngine.Trees.Tree>() != null) return true;
+            if (prefab.GetComponentInChildren<VoxelEngine.Trees.Tree>(true) != null) return true;
             string name = prefab.name;
             return name.IndexOf("tree", System.StringComparison.OrdinalIgnoreCase) >= 0
                 || name.IndexOf("cypress", System.StringComparison.OrdinalIgnoreCase) >= 0
@@ -344,9 +390,41 @@ namespace VoxelEngine.Scattering
         {
             if (prefab == null) return false;
             if (s_passivePrefabCache.TryGetValue(prefab, out bool passive)) return passive;
-            passive = prefab.GetComponentInChildren<VoxelEngine.Fauna.PassiveAnimal>() != null;
+            passive = prefab.GetComponentInChildren<VoxelEngine.Fauna.PassiveAnimal>(true) != null;
             s_passivePrefabCache[prefab] = passive;
             return passive;
+        }
+
+        private static bool IsEnemyPrefab(GameObject prefab)
+        {
+            if (prefab == null) return false;
+            if (s_enemyPrefabCache.TryGetValue(prefab, out bool enemy)) return enemy;
+            enemy = false;
+            MonoBehaviour[] behaviours = prefab.GetComponentsInChildren<MonoBehaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] == null) continue;
+                System.Type type = behaviours[i].GetType();
+                if (type.Namespace == "VoxelEngine.Combat"
+                    && type.Name.StartsWith("Enemy", System.StringComparison.Ordinal))
+                {
+                    enemy = true;
+                    break;
+                }
+            }
+            s_enemyPrefabCache[prefab] = enemy;
+            return enemy;
+        }
+
+        private static bool IsBuildingPrefab(GameObject prefab)
+        {
+            if (prefab == null) return false;
+            if (s_buildingPrefabCache.TryGetValue(prefab, out bool building)) return building;
+            building = prefab.name.StartsWith("Ruin_", System.StringComparison.OrdinalIgnoreCase)
+                || prefab.GetComponentInChildren<VoxelEngine.Exploration.RuinChest>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Exploration.RuinBlockDrop>(true) != null;
+            s_buildingPrefabCache[prefab] = building;
+            return building;
         }
 
         private static bool IsLiquid(Voxel voxel)

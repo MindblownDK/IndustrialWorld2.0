@@ -30,19 +30,40 @@ MonoBehaviour:
   allowBeach: 0
   isOceanic: 0
   scatter:
-  - prefab: {fileID: 7203801512382610020, guid: 71e76c52a9c867b489d5b006f4a50373, type: 3}
-    density: 1e-20
-    minScale: 1.1
-    maxScale: 1.6
+  - prefab: {fileID: 3259577312468037132, guid: 49919ea5690990e45835c4454603c0fc, type: 3}
+    density: 0.055
+    minScale: 0.7
+    maxScale: 1.5
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 6583166903074120235, guid: e31022b7fee20cc469369b5e126cac61, type: 3}
-    density: 1e-20
-    minScale: 1.1
-    maxScale: 1.6
+  - prefab: {fileID: 6284384469533874122, guid: b282e5fb14ff86949954ee738f43fee9, type: 3}
+    density: 0.04
+    minScale: 0.7
+    maxScale: 1.45
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 5392518285401450047, guid: 6c0f9655e41b02146ace670b7aeecaa0, type: 3}
+  enemyScatter:
+  - prefab: {fileID: 5038194977618012362, guid: 7694e7d081c6ce44091664a069abd215, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 5021700051522926644, guid: 36e3d1db4c4b37a4593227619dd9efcc, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 2826208461489238046, guid: e64f3c93b4e46ca489122ec341bcaf83, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  passiveScatter: []
+  buildingScatter:
+  - prefab: {fileID: 4633750830715718623, guid: 23e67b6f8301f6c449d7974ae29792e8, type: 3}
     density: 1e-20
     minScale: 1.1
     maxScale: 1.6
@@ -54,21 +75,21 @@ MonoBehaviour:
     maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 4633750830715718623, guid: 23e67b6f8301f6c449d7974ae29792e8, type: 3}
+  - prefab: {fileID: 5392518285401450047, guid: 6c0f9655e41b02146ace670b7aeecaa0, type: 3}
     density: 1e-20
     minScale: 1.1
     maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 3259577312468037132, guid: 49919ea5690990e45835c4454603c0fc, type: 3}
-    density: 0.055
-    minScale: 0.7
-    maxScale: 1.5
+  - prefab: {fileID: 6583166903074120235, guid: e31022b7fee20cc469369b5e126cac61, type: 3}
+    density: 1e-20
+    minScale: 1.1
+    maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 6284384469533874122, guid: b282e5fb14ff86949954ee738f43fee9, type: 3}
-    density: 0.04
-    minScale: 0.7
-    maxScale: 1.45
+  - prefab: {fileID: 7203801512382610020, guid: 71e76c52a9c867b489d5b006f4a50373, type: 3}
+    density: 1e-20
+    minScale: 1.1
+    maxScale: 1.6
     minHeight: 0
     maxHeight: 9999

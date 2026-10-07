@@ -48,8 +48,21 @@ namespace VoxelEngine.Biomes
         [Header("Underwater")]
         public bool isOceanic = false;        // pull terrain below sea level
 
-        [Header("Scatter (vegetation, rocks)")]
+        [Header("Environment Scatter")]
+        [Tooltip("Vegetation, rocks and other non-structure scenery. Pollution can suppress living flora in this category.")]
         public ScatterEntry[] scatter;
+
+        [Header("Enemy Spawns")]
+        [Tooltip("Hostile prefabs. Local pollution increases their effective spawn pressure.")]
+        public ScatterEntry[] enemyScatter;
+
+        [Header("Passive Spawns")]
+        [Tooltip("Passive-animal prefabs. Body habitability and local pollution reduce their effective activity.")]
+        public ScatterEntry[] passiveScatter;
+
+        [Header("Building Spawns")]
+        [Tooltip("Ruins, camps and other authored structures. These are not modified by ecology pressure.")]
+        public ScatterEntry[] buildingScatter;
 
         [System.Serializable]
         public struct ScatterEntry

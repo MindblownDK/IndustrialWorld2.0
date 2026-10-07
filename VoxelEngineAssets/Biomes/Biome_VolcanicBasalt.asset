@@ -30,13 +30,34 @@ MonoBehaviour:
   allowBeach: 0
   isOceanic: 0
   scatter:
-  - prefab: {fileID: 1723618842616313336, guid: c94da3848e6d8364881f6d0f3ee92eb0, type: 3}
-    density: 1e-20
-    minScale: 1.1
-    maxScale: 1.6
+  - prefab: {fileID: 3616761693640461971, guid: bd3a0167aed76ab4f98738c371a17abd, type: 3}
+    density: 0.075
+    minScale: 0.65
+    maxScale: 1.55
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 9099396092878120450, guid: cacf560cc84f19a4db9ab43c7477bb3c, type: 3}
+  - prefab: {fileID: 459316252443025964, guid: 41c0c0d0267b1d54a96fa06f404a38d2, type: 3}
+    density: 0.035
+    minScale: 0.65
+    maxScale: 1.4
+    minHeight: 0
+    maxHeight: 9999
+  enemyScatter:
+  - prefab: {fileID: 5038194977618012362, guid: 51ba7987f90faa848aa3830e4aecb35a, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 5021700051522926644, guid: bebd220c3314d934683da18d024ac01b, type: 3}
+    density: 0.001
+    minScale: 0.9
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999
+  passiveScatter: []
+  buildingScatter:
+  - prefab: {fileID: 4201231751499619643, guid: 437f263aa72a39a4dab13433f735b947, type: 3}
     density: 1e-20
     minScale: 1.1
     maxScale: 1.6
@@ -48,21 +69,15 @@ MonoBehaviour:
     maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 4201231751499619643, guid: 437f263aa72a39a4dab13433f735b947, type: 3}
+  - prefab: {fileID: 9099396092878120450, guid: cacf560cc84f19a4db9ab43c7477bb3c, type: 3}
     density: 1e-20
     minScale: 1.1
     maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
-  - prefab: {fileID: 3616761693640461971, guid: bd3a0167aed76ab4f98738c371a17abd, type: 3}
-    density: 0.075
-    minScale: 0.65
-    maxScale: 1.55
-    minHeight: 0
-    maxHeight: 9999
-  - prefab: {fileID: 459316252443025964, guid: 41c0c0d0267b1d54a96fa06f404a38d2, type: 3}
-    density: 0.035
-    minScale: 0.65
-    maxScale: 1.4
+  - prefab: {fileID: 1723618842616313336, guid: c94da3848e6d8364881f6d0f3ee92eb0, type: 3}
+    density: 1e-20
+    minScale: 1.1
+    maxScale: 1.6
     minHeight: 0
     maxHeight: 9999
