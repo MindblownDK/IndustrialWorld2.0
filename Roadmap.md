@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.1-dev`
-**Roadmap Version:** `17.1.1-dev`
+**Current Version:** `17.1.2-dev`
+**Roadmap Version:** `17.1.2-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.1.2-dev - Coherent Water Crests and Softer Shores
+- Body-centred wind-aligned wave normals and phase-locked crest foam implemented
+- Fractional sea-level bank films suppressed; procedural sand relief softened
+- Unity rendering/visual acceptance open; boat wakes remain deferred
+
 ### 17.1.1-dev - Responsive Water and Restored Biomes
 - Player-edited fluid work is prioritized within the bounded one-chunk-per-frame solver
 - Bank-depth shore fade and water-mesher/solver allocation reductions implemented
@@ -48,11 +53,6 @@
 - Progressive nearest-first grass, narrow edit remesh bounds and unchanged-material fast path implemented
 - Collider-grounded new scatter and dry enemy footing implemented
 - Cached liquid halo and fallback mapping corrections implemented; Unity acceptance open
-
-### 16.0.0-dev - Regional Biomes, Named PBR and Conservative Water
-- ~~Regional mountain masks and shared temperate biome windows~~ *(16.0.0-dev)*
-- ~~Named triplanar PBR library with per-material legacy fallback~~ *(16.0.0-dev)*
-- ~~Conservative fluid transfers and world-grid liquid mesh replacement~~ *(16.0.0-dev)*
 
 
 ### Locked Decisions
@@ -83,6 +83,7 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Boat-wake visuals** (deferred 17.1.2-dev): wake shape, crest interaction, and near-shore behavior remain unchanged until the base water-flow and shoreline pass is reviewed in Unity.
 - **Auto-craft queue EDITS are host-echo, not intent-RPC** (accepted 14.43.0, narrowed 14.58.0): the simulation itself is host-only since 14.58.0, but a guest's queue/bank edit still applies locally and replicates through the seam - an edit landing in the same instant as a host convergence pass can be overwritten and needs re-doing. Cosmetic-rare; full intent conversion only if live play ever surfaces it.
 - **Storage security enforcement: host-validated since 14.57.0.** Guest container overwrites into guarded networks are checked against the Security Block rules on the host and denied writes are converged away; the per-machine UI gates remain as UX. The machine sims themselves are host-only since 14.58.0 (SimulationIsRemote gate).
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
@@ -2611,7 +2612,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## Landscape and water validation still open
-- [ ] 17.1.1-dev Unity compilation, water response/shoreline review, target-hardware FPS profiling, and fresh-seed temperate biome coverage
+- [ ] 17.1.2-dev water/shoreline visual and performance acceptance pending Unity review
+- [ ] 17.1.1-dev fresh-seed temperate biome coverage
 - [x] User Unity conservation fixture pass *(16.0.0-dev)*
 - [ ] Unity/Burst/HLSL compilation and conservation regression *(16.0.1-dev)*
 - [ ] Fresh-seed biome coverage and mountain-region review *(16.0.0-dev)*

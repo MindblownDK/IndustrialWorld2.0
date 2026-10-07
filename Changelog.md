@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.1-dev`
+**Current Version:** `17.1.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.2-dev] Coherent Water Crests and Softer Shores
+
+**Type:** PATCH — save-compatible water/sand visual polish and a shoreline scalar-field correction. No save schema, voxel format, terrain generation, liquid-transfer arithmetic, or public API changes.
+
+**GitHub title:** `[17.1.2-dev] Coherent water crests and softer shores`
+
+#### Fixed and improved
+- Native water now shades with three body-centred, wind-aligned wave bands. Moving crest foam follows the wave phases, wave normals calm near shallow banks, and shared mesh vertices remain stationary so adjacent chunks keep matching edges.
+- Coarse per-chunk solver velocity no longer steers the surface normal direction; it remains only a low-weight flow-foam cue. Fluid simulation and the existing wake system are unchanged.
+- Fractional generated ocean-water samples around the planetary sea shell are no longer promoted into isolated bank films, reducing detached shoreline fragments without altering stored water levels or transfer volume.
+- Sand and Dust ridges are now broad and consistently directional, with much less domain warp, contrast, normal relief, and grain. This directly targets the conspicuous concentric rings while retaining restrained material detail.
+- The snapshot surface fixture now checks that a fractional sea-level shoreline cell does not emit a detached bank film.
+
+#### Compatibility and validation
+- PATCH over 17.1.1-dev. Existing saves and generated terrain remain valid; terrain revision, voxel data, fluid conservation, public runtime interfaces, setup content, and boat-wake behavior are unchanged.
+- Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. Unity C#/HLSL compilation, the updated fixture, real beach/water visuals, and target-hardware FPS still need validation. User-reported FPS was great on the preceding pass; no new measurement is claimed.
+- Boat wakes are intentionally deferred to a later pass. No manual content or prefab setup is required.
 
 ### [17.1.1-dev] Responsive Water, Cleaner Shores, and Restored Biomes
 

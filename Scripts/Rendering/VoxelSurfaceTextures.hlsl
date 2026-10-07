@@ -191,27 +191,28 @@ void VsxSurface(float  matId,
     }
     else if (cls == VSX_SAND || cls == VSX_DUST)
     {
-        // Wind ripples: parallel ridges, direction meandering over a few metres.
-        float drift  = VsxBroad(p * 0.045);
-        float ang    = drift * 6.2831;
-        float2 dir   = float2(cos(ang), sin(ang));
-        float qpar   = dot(pc, dir);          // coordinate along the ripple direction
-        float warp   = VsxBroad(p * 0.35);
-        float ripple = qpar * 2.4 + warp * 3.5;
-        float rp     = sin(ripple);
-        float crest = smoothstep(0.30, 0.95, rp);
-        float trough = 1.0 - smoothstep(-0.95, -0.30, rp);
-        float gain  = (cls == VSX_SAND) ? 1.0 : 0.7;
-        albedoMul  *= 1.0 + (crest * 0.14 - trough * 0.10) * gain;
-        gradT      += dir * cos(ripple) * crest * 0.55 * gain;
-        smoothAdd  += crest * 0.06;
+        // Broad, mostly parallel wind ridges. The former per-pixel rotating bearing
+        // made closed, concentric rings; a slow bounded drift keeps dunes directional.
+        float bearingDrift = VsxBroad(p * 0.012) - 0.5;
+        float2 dir = normalize(float2(0.83, 0.56)
+            + float2(bearingDrift * 0.16, -bearingDrift * 0.12));
+        float qpar = dot(pc, dir);
+        float warp = VsxBroad(p * 0.085) - 0.5;
+        float ripple = qpar * 1.10 + warp * 1.25;
+        float rp = sin(ripple);
+        float crest = smoothstep(0.12, 0.92, rp);
+        float trough = 1.0 - smoothstep(-0.92, -0.12, rp);
+        float gain = (cls == VSX_SAND) ? 1.0 : 0.7;
+        albedoMul *= 1.0 + (crest * 0.055 - trough * 0.038) * gain;
+        gradT += dir * cos(ripple) * crest * 0.16 * gain;
+        smoothAdd += crest * 0.018;
         if (cls == VSX_DUST)
         {
             // Martian-style broad colour drift between rust tones.
             float driftCol = VsxBroad(p * 0.012);
             albedoMul *= lerp(float3(1, 1, 1), float3(1.10, 0.94, 0.80), driftCol * 0.45);
         }
-        else albedoMul *= 0.97 + 0.06 * VsxNoise3(p * 5.0);   // loose grain
+        else albedoMul *= 0.985 + 0.03 * VsxNoise3(p * 2.4);   // restrained loose grain
     }
     else if (cls == VSX_CLAY)
     {

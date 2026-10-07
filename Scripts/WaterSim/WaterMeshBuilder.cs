@@ -166,8 +166,13 @@ namespace VoxelEngine.WaterSim
                 // Mesh jobs read voxels only: concurrent main-thread reads need no Complete().
                 neighbours[x+1+3*(y+1+3*(z+1))]=c;
             }
-            var snapshot=new SmoothLiquidMesher.Snapshot { origin=chunk.coord*S, planet=world is SphereWorld,
-                velocity=ConservativeFluidSolver.GetFlow(chunk), voxels=new Voxel[H*H*H], known=new bool[H*H*H] };
+            bool planet = world is SphereWorld;
+            float seaRadius = 0f;
+            if (world is SphereWorld sphereWorld && sphereWorld.body != null)
+                seaRadius = sphereWorld.body.SeaRadius / VoxelConstants.VOXEL_SIZE;
+            var snapshot=new SmoothLiquidMesher.Snapshot { origin=chunk.coord*S, planet=planet,
+                seaRadius=seaRadius, velocity=ConservativeFluidSolver.GetFlow(chunk),
+                voxels=new Voxel[H*H*H], known=new bool[H*H*H] };
             for(int z=-2;z<=S+2;z++) for(int y=-2;y<=S+2;y++) for(int x=-2;x<=S+2;x++)
             {
                 int dx=x<0?-1:x>=S?1:0,dy=y<0?-1:y>=S?1:0,dz=z<0?-1:z>=S?1:0;

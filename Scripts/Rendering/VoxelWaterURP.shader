@@ -105,7 +105,7 @@ Shader "VoxelEngine/VoxelWaterURP"
             CBUFFER_END
 
             // ── Weather → sea state (globals published by WeatherSeaState) ──
-            // 0 = glass calm, 1 = full storm sea. The swell also leans into the wind.
+            // 0 = glass calm, 1 = storm; wind bearing is projected onto each local tangent plane.
             float  _WeatherSeaState;
             float4 _WeatherWindDirWS;
 
@@ -113,15 +113,6 @@ Shader "VoxelEngine/VoxelWaterURP"
             float SeaSpeed() { return 1.0 + saturate(_WeatherSeaState) * 0.35; }   // waves run harder
             float SeaChop(float chop) { return saturate(chop * (1.0 + saturate(_WeatherSeaState) * 1.10)); }
             float SeaFoam()  { return 1.0 + saturate(_WeatherSeaState) * 1.80; }   // whitecaps
-
-            /// Blends an authored wave bearing toward the wind as the sea builds.
-            float2 SeaDir(float2 authored, float2 windDir)
-            {
-                float w = saturate(_WeatherSeaState) * 0.75;
-                float2 d = lerp(normalize(authored), windDir, w);
-                float len = length(d);
-                return len > 0.0001 ? d / len : normalize(authored);
-            }
 
 
             // Native spherical-water context + a compact wake registry. These globals are
@@ -209,41 +200,93 @@ Shader "VoxelEngine/VoxelWaterURP"
                 return saturate(foam);
             }
 
-            float3 Gerstner(float2 xz, float2 dir, float amp, float freq, float speed, float chop, float t)
+            float3 DirectionalWaveNormal(float3 surfaceCoord, float3 radialUp,
+                float geometryDepth01, float tideMask, float t,
+                out float3 waveBearing, out float crestFoam)
             {
-                dir = normalize(dir);
-                float phase = dot(xz, dir) * freq + t * speed;
-                float s, c; sincos(phase, s, c);
-                return float3(dir.x * amp * c * chop, amp * s, dir.y * amp * c * chop);
-            }
+                float seaState = saturate(_WeatherSeaState);
+                float3 globalWind = _WeatherWindDirWS.xyz;
+                float globalWindLengthSq = dot(globalWind, globalWind);
+                if (globalWindLengthSq > 0.0001)
+                    globalWind *= rsqrt(globalWindLengthSq);
+                else
+                    globalWind = normalize(float3(0.83, 0.0, 0.56));
 
-            float3 PlanetWave(float3 worldPos, float3 radialUp, float2 flow, float deepAmp, float shoreAtten, float tideMask, float t)
-            {
-                // Fixed body-centred 3D phase. Projecting the radial position on a
-                // per-vertex tangent plane collapses the coordinates and creates streaks.
-                float3 p = worldPos - _VoxelWaterBodyCenter.xyz;
-                float tide = 1.0 + tideMask * _TideStrength;
-                float3 d1 = normalize(float3(1.0, 0.23, 0.37));
-                float3 d2 = normalize(float3(-0.42, 0.61, 0.91));
-                float3 wind = _WeatherWindDirWS.xyz;
-                if (dot(wind,wind)>0.001) d1=normalize(lerp(d1,normalize(wind),saturate(_WeatherSeaState)*0.6));
-                float phase1 = dot(p,d1)*_DeepWaveFrequency + t*_DeepWaveSpeed*SeaSpeed();
-                float phase2 = dot(p,d2)*_SecondaryWaveFrequency + t*_SecondaryWaveSpeed*SeaSpeed();
-                float height = sin(phase1)*deepAmp + sin(phase2)*_SecondaryWaveAmplitude;
-                height += sin(dot(p,normalize(float3(0.7,-0.3,0.5)))*_ShallowWaveFrequency+t*_ShallowWaveSpeed)*_ShallowWaveAmplitude;
-                // Radial-only displacement keeps banks and shared intersections stable.
-                return radialUp * clamp(height * tide * SeaAmp(), -0.2, 0.2) * shoreAtten;
-            }
+                float3 projectedWind = globalWind - radialUp * dot(globalWind, radialUp);
+                float windLengthSq = dot(projectedWind, projectedWind);
+                if (windLengthSq > 0.0001)
+                    waveBearing = projectedWind * rsqrt(windLengthSq);
+                else
+                {
+                    float3 fallbackAxis = abs(radialUp.y) < 0.85
+                        ? float3(0, 1, 0) : float3(1, 0, 0);
+                    waveBearing = normalize(cross(fallbackAxis, radialUp));
+                }
 
-            float3 FlowMappedNormal(float2 uv, float2 flowDir, float flowSpeed, float t)
-            {
-                float2 p = uv - flowDir * t * 0.12;
-                float a = dot(p,float2(0.35,0.17))+t*0.6;
-                float b = dot(p,float2(-0.19,0.42))-t*0.45;
-                float c=dot(p,float2(1.7,-1.1))+t*0.8;
-                float2 slope = float2(cos(a)*0.35-cos(b)*0.19,cos(a)*0.17+cos(b)*0.42);
-                slope += cos(c)*float2(0.13,-0.09);
-                return normalize(float3(-slope.x*_NormalScale*0.28,1,-slope.y*_NormalScale*0.28));
+                // Keep phase axes body-centred (not tangent-projected positions, which
+                // collapse to zero on a sphere); project only their derivatives for normals.
+                float globalAxisBlend = smoothstep(0.82, 0.98, abs(globalWind.y));
+                float3 globalAxis = normalize(lerp(float3(0, 1, 0), float3(1, 0, 0), globalAxisBlend));
+                float3 globalCross = normalize(cross(globalAxis, globalWind));
+                float3 longWaveDir = normalize(globalWind + globalCross * 0.18);
+                float3 crossWaveDir = normalize(globalCross - globalWind * 0.20);
+                float3 detailWaveDir = normalize(globalWind * 0.82 - globalCross * 0.57);
+                float3 longTangent = longWaveDir - radialUp * dot(longWaveDir, radialUp);
+                float3 crossTangent = crossWaveDir - radialUp * dot(crossWaveDir, radialUp);
+                float3 detailTangent = detailWaveDir - radialUp * dot(detailWaveDir, radialUp);
+
+                // Deep swell dies away over the authored bank-depth range. Short waves
+                // remain, but are deliberately gentler in the last metre at the beach.
+                float shoreFadeEnd = max(0.07, _ShoreBlendDistance / 8.0);
+                float shoreWaveFade = smoothstep(0.025, shoreFadeEnd, saturate(geometryDepth01));
+                float tide = 1.0 + saturate(tideMask) * max(_TideStrength, 0.0);
+                float waveEnergy = SeaAmp() * tide;
+                float deepAmp = max(_DeepWaveAmplitude, 0.0) * waveEnergy * shoreWaveFade;
+                float crossAmp = max(_SecondaryWaveAmplitude, 0.0) * waveEnergy * shoreWaveFade;
+                float detailAmp = max(_ShallowWaveAmplitude, 0.0) * tide
+                    * (1.0 + seaState * 0.35) * lerp(0.38, 0.92, shoreWaveFade);
+
+                float deepFreq = max(_DeepWaveFrequency, 0.001);
+                float crossFreq = max(_SecondaryWaveFrequency, 0.001);
+                float detailFreq = max(_ShallowWaveFrequency, 0.001);
+                // Body-centred phases are identical on duplicated chunk-edge vertices.
+                // Minus time makes crests travel forward along the wind bearing.
+                float deepPhase = dot(surfaceCoord, longWaveDir) * deepFreq
+                    - t * max(_DeepWaveSpeed, 0.0) * SeaSpeed();
+                float crossPhase = dot(surfaceCoord, crossWaveDir) * crossFreq
+                    - t * max(_SecondaryWaveSpeed, 0.0) * SeaSpeed();
+                float detailPhase = dot(surfaceCoord, detailWaveDir) * detailFreq
+                    - t * max(_ShallowWaveSpeed, 0.0) * SeaSpeed();
+
+                float deepSin, deepCos, crossSin, crossCos, detailSin, detailCos;
+                sincos(deepPhase, deepSin, deepCos);
+                sincos(crossPhase, crossSin, crossCos);
+                sincos(detailPhase, detailSin, detailCos);
+                float chop = SeaChop(max(_WaveChop, 0.0));
+                float deepSlope = deepAmp * deepFreq
+                    * (deepCos + chop * 0.38 * (2.0 * deepCos * deepCos - 1.0));
+                float crossSlope = crossAmp * crossFreq
+                    * (crossCos + chop * 0.24 * (2.0 * crossCos * crossCos - 1.0));
+                float detailSlope = detailAmp * detailFreq
+                    * (detailCos + chop * 0.12 * (2.0 * detailCos * detailCos - 1.0));
+                float3 slope = (longTangent * deepSlope + crossTangent * crossSlope + detailTangent * detailSlope)
+                    * max(_NormalScale, 0.0);
+
+                // Keep strong authored storm values readable rather than turning them
+                // into near-vertical facets; this affects shading only, never the mesh.
+                float slopeLengthSq = dot(slope, slope);
+                float maxSlope = lerp(0.72, 1.05, seaState);
+                if (slopeLengthSq > maxSlope * maxSlope)
+                    slope *= maxSlope * rsqrt(slopeLengthSq);
+
+                float crestSignal = deepSin + 0.32 * crossSin + 0.14 * detailSin;
+                float crestThreshold = lerp(0.98, 0.58, seaState);
+                float crestMask = smoothstep(crestThreshold, crestThreshold + 0.28,
+                    crestSignal + chop * 0.12);
+                crestFoam = saturate(crestMask * lerp(0.06, 0.48, seaState) * SeaFoam())
+                    * shoreWaveFade;
+
+                return normalize(radialUp - slope);
             }
 
             V2F vert(A2V i)
@@ -256,7 +299,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float topFacing = saturate(dot(TransformObjectToWorldNormal(i.normOS), radialUp));
                 float shoreDepthMask = saturate(i.color.r);
                 float tideMask = i.color.g;
-                float shoreAtten = saturate(shoreDepthMask * (_ShoreBlendDistance / max(_ShoreBlendDistance, 0.0001)));
 
                 // Topology is voxel-owned. Per-triangle depth and normals MUST NOT move
                 // duplicate edge vertices apart; surface motion is normal-only.
@@ -293,14 +335,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 surfUV = float2(dot(surfaceCoord,float3(0.73,0.39,0.56)),dot(surfaceCoord,float3(-0.42,0.86,0.28)));
                 bool isSideFace = dot(geoN,radialUp) < 0.3;
 
-                float3 detailN = FlowMappedNormal(surfUV, flowDir, flowSpeed, t);
-                float3 worldDetailN = normalize(tanA * detailN.x + radialUp * detailN.y + tanB * detailN.z);
-                float3 N = normalize(lerp(radialUp, worldDetailN, 0.92));
-
-                // -- Fine ripple layer (9.16.0): a tighter animated noise octave riding on
-                // the detail normal so every liquid reads as textured, never as glass. --
-                float2 ripBase = surfUV * _DetailScale + float2(t * 0.34, -t * 0.21);
+                float3 waveBearing;
+                float waveCrestFoam;
+                float3 waveN = DirectionalWaveNormal(surfaceCoord, radialUp, geometryDepth01,
+                    tideMask, t, waveBearing, waveCrestFoam);
+                float3 N = normalize(lerp(radialUp, waveN, saturate(_FlowNormalStrength)));
                 if (isSideFace) N = geoN;
+                float3 detailN = normalize(float3(dot(N,tanA), dot(N,radialUp), dot(N,tanB)));
 
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
@@ -327,14 +368,16 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float validDepth = step(0.05, depthDiff);
                 float shoreFoamFade = saturate(1.0 - depthDiff / (_ShoreFoamWidth * 0.7));
                 float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * saturate(1.0 - shoreAtten) * 0.45;
-                // Whitecaps: a storm sea breaks far more often than a calm one.
-                float crestThreshold = lerp(0.62, 0.44, saturate(_WeatherSeaState));
-                float crest = saturate((FBM(surfUV * 0.25 + t * 0.08) - crestThreshold) * 3.5)
-                            * saturate(_DeepWaveAmplitude * 1.5 * SeaFoam());
-                float lace = FBM(surfUV * 0.85 + float2(t * 0.12, -t * 0.08));
-                float crestFoam = crest * lace * 0.35;
-                float flowFoam = saturate(flowSpeed - 1.2) * _FlowFoamStrength * 0.4;
-                float2 foamScrollUV = surfUV + normalize(flowDir + 0.001) * t * 0.3;
+                // Crest foam is phase-locked to the same wind-driven swell as the normals,
+                // so whitecaps travel with the waves instead of crawling as unrelated noise.
+                float crestFoam = waveCrestFoam * 0.34;
+                float2 windUV = float2(
+                    dot(waveBearing,float3(0.73,0.39,0.56)),
+                    dot(waveBearing,float3(-0.42,0.86,0.28)));
+                float2 foamScrollUV = surfUV - windUV * t * 0.18;
+                // Solver velocity remains a low-weight foam cue only. It no longer steers
+                // surface normals, avoiding chunk-sized changes in the apparent wave bearing.
+                float flowFoam = smoothstep(1.0, 2.6, flowSpeed) * _FlowFoamStrength * 0.28;
                 flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
                 float wakeFoam = NativeWakeFoam(i.posWS, radialUp);
                 float foam = saturate(shoreFoam + crestFoam + flowFoam + wakeFoam);

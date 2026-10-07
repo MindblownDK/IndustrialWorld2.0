@@ -21,6 +21,9 @@ namespace VoxelEngine.WaterSim
         {
             public Vector3Int origin;
             public bool planet;
+            // Runtime-only spherical sea reference used to keep fractional ocean edge
+            // samples from being reconstructed as detached films on the beach.
+            internal float seaRadius;
             public Voxel[] voxels;
             public bool[] known;
             public Vector3 velocity;
@@ -181,6 +184,13 @@ namespace VoxelEngine.WaterSim
         private static float Height(Snapshot snapshot, Vector3Int p)
             => snapshot.planet ? ((Vector3)(snapshot.origin+p)).magnitude : snapshot.origin.y+p.y;
 
+        private static bool IsFractionalSeaSurfaceWater(Snapshot snapshot, Vector3Int p, Voxel voxel, LiquidType liquid)
+        {
+            return liquid == LiquidType.Water && snapshot.planet && snapshot.seaRadius > 0f
+                && voxel.waterLevel < 128
+                && Mathf.Abs(Height(snapshot, p) - snapshot.seaRadius) <= 1.25f;
+        }
+
         private static float Sample(int x,int y,int z,LiquidType liquid,Snapshot snapshot,out bool wet)
         {
             Vector3Int p = new Vector3Int(x,y,z);
@@ -196,6 +206,10 @@ namespace VoxelEngine.WaterSim
                     Vector3Int np=p+new Vector3Int(dx,dy,dz);
                     Voxel n=Read(snapshot,np);
                     if(!FluidMaterialUtility.Matches(n,liquid)) continue;
+                    // Fractional generated ocean voxels sit just above the nominal sea
+                    // shell. Extrapolating their negative fill into solid bank samples
+                    // paints detached water slivers across otherwise dry beach cells.
+                    if(IsFractionalSeaSurfaceWater(snapshot,np,n,liquid)) continue;
                     Vector3 radial=snapshot.planet ? ((Vector3)(snapshot.origin+np)).normalized : Vector3.up;
                     Vector3 abs=new Vector3(Mathf.Abs(radial.x),Mathf.Abs(radial.y),Mathf.Abs(radial.z));
                     Vector3Int up=abs.x>=abs.y && abs.x>=abs.z ? new Vector3Int(radial.x>=0?1:-1,0,0)
@@ -216,9 +230,12 @@ namespace VoxelEngine.WaterSim
                     Voxel n=Read(snapshot,p+new Vector3Int(dx,dy,dz));
                     if(FluidMaterialUtility.Matches(n,liquid) && n.waterLevel>=128) resolvedSurface=true;
                 }
-                // Only isolated supported films; never lift partial shoreline cells that
-                // already have a resolvable neighbouring surface.
-                if(support.IsSolid && !resolvedSurface) value=0.01f+v.waterLevel/255f*0.04f;
+                // Keep isolated supported films for placed liquids, but do not lift the
+                // fractional generated sea shell above its waterline; that fallback makes
+                // one-cell beach fragments where no full neighbouring sample exists.
+                if(support.IsSolid && !resolvedSurface
+                    && !IsFractionalSeaSurfaceWater(snapshot,p,v,liquid))
+                    value=0.01f+v.waterLevel/255f*0.04f;
             }
             return Mathf.Abs(value)<0.00001f ? 0.00001f : value;
         }
