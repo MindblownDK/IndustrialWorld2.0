@@ -28,8 +28,8 @@ Shader "VoxelEngine/VoxelGrass"
 {
     Properties
     {
-        _BaseColor   ("Base Color (root)", Color) = (0.22, 0.40, 0.12, 1)
-        _TipColor    ("Tip Color",         Color) = (0.45, 0.65, 0.22, 1)
+        _BaseColor   ("Base Color (root)", Color) = (0.16, 0.27, 0.095, 1)
+        _TipColor    ("Tip Color",         Color) = (0.36, 0.47, 0.18, 1)
         _WindStrength ("Wind Strength",    Range(0, 1))   = 0.4
         _WindSpeed   ("Wind Speed",        Range(0, 5))   = 1.5
         _WindDir     ("Wind Direction",    Vector) = (1, 0, 0.3, 0)
@@ -130,7 +130,7 @@ Shader "VoxelEngine/VoxelGrass"
                 float heightFactor = IN.uv.y;
                 OUT.heightFactor = heightFactor;
 
-                float3 rootWS = TransformObjectToWorld(float3(IN.positionOS.x, 0.0, IN.positionOS.z));
+                float3 rootWS = TransformObjectToWorld(float3(0, 0, 0));
                 float3 worldPos = TransformObjectToWorld(IN.positionOS.xyz);
                 float3 worldNormal = TransformObjectToWorldNormal(IN.normalOS);
 
@@ -150,7 +150,7 @@ Shader "VoxelEngine/VoxelGrass"
 
                 // Per-blade phase and gust remain body-centred for stable planet wrapping.
                 float3 bodyCoord = lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
-                float phase = hash(floor(bodyCoord * 10.0)) * 6.28;
+                float phase = hash(floor((rootWS - _VoxelTerrainBodyCenter.xyz) * 10.0)) * 6.28;
                 float2 gustUV = bodyCoord.xz * _GustScale * 0.01 + _Time.y * _WindSpeed * 0.3;
                 float gust = vnoise(gustUV) * 2.0 - 1.0;
 
@@ -180,9 +180,9 @@ Shader "VoxelEngine/VoxelGrass"
 
                 // -- Colour: root-to-tip gradient, per-blade hue variation, root AO. --
                 float3 color = lerp(_BaseColor.rgb, _TipColor.rgb, heightFactor);
-                float hue = hash(floor(bodyCoord * 4.0)) - 0.5;          // stable per blade
+                float hue = hash(floor((rootWS - _VoxelTerrainBodyCenter.xyz) * 4.0)) - 0.5;          // stable per blade
                 color = lerp(color, color * float3(1.14, 1.0, 0.72), hue * 0.5);  // dry-ish / lush variation
-                color *= (0.85 + sway * 0.3);                            // gusts brighten
+                color *= 0.92;                            // gusts brighten
                 color *= 0.72 + 0.28 * heightFactor;                     // roots sit in shade
                 OUT.color = color;
 

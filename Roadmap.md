@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.74.0-dev`
-**Roadmap Version:** `14.74.0-dev`
+**Current Version:** `14.74.1-dev`
+**Roadmap Version:** `14.74.1-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.74.1-dev - Grounded Worlds, Rare Discoveries
+- Grass uses full-disk, terrain-resampled tufts and suitable clay coverage
+- Ruin placement applies one-tenth authored probability
+- Versioned landscape balancing restores active scenery without resetting later tuning
+
 ### 14.74.0-dev - Planet Ecology, Designer-Owned
 - Theme profiles own native abundance, pollution response and livestock suitability
 - Supplemental and biome-scattered Ghouls share profile habitat rules
@@ -48,11 +53,6 @@
 - Pollution-source tie-breaking uses Unity's supported entity identity API
 - Source ranking and industrial threat behaviour remain unchanged
 - The 14.73.0-dev feature compiles without the obsolete Object API
-
-### 14.73.0-dev - They Follow the Smoke
-- Active static pollution outlets attract host-authoritative Ghoul scouts to their exact machine
-- Scouts attack emitting blocks, but nearby players retain target priority and stopped sources lose the scent
-- Dedicated hosts can anchor supplemental hostile population to replicated players without a local avatar
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

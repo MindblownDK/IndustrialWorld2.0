@@ -160,6 +160,12 @@ namespace VoxelEngine.Scattering
                         if (topMat == (byte)MaterialId.Stone && (isLivingFlora || isPassiveAnimal))
                             continue;
                         float effectiveDensity = entry.density;
+                        // Ruins are discoveries, not background scenery. Apply once at runtime
+                        // so existing assets and future setup actions cannot undo the balance.
+                        bool isRuin = entry.prefab.GetComponentInChildren<VoxelEngine.Exploration.RuinChest>(true) != null
+                            || entry.prefab.GetComponentInChildren<VoxelEngine.Exploration.RuinBlockDrop>(true) != null
+                            || entry.prefab.name.StartsWith("Ruin_", System.StringComparison.OrdinalIgnoreCase);
+                        if (isRuin) effectiveDensity *= 0.10f;
                         if (isLivingFlora || isPassiveAnimal || isEnemy)
                         {
                             if (!hasEcologyReading)

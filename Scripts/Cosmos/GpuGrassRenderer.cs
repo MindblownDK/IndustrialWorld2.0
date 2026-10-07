@@ -51,13 +51,13 @@ namespace VoxelEngine.Cosmos
         public float rebuildThreshold = 12f;
 
         [Header("Density (per square metre, before quality scaling)")]
-        [Range(0f, 6f)] public float baseDensity = 2.2f;
+        [Range(0f, 6f)] public float baseDensity = 2.4f;
         [Tooltip("Maximum radial terrain samples used when rebuilding one grass field.")]
         [Range(256, 8192)] public int maxSurfaceSamples = 3600;
 
         [Header("Blade")]
-        [Range(0.1f, 2f)] public float bladeHeight = 0.65f;
-        [Range(0.02f, 0.5f)] public float bladeWidth = 0.1f;
+        [Range(0.1f, 2f)] public float bladeHeight = 0.48f;
+        [Range(0.02f, 0.5f)] public float bladeWidth = 0.045f;
         [Range(0f, 0.5f)] public float heightVariance = 0.35f;
 
         [Header("Quality Scaling")]
@@ -78,6 +78,7 @@ namespace VoxelEngine.Cosmos
         private float _lastRebuildTime;
         private float _nextEcologySample;
         private float _lastEcologyMultiplier = -1f;
+        private float _lastQualityMultiplier = -1f;
         private Color _healthyBaseColor;
         private Color _healthyTipColor;
 
@@ -93,6 +94,8 @@ namespace VoxelEngine.Cosmos
             if (body == null) body = GetComponentInParent<CelestialBody>();
             if (grassBladeMesh == null) grassBladeMesh = CreateDefaultBlade();
             if (grassMaterial == null) grassMaterial = CreateDefaultGrassMaterial();
+            else grassMaterial = new Material(grassMaterial);
+            if (grassMaterial == null) { enabled = false; return; }
             _renderParams = new RenderParams(grassMaterial);
             _renderParams.worldBounds = new Bounds(Vector3.zero, new Vector3(100000f, 100000f, 100000f)); // Prevent frustum culling from hiding the grass field
             if (grassMaterial != null)
@@ -108,6 +111,7 @@ namespace VoxelEngine.Cosmos
         private void OnDestroy()
         {
             DisposeField();
+            if (grassMaterial != null) Destroy(grassMaterial);
         }
 
         private void DisposeField()
@@ -162,6 +166,14 @@ namespace VoxelEngine.Cosmos
                 _lastRebuildPos = viewer.position;
                 _lastRebuildTime = Time.unscaledTime;
                 _built = true;
+            }
+
+            // Density preset changes must also rebuild an already populated field.
+            float qualityMultiplier = GetQualityDensityMul();
+            if (!Mathf.Approximately(_lastQualityMultiplier, qualityMultiplier))
+            {
+                _lastQualityMultiplier = qualityMultiplier;
+                _built = false;
             }
 
             // Rebuild when the viewer has moved enough.
@@ -254,8 +266,10 @@ namespace VoxelEngine.Cosmos
             int sampleBudget = Mathf.Max(256, maxSurfaceSamples);
             int budgetStep = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(
                 Mathf.PI * range * range / sampleBudget)));
-            int step = Mathf.Max(densityStep, budgetStep);
-            var candidates = new List<Matrix4x4>(sampleBudget);
+            // At least 3 m cells bound a 70 m field to about 1,800 base probes.
+            // A uniform per-cell cap fills every quadrant instead of truncating one side.
+            int step = Mathf.Max(3, Mathf.Max(densityStep, budgetStep));
+            var candidates = new List<Matrix4x4>(sampleBudget * 32);
 
             // Every candidate begins on a tangent plane around the viewer, then is projected
             // along the radial direction onto the true spherical voxel surface. This avoids
@@ -270,7 +284,8 @@ namespace VoxelEngine.Cosmos
                 if (!TryFindRadialGrassSurface(world, radial, out Vector3Int surfaceVoxel,
                         out Vector3 surfaceLocal, out Vector3 radialUpLocal, out byte surfaceMaterial))
                     continue;
-                if (surfaceMaterial != (byte)MaterialId.Grass) continue;
+                if (surfaceMaterial != (byte)MaterialId.Grass
+                    && !(surfaceMaterial == (byte)MaterialId.Clay && ecology.SupportsLivestock)) continue;
                 Vector3Int outward = surfaceVoxel + Vector3Int.RoundToInt(radialUpLocal);
                 var above = world.GetVoxelWorld(outward);
                 if (above.IsSolid || above.waterLevel > 0) continue;
@@ -278,36 +293,42 @@ namespace VoxelEngine.Cosmos
                 // Keep blades perpendicular to the planet's radial frame. Surface-net gradient
                 // estimates can tilt wildly across a Cartesian chunk seam, making grass look
                 // flat relative to world Y instead of wrapped around the sphere.
-                Vector3 terrainNormalLocal = radialUpLocal;
                 GetTangentBasis(radialUpLocal, out Vector3 localTangentA, out Vector3 localTangentB);
 
-                int bladeCount = Mathf.Max(1, Mathf.RoundToInt(density * step * step));
                 uint hash = (uint)(surfaceVoxel.x * 73856093 ^ surfaceVoxel.y * 19349663 ^ surfaceVoxel.z * 83492791);
                 var rng = new Unity.Mathematics.Random(math.max(1u, hash));
-
-                // Anchor the placement to the voxel center to prevent grass from sliding when the player moves
-                Vector3 voxelCenter = new Vector3(surfaceVoxel.x + 0.5f, surfaceVoxel.y + 0.5f, surfaceVoxel.z + 0.5f) * VoxelConstants.VOXEL_SIZE;
-                Vector3 stableSurfaceLocal = voxelCenter.sqrMagnitude > 0.0001f ? voxelCenter.normalized * surfaceLocal.magnitude : surfaceLocal;
-
-                for (int blade = 0; blade < bladeCount; blade++)
+                // Broad body-local patches, not identical evenly spaced grass cards.
+                float patch = Mathf.PerlinNoise(surfaceLocal.x * 0.045f + surfaceLocal.y * 0.019f,
+                    surfaceLocal.z * 0.045f + 41f);
+                int bladeCount = Mathf.Clamp(Mathf.RoundToInt(density * step * step
+                    * Mathf.Lerp(0.55f, 1.15f, patch)), 1, 32);
+                int tuftCount = Mathf.Max(1, Mathf.CeilToInt(bladeCount / 5f));
+                for (int tuft = 0; tuft < tuftCount; tuft++)
                 {
-                    Vector3 localJitter = localTangentA * rng.NextFloat(-step * 0.5f, step * 0.5f)
-                        + localTangentB * rng.NextFloat(-step * 0.5f, step * 0.5f);
-                    // BODY-LOCAL anchor (9.18.0): world projection happens in Update, so a
-                    // floating-origin rebase can never strand blades in stale coordinates.
-                    // 9.18.2: roots are PLANTED 2 cm into the ground (the old +35 cm lift
-                    // held the whole field visibly above the terrain surface).
-                    Vector3 anchorLocal = stableSurfaceLocal + localJitter - radialUpLocal * 0.02f;
-                    Quaternion rotationLocal = Quaternion.FromToRotation(Vector3.up, terrainNormalLocal);
-                    rotationLocal = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), terrainNormalLocal) * rotationLocal;
-                    float height = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
-                    candidates.Add(Matrix4x4.TRS(anchorLocal, rotationLocal, new Vector3(bladeWidth, height, 1f)));
+                    Vector3 probe = surfaceLocal + localTangentA * rng.NextFloat(-step * 0.45f, step * 0.45f)
+                        + localTangentB * rng.NextFloat(-step * 0.45f, step * 0.45f);
+                    if (!TryFindRadialGrassSurface(world, probe.normalized, out _,
+                            out Vector3 tuftSurface, out Vector3 tuftUp, out byte tuftMaterial)) continue;
+                    if (tuftMaterial != surfaceMaterial) continue;
+                    // Each tuft independently rejects water and newly occupied ground.
+                    Vector3Int tuftVoxel = Vector3Int.FloorToInt(tuftSurface / VoxelConstants.VOXEL_SIZE);
+                    Voxel tuftAbove = world.GetVoxelWorld(tuftVoxel + Vector3Int.RoundToInt(tuftUp));
+                    if (tuftAbove.IsSolid || tuftAbove.waterLevel > 0) continue;
+                    GetTangentBasis(tuftUp, out Vector3 tuftA, out Vector3 tuftB);
+                    for (int blade = 0; blade < 5 && tuft * 5 + blade < bladeCount; blade++)
+                    {
+                        Vector3 anchor = tuftSurface - tuftUp * 0.045f
+                            + tuftA * rng.NextFloat(-0.16f, 0.16f) + tuftB * rng.NextFloat(-0.16f, 0.16f);
+                        Quaternion rotation = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), tuftUp)
+                            * Quaternion.FromToRotation(Vector3.up, tuftUp);
+                        float height = bladeHeight * Mathf.Lerp(0.72f, 1.18f, patch)
+                            * (1f + rng.NextFloat(-heightVariance, heightVariance));
+                        candidates.Add(Matrix4x4.TRS(anchor, rotation,
+                            new Vector3(bladeWidth * rng.NextFloat(0.7f, 1.25f), height, height)));
+                    }
                 }
-
-                if (candidates.Count >= sampleBudget * 3) goto done;
             }
 
-        done:
             DisposeField();
             _instanceCount = candidates.Count;
             Debug.Log($"[Grass] blades={_instanceCount} density={density:0.00}/m2 tier={GraphicsPreset.Current} range={range:0}m");
@@ -367,7 +388,7 @@ namespace VoxelEngine.Cosmos
             int q = QualitySettings.GetQualityLevel();
             // 0-1 = Low, 2-3 = Mid, 4 = High, 5 = Ultra.
             int idx = q <= 1 ? 0 : q <= 3 ? 1 : q == 4 ? 2 : 3;
-            if (idx < 0 || idx >= qualityDensityMul.Length) return 1f;
+            if (qualityDensityMul == null || idx < 0 || idx >= qualityDensityMul.Length) return 1f;
             return qualityDensityMul[idx];
         }
 
@@ -418,6 +439,7 @@ namespace VoxelEngine.Cosmos
             var shader = Shader.Find("VoxelEngine/VoxelGrass")
                        ?? Shader.Find("Universal Render Pipeline/Unlit")
                        ?? Shader.Find("Standard");
+            if (shader == null) return null;
             var mat = new Material(shader);
             mat.name = "Mat_Grass_Runtime";
             mat.enableInstancing = true;

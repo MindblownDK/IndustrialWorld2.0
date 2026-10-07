@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.74.0-dev`
+**Current Version:** `14.74.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.74.1-dev] Grounded Worlds, Rare Discoveries
+
+#### Fixed
+- Grass no longer exhausts its blade budget partway across the viewer disk. Bounded per-cell placement covers every quadrant instead of stopping in scan order.
+- Suitable exposed clay supports grass on livestock-compatible bodies; sand, stone and exotic surfaces remain excluded.
+- Tufts resample their own radial terrain footing and reject water/occupied ground. Narrower, shorter blades use height-scaled curvature instead of an oversized fixed-depth lean.
+- Per-blade shader phase and colour resolve from the instance root, not each vertex. Removed gust-driven colour flashing and softened the default green palette.
+- Each renderer owns its material instance so ecology/wind updates cannot alter shared authored materials. Quality-density changes now request a field rebuild.
+
+#### Balanced
+- Ruins receive 10% of their authored placement probability, including legacy environment-array entries. Authored density is not rewritten, so repeated setup does not compound rarity. Actual encounters still depend on biome, prefab count and valid footing.
+- An explicit centralized landscape-balance action raises active scenery to biome-aware density floors, restores near-zero positive scenery by request, and preserves exactly-zero disabled entries. Trees use lower floors than ground props; lunar/desolate worlds remain sparser.
+- A versioned importer marker makes balancing one-time per biome, preserving subsequent designer edits. Creature/ruin densities, scales, height limits, terrain and machine balance remain untouched.
+
+#### Validation
+- Static structural, version and whitespace checks passed. Full Unity compilation, shader validation, visual review and performance profiling remain required in the complete project.
+- Save format and runtime gameplay APIs remain unchanged. Version synchronized to 14.74.1-dev.
 
 ### [14.74.0-dev] Planet Ecology, Designer-Owned
 
