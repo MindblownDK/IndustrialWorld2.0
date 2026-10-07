@@ -326,6 +326,27 @@ namespace VoxelEngine.UI
                 || rootName.StartsWith("LedStretchGhost", System.StringComparison.Ordinal);
         }
 
+        private static string FindRuinDisplayName(Transform source)
+        {
+            Transform named = null;
+            for (Transform cursor = source; cursor != null; cursor = cursor.parent)
+            {
+                string candidate = cursor.name;
+                if (candidate.StartsWith("Ruin_", System.StringComparison.OrdinalIgnoreCase)
+                    || candidate.StartsWith("Ruin ", System.StringComparison.OrdinalIgnoreCase))
+                    named = cursor;
+                if (candidate.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    break;
+            }
+
+            string raw = (named != null ? named.name : source != null ? source.name : "Ruin")
+                .Replace("(Clone)", string.Empty).Trim();
+            if (raw.StartsWith("Ruin_", System.StringComparison.OrdinalIgnoreCase))
+                raw = raw.Substring("Ruin_".Length);
+            raw = raw.Replace('_', ' ').Trim();
+            return string.IsNullOrWhiteSpace(raw) ? "Ruin" : raw;
+        }
+
         private static bool TryResolve(RaycastHit hit, out TargetInfo info)
         {
             info = default;
@@ -358,6 +379,30 @@ namespace VoxelEngine.UI
                 info.showHealth = true;
                 info.health01 = Mathf.Clamp01(1f);
                 info.healthText = "SALVAGEABLE";
+                return true;
+            }
+
+            // Setup-authored ruins are parented beneath CosmosBootstrap at runtime. Resolve
+            // their own authored identity before the generic root fallback so that internal
+            // controller names can never leak into the player-facing inspection card.
+            var ruinChest = hit.collider.GetComponentInParent<VoxelEngine.Exploration.RuinChest>();
+            var ruinDrop = hit.collider.GetComponentInParent<VoxelEngine.Exploration.RuinBlockDrop>();
+            if (ruinChest != null || ruinDrop != null)
+            {
+                bool hasAuthoredChestName = ruinChest != null
+                    && !string.IsNullOrWhiteSpace(ruinChest.ruinName)
+                    && !string.Equals(ruinChest.ruinName, "Ruin", System.StringComparison.OrdinalIgnoreCase);
+                string ruinName = hasAuthoredChestName
+                    ? ruinChest.ruinName
+                    : FindRuinDisplayName(hit.collider.transform);
+                info.title = ruinName.ToUpperInvariant();
+                info.detail = ruinChest != null ? "RUIN CACHE" : "RUIN SALVAGE";
+                if (ruinChest != null)
+                    info.status = ruinChest.isLooted ? "Cache opened" : "Unsearched cache";
+                else if (ruinDrop.salvage != null)
+                    info.status = $"Salvage: {Mathf.Max(1, ruinDrop.count)} × {ruinDrop.salvage.displayName}";
+                else
+                    info.status = "Salvageable ruin structure";
                 return true;
             }
 
@@ -602,7 +647,9 @@ namespace VoxelEngine.UI
                 return false;
 
             string fallback = hit.collider.transform.root.name;
-            if (string.IsNullOrWhiteSpace(fallback)) return false;
+            if (string.IsNullOrWhiteSpace(fallback)
+                || fallback.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
             info.title = fallback.Replace("(Clone)", string.Empty).Trim();
             info.detail = "WORLD OBJECT";
             info.status = $"Distance: {hit.distance:0.0} m";

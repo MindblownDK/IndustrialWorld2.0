@@ -44,6 +44,8 @@ namespace VoxelEngine.UI
         private static float _zoom = 1f;
         private static Vector2 _pan;
         private static Vector3 _anchor;
+        private static CelestialBody _rememberedViewBody;
+        private static bool _hasRememberedView;
         private static bool _dragging;
         private static Vector2 _dragStart, _panStart;
 
@@ -70,7 +72,7 @@ namespace VoxelEngine.UI
         private static Vector3 _terrainAnchor;
         private static Vector2 _terrainViewCentre;
         private static Vector2 _terrainViewportSize;
-        private static float _terrainMetresPerPixel;
+        private static Vector2 _terrainCellSize;
         private static MapFrame _projectionFrame;
 
         private readonly struct MapFrame
@@ -163,8 +165,23 @@ namespace VoxelEngine.UI
 
             _canvas.RegisterCallback<WheelEvent>(e =>
             {
-                _zoom = Mathf.Clamp(_zoom * (e.delta.y > 0 ? 0.88f : 1.14f), 0.05f, 40f);
-                InvalidateView();
+                float oldZoom = Mathf.Max(0.0001f, _zoom);
+                float newZoom = Mathf.Clamp(oldZoom * (e.delta.y > 0 ? 0.88f : 1.14f),
+                    0.05f, 40f);
+                if (!Mathf.Approximately(newZoom, oldZoom))
+                {
+                    // Keep the world point under the mouse fixed. Merely changing metres per
+                    // pixel around the viewport centre made every nearby chunk appear to slide.
+                    Vector2 pointer = _canvas.WorldToLocal((Vector2)e.position);
+                    Rect viewport = _canvas.contentRect;
+                    Vector2 viewportCentre = new(viewport.width * 0.5f, viewport.height * 0.5f);
+                    Vector2 mapCentre = viewportCentre + _pan;
+                    float scaleRatio = newZoom / oldZoom;
+                    _pan += (pointer - mapCentre) * (1f - scaleRatio);
+                    _zoom = newZoom;
+                    _pointerCanvas = pointer;
+                    InvalidateView();
+                }
                 e.StopPropagation();
             });
             // Labels are positioned against the canvas rect, so a resize moves
@@ -389,11 +406,17 @@ namespace VoxelEngine.UI
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
 
-            _pan = Vector2.zero;
             Refresh();
-            FrameAll();
+            CelestialBody activeBody = GravityProvider.ActiveBody;
+            if (!_hasRememberedView || _rememberedViewBody != activeBody)
+            {
+                _pan = Vector2.zero;
+                FrameAll();
+                _rememberedViewBody = activeBody;
+                _hasRememberedView = true;
+            }
             RefreshLayerButtons();
-            InvalidateView();   // FrameAll changed the scale after Refresh painted
+            InvalidateView();   // First open/body change may have reframed the scale.
         }
 
         public static void Close()
@@ -1250,14 +1273,29 @@ namespace VoxelEngine.UI
         {
             Vector2 sizeMetres = new(viewport.width * metresPerPixel, viewport.height * metresPerPixel);
             Vector2 viewCentre = new(-_pan.x * metresPerPixel, _pan.y * metresPerPixel);
-            float cellEast = Mathf.Max(1f, sizeMetres.x * 1.25f / TerrainRasterCells);
-            float cellNorth = Mathf.Max(1f, sizeMetres.y * 1.25f / TerrainRasterCells);
-            float centreThreshold = Mathf.Max(cellEast, cellNorth) * 0.45f;
+
+            // Keep raster boundaries fixed in map metres. The old implementation derived an
+            // arbitrary new cell size and origin on every wheel step, so terrain squares slid
+            // underneath otherwise stable markers. Power-of-two cells share the same origin
+            // across detail levels and the centre only advances by whole cells while panning.
+            float cellEast = StableRasterCellSize(sizeMetres.x * 1.25f / TerrainRasterCells);
+            float cellNorth = StableRasterCellSize(sizeMetres.y * 1.25f / TerrainRasterCells);
+            float startEdgeEast = Mathf.Floor(
+                (viewCentre.x - cellEast * TerrainRasterCells * 0.5f) / cellEast) * cellEast;
+            float startEdgeNorth = Mathf.Floor(
+                (viewCentre.y - cellNorth * TerrainRasterCells * 0.5f) / cellNorth) * cellNorth;
+            float startEast = startEdgeEast + cellEast * 0.5f;
+            float startNorth = startEdgeNorth + cellNorth * 0.5f;
+            Vector2 rasterCentre = new(
+                startEdgeEast + cellEast * TerrainRasterCells * 0.5f,
+                startEdgeNorth + cellNorth * TerrainRasterCells * 0.5f);
+            Vector2 desiredCellSize = new(cellEast, cellNorth);
+            float centreThreshold = Mathf.Max(cellEast, cellNorth) * 0.1f;
             bool stale = _terrainTiles.Count == 0
                 || _terrainBody != frame.Body
                 || (_terrainAnchor - frame.Anchor).sqrMagnitude > centreThreshold * centreThreshold
-                || (_terrainViewCentre - viewCentre).sqrMagnitude > centreThreshold * centreThreshold
-                || Mathf.Abs(_terrainMetresPerPixel - metresPerPixel) > metresPerPixel * 0.12f
+                || (_terrainViewCentre - rasterCentre).sqrMagnitude > 0.01f
+                || (_terrainCellSize - desiredCellSize).sqrMagnitude > 0.01f
                 || Mathf.Abs(_terrainViewportSize.x - viewport.width) > 24f
                 || Mathf.Abs(_terrainViewportSize.y - viewport.height) > 24f;
             if (!stale) return;
@@ -1265,15 +1303,13 @@ namespace VoxelEngine.UI
             _terrainTiles.Clear();
             _terrainBody = frame.Body;
             _terrainAnchor = frame.Anchor;
-            _terrainViewCentre = viewCentre;
+            _terrainViewCentre = rasterCentre;
             _terrainViewportSize = viewport.size;
-            _terrainMetresPerPixel = metresPerPixel;
+            _terrainCellSize = desiredCellSize;
 
             float radius = Mathf.Max(100f, Vector3.Distance(frame.Anchor, frame.Body.transform.position));
             float halfEast = cellEast * 0.5f;
             float halfNorth = cellNorth * 0.5f;
-            float startEast = viewCentre.x - cellEast * (TerrainRasterCells - 1) * 0.5f;
-            float startNorth = viewCentre.y - cellNorth * (TerrainRasterCells - 1) * 0.5f;
 
             for (int y = 0; y < TerrainRasterCells; y++)
             {
@@ -1312,6 +1348,12 @@ namespace VoxelEngine.UI
                         halfEast, halfNorth, colour, ocean));
                 }
             }
+        }
+
+        private static float StableRasterCellSize(float minimumMetres)
+        {
+            minimumMetres = Mathf.Max(1f, minimumMetres);
+            return Mathf.Pow(2f, Mathf.Ceil(Mathf.Log(minimumMetres, 2f)));
         }
 
         private static void DrawPollution(Painter2D painter, Rect r, Vector2 centre,

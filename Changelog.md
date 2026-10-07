@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.1-dev`
+**Current Version:** `14.73.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.73.2-dev] Maps and Panels Stay Put
+
+#### Fixed
+- **Cursor-anchored Logistics Map zoom.** Mouse-wheel zoom now keeps the world point beneath the pointer fixed instead of scaling around the viewport centre. The current zoom, pan and map anchor remain intact when the map is closed and reopened on the same celestial body; changing bodies still frames the new local network safely.
+- **Stable terrain raster while zooming.** The local terrain backdrop now uses power-of-two world-space cells on a fixed, snapped origin. Wheel steps no longer rebuild an arbitrarily shifted tile lattice, while level changes remain aligned and panning advances the raster only by whole cells.
+- **Ruin inspection names.** Ruin caches and salvage structures resolve their authored ruin identity before generic hierarchy fallback. A `CosmosBootstrap` runtime root is rejected from the world-inspection card and can no longer appear as player-facing object text.
+- **Scrollable emissions telemetry.** Machine panels without an existing `ScrollView` are wrapped in a styled vertical scroller before the Air Emissions card is appended. Expanding the foldout now exposes a scrollbar instead of flex-shrinking and clipping the entire machine UI; fixed bezel, scanline and theme-frame decoration stays outside the scrolling body.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to patch version `14.73.2-dev`.
 
 ### [14.73.1-dev] Current Entity Identity
 

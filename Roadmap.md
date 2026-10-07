@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.73.1-dev`
-**Roadmap Version:** `14.73.1-dev`
+**Current Version:** `14.73.2-dev`
+**Roadmap Version:** `14.73.2-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.73.2-dev - Maps and Panels Stay Put
+- Logistics Map zoom follows the pointer, retains its same-body view and uses a fixed terrain-tile origin
+- Ruin inspection exposes authored ruin names and never the CosmosBootstrap runtime root
+- Expanded emissions telemetry scrolls instead of compressing or clipping machine controls
+
 ### 14.73.1-dev - Current Entity Identity
 - Pollution-source tie-breaking uses Unity's supported entity identity API
 - Source ranking and industrial threat behaviour remain unchanged
@@ -48,11 +53,6 @@
 - Canonical biomes gain 21 setup-authored identity props through the existing deterministic spherical scatter pass
 - Reversible local ecology pressure suppresses living flora and compatible livestock while raising capped host-authoritative hostile cadence
 - The optional pollution map layer reports ecology vitality, wildlife activity, hostile pressure and serious-decline alerts
-
-### 14.70.0-dev - Follow the Smoke
-- Pollution hover ranks the three largest active nearby contributors with SI air/runoff rates and honest residual-load fallback
-- Optional map alerts forecast the next body severity boundary and expose local/body air or runoff hazards
-- Severity-aware hover guidance directs air capture, runoff remediation and combined recovery at their actual operating radii
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

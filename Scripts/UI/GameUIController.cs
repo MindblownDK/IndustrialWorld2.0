@@ -1692,11 +1692,49 @@ namespace VoxelEngine.UI
             }
 
             // Machine builders generally place their scrolling content inside the panel.
-            // Appending there keeps the card reachable on smaller resolutions.
+            // Older compact panels did not; wrapping their ordinary content prevents an
+            // expanded emissions foldout from flex-shrinking every row into an unreadable
+            // stack. Decorative bezel/frame children stay fixed above the scrolling body.
             var panel = content[content.childCount - 1];
-            var scroll = panel.Q<ScrollView>();
-            if (scroll != null) scroll.Add(card);
-            else panel.Add(card);
+            ScrollView scroll = panel.Q<ScrollView>();
+            if (scroll == null) scroll = WrapMachinePanelInScrollView(panel);
+            else if (string.IsNullOrEmpty(scroll.name)) scroll.name = "MachinePanelTelemetryScroll";
+            scroll.Add(card);
+        }
+
+        private static ScrollView WrapMachinePanelInScrollView(VisualElement panel)
+        {
+            var scroll = new ScrollView(ScrollViewMode.Vertical)
+            {
+                name = "MachinePanelTelemetryScroll",
+                horizontalScrollerVisibility = ScrollerVisibility.Hidden,
+                verticalScrollerVisibility = ScrollerVisibility.Auto,
+            };
+            scroll.style.flexGrow = 1;
+            scroll.style.flexShrink = 1;
+            scroll.style.minHeight = 0;
+            UITheme.StyleScroller(scroll);
+
+            var movable = new List<VisualElement>(panel.childCount);
+            var chrome = new List<VisualElement>();
+            foreach (VisualElement child in panel.Children())
+            {
+                string childName = child.name ?? string.Empty;
+                bool panelChrome = childName == "ThemeFrame"
+                    || childName == "LcdBezelBracket"
+                    || childName == "LcdBootSweep"
+                    || childName.StartsWith("LcdScanline_", StringComparison.Ordinal);
+                if (panelChrome) chrome.Add(child);
+                else movable.Add(child);
+            }
+            for (int i = 0; i < movable.Count; i++)
+            {
+                movable[i].RemoveFromHierarchy();
+                scroll.Add(movable[i]);
+            }
+            panel.Add(scroll);
+            for (int i = 0; i < chrome.Count; i++) chrome[i].BringToFront();
+            return scroll;
         }
 
         // ── PANEL SCROLL POSITION ACROSS LIVE REBUILDS ────────────────────────
@@ -1710,14 +1748,31 @@ namespace VoxelEngine.UI
         // closing the panel) drops them so a fresh panel always starts at the top.
         private static UnityEngine.Object s_panelScrollOwner;
 
+        private UnityEngine.Object CurrentPanelScrollOwner()
+        {
+            if (_openFurnace != null) return _openFurnace;
+            if (_openElectric != null) return _openElectric;
+            if (_openCoalGen != null) return _openCoalGen;
+            if (_openGridBlock != null) return _openGridBlock;
+            if (_openOilRefinery != null) return _openOilRefinery;
+            if (_openDistillationPlant != null) return _openDistillationPlant;
+            if (_openCatalyticCracker != null) return _openCatalyticCracker;
+            if (_openFlareStack != null) return _openFlareStack;
+            if (_openChemPlant != null) return _openChemPlant;
+            return null;
+        }
+
         private void SavePanelScrollOffsets()
         {
             if (_contentLayer == null) return;
-            var owner = (UnityEngine.Object)_openGridBlock;
+            UnityEngine.Object owner = CurrentPanelScrollOwner();
             if (!System.Object.ReferenceEquals(s_panelScrollOwner, owner))
             {
                 s_panelScrollOffsets.Clear();
                 s_panelScrollOwner = owner;
+                // The mounted ScrollViews still belong to the previously rendered panel.
+                // Never attribute those offsets to the machine that is about to be built.
+                return;
             }
             foreach (var sv in _contentLayer.Query<ScrollView>().ToList())
             {
@@ -1729,7 +1784,7 @@ namespace VoxelEngine.UI
         private void RestorePanelScrollOffsets()
         {
             if (_contentLayer == null || s_panelScrollOffsets.Count == 0) return;
-            if (!System.Object.ReferenceEquals(s_panelScrollOwner, _openGridBlock)) return;
+            if (!System.Object.ReferenceEquals(s_panelScrollOwner, CurrentPanelScrollOwner())) return;
             foreach (var sv in _contentLayer.Query<ScrollView>().ToList())
             {
                 if (sv == null || string.IsNullOrEmpty(sv.name) || !s_panelScrollOffsets.ContainsKey(sv.name)) continue;
