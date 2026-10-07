@@ -18,8 +18,8 @@ namespace VoxelEngine.WaterSim
         public bool useNativeVolumetricAssist;
 
         [Header("Tuning")]
-        [Range(2f, 12f)] public float tickRate = 4f;
-        [Range(1, 12)] public int maxChunksPerTick = 2;
+        [Range(2f, 12f)] public float tickRate = 6f;
+        [Range(1, 12)] public int maxChunksPerTick = 3;
         public int computeFrameSkip = 2;
 
         private void Awake()
@@ -32,13 +32,14 @@ namespace VoxelEngine.WaterSim
 
         private void MigrateLegacyBudget()
         {
-            // Preserve authored tuning; migrate only the exact old defaults that made every
-            // active fluid chunk simulate at 8 Hz / six chunks per tick during streaming.
-            if (Mathf.Approximately(tickRate, 8f) && maxChunksPerTick == 6)
-            {
-                tickRate = 4f;
-                maxChunksPerTick = 2;
-            }
+            // Preserve authored tuning. Upgrade only the recognizable legacy defaults:
+            // 8/6 was the old burst-heavy setup; 4/2 was the previous low-throughput baseline.
+            bool oldBurstBudget = Mathf.Approximately(tickRate, 8f) && maxChunksPerTick == 6;
+            bool previousNativeBudget = Mathf.Approximately(tickRate, 4f) && maxChunksPerTick == 2;
+            if (!oldBurstBudget && !previousNativeBudget) return;
+
+            tickRate = 6f;
+            maxChunksPerTick = 3;
         }
 
         [ContextMenu("Apply Native Water Defaults")]

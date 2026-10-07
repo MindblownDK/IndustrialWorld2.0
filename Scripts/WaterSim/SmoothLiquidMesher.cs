@@ -55,6 +55,7 @@ namespace VoxelEngine.WaterSim
             var relevant = new bool[N*N*N];
             var values = new float[8]; var positions = new Vector3[8];
             var intersections = new Vector3[4];
+            var intersectionAngles = new float[4];
             for (int liquidIndex=0; liquidIndex<7; liquidIndex++)
             {
                 if (!present[liquidIndex]) continue;
@@ -101,11 +102,25 @@ namespace VoxelEngine.WaterSim
                         // Sort the planar polygon around its centre before triangulation.
                         Vector3 center=Vector3.zero;for(int j=0;j<count;j++) center+=intersections[j];center/=count;
                         Vector3 tangent=(intersections[0]-center).normalized, bitangent=Vector3.Cross(normal,tangent);
-                        for(int a=0;a<count-1;a++)for(int b=a+1;b<count;b++)
+                        for (int j = 0; j < count; j++)
                         {
-                            Vector3 da=intersections[a]-center,db=intersections[b]-center;
-                            if(Mathf.Atan2(Vector3.Dot(da,bitangent),Vector3.Dot(da,tangent))>Mathf.Atan2(Vector3.Dot(db,bitangent),Vector3.Dot(db,tangent)))
-                            {Vector3 swap=intersections[a];intersections[a]=intersections[b];intersections[b]=swap;}
+                            Vector3 delta = intersections[j] - center;
+                            intersectionAngles[j] = Mathf.Atan2(
+                                Vector3.Dot(delta, bitangent), Vector3.Dot(delta, tangent));
+                        }
+                        for (int j = 1; j < count; j++)
+                        {
+                            float angle = intersectionAngles[j];
+                            Vector3 point = intersections[j];
+                            int insert = j - 1;
+                            while (insert >= 0 && intersectionAngles[insert] > angle)
+                            {
+                                intersectionAngles[insert + 1] = intersectionAngles[insert];
+                                intersections[insert + 1] = intersections[insert];
+                                insert--;
+                            }
+                            intersectionAngles[insert + 1] = angle;
+                            intersections[insert + 1] = point;
                         }
                         int start=vertices.Count;
                         for(int j=0;j<count;j++)

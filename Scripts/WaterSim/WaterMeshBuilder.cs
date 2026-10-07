@@ -39,6 +39,7 @@ namespace VoxelEngine.WaterSim
         }
         private static readonly List<Pending> _pending = new();
         private static readonly Dictionary<Chunk,int> _queuedEpoch = new();
+        private static readonly List<Chunk> _deadChunkScratch = new();
         private static int _worldGeneration;
         private static readonly Unity.Profiling.ProfilerMarker SnapshotMarker = new("Voxel.WaterSnapshot");
         private static readonly Unity.Profiling.ProfilerMarker UploadMarker = new("Voxel.WaterUpload");
@@ -74,6 +75,7 @@ namespace VoxelEngine.WaterSim
         {
             _worldGeneration++;
             _queuedEpoch.Clear();
+            _deadChunkScratch.Clear();
             // 9.16.0 — reset the whole 7-slot registry; profiles rebuild on demand.
             for (int i = 0; i < _liquidMats.Length; i++)
             {
@@ -129,12 +131,12 @@ namespace VoxelEngine.WaterSim
             if(_pending.Count >= 2 || _queuedEpoch.Count == 0) return;
             Vector3 viewer = world.Viewer != null ? (Vector3)world.WorldToVoxel(world.Viewer.position) : Vector3.zero;
             Chunk nearest=null; float best=float.PositiveInfinity;
-            var dead = new List<Chunk>();
+            _deadChunkScratch.Clear();
             foreach(var pair in _queuedEpoch)
             {
                 Chunk c=pair.Key;
                 if(c==null || c.streamEpoch!=pair.Value || c.go==null || !c.go.activeSelf)
-                { dead.Add(c); continue; }
+                { _deadChunkScratch.Add(c); continue; }
                 if(!c.isGenerated) continue;
                 bool running=false;
                 foreach(Pending p in _pending) if(p.chunk==c && p.epoch==c.streamEpoch) { running=true; break; }
@@ -143,7 +145,7 @@ namespace VoxelEngine.WaterSim
                 if(c.waterMesh == null) distance *= 0.25f;
                 if(distance<best) { best=distance; nearest=c; }
             }
-            foreach(Chunk c in dead) _queuedEpoch.Remove(c);
+            foreach(Chunk c in _deadChunkScratch) _queuedEpoch.Remove(c);
             if(nearest==null) return;
             SmoothLiquidMesher.Snapshot snapshot;
             using(SnapshotMarker.Auto()) snapshot=Capture(world,nearest);

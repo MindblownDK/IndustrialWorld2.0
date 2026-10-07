@@ -38,7 +38,8 @@ namespace VoxelEngine.WaterSim
         private int _computeFrameCounter;
 
         private readonly HashSet<Vector3Int> _activeChunks = new();
-        private readonly Queue<Vector3Int> _workQueue = new();
+        private readonly LinkedList<Vector3Int> _workQueue = new();
+        private readonly Dictionary<Vector3Int, LinkedListNode<Vector3Int>> _queuedWork = new();
         private float _timer;
         private int _simulationStep;
         private int _tickRemaining;
@@ -205,9 +206,27 @@ namespace VoxelEngine.WaterSim
             return false;
         }
 
-        public void MarkActive(Vector3Int chunkCoord)
+        public void MarkActive(Vector3Int chunkCoord) => QueueActive(chunkCoord, urgent: false);
+
+        private void MarkUrgent(Vector3Int chunkCoord) => QueueActive(chunkCoord, urgent: true);
+
+        private void QueueActive(Vector3Int chunkCoord, bool urgent)
         {
-            if (_activeChunks.Add(chunkCoord)) _workQueue.Enqueue(chunkCoord);
+            _activeChunks.Add(chunkCoord);
+            if (_queuedWork.TryGetValue(chunkCoord, out LinkedListNode<Vector3Int> queued))
+            {
+                if (urgent && queued != _workQueue.First)
+                {
+                    _workQueue.Remove(queued);
+                    _queuedWork[chunkCoord] = _workQueue.AddFirst(chunkCoord);
+                }
+                return;
+            }
+
+            LinkedListNode<Vector3Int> node = urgent
+                ? _workQueue.AddFirst(chunkCoord)
+                : _workQueue.AddLast(chunkCoord);
+            _queuedWork.Add(chunkCoord, node);
         }
 
         // ── Mountain springs (9.6.0 — Phase 3 liquid flow) ─────────────────
@@ -229,7 +248,18 @@ namespace VoxelEngine.WaterSim
         public void RegisterSpring(Vector3Int worldVoxel) => _springs.Add(worldVoxel);
 
         /// <summary>Forget every spring (world/body switch).</summary>
-        public void ClearSprings() { _springs.Clear(); _springScratch.Clear(); _springCursor = 0; _activeChunks.Clear(); _workQueue.Clear(); ConservativeFluidSolver.Reset(); _tickRemaining = 0; _timer = 0; }
+        public void ClearSprings()
+        {
+            _springs.Clear();
+            _springScratch.Clear();
+            _springCursor = 0;
+            _activeChunks.Clear();
+            _workQueue.Clear();
+            _queuedWork.Clear();
+            ConservativeFluidSolver.Reset();
+            _tickRemaining = 0;
+            _timer = 0f;
+        }
 
         private void RefillSprings(IVoxelWorld world)
         {
@@ -262,7 +292,7 @@ namespace VoxelEngine.WaterSim
                 FluidMaterialUtility.SetLiquid(ref v, VoxelEngine.Items.LiquidType.Water, 255);
                 world.SetVoxelWorld(s, v, remesh: false);
                 // Liquid state does not invalidate the terrain mesh.
-                MarkActive(chunkCoord);
+                MarkUrgent(chunkCoord);
                 WaterMeshBuilder.Schedule(chunk);
                 budget--;
             }
@@ -281,16 +311,19 @@ namespace VoxelEngine.WaterSim
                 _simulationStep++;
                 _tickRemaining = Mathf.Min(maxChunksPerTick, _workQueue.Count);
             }
-            if (_tickRemaining <= 0 || _workQueue.Count == 0) { _tickRemaining = 0; return; }
-            // One chunk per rendered frame, never an eight-chunk catch-up burst. Simulation
-            // falls behind wall time under load rather than freezing input to catch up.
+            if (_tickRemaining <= 0 || _workQueue.First == null) { _tickRemaining = 0; return; }
+            // One chunk per rendered frame, never a catch-up burst. The priority linked list
+            // moves player-edited water to the front without duplicating queue entries.
             _tickRemaining--;
-            var coord = _workQueue.Dequeue();
+            LinkedListNode<Vector3Int> next = _workQueue.First;
+            var coord = next.Value;
+            _workQueue.RemoveFirst();
+            _queuedWork.Remove(coord);
             if (!world.TryGetChunk(coord, out var chunk) || !chunk.isGenerated)
             { _activeChunks.Remove(coord); return; }
             using (StepMarker.Auto())
             {
-                if (StepChunkNow(world, coord, chunk, _simulationStep)) _workQueue.Enqueue(coord);
+                if (StepChunkNow(world, coord, chunk, _simulationStep)) QueueActive(coord, urgent: false);
                 else _activeChunks.Remove(coord);
             }
         }
@@ -339,24 +372,29 @@ namespace VoxelEngine.WaterSim
                 Mathf.FloorToInt(centerWorldVoxel.z / (float)cs));
             // Liquid can't travel further than one chunk in a single step, so the synchronous
             // neighbourhood is clamped: 3×3×3 for normal edits, 5×5×5 for massive brushes.
+            // Insert outer rings first because urgent work is placed at the list head; the edited
+            // chunk then runs before its neighbours, while older distant flow work yields fairly.
             int chunkR = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(1, radius) / (float)cs), 1, 2);
-
-            for (int z = -chunkR; z <= chunkR; z++)
-            for (int y = -chunkR; y <= chunkR; y++)
-            for (int x = -chunkR; x <= chunkR; x++)
+            for (int ring = chunkR; ring >= 0; ring--)
+            for (int z = -ring; z <= ring; z++)
+            for (int y = -ring; y <= ring; y++)
+            for (int x = -ring; x <= ring; x++)
             {
+                if (Mathf.Max(Mathf.Abs(x), Mathf.Max(Mathf.Abs(y), Mathf.Abs(z))) != ring) continue;
                 var coord = chunkCenter + new Vector3Int(x, y, z);
                 if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) continue;
-                MarkActive(coord);
+                MarkUrgent(coord);
             }
 
             // The next regular tick fires immediately so the flow wave keeps pace with edits.
             _timer = 1f / Mathf.Max(0.1f, tickRate);
         }
 
-        private void WakeNeighbour(IVoxelWorld world, Vector3Int coord)
+        private void WakeNeighbour(IVoxelWorld world, Vector3Int coord, bool urgent = false)
         {
-            if (world.TryGetChunk(coord, out var ch) && ch.isGenerated) MarkActive(coord);
+            if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) return;
+            if (urgent) MarkUrgent(coord);
+            else MarkActive(coord);
         }
 
 
@@ -379,10 +417,13 @@ namespace VoxelEngine.WaterSim
             ch.SetVoxelLocal(lx, ly, lz, v);
             ch.isDirty = true;
             ch.isModified = true;
-            MarkActive(coord);
-            WakeNeighbour(world,coord + Vector3Int.right); WakeNeighbour(world,coord - Vector3Int.right);
-            WakeNeighbour(world,coord + Vector3Int.up); WakeNeighbour(world,coord - Vector3Int.up);
-            WakeNeighbour(world,coord + new Vector3Int(0,0,1)); WakeNeighbour(world,coord - new Vector3Int(0,0,1));
+            MarkUrgent(coord);
+            WakeNeighbour(world, coord + Vector3Int.right, urgent: true);
+            WakeNeighbour(world, coord - Vector3Int.right, urgent: true);
+            WakeNeighbour(world, coord + Vector3Int.up, urgent: true);
+            WakeNeighbour(world, coord - Vector3Int.up, urgent: true);
+            WakeNeighbour(world, coord + new Vector3Int(0, 0, 1), urgent: true);
+            WakeNeighbour(world, coord - new Vector3Int(0, 0, 1), urgent: true);
             WaterMeshBuilder.Schedule(ch);
         }
 
@@ -428,10 +469,13 @@ namespace VoxelEngine.WaterSim
             ch.SetVoxelLocal(lx, ly, lz, v);
             ch.isDirty = true;
             ch.isModified = true;
-            MarkActive(coord);
-            WakeNeighbour(world,coord + Vector3Int.right); WakeNeighbour(world,coord - Vector3Int.right);
-            WakeNeighbour(world,coord + Vector3Int.up); WakeNeighbour(world,coord - Vector3Int.up);
-            WakeNeighbour(world,coord + new Vector3Int(0,0,1)); WakeNeighbour(world,coord - new Vector3Int(0,0,1));
+            MarkUrgent(coord);
+            WakeNeighbour(world, coord + Vector3Int.right, urgent: true);
+            WakeNeighbour(world, coord - Vector3Int.right, urgent: true);
+            WakeNeighbour(world, coord + Vector3Int.up, urgent: true);
+            WakeNeighbour(world, coord - Vector3Int.up, urgent: true);
+            WakeNeighbour(world, coord + new Vector3Int(0, 0, 1), urgent: true);
+            WakeNeighbour(world, coord - new Vector3Int(0, 0, 1), urgent: true);
             WaterMeshBuilder.Schedule(ch);
             return drained;
         }

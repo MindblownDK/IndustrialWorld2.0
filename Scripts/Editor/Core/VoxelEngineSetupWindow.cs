@@ -3299,10 +3299,12 @@ namespace VoxelEngine.EditorTools
             if (performance == null) performance = bootstrap.gameObject.AddComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
             performance.renderNativeWater = true;
             performance.useNativeVolumetricAssist = false;
-            if (Mathf.Approximately(performance.tickRate, 8f) && performance.maxChunksPerTick == 6)
+            bool legacyFluidBudget = Mathf.Approximately(performance.tickRate, 8f) && performance.maxChunksPerTick == 6;
+            bool previousNativeBudget = Mathf.Approximately(performance.tickRate, 4f) && performance.maxChunksPerTick == 2;
+            if (legacyFluidBudget || previousNativeBudget)
             {
-                performance.tickRate = 4f;
-                performance.maxChunksPerTick = 2;
+                performance.tickRate = 6f;
+                performance.maxChunksPerTick = 3;
             }
 
             if (Object.FindAnyObjectByType<VoxelEngine.WaterSim.NativeWaterWakeSystem>(FindObjectsInactive.Include) == null)

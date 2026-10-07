@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.0-dev`
+**Current Version:** `17.1.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.1-dev] Responsive Water, Cleaner Shores, and Restored Biomes
+
+**Type:** PATCH — save-compatible fluid scheduling, shoreline visual polish, generation filtering, and allocation reductions. No save schema, voxel format, liquid-transfer arithmetic, or public API changes.
+
+**GitHub title:** `[17.1.1-dev] Responsive water, cleaner shores, and restored biomes`
+
+#### Fixed and improved
+- Player edits, placed/drained liquids, and spring refills now enter a deduplicated priority queue ahead of older passive flow work. The edited chunk is processed before its surrounding wake neighbourhood; the solver still processes at most one chunk per rendered frame.
+- Native water defaults move from 4 Hz / 2 chunks per tick to 6 Hz / 3 chunks per tick. Only recognized legacy defaults migrate; custom component tuning is preserved.
+- Shallow water now fades against the shore using the mesher's voxel-authored bank thickness as well as scene depth, with a nonzero opacity floor to avoid transparent pinholes when depth sampling is unavailable.
+- Temperate-world biome filtering now reserves Wasteland, Scrap, and Rust profiles for their specialized world identities. On Earth these profiles previously competed in the same dry climate window as Plains and Desert and frequently won the biome score.
+- Removed small per-step solver arrays and a repeated water-queue scratch-list allocation; polygon angle ordering now calculates each intersection angle once instead of recalculating it during every comparison.
+
+#### Compatibility and validation
+- PATCH over 17.1.0-dev. Liquid storage, transfer conservation, chunk format, terrain identity, pump/boat interfaces, and research/content assets are unchanged. Existing generated terrain is not repainted; corrected biome selection applies to newly generated chunks.
+- No Voxel Engine Setup content-authoring step is added or required. Existing world data remains loadable.
+- C# changes received local structural/whitespace checks. Unity C#/Burst/HLSL compilation, runtime water/shoreline visuals, fluid conservation after this edit, target-hardware FPS, and fresh-seed biome coverage still require Unity validation. The previously supplied validation PASS logs apply to the earlier code, not this patch; no measured FPS gain is claimed.
 
 ### [17.1.0-dev] Meadow Tufts and Water Surface Detail
 

@@ -27,18 +27,33 @@ namespace VoxelEngine.WaterSim
         {
             const int S = VoxelConstants.CHUNK_SIZE;
             bool changed = false;
-            Vector3 netFlow = Vector3.zero; int transfers = 0;
-            var dirtyNeighbours = new bool[3];
+            Vector3 netFlow = Vector3.zero;
+            int transfers = 0;
+            byte dirtyNeighbourMask = 0;
             Vector3Int origin = source.coord * S;
-            var targets = new Chunk[3];
-            for (int axisIndex = 0; axisIndex < 3; axisIndex++)
+            Chunk targetX = null;
+            Chunk targetY = null;
+            Chunk targetZ = null;
+            if (world.TryGetChunk(source.coord + Vector3Int.right, out Chunk neighbourX)
+                && neighbourX != null && neighbourX.isGenerated)
             {
-                if (world.TryGetChunk(source.coord + Axes[axisIndex], out Chunk neighbour)
-                    && neighbour != null && neighbour.isGenerated)
-                {
-                    world.CompleteGenJobForChunk(neighbour); world.CompleteMeshJobForChunk(neighbour);
-                    targets[axisIndex] = neighbour;
-                }
+                world.CompleteGenJobForChunk(neighbourX);
+                world.CompleteMeshJobForChunk(neighbourX);
+                targetX = neighbourX;
+            }
+            if (world.TryGetChunk(source.coord + Vector3Int.up, out Chunk neighbourY)
+                && neighbourY != null && neighbourY.isGenerated)
+            {
+                world.CompleteGenJobForChunk(neighbourY);
+                world.CompleteMeshJobForChunk(neighbourY);
+                targetY = neighbourY;
+            }
+            if (world.TryGetChunk(source.coord + new Vector3Int(0, 0, 1), out Chunk neighbourZ)
+                && neighbourZ != null && neighbourZ.isGenerated)
+            {
+                world.CompleteGenJobForChunk(neighbourZ);
+                world.CompleteMeshJobForChunk(neighbourZ);
+                targetZ = neighbourZ;
             }
             for (int pass = 0; pass < 3; pass++)
             {
@@ -54,7 +69,8 @@ namespace VoxelEngine.WaterSim
                     Vector3Int q = p + axis;
                     int axisIndex = (step + pass) % 3;
                     bool border = axisIndex == 0 ? x == S-1 : axisIndex == 1 ? y == S-1 : z == S-1;
-                    Chunk target = border ? targets[axisIndex] : source;
+                    Chunk boundaryTarget = axisIndex == 0 ? targetX : axisIndex == 1 ? targetY : targetZ;
+                    Chunk target = border ? boundaryTarget : source;
                     if (target == null) continue;
                     Vector3Int localQ = q - target.coord * S;
                     Voxel a = source.GetVoxelLocal(x, y, z);
@@ -75,7 +91,8 @@ namespace VoxelEngine.WaterSim
                             {
                                 WriteLiquid(world, source, x, y, z, b);
                                 WriteLiquid(world, target, localQ.x, localQ.y, localQ.z, a);
-                                if (target != source) dirtyNeighbours[axisIndex] = true; changed = true;
+                                if (target != source) dirtyNeighbourMask |= (byte)(1 << axisIndex);
+                                changed = true;
                             }
                         }
                         continue;
@@ -98,11 +115,15 @@ namespace VoxelEngine.WaterSim
                     FluidMaterialUtility.SetLiquid(ref receiver, liquid, (byte)(receiver.waterLevel + amount));
                     WriteLiquid(world, source, x, y, z, fromA ? donor : receiver);
                     WriteLiquid(world, target, localQ.x, localQ.y, localQ.z, fromA ? receiver : donor);
-                    if (target != source) dirtyNeighbours[axisIndex] = true; changed = true;
+                    if (target != source) dirtyNeighbourMask |= (byte)(1 << axisIndex);
+                    changed = true;
                 }
             }
             SetFlow(source, transfers > 0 ? netFlow / transfers * 10f : Vector3.zero);
-            for (int i=0;i<3;i++) if(dirtyNeighbours[i]) { SetFlow(targets[i], GetFlow(source)); Dirty(targets[i]); }
+            Vector3 sourceFlow = GetFlow(source);
+            if ((dirtyNeighbourMask & 1) != 0) { SetFlow(targetX, sourceFlow); Dirty(targetX); }
+            if ((dirtyNeighbourMask & 2) != 0) { SetFlow(targetY, sourceFlow); Dirty(targetY); }
+            if ((dirtyNeighbourMask & 4) != 0) { SetFlow(targetZ, sourceFlow); Dirty(targetZ); }
             if (changed) Dirty(source);
             return changed;
         }

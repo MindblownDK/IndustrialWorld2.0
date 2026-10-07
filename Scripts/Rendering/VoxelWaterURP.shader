@@ -385,6 +385,12 @@ Shader "VoxelEngine/VoxelWaterURP"
                 alpha = max(alpha, lerp(0.48, 0.94, deep01));
                 // Soft intersection, not a bright opaque jagged band at the bank.
                 alpha *= hasValidDepth ? saturate(depthDiff / 0.18) : 1.0;
+                // Scene depth can be unavailable on some render paths, so also use the
+                // voxel-authored water-to-bank thickness. Keep a visible opacity floor to
+                // avoid transparent pinholes while blending the last few metres into shore.
+                float bankFade = smoothstep(0.05, 0.35, geometryDepth01);
+                float bankOpacity = lerp(0.32, 1.0, bankFade);
+                alpha *= bankOpacity;
                 alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
 
                 col = MixFog(col, i.fog);

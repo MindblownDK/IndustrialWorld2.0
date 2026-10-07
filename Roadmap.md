@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.0-dev`
-**Roadmap Version:** `17.1.0-dev`
+**Current Version:** `17.1.1-dev`
+**Roadmap Version:** `17.1.1-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.1.1-dev - Responsive Water and Restored Biomes
+- Player-edited fluid work is prioritized within the bounded one-chunk-per-frame solver
+- Bank-depth shore fade and water-mesher/solver allocation reductions implemented
+- Temperate biome filtering corrected; Unity visual, FPS and fresh-seed acceptance open
+
 ### 17.1.0-dev - Meadow and Surface Detail
 - Fuller default tufts, rare blossoms and excavation eligibility implemented
 - Water detail and scalar polygon continuity adjustments implemented
@@ -48,21 +53,6 @@
 - ~~Regional mountain masks and shared temperate biome windows~~ *(16.0.0-dev)*
 - ~~Named triplanar PBR library with per-material legacy fallback~~ *(16.0.0-dev)*
 - ~~Conservative fluid transfers and world-grid liquid mesh replacement~~ *(16.0.0-dev)*
-
-### 15.0.0-dev - Mountains, Coastlines and Grounded Grass
-- CPU/GPU terrain includes broader mountain uplift and local relief; fresh worlds required
-- Coastal palm gates, hashed scatter sampling and centralized desert-reference repair are implemented
-- Progressive collider-grounded grass and completion-first chunk scheduling are implemented
-
-### 14.74.1-dev - Grounded Worlds, Rare Discoveries
-- Grass uses full-disk, terrain-resampled tufts and suitable clay coverage
-- Ruin placement applies one-tenth authored probability
-- Versioned landscape balancing restores active scenery without resetting later tuning
-
-### 14.74.0-dev - Planet Ecology, Designer-Owned
-- Theme profiles own native abundance, pollution response and livestock suitability
-- Supplemental and biome-scattered Ghouls share profile habitat rules
-- Centralized setup creates missing profiles while preserving authored tuning
 
 
 ### Locked Decisions
@@ -2621,6 +2611,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## Landscape and water validation still open
+- [ ] 17.1.1-dev Unity compilation, water response/shoreline review, target-hardware FPS profiling, and fresh-seed temperate biome coverage
 - [x] User Unity conservation fixture pass *(16.0.0-dev)*
 - [ ] Unity/Burst/HLSL compilation and conservation regression *(16.0.1-dev)*
 - [ ] Fresh-seed biome coverage and mountain-region review *(16.0.0-dev)*

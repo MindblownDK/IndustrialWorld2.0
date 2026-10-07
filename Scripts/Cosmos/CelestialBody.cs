@@ -298,11 +298,16 @@ namespace VoxelEngine.Cosmos
             if (bodyName.IndexOf("Desolate", System.StringComparison.OrdinalIgnoreCase) >= 0)
                 return bName.IndexOf("Desolate", System.StringComparison.OrdinalIgnoreCase) >= 0;
 
-            // Earthlike / Home planet: exclude specialized moon/volcanic/acid/pirate biomes
+            // General temperate-world candidates: keep specialized moon/volcanic/acid and
+            // pirate-wasteland biomes out. Wasteland's overlapping climate window otherwise
+            // wins the same dry band intended for Plains and Desert.
             if (bName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Wasteland", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Scrap", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Rust", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Lunar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Martian", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 bName.IndexOf("Venus", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
