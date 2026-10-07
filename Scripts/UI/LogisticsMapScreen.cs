@@ -425,8 +425,10 @@ namespace VoxelEngine.UI
             if (_showPollution)
             {
                 PollutionTelemetry telemetry = PollutionService.TelemetryAt(ViewerPosition());
+                EcologyReading ecology = EcologyPressure.Sample(ViewerPosition());
                 pollution = $"   ·   AIR {telemetry.Band} {telemetry.LocalAir01 * 100f:0}%" +
-                    $"   ·   SOIL {telemetry.RunoffBand} {telemetry.LocalRunoff01 * 100f:0}%";
+                    $"   ·   SOIL {telemetry.RunoffBand} {telemetry.LocalRunoff01 * 100f:0}%" +
+                    (ecology.Status != "NO BIOSPHERE" ? $"   ·   ECOLOGY {ecology.Status}" : string.Empty);
                 environmentAlert = HasEnvironmentAlert(telemetry);
             }
             _statusLabel.text =
@@ -565,6 +567,31 @@ namespace VoxelEngine.UI
                 runoffDetail.style.color = new StyleColor(T.TextMuted);
                 runoffDetail.style.marginBottom = 2;
                 _list.Add(runoffDetail);
+
+                EcologyReading ecology = EcologyPressure.Sample(ViewerPosition());
+                if (ecology.Status != "NO BIOSPHERE")
+                {
+                    AddSection("ECOLOGY");
+                    string state = ecology.SupportsNativeEcology
+                        ? $"{ecology.Status}   ·   VITALITY {ecology.Vitality01 * 100f:0}%"
+                        : "BARREN   ·   NO NATIVE BIOSPHERE";
+                    var ecologyState = new Label(state);
+                    ecologyState.style.fontSize = 10;
+                    ecologyState.style.color = new StyleColor(ecology.SupportsNativeEcology
+                        ? EcologyColour(ecology.Pressure01) : T.TextMuted);
+                    ecologyState.style.marginBottom = 2;
+                    _list.Add(ecologyState);
+                    string wildlife = ecology.SupportsNativeEcology
+                        ? $"WILDLIFE ACTIVITY {ecology.PassiveActivity01 * 100f:0}%"
+                        : "CONVENTIONAL LIVESTOCK UNSUITABLE";
+                    var ecologyDetail = new Label(
+                        wildlife + $"   ·   HOSTILE PRESSURE {ecology.HostilePressureMultiplier:0.00}x");
+                    ecologyDetail.style.fontSize = 9;
+                    ecologyDetail.style.whiteSpace = WhiteSpace.Normal;
+                    ecologyDetail.style.color = new StyleColor(T.TextMuted);
+                    ecologyDetail.style.marginBottom = 2;
+                    _list.Add(ecologyDetail);
+                }
             }
 
             AddSection("RAIL");
@@ -618,6 +645,8 @@ namespace VoxelEngine.UI
 
         private static bool HasEnvironmentAlert(PollutionTelemetry telemetry)
         {
+            EcologyReading ecology = EcologyPressure.Sample(ViewerPosition());
+            if (ecology.Status != "NO BIOSPHERE" && ecology.Pressure01 >= 0.50f) return true;
             if (telemetry.LocalAir01 >= 0.45f || telemetry.LocalRunoff01 >= 0.42f
                 || telemetry.BodyAir01 >= 0.45f || telemetry.BodyRunoff01 >= 0.42f) return true;
             return TryForecastBand(telemetry.BodyAir01, telemetry.TrendPerMinute, air: true,
@@ -636,10 +665,22 @@ namespace VoxelEngine.UI
                 air: true, out string nextAir, out string airEta);
             bool runoffForecast = TryForecastBand(telemetry.BodyRunoff01,
                 telemetry.RunoffTrendPerMinute, air: false, out string nextRunoff, out string runoffEta);
+            EcologyReading ecology = EcologyPressure.Sample(ViewerPosition());
+            bool ecologicalDecline = ecology.SupportsNativeEcology && ecology.Pressure01 >= 0.50f;
+            bool hostileEscalation = !ecology.SupportsNativeEcology
+                && ecology.Status != "NO BIOSPHERE" && ecology.Pressure01 >= 0.50f;
             if (!severeAir && !severeRunoff && !severeBodyAir && !severeBodyRunoff
-                && !airForecast && !runoffForecast) return;
+                && !airForecast && !runoffForecast && !ecologicalDecline && !hostileEscalation) return;
 
             AddSection("ENVIRONMENT ALERTS");
+            if (ecologicalDecline)
+                AddEnvironmentAlert($"ECOLOGY · {ecology.Status}",
+                    "Vegetation and passive wildlife are declining; remove local air and runoff sources.",
+                    EcologyColour(ecology.Pressure01));
+            else if (hostileEscalation)
+                AddEnvironmentAlert("POLLUTION-DRIVEN HOSTILES",
+                    $"Local hostile pressure is {ecology.HostilePressureMultiplier:0.00}x; remove nearby air and runoff sources.",
+                    EcologyColour(ecology.Pressure01));
             if (severeAir)
                 AddEnvironmentAlert($"{AirBand(telemetry.LocalAir01)} AIR AT VIEWER",
                     "Power an Atmospheric Carbon Harvester near the orange/red cells.",
@@ -959,6 +1000,15 @@ namespace VoxelEngine.UI
 
         private static string AppendSourceGuidance(string detail, PollutionMapCell cell)
         {
+            EcologyReading ecology = EcologyPressure.Sample(cell.World);
+            if (ecology.SupportsNativeEcology)
+                detail += $"\nECOLOGY  ·  {ecology.Status}  ·  "
+                    + $"{ecology.Vitality01 * 100f:0}% VITALITY  ·  "
+                    + $"{ecology.HostilePressureMultiplier:0.00}x HOSTILES";
+            else if (ecology.Status != "NO BIOSPHERE")
+                detail += $"\nBIOSPHERE  ·  BARREN  ·  "
+                    + $"{ecology.HostilePressureMultiplier:0.00}x HOSTILES";
+
             PollutionEmitter.CollectActiveNear(cell.World, cell.SizeMetres * 1.75f, _sourceReadings);
             if (_sourceReadings.Count == 0)
             {
@@ -1319,6 +1369,15 @@ namespace VoxelEngine.UI
             if (intensity < 0.75f)
                 return Color.Lerp(new Color(0.62f, 0.44f, 0.16f), new Color(0.46f, 0.20f, 0.48f), (intensity - 0.40f) / 0.35f);
             return Color.Lerp(new Color(0.46f, 0.20f, 0.48f), new Color(0.22f, 0.07f, 0.20f), (intensity - 0.75f) / 0.25f);
+        }
+
+        private static Color EcologyColour(float pressure)
+        {
+            pressure = Mathf.Clamp01(pressure);
+            if (pressure < 0.50f)
+                return Color.Lerp(new Color(0.36f, 0.78f, 0.45f), new Color(0.94f, 0.72f, 0.20f), pressure / 0.50f);
+            return Color.Lerp(new Color(0.94f, 0.72f, 0.20f), new Color(0.72f, 0.14f, 0.12f),
+                (pressure - 0.50f) / 0.50f);
         }
 
         private static bool OnScreen(Vector2 p, Rect r, float margin)

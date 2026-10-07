@@ -5,6 +5,7 @@ using UnityEngine;
 using VoxelEngine.Biomes;
 using VoxelEngine.Core;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Environment;
 using VoxelEngine.Materials;
 
 namespace VoxelEngine.Scattering
@@ -28,6 +29,8 @@ namespace VoxelEngine.Scattering
         }
 
         private static readonly Dictionary<IChunkScatterWorld, List<Reservation>> s_reservations = new();
+        private static readonly Dictionary<GameObject, bool> s_livingPrefabCache = new();
+        private static readonly Dictionary<GameObject, bool> s_passivePrefabCache = new();
         private static readonly Collider[] s_overlapBuffer = new Collider[32];
 
         /// <summary>Release cached runtime reservations when a streamed world is destroyed.</summary>
@@ -98,7 +101,6 @@ namespace VoxelEngine.Scattering
                 }
 
                 byte topMat = voxel.material;
-                if (topMat == (byte)MaterialId.Stone) continue;
 
                 float altitude = isSphere ? localSurface.magnitude : worldY;
                 if (altitude <= world.SeaLevel) continue;
@@ -111,12 +113,37 @@ namespace VoxelEngine.Scattering
                     : VoxelEngine.Biomes.BiomePicker.SampleClimate(seed, worldX, worldZ);
                 BiomeDefinition biome = PickBiome(registry, climate);
                 if (biome == null || biome.scatter == null || biome.scatter.Length == 0) continue;
+                bool hasEcologyReading = false;
+                EcologyReading ecologyReading = default;
 
                 foreach (var entry in biome.scatter)
                 {
                     if (entry.prefab == null || entry.density <= 0f) continue;
                     if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
-                    if (rng.NextFloat() > entry.density) continue;
+
+                    bool isLivingFlora = IsLivingFloraPrefab(entry.prefab);
+                    bool isPassiveAnimal = IsPassiveAnimalPrefab(entry.prefab);
+                    // Exposed stone is valid authored terrain on the Moon and other rocky
+                    // worlds, but it is still unsuitable soil for living flora or livestock.
+                    if (topMat == (byte)MaterialId.Stone && (isLivingFlora || isPassiveAnimal))
+                        continue;
+                    float effectiveDensity = entry.density;
+                    if (isLivingFlora || isPassiveAnimal)
+                    {
+                        if (!hasEcologyReading)
+                        {
+                            Transform ecologyRoot = chunk.go.transform.parent;
+                            Vector3 ecologyPosition = ecologyRoot != null
+                                ? ecologyRoot.TransformPoint(localSurface)
+                                : localSurface;
+                            ecologyReading = EcologyPressure.Sample(ecologyPosition);
+                            hasEcologyReading = true;
+                        }
+                        effectiveDensity *= isPassiveAnimal
+                            ? ecologyReading.PassiveActivity01
+                            : ecologyReading.FloraSpawnMultiplier;
+                    }
+                    if (rng.NextFloat() > Mathf.Clamp01(effectiveDensity)) continue;
 
                     float scale = rng.NextFloat(entry.minScale, entry.maxScale);
                     if (scale <= 0f) continue;
@@ -151,6 +178,8 @@ namespace VoxelEngine.Scattering
 
                     GameObject instance = Object.Instantiate(entry.prefab, worldPos, worldRot, holder.transform);
                     instance.transform.localScale = Vector3.one * scale;
+                    if (isLivingFlora && instance.GetComponent<PollutionSensitiveFlora>() == null)
+                        instance.AddComponent<PollutionSensitiveFlora>();
                     if (isTree && instance.GetComponentInChildren<VoxelEngine.Trees.Tree>() == null)
                     {
                         var t = instance.AddComponent<VoxelEngine.Trees.Tree>();
@@ -162,9 +191,9 @@ namespace VoxelEngine.Scattering
                     if (instance.GetComponentInChildren<Collider>() == null)
                     {
                         var col = instance.AddComponent<CapsuleCollider>();
-                        col.height = 4f;
-                        col.radius = 0.6f;
-                        col.center = new Vector3(0, 2f, 0);
+                        col.height = isTree ? 4f : 1.5f;
+                        col.radius = isTree ? 0.6f : 0.45f;
+                        col.center = new Vector3(0f, col.height * 0.5f, 0f);
                     }
                     Register(world, instance, worldPos, clearRadius);
                     break; // one authored scatter choice per validated surface point
@@ -296,7 +325,28 @@ namespace VoxelEngine.Scattering
         {
             if (prefab == null) return false;
             if (prefab.GetComponent<VoxelEngine.Trees.Tree>() != null) return true;
-            return prefab.name.IndexOf("tree", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            string name = prefab.name;
+            return name.IndexOf("tree", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("cypress", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("palm", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsLivingFloraPrefab(GameObject prefab)
+        {
+            if (prefab == null) return false;
+            if (s_livingPrefabCache.TryGetValue(prefab, out bool living)) return living;
+            living = EcologyPressure.IsLivingFlora(prefab);
+            s_livingPrefabCache[prefab] = living;
+            return living;
+        }
+
+        private static bool IsPassiveAnimalPrefab(GameObject prefab)
+        {
+            if (prefab == null) return false;
+            if (s_passivePrefabCache.TryGetValue(prefab, out bool passive)) return passive;
+            passive = prefab.GetComponentInChildren<VoxelEngine.Fauna.PassiveAnimal>() != null;
+            s_passivePrefabCache[prefab] = passive;
+            return passive;
         }
 
         private static bool IsLiquid(Voxel voxel)

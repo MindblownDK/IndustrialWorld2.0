@@ -11459,20 +11459,167 @@ root =>
             GameObject LoadRuin(string ruinName)
                 => AssetDatabase.LoadAssetAtPath<GameObject>($"{RUINS_DIR}/{ruinName}.prefab");
 
+            // Planet identity lives in the existing deterministic ChunkScatter pipeline. These
+            // setup-owned props are deliberately simple, low-poly silhouettes: they are cheap at
+            // spherical-world scale and remain editable prefabs after generation. Existing assets
+            // and materials are always preserved, including designer-authored replacements.
+            const string THEMED_SCATTER_DIR = ASSET_ROOT + "/Scatter/ThemedWorlds";
+            EnsureFolder(THEMED_SCATTER_DIR);
+
+            GameObject EnsureThemedProp(string name, string style, Color primary, Color accent)
+            {
+                string path = $"{THEMED_SCATTER_DIR}/{name}.prefab";
+                var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (existing != null) return existing;
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+                {
+                    Debug.LogError($"[CelestialWorlds] Preserved conflicting scatter asset: {path}");
+                    return null;
+                }
+
+                Material main = MakeColoredMat(THEMED_SCATTER_DIR, "Mat_" + name, primary);
+                Material detail = MakeColoredMat(THEMED_SCATTER_DIR, "Mat_" + name + "_Accent", accent);
+                var root = new GameObject(name);
+
+                void Part(string partName, PrimitiveType primitive, Vector3 position,
+                    Vector3 scale, Vector3 euler, Material material)
+                {
+                    var part = GameObject.CreatePrimitive(primitive);
+                    part.name = partName;
+                    part.transform.SetParent(root.transform, false);
+                    part.transform.localPosition = position;
+                    part.transform.localScale = scale;
+                    part.transform.localRotation = Quaternion.Euler(euler);
+                    UnityEngine.Object.DestroyImmediate(part.GetComponent<Collider>());
+                    part.GetComponent<Renderer>().sharedMaterial = material;
+                }
+
+                switch (style)
+                {
+                    case "boulder":
+                        Part("Core", PrimitiveType.Sphere, new Vector3(0f, 0.52f, 0f), new Vector3(1.45f, 0.78f, 1.15f), new Vector3(0f, 18f, -7f), main);
+                        Part("Shoulder", PrimitiveType.Sphere, new Vector3(0.72f, 0.37f, 0.16f), new Vector3(0.82f, 0.55f, 0.72f), new Vector3(12f, 0f, 18f), detail);
+                        Part("Shard", PrimitiveType.Cube, new Vector3(-0.62f, 0.38f, -0.12f), new Vector3(0.48f, 0.72f, 0.55f), new Vector3(14f, 32f, 8f), main);
+                        break;
+                    case "shrub":
+                        Part("Stem", PrimitiveType.Cylinder, new Vector3(0f, 0.58f, 0f), new Vector3(0.09f, 0.58f, 0.09f), new Vector3(0f, 0f, -5f), main);
+                        Part("BranchA", PrimitiveType.Cylinder, new Vector3(0.30f, 0.72f, 0f), new Vector3(0.055f, 0.42f, 0.055f), new Vector3(0f, 0f, -48f), detail);
+                        Part("BranchB", PrimitiveType.Cylinder, new Vector3(-0.27f, 0.62f, 0.08f), new Vector3(0.05f, 0.36f, 0.05f), new Vector3(18f, 0f, 52f), detail);
+                        Part("BranchC", PrimitiveType.Cylinder, new Vector3(0.08f, 0.48f, -0.28f), new Vector3(0.045f, 0.32f, 0.045f), new Vector3(52f, 0f, 12f), main);
+                        break;
+                    case "fungus":
+                        Part("StemA", PrimitiveType.Cylinder, new Vector3(0f, 0.54f, 0f), new Vector3(0.11f, 0.54f, 0.11f), Vector3.zero, main);
+                        Part("CapA", PrimitiveType.Sphere, new Vector3(0f, 1.08f, 0f), new Vector3(0.62f, 0.20f, 0.62f), Vector3.zero, detail);
+                        Part("StemB", PrimitiveType.Cylinder, new Vector3(0.48f, 0.32f, 0.14f), new Vector3(0.07f, 0.32f, 0.07f), new Vector3(0f, 0f, -6f), main);
+                        Part("CapB", PrimitiveType.Sphere, new Vector3(0.51f, 0.65f, 0.14f), new Vector3(0.38f, 0.14f, 0.38f), Vector3.zero, detail);
+                        Part("StemC", PrimitiveType.Cylinder, new Vector3(-0.38f, 0.25f, -0.10f), new Vector3(0.06f, 0.25f, 0.06f), new Vector3(0f, 0f, 8f), main);
+                        Part("CapC", PrimitiveType.Sphere, new Vector3(-0.40f, 0.51f, -0.10f), new Vector3(0.29f, 0.11f, 0.29f), Vector3.zero, detail);
+                        break;
+                    case "scrap":
+                        Part("PlateA", PrimitiveType.Cube, new Vector3(0f, 0.20f, 0f), new Vector3(1.45f, 0.12f, 0.72f), new Vector3(8f, 22f, 10f), main);
+                        Part("PlateB", PrimitiveType.Cube, new Vector3(0.18f, 0.48f, -0.06f), new Vector3(0.22f, 0.82f, 1.15f), new Vector3(18f, -16f, 32f), detail);
+                        Part("Beam", PrimitiveType.Cube, new Vector3(-0.22f, 0.45f, 0.14f), new Vector3(1.60f, 0.14f, 0.14f), new Vector3(-12f, 48f, -20f), main);
+                        Part("Hub", PrimitiveType.Cylinder, new Vector3(0.55f, 0.29f, 0.27f), new Vector3(0.30f, 0.10f, 0.30f), new Vector3(90f, 0f, 0f), detail);
+                        break;
+                    case "cypress":
+                        Part("Trunk", PrimitiveType.Cylinder, new Vector3(0f, 1.15f, 0f), new Vector3(0.13f, 1.15f, 0.13f), Vector3.zero, main);
+                        Part("CrownLow", PrimitiveType.Sphere, new Vector3(0f, 1.40f, 0f), new Vector3(0.72f, 1.18f, 0.72f), Vector3.zero, detail);
+                        Part("CrownHigh", PrimitiveType.Sphere, new Vector3(0f, 2.48f, 0f), new Vector3(0.48f, 0.90f, 0.48f), Vector3.zero, detail);
+                        Part("Tip", PrimitiveType.Sphere, new Vector3(0f, 3.22f, 0f), new Vector3(0.25f, 0.48f, 0.25f), Vector3.zero, detail);
+                        break;
+                    case "marble":
+                        Part("DrumA", PrimitiveType.Cylinder, new Vector3(-0.35f, 0.27f, 0f), new Vector3(0.34f, 0.28f, 0.34f), new Vector3(0f, 0f, 78f), main);
+                        Part("DrumB", PrimitiveType.Cylinder, new Vector3(0.36f, 0.32f, 0.12f), new Vector3(0.30f, 0.31f, 0.30f), new Vector3(14f, 0f, 69f), main);
+                        Part("Capital", PrimitiveType.Cube, new Vector3(0.04f, 0.18f, -0.42f), new Vector3(0.74f, 0.19f, 0.60f), new Vector3(8f, 27f, 4f), detail);
+                        break;
+                    case "reeds":
+                        for (int i = 0; i < 7; i++)
+                        {
+                            float x = (i % 3 - 1) * 0.24f;
+                            float z = (i / 3 - 1) * 0.20f;
+                            float height = 0.60f + (i % 3) * 0.14f;
+                            Part("Reed" + i, PrimitiveType.Cylinder, new Vector3(x, height, z), new Vector3(0.035f, height, 0.035f), new Vector3(0f, 0f, i * 2f - 6f), main);
+                            Part("Seed" + i, PrimitiveType.Sphere, new Vector3(x, height * 2f, z), new Vector3(0.07f, 0.18f, 0.07f), Vector3.zero, detail);
+                        }
+                        break;
+                    case "palm":
+                        Part("Trunk", PrimitiveType.Cylinder, new Vector3(0f, 1.45f, 0f), new Vector3(0.16f, 1.45f, 0.16f), new Vector3(0f, 0f, -5f), main);
+                        for (int i = 0; i < 6; i++)
+                        {
+                            float angle = i * 60f;
+                            Vector3 direction = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
+                            Part("Frond" + i, PrimitiveType.Cube, new Vector3(0f, 2.90f, 0f) + direction * 0.62f, new Vector3(0.18f, 0.07f, 1.25f), new Vector3(-18f, angle, 0f), detail);
+                        }
+                        break;
+                    case "basalt":
+                        Part("ColumnA", PrimitiveType.Cube, new Vector3(0f, 0.72f, 0f), new Vector3(0.58f, 1.44f, 0.58f), new Vector3(0f, 9f, 0f), main);
+                        Part("ColumnB", PrimitiveType.Cube, new Vector3(0.58f, 0.48f, 0.08f), new Vector3(0.48f, 0.96f, 0.48f), new Vector3(0f, -13f, 0f), detail);
+                        Part("ColumnC", PrimitiveType.Cube, new Vector3(-0.49f, 0.36f, -0.12f), new Vector3(0.43f, 0.72f, 0.43f), new Vector3(0f, 19f, 0f), main);
+                        break;
+                    case "vent":
+                        Part("ChimneyA", PrimitiveType.Cylinder, new Vector3(0f, 0.58f, 0f), new Vector3(0.28f, 0.58f, 0.28f), new Vector3(0f, 0f, -5f), main);
+                        Part("ChimneyB", PrimitiveType.Cylinder, new Vector3(0.42f, 0.34f, 0.10f), new Vector3(0.20f, 0.34f, 0.20f), new Vector3(0f, 0f, 7f), main);
+                        Part("DepositA", PrimitiveType.Sphere, new Vector3(-0.34f, 0.16f, 0.12f), new Vector3(0.46f, 0.18f, 0.38f), Vector3.zero, detail);
+                        Part("DepositB", PrimitiveType.Sphere, new Vector3(0.22f, 0.15f, -0.34f), new Vector3(0.34f, 0.15f, 0.42f), Vector3.zero, detail);
+                        break;
+                    default: // angular crystal / ice spire cluster
+                        Part("ShardA", PrimitiveType.Cube, new Vector3(0f, 0.82f, 0f), new Vector3(0.38f, 1.64f, 0.38f), new Vector3(5f, 18f, -7f), main);
+                        Part("ShardB", PrimitiveType.Cube, new Vector3(0.48f, 0.52f, 0.10f), new Vector3(0.28f, 1.04f, 0.28f), new Vector3(-16f, -8f, 18f), detail);
+                        Part("ShardC", PrimitiveType.Cube, new Vector3(-0.39f, 0.38f, -0.10f), new Vector3(0.23f, 0.76f, 0.23f), new Vector3(19f, 25f, -14f), detail);
+                        Part("Base", PrimitiveType.Sphere, new Vector3(0f, 0.16f, 0f), new Vector3(1.05f, 0.22f, 0.88f), Vector3.zero, main);
+                        break;
+                }
+
+                GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+                return prefab;
+            }
+
+            void AddScatter(BiomeDefinition biome, GameObject prefab, float density,
+                float minScale = 0.85f, float maxScale = 1.35f)
+            {
+                if (biome == null || prefab == null) return;
+                var list = biome.scatter != null
+                    ? new List<BiomeDefinition.ScatterEntry>(biome.scatter)
+                    : new List<BiomeDefinition.ScatterEntry>();
+                foreach (var entry in list)
+                    if (entry.prefab == prefab) return; // preserve designer density/scale tuning
+                list.Add(new BiomeDefinition.ScatterEntry
+                {
+                    prefab = prefab,
+                    density = density,
+                    minScale = minScale,
+                    maxScale = maxScale,
+                    minHeight = 0,
+                    maxHeight = 9999
+                });
+                biome.scatter = list.ToArray();
+                EditorUtility.SetDirty(biome);
+            }
+
             // Create/update a themed biome: wide climate window + themed surface + ruin scatter.
             BiomeDefinition MakeThemedBiome(string assetName, string displayName, Color debug, MaterialId surface, float density, params string[] ruinNames)
             {
                 string path = $"{BIOMES_DIR}/{assetName}.asset";
+                bool created = AssetDatabase.LoadAssetAtPath<BiomeDefinition>(path) == null;
                 var b = GetOrCreateAsset<BiomeDefinition>(path);
-                b.biomeName = displayName;
-                b.debugColor = debug;
-                b.minTemperature = 0f; b.maxTemperature = 1f;   // wide window → always qualifies on its planet
-                b.minHumidity = 0f;    b.maxHumidity = 1f;
-                b.priority = 5;
-                b.heightAmplitude = 10f; b.heightFrequency = 0.02f; b.ridgedness = 0.1f;
-                b.surfaceMaterial = surface; b.surfaceDepth = 1;
-                b.subsurfaceMaterial = surface; b.subsurfaceDepth = 5;
-                b.allowBeach = false; b.isOceanic = false;
+                if (b == null) return null;
+                if (created)
+                {
+                    b.biomeName = displayName;
+                    b.debugColor = debug;
+                    b.minTemperature = 0f; b.maxTemperature = 1f;   // wide window → always qualifies on its planet
+                    b.minHumidity = 0f;    b.maxHumidity = 1f;
+                    b.priority = 5;
+                    b.heightAmplitude = 10f; b.heightFrequency = 0.02f; b.ridgedness = 0.1f;
+                    b.surfaceMaterial = surface; b.surfaceDepth = 1;
+                    b.subsurfaceMaterial = surface; b.subsurfaceDepth = 5;
+                    b.allowBeach = false; b.isOceanic = false;
+                }
+                else if (string.IsNullOrWhiteSpace(b.biomeName))
+                {
+                    b.biomeName = displayName;
+                }
                 // Scatter: non-destructive append of this world's themed ruins
                 var list = (b.scatter != null) ? new List<BiomeDefinition.ScatterEntry>(b.scatter) : new List<BiomeDefinition.ScatterEntry>();
                 foreach (var rn in ruinNames)
@@ -11488,24 +11635,68 @@ root =>
                 return b;
             }
 
-            // Create/update a planet. Non-destructive on ore lists; sets the fields that define the world.
+            // Create a missing canonical planet, or append required biome links without resetting an existing body's tuning.
             PlanetTemplate MakePlanet(string assetName, string bodyName, float temp, float oxygen, float gravity, float radiusKm, bool grass, Color displayColor, params BiomeDefinition[] biomes)
             {
                 string path = $"{PLANETS_DIR}/Planet_{assetName}.asset";
+                bool initialize = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(path) == null;
                 var p = GetOrCreateAsset<PlanetTemplate>(path);
-                if (p.body == null) p.body = BodySettings.CreateEarthlike();
-                p.body.bodyName = bodyName;
-                p.body.temperature = temp;
-                p.body.oxygenLevel = oxygen;
-                p.body.gravity = gravity;
-                p.body.radiusKm = radiusKm;
-                p.body.waterLevel = 96;
-                p.body.enableGrass = grass;
-                p.body.mountainScale = 1f;
-                p.body.displayColor = displayColor;
-                p.body.allowedBiomes = biomes;
+                if (p == null) return null;
+                if (p.body == null)
+                {
+                    p.body = BodySettings.CreateEarthlike();
+                    initialize = true;
+                }
+                if (initialize)
+                {
+                    p.body.bodyName = bodyName;
+                    p.body.temperature = temp;
+                    p.body.oxygenLevel = oxygen;
+                    p.body.gravity = gravity;
+                    p.body.radiusKm = radiusKm;
+                    p.body.waterLevel = 96;
+                    p.body.enableGrass = grass;
+                    p.body.mountainScale = 1f;
+                    p.body.displayColor = displayColor;
+                    p.body.allowedBiomes = biomes;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(p.body.bodyName) || p.body.bodyName == "Greek")
+                        p.body.bodyName = bodyName;
+                    if (p.body.displayColor.a <= 0.01f) p.body.displayColor = displayColor;
+                    var allowed = p.body.allowedBiomes != null
+                        ? new List<BiomeDefinition>(p.body.allowedBiomes)
+                        : new List<BiomeDefinition>();
+                    foreach (var biome in biomes)
+                        if (biome != null && !allowed.Contains(biome)) allowed.Add(biome);
+                    p.body.allowedBiomes = allowed.ToArray();
+                }
                 EditorUtility.SetDirty(p);
                 return p;
+            }
+
+            void ApplyWorldIdentity(BodySettings body, UnityEngine.Object owner,
+                float waterVolume, float mountainScale, float continentScale)
+            {
+                const int ProfileVersion = 1;
+                if (body == null || owner == null || body.worldIdentityProfileVersion >= ProfileVersion)
+                    return;
+
+                bool untouchedLegacyDefaults = body.waterLevel == 96
+                    && Mathf.Approximately(body.waterVolume, 1f)
+                    && Mathf.Approximately(body.mountainScale, 1f)
+                    && Mathf.Approximately(body.continentScaleFactor, 1f);
+                if (untouchedLegacyDefaults)
+                {
+                    body.waterVolume = waterVolume;
+                    body.mountainScale = mountainScale;
+                    body.continentScaleFactor = continentScale;
+                }
+                // Mark both upgraded defaults and customized profiles. A later Setup Wizard
+                // run can never overwrite a designer's terrain/hydrosphere tuning.
+                body.worldIdentityProfileVersion = ProfileVersion;
+                EditorUtility.SetDirty(owner);
             }
 
             // ── 11 themed biomes (surface material + ruin scatter) ──
@@ -11521,6 +11712,54 @@ root =>
             var bVolcanic = MakeThemedBiome("Biome_VolcanicBasalt", "Volcanic Basalt Plains", new Color(0.20f,0.10f,0.10f), MaterialId.VolcanicBasalt, 0.00008f, "Ruin_Volcanic_ObsidianCitadel","Ruin_Volcanic_MagmaForge","Ruin_Volcanic_CharredDome","Ruin_Volcanic_AshKeep");
             var bCrystal  = MakeThemedBiome("Biome_CrystalGeode",   "Crystal Geode Flats",    new Color(0.60f,0.50f,0.90f), MaterialId.CrystalGeode,   0.00008f, "Ruin_Crystal_GeodeShrine","Ruin_Crystal_PrismSpire","Ruin_Crystal_LuminaTemple");
 
+            // ── Body-specific scenery ──
+            // Geological worlds remain sparse but gain recognizable silhouettes; viable worlds
+            // receive native flora. Entries are append-only so a designer's density and scale
+            // survive every later Setup Wizard run.
+            var lunarRock = EnsureThemedProp("Prop_LunarCraterRock", "boulder", new Color(0.38f,0.39f,0.43f), new Color(0.56f,0.57f,0.60f));
+            var marsRock = EnsureThemedProp("Prop_MartianBoulder", "boulder", new Color(0.46f,0.18f,0.09f), new Color(0.72f,0.31f,0.13f));
+            var marsShrub = EnsureThemedProp("Prop_MartianDryShrub", "shrub", new Color(0.28f,0.15f,0.08f), new Color(0.48f,0.25f,0.10f));
+            var venusVent = EnsureThemedProp("Prop_VenusSulfurVent", "vent", new Color(0.44f,0.36f,0.19f), new Color(0.88f,0.72f,0.18f));
+            var venusRock = EnsureThemedProp("Prop_VenusAshBoulder", "boulder", new Color(0.35f,0.30f,0.22f), new Color(0.62f,0.51f,0.25f));
+            var acidFungus = EnsureThemedProp("Prop_AcidGlowFungus", "fungus", new Color(0.22f,0.42f,0.16f), new Color(0.52f,0.92f,0.22f));
+            var acidReeds = EnsureThemedProp("Prop_AcidReeds", "reeds", new Color(0.18f,0.38f,0.12f), new Color(0.68f,0.84f,0.16f));
+            var pirateScrap = EnsureThemedProp("Prop_PirateScrapPile", "scrap", new Color(0.29f,0.25f,0.22f), new Color(0.62f,0.28f,0.10f));
+            var pirateRock = EnsureThemedProp("Prop_PirateErodedRock", "boulder", new Color(0.33f,0.29f,0.23f), new Color(0.49f,0.39f,0.26f));
+            var olympusCypress = EnsureThemedProp("Prop_OlympusCypress", "cypress", new Color(0.37f,0.23f,0.11f), new Color(0.13f,0.35f,0.16f));
+            var olympusMarble = EnsureThemedProp("Prop_OlympusMarbleFragments", "marble", new Color(0.82f,0.81f,0.74f), new Color(0.95f,0.92f,0.83f));
+            var iceSpire = EnsureThemedProp("Prop_IceSpire", "crystal", new Color(0.48f,0.72f,0.88f), new Color(0.78f,0.94f,1.00f));
+            var frostRock = EnsureThemedProp("Prop_FrostBoulder", "boulder", new Color(0.50f,0.62f,0.70f), new Color(0.78f,0.86f,0.91f));
+            var oceanReeds = EnsureThemedProp("Prop_OceanReeds", "reeds", new Color(0.22f,0.46f,0.25f), new Color(0.72f,0.66f,0.25f));
+            var oceanPalm = EnsureThemedProp("Prop_OceanPalm", "palm", new Color(0.42f,0.27f,0.12f), new Color(0.16f,0.52f,0.24f));
+            var desolateShrub = EnsureThemedProp("Prop_DesolateDeadShrub", "shrub", new Color(0.31f,0.23f,0.15f), new Color(0.48f,0.37f,0.24f));
+            var desolateRock = EnsureThemedProp("Prop_DesolateErodedRock", "boulder", new Color(0.40f,0.34f,0.26f), new Color(0.58f,0.48f,0.34f));
+            var basaltColumns = EnsureThemedProp("Prop_VolcanicBasaltColumns", "basalt", new Color(0.10f,0.09f,0.10f), new Color(0.24f,0.12f,0.09f));
+            var volcanicVent = EnsureThemedProp("Prop_VolcanicVent", "vent", new Color(0.14f,0.11f,0.10f), new Color(0.74f,0.18f,0.05f));
+            var crystalCluster = EnsureThemedProp("Prop_CrystalCluster", "crystal", new Color(0.30f,0.18f,0.52f), new Color(0.72f,0.48f,0.95f));
+            var crystalShard = EnsureThemedProp("Prop_CrystalShard", "crystal", new Color(0.20f,0.42f,0.58f), new Color(0.58f,0.90f,0.98f));
+
+            AddScatter(bMoon, lunarRock, 0.050f, 0.65f, 1.45f);
+            AddScatter(bMars, marsRock, 0.065f, 0.75f, 1.65f);
+            AddScatter(bMars, marsShrub, 0.025f, 0.55f, 1.15f);
+            AddScatter(bVenus, venusVent, 0.035f, 0.75f, 1.40f);
+            AddScatter(bVenus, venusRock, 0.055f, 0.70f, 1.55f);
+            AddScatter(bAcid, acidFungus, 0.080f, 0.75f, 1.45f);
+            AddScatter(bAcid, acidReeds, 0.060f, 0.70f, 1.25f);
+            AddScatter(bPirate, pirateScrap, 0.055f, 0.70f, 1.50f);
+            AddScatter(bPirate, pirateRock, 0.040f, 0.70f, 1.45f);
+            AddScatter(bGreek, olympusCypress, 0.070f, 0.80f, 1.35f);
+            AddScatter(bGreek, olympusMarble, 0.040f, 0.65f, 1.45f);
+            AddScatter(bIce, iceSpire, 0.065f, 0.70f, 1.70f);
+            AddScatter(bIce, frostRock, 0.045f, 0.65f, 1.45f);
+            AddScatter(bWater, oceanReeds, 0.080f, 0.70f, 1.25f);
+            AddScatter(bWater, oceanPalm, 0.050f, 0.75f, 1.35f);
+            AddScatter(bDesolate, desolateShrub, 0.012f, 0.60f, 1.20f);
+            AddScatter(bDesolate, desolateRock, 0.035f, 0.65f, 1.55f);
+            AddScatter(bVolcanic, basaltColumns, 0.075f, 0.65f, 1.55f);
+            AddScatter(bVolcanic, volcanicVent, 0.035f, 0.65f, 1.40f);
+            AddScatter(bCrystal, crystalCluster, 0.090f, 0.70f, 1.65f);
+            AddScatter(bCrystal, crystalShard, 0.050f, 0.55f, 1.25f);
+
             // ── Planets (Mars/Venus reconfigured + 8 new worlds) ──
             var pMars     = MakePlanet("Mars",     "Mars",          5f,  0.02f, 0.38f, 6f, false, new Color(0.80f,0.40f,0.18f,1f), bMars);
             var pVenus    = MakePlanet("Venus",    "Venus",         60f, 0.00f, 0.90f, 6f, false, new Color(0.85f,0.70f,0.25f,1f), bVenus);
@@ -11533,12 +11772,29 @@ root =>
             var pVolcanic = MakePlanet("Volcanic", "Volcanic World",70f, 0.05f, 0.90f, 6f, false, new Color(0.25f,0.10f,0.08f,1f), bVolcanic);
             var pCrystal  = MakePlanet("Crystal",  "Crystal World", 10f, 0.25f, 0.70f, 6f, false, new Color(0.60f,0.50f,0.92f,1f), bCrystal);
 
+            ApplyWorldIdentity(pMars?.body, pMars, 0.08f, 1.25f, 1.15f);
+            ApplyWorldIdentity(pVenus?.body, pVenus, 0.18f, 0.70f, 1.30f);
+            ApplyWorldIdentity(pAcid?.body, pAcid, 1.35f, 0.78f, 1.10f);
+            ApplyWorldIdentity(pPirate?.body, pPirate, 0.48f, 1.15f, 0.90f);
+            ApplyWorldIdentity(pGreek?.body, pGreek, 0.78f, 1.40f, 1.10f);
+            ApplyWorldIdentity(pIce?.body, pIce, 1.10f, 1.12f, 1.20f);
+            ApplyWorldIdentity(pWater?.body, pWater, 2.35f, 0.52f, 1.65f);
+            ApplyWorldIdentity(pDesolate?.body, pDesolate, 0.05f, 1.12f, 1.25f);
+            ApplyWorldIdentity(pVolcanic?.body, pVolcanic, 0f, 1.60f, 0.82f);
+            ApplyWorldIdentity(pCrystal?.body, pCrystal, 0.22f, 1.32f, 1.00f);
+
             // ── Moon: wire the lunar biome ──
             var moon = AssetDatabase.LoadAssetAtPath<MoonTemplate>($"{PLANETS_DIR}/Moon_Earth.asset");
-            if (moon != null)
+            if (moon != null && moon.body != null)
             {
-                moon.body.allowedBiomes = new BiomeDefinition[] { bMoon };
-                moon.body.displayColor = new Color(0.70f, 0.70f, 0.72f, 1f);
+                ApplyWorldIdentity(moon.body, moon, 0f, 1.18f, 1.10f);
+                var allowed = moon.body.allowedBiomes != null
+                    ? new List<BiomeDefinition>(moon.body.allowedBiomes)
+                    : new List<BiomeDefinition>();
+                if (bMoon != null && !allowed.Contains(bMoon)) allowed.Add(bMoon);
+                moon.body.allowedBiomes = allowed.ToArray();
+                if (moon.body.displayColor.a <= 0.01f)
+                    moon.body.displayColor = new Color(0.70f, 0.70f, 0.72f, 1f);
                 EditorUtility.SetDirty(moon);
             }
 
@@ -11568,7 +11824,8 @@ root =>
                 foreach (var p in new[] { pMars, pVenus, pAcid, pPirate, pGreek, pIce, pWater, pDesolate, pVolcanic, pCrystal })
                     if (p != null && !list.Contains(p)) list.Add(p);
                 sys.planets = list.ToArray();
-                AssetDatabase.DeleteAsset($"{PLANETS_DIR}/Planet_Greek.asset"); // remove legacy asset (renamed to Olympus)
+                // The legacy Greek asset is left intact for projects that still reference it;
+                // only System_Sol's live slot is migrated to the canonical Olympus template.
                 EditorUtility.SetDirty(sys);
                 EnsureSolarSystemRuntimeLinks(sys);
             }
@@ -11579,16 +11836,16 @@ root =>
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine — Celestial Worlds (Phase 2)",
-                "Themed worlds wired:\n\n" +
-                "• 11 themed biomes (Lunar, Martian, Venusian, Acid, Pirate, Greek, Frozen, Ocean, Desolate, Volcanic, Crystal)\n" +
-                "• 10 planets configured (Mars/Venus reconfigured + 8 new) with themed terrain + ruin scatter\n" +
-                "• Moon wired to the Lunar biome\n" +
-                "• All appended to System_Sol\n" +
-                "• Runtime CosmosTemplateLibrary + Asteroids_MainBelt repaired automatically\n\n" +
-                "New surface materials: Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode.\n" +
-                "Ruins now spawn on their own world via biome scatter (~0.0006 density).\n\n" +
-                "IMPORTANT: re-run Core & Project Bootstrap -> Create all base assets once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
+            EditorUtility.DisplayDialog("Voxel Engine — Celestial Worlds + Ecology",
+                "Themed worlds wired non-destructively:\n\n" +
+                "• 11 themed biomes (Lunar, Martian, Venusian, Acid, Pirate, Olympian, Frozen, Ocean, Desolate, Volcanic, Crystal)\n" +
+                "• 21 reusable scenery prefabs: crater rocks, alien flora, scrap, marble, ice, coastal growth, basalt and crystal formations\n" +
+                "• 10 planets configured (Mars/Venus + 8 additional worlds) and Moon wired to its Lunar biome\n" +
+                "• Untouched generic water/mountain defaults receive one themed identity profile; custom tuning is preserved\n" +
+                "• Existing biome and scatter density tuning preserved; missing entries appended only\n" +
+                "• System_Sol, CosmosTemplateLibrary and Asteroids_MainBelt links repaired automatically\n\n" +
+                "Scenery uses the normal deterministic, budgeted spherical scatter pass. Living flora responds reversibly to local air and runoff pollution; barren worlds retain geological identity without inappropriate livestock.\n\n" +
+                "Visit newly generated or repopulated surface chunks to see the added scenery.",
                 "OK");
         }
 

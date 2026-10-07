@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.70.0-dev`
+**Current Version:** `14.71.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.71.0-dev] Worlds That Breathe
+
+**Canonical planets now carry recognizable body-specific scenery instead of near-empty themed terrain, while the existing pollution field exerts reversible, planet-aware pressure on living flora, passive wildlife and hostile spawning.**
+
+#### Added
+- **Twenty-one reusable themed scenery prefabs.** The centralized `Build celestial worlds, themed biomes and Sol registration` Setup Wizard action authors crater rocks, Martian boulders and dry scrub, Venusian sulfur vents and ash stones, acid fungi and reeds, pirate scrap, Olympian cypress and marble fragments, ice spires, ocean reeds and palms, desolate scrub, volcanic basalt and vents, and crystal clusters. Moon and Desolate remain intentionally sparse but visually identifiable.
+- **Planet-aware ecology evaluation.** One stateless ecology reading combines local airborne pollution, local runoff, body theme, atmosphere, oxygen and temperature into reversible vitality, flora density, passive activity and hostile-pressure values. No ecology state or save schema was added; recovery follows the existing authoritative pollution recovery.
+- **Visible vegetation stress.** Living procedural scatter samples pollution on a staggered low-frequency cadence and uses renderer property blocks to shift toward muted brown-grey stress colours without cloning or modifying shared materials. The GPU grass field also thins after meaningful pressure changes and adopts a dry stressed palette; cleanup restores authored density and colours.
+- **Contextual ecology telemetry.** Enabling the existing Logistics Map pollution layer adds ecology status, vitality, wildlife activity and hostile-pressure readouts. Polluted-cell hover cards show local ecological consequence, and serious decline appears in the existing Environment Alerts section rather than as a permanent HUD element.
+
+#### Changed
+- **Scatter remains deterministic and budgeted.** Ecology scales living-flora and biome-authored livestock selection inside the existing deferred `ChunkScatter` pass; geological scenery still follows the normal seeded spherical placement, spacing and structure-collision rules.
+- **Livestock respects habitability.** The host-only supplemental spawner now excludes conventional farm animals from vacuum, low-oxygen, toxic, frozen and overheated bodies. Compatible worlds reduce herd cadence and cap as pollution rises, while biome-scattered livestock uses the same ecology gate.
+- **Pollution raises capped hostile pressure.** The host-only hostile spawner shortens its cadence and raises its bounded live cap with local ecological pressure; cleaning the area reverses both multipliers. Ghouls no longer originate on an airless surface.
+- **Celestial setup is more non-destructive.** Re-running the centralized action creates only missing themed prefabs and scatter entries, preserves existing materials and designer-tuned densities/scales, and no longer resets existing biome terrain or planet climate/gravity values while repairing required links. A versioned one-time identity profile changes only untouched legacy hydrosphere/mountain defaults, making Ocean wetter and flatter, Volcanic dry and rugged, and the other canonical bodies comparably distinct; any prior tuning is marked and preserved.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.71.0-dev`.
 
 ### [14.70.0-dev] Follow the Smoke
 

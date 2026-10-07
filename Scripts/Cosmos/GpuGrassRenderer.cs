@@ -27,6 +27,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.Environment;
 using VoxelEngine.Materials;
 
 namespace VoxelEngine.Cosmos
@@ -75,6 +76,10 @@ namespace VoxelEngine.Cosmos
         private bool _built;
         private int _lastEditVersion = -1;
         private float _lastRebuildTime;
+        private float _nextEcologySample;
+        private float _lastEcologyMultiplier = -1f;
+        private Color _healthyBaseColor;
+        private Color _healthyTipColor;
 
         // Render params (reused - no per-frame GC).
         private RenderParams _renderParams;
@@ -90,8 +95,14 @@ namespace VoxelEngine.Cosmos
             if (grassMaterial == null) grassMaterial = CreateDefaultGrassMaterial();
             _renderParams = new RenderParams(grassMaterial);
             _renderParams.worldBounds = new Bounds(Vector3.zero, new Vector3(100000f, 100000f, 100000f)); // Prevent frustum culling from hiding the grass field
-            if (grassMaterial != null && grassMaterial.HasProperty("_FadeRange"))
-                grassMaterial.SetFloat("_FadeRange", range);
+            if (grassMaterial != null)
+            {
+                if (grassMaterial.HasProperty("_FadeRange")) grassMaterial.SetFloat("_FadeRange", range);
+                _healthyBaseColor = grassMaterial.HasProperty("_BaseColor")
+                    ? grassMaterial.GetColor("_BaseColor") : new Color(0.22f, 0.40f, 0.12f, 1f);
+                _healthyTipColor = grassMaterial.HasProperty("_TipColor")
+                    ? grassMaterial.GetColor("_TipColor") : new Color(0.45f, 0.65f, 0.22f, 1f);
+            }
         }
 
         private void OnDestroy()
@@ -116,6 +127,26 @@ namespace VoxelEngine.Cosmos
             {
                 if (_instanceCount > 0) DisposeField();
                 return;
+            }
+
+            // Pollution pressure is slow-moving. Sample it on the same low cadence as
+            // other environmental visuals, recolour immediately, and rebuild only after
+            // a meaningful density change so the GPU field does not churn every frame.
+            if (Time.unscaledTime >= _nextEcologySample)
+            {
+                _nextEcologySample = Time.unscaledTime + 2.5f;
+                EcologyReading ecology = EcologyPressure.Sample(viewer.position);
+                ApplyEcologyColour(ecology);
+                float multiplier = ecology.FloraSpawnMultiplier;
+                bool densityChanged = _lastEcologyMultiplier >= 0f
+                    && Mathf.Abs(multiplier - _lastEcologyMultiplier) >= 0.08f;
+                _lastEcologyMultiplier = multiplier;
+                if (densityChanged && _built && Time.unscaledTime - _lastRebuildTime >= 0.6f)
+                {
+                    RebuildField();
+                    _lastRebuildPos = viewer.position;
+                    _lastRebuildTime = Time.unscaledTime;
+                }
             }
 
             // 9.18.2 - PLAYER EDITS rebuild the field: mining grass (or the ground under
@@ -185,6 +216,18 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        private void ApplyEcologyColour(EcologyReading ecology)
+        {
+            if (grassMaterial == null) return;
+            float stress = 1f - ecology.Vitality01;
+            Color stressedBase = new Color(0.31f, 0.25f, 0.13f, _healthyBaseColor.a);
+            Color stressedTip = new Color(0.43f, 0.37f, 0.18f, _healthyTipColor.a);
+            if (grassMaterial.HasProperty("_BaseColor"))
+                grassMaterial.SetColor("_BaseColor", Color.Lerp(_healthyBaseColor, stressedBase, stress * 0.86f));
+            if (grassMaterial.HasProperty("_TipColor"))
+                grassMaterial.SetColor("_TipColor", Color.Lerp(_healthyTipColor, stressedTip, stress * 0.86f));
+        }
+
         // -- Field rebuild --
         private void RebuildField()
         {
@@ -192,7 +235,10 @@ namespace VoxelEngine.Cosmos
             if (world == null || body == null) { _instanceCount = 0; return; }
 
             float densityMul = GetQualityDensityMul();
-            float density = baseDensity * densityMul;
+            EcologyReading ecology = EcologyPressure.Sample(viewer.position);
+            _lastEcologyMultiplier = ecology.FloraSpawnMultiplier;
+            ApplyEcologyColour(ecology);
+            float density = baseDensity * densityMul * ecology.FloraSpawnMultiplier;
             if (density <= 0.01f)
             {
                 Debug.Log($"[Grass] field empty (quality density {densityMul:0.00}).");

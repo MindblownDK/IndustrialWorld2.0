@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.70.0-dev`
-**Roadmap Version:** `14.70.0-dev`
+**Current Version:** `14.71.0-dev`
+**Roadmap Version:** `14.71.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.71.0-dev - Worlds That Breathe
+- Canonical biomes gain 21 setup-authored identity props through the existing deterministic spherical scatter pass
+- Reversible local ecology pressure suppresses living flora and compatible livestock while raising capped host-authoritative hostile cadence
+- The optional pollution map layer reports ecology vitality, wildlife activity, hostile pressure and serious-decline alerts
+
 ### 14.70.0-dev - Follow the Smoke
 - Pollution hover ranks the three largest active nearby contributors with SI air/runoff rates and honest residual-load fallback
 - Optional map alerts forecast the next body severity boundary and expose local/body air or runoff hazards
@@ -49,11 +54,6 @@
 - Machine panels and setup-authored block tooltips report SI PM-equivalent emissions; routed maritime exhaust is aggregated at the engine
 - Orbital pollution bands/readouts, capped pollution-weather feedback, clearer forecast probabilities and lighter cloud coverage are live
 - Carbon Concentrate conversion is player-facing as Carbon to Graphite with internal IDs unchanged
-
-### 14.66.2-dev - One Workshop
-- Setup Wizard actions are grouped by system and automatically numbered in display order; creature/boss and combat/weapon content are consolidated
-- Duplicate spherical-water and obsolete standalone Sol setup paths are retired; missing Water Crossings and maintenance actions are available in the wizard
-- Airborne Pollution setup now creates or repairs canonical Graphite instead of blocking after Industrial Content
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -347,7 +347,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev adds live active-source attribution, rising-threshold alerts and cleanup guidance. Historical attribution, climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev added live active-source attribution, rising-threshold alerts and cleanup guidance; 14.71.0-dev adds reversible local flora/fauna/hostile pressure and body-themed scenery. Historical attribution, climate load, orbital debris, bespoke creature ecology and territorial threats remain later phases.)*
 
 #### Pollution Sources
 
@@ -372,12 +372,12 @@ Industrial activity creates pollution that spreads outward from its source and c
 - Moderate pollution creates packs, ambushes, and repeated attacks on exposed logistics.
 - High pollution creates organized waves, elite mutations, flying attackers, and planet-specific siege creatures.
 - Extreme pollution can awaken regional bosses or provoke territorial factions.
-- More pollution increases enemy count, tier, frequency, and detection distance, with population caps and recovery cooldowns to prevent unbounded spawning.
-- Destroying or filtering the source gradually lowers pressure; enemies already committed to an attack do not disappear instantly.
+- ~~More pollution increases capped hostile count and spawn frequency; cleanup reverses both pressure multipliers.~~ *(14.71.0-dev)* Enemy tiers, source tracking, organized waves and detection-distance escalation remain open.
+- ~~Destroying or filtering the source gradually lowers future pressure without deleting enemies already alive.~~ *(14.71.0-dev)*
 
 ### Planet-Specific Hostile & Passive Ecology
 
-Each planet owns an `EcologyProfile` defining passive creatures, predators, pollution responders, elites, bosses, resistances, loot, and spawn rules.
+The first shared body-theme ecology catalogue shipped in 14.71.0-dev: conventional livestock now obeys atmosphere, oxygen, temperature and pollution suitability, while living flora and hostile pressure use the same local reading. Dedicated `EcologyProfile` assets with bespoke creatures, predators, elites, bosses, resistances, loot and spawn rules remain open.
 
 | Planet Theme | Passive Life | Standard Threats | Elites / Bosses |
 |--------------|--------------|------------------|-----------------|
@@ -1760,12 +1760,14 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Step 59 Setup Wizard:** Non-destructive generation of scanner tool items, craft bench recipes, and registration. (Implemented 9.26.0-dev)
    - Terrain core drill and acoustic seismic survey rig. (Upcoming)
 
-16. **Pollution & Industrial Threat Director** - **PHASE 2 FOUNDATIONS SHIPPED (14.68.0-dev)**
+16. **Pollution & Industrial Threat Director** - **PHASE 3 ECOLOGY FOUNDATION SHIPPED (14.71.0-dev)**
    - ~~Sparse body-local airborne pollution, transport, cleanup, optional map telemetry and body burden~~ *(14.66.0-dev; Setup Step 114)*.
    - ~~Persistent runoff/soil-water transport, recovery, mapping and water-pump response~~ *(14.68.0-dev; Setup Step 114)*.
    - Live nearby-source attribution and warning thresholds shipped 14.70.0-dev; historical attribution, dormant-region transport and production-statistics integration remain open.
+   - ~~Reversible local flora density/vitality, compatible-livestock activity and capped hostile cadence/cap pressure~~ *(14.71.0-dev)*.
+   - ~~Canonical body biomes receive deterministic identity scenery while intentionally barren worlds remain sparse~~ *(14.71.0-dev; centralized celestial-world Setup Wizard action)*.
    - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
-   - Planet Ecology Profiles choose appropriate passive life, pollution responders, enemy tiers, and bosses.
+   - Dedicated Planet Ecology Profiles remain open for bespoke passive life, pollution responders, enemy tiers, loot and bosses.
 
 17. **Planetary Ecology & Territorial Space Factions**
    - Different hostile and passive populations on every planet theme.

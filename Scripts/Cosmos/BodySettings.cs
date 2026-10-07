@@ -173,6 +173,12 @@ namespace VoxelEngine.Cosmos
         // still owns the look; existing non-zero override colours are never reset.
         [HideInInspector] public int skyProfileVersion = 0;
 
+        // Written by the centralized celestial-world setup action. Version zero is
+        // upgraded only when all legacy terrain/hydrosphere values are still at the
+        // old generic defaults; any designer-tuned value causes the profile to be
+        // marked as preserved instead.
+        [HideInInspector] public int worldIdentityProfileVersion = 0;
+
         // ── Biomes ────────────────────────────────────────────────
         [Header("Biomes")]
         [Tooltip("Whitelist of biomes that may generate on this body. Empty = use registry defaults.")]

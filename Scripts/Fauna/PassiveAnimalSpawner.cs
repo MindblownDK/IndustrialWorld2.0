@@ -11,6 +11,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Fauna
 {
@@ -58,8 +59,11 @@ namespace VoxelEngine.Fauna
 
             bool vacuum = VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(ppos)
                           || VoxelEngine.Cosmos.GravityProvider.ActiveBody == null;
-            if (vacuum)
+            EcologyReading ecology = EcologyPressure.Sample(ppos);
+            if (vacuum || !ecology.SupportsLivestock)
             {
+                // Conventional farm animals are intentionally absent from vacuum,
+                // toxic, frozen and otherwise incompatible themed bodies.
                 for (int i = _alive.Count - 1; i >= 0; i--)
                 {
                     var a = _alive[i];
@@ -82,7 +86,7 @@ namespace VoxelEngine.Fauna
             }
 
             if (Time.time < _nextSpawn) return;
-            _nextSpawn = Time.time + spawnInterval;
+            _nextSpawn = Time.time + spawnInterval / Mathf.Max(0.12f, ecology.PassiveActivity01);
 
             if (!LoadPrefabs())
             {
@@ -90,7 +94,8 @@ namespace VoxelEngine.Fauna
                 return;
             }
 
-            if (_alive.Count >= maxAlive) return;
+            int ecologicalCap = Mathf.FloorToInt(maxAlive * ecology.PassiveActivity01);
+            if (_alive.Count >= ecologicalCap) return;
 
             // 14.64.0 — herds are SURFACE life (same rule the EnemySpawner got in
             // 14.60.0): no streamed world, no meaningful gravity, or no real ground

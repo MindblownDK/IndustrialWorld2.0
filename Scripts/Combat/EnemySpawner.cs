@@ -5,6 +5,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Combat
 {
@@ -55,8 +56,12 @@ namespace VoxelEngine.Combat
                 }
             }
 
+            if (VoxelEngine.Cosmos.GravityProvider.ActiveBody == null
+                || VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(ppos)) return;
+
+            EcologyReading ecology = EcologyPressure.Sample(ppos);
             if (Time.time < _nextSpawn) return;
-            _nextSpawn = Time.time + spawnInterval;
+            _nextSpawn = Time.time + spawnInterval / ecology.HostilePressureMultiplier;
 
             if (ghoulPrefab == null)
             {
@@ -68,7 +73,8 @@ namespace VoxelEngine.Combat
                 }
             }
 
-            if (_alive.Count >= maxAlive)
+            int ecologicalCap = Mathf.CeilToInt(maxAlive * ecology.HostilePressureMultiplier);
+            if (_alive.Count >= ecologicalCap)
             {
                 return;
             }
