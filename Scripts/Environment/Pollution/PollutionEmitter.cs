@@ -37,6 +37,47 @@ namespace VoxelEngine.Environment
         public float RatedRunoffPerSecond => profile != null
             ? Mathf.Max(0f, profile.perSecond.runoff * emissionMultiplier)
             : 0f;
+        public bool IsActivelyEmitting => isActiveAndEnabled
+            && CurrentAirbornePerSecond + CurrentRunoffPerSecond > 0.0001f;
+        public string DisplayName => SourceDisplayName();
+
+        /// <summary>
+        /// Finds the strongest live industrial outlet around a world position without
+        /// allocating a temporary collection. Surface-only callers may reject grid-mounted
+        /// exhaust because ground creatures cannot meaningfully path onto moving hulls.
+        /// </summary>
+        public static bool TryFindStrongestActiveNear(Vector3 worldPosition, float radiusMetres,
+            out PollutionEmitter strongest, bool surfaceSourcesOnly = false)
+        {
+            strongest = null;
+            float radius = Mathf.Max(1f, radiusMetres);
+            float radiusSq = radius * radius;
+            float bestRate = 0.0001f;
+            int bestId = int.MaxValue;
+
+            for (int i = s_active.Count - 1; i >= 0; i--)
+            {
+                PollutionEmitter emitter = s_active[i];
+                if (emitter == null)
+                {
+                    s_active.RemoveAt(i);
+                    continue;
+                }
+                if (!emitter.IsActivelyEmitting) continue;
+                if (surfaceSourcesOnly
+                    && emitter.GetComponentInParent<GridEntity>() != null) continue;
+                if ((emitter.ReleasePoint - worldPosition).sqrMagnitude > radiusSq) continue;
+
+                float rate = emitter.CurrentAirbornePerSecond + emitter.CurrentRunoffPerSecond;
+                int id = emitter.GetInstanceID();
+                if (rate < bestRate || (Mathf.Approximately(rate, bestRate) && id >= bestId))
+                    continue;
+                bestRate = rate;
+                bestId = id;
+                strongest = emitter;
+            }
+            return strongest != null;
+        }
 
         /// <summary>
         /// Resolves the emitters whose readings should be presented for a selected machine.

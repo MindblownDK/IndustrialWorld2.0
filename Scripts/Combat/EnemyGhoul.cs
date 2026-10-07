@@ -5,6 +5,8 @@
 // contact. Uses the shared Damageable health/loot contract so player weapons kill it.
 
 using UnityEngine;
+using VoxelEngine.Building;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Combat
 {
@@ -28,6 +30,27 @@ namespace VoxelEngine.Combat
         private Vector3 _wanderTarget;
         private float _nextWanderAt;
         private float _nextAttackAt;
+        private PollutionEmitter _industrialTarget;
+        private PlacedBlock _industrialTargetBlock;
+
+        public bool HasActiveIndustrialTarget => _industrialTarget != null
+            && _industrialTargetBlock != null && _industrialTarget.IsActivelyEmitting;
+        public Vector3 IndustrialTargetPosition => _industrialTargetBlock != null
+            ? _industrialTargetBlock.transform.position
+            : transform.position;
+
+        /// <summary>
+        /// Gives a pollution-attracted scout one host-only industrial objective. Player targets
+        /// still take priority inside normal detection range; shutting down or filtering the
+        /// source breaks the scent without deleting an enemy that already exists.
+        /// </summary>
+        public void SetIndustrialTarget(PollutionEmitter emitter)
+        {
+            _industrialTarget = emitter;
+            _industrialTargetBlock = emitter != null
+                ? emitter.GetComponentInParent<PlacedBlock>()
+                : null;
+        }
 
         protected override void Awake()
         {
@@ -60,27 +83,49 @@ namespace VoxelEngine.Combat
             Vector3 grav = VoxelEngine.Cosmos.GravityProvider.GetGravity(pos);
             EnsurePlayer();
 
-            // Detect / chase / wander — all in the local tangent plane (perpendicular to radial up).
-            Vector3 flatToPlayer = (_player != null) ? Vector3.ProjectOnPlane(_player.position - pos, up) : Vector3.zero;
+            // Player targets take priority. Outside normal detection range, a scout spawned by
+            // an active industrial outlet follows that source instead of wandering near the player.
+            Vector3 flatToPlayer = (_player != null)
+                ? Vector3.ProjectOnPlane(_player.position - pos, up)
+                : Vector3.zero;
             float distP = flatToPlayer.magnitude;
-            bool chasing = _player != null && distP <= detectRange;
+            bool chasingPlayer = _player != null && distP <= detectRange;
+            if (_industrialTarget != null && !HasActiveIndustrialTarget)
+                SetIndustrialTarget(null);
+            bool chasingIndustry = !chasingPlayer && HasActiveIndustrialTarget;
 
             Vector3 moveDir;
             float spd;
-            if (chasing)
+            if (chasingPlayer)
             {
                 moveDir = flatToPlayer.sqrMagnitude > 0.0001f ? flatToPlayer.normalized
                                                               : Vector3.ProjectOnPlane(transform.forward, up).normalized;
                 spd = distP > attackRange ? chaseSpeed : 0f;
-                // 14.60.0 - the bite needs TRUE range, not the tangent-plane
-                // projection: distP ignores height, so a player hovering far
-                // above read as "in reach" and was mauled from the sky.
+                // The bite needs TRUE range, not the tangent-plane projection: distP ignores
+                // height, so a player hovering far above must not read as in reach.
                 float trueDist = Vector3.Distance(_player.position, pos);
                 if (distP <= attackRange && trueDist <= attackRange + 0.8f
                     && Time.time >= _nextAttackAt)
                 {
                     _nextAttackAt = Time.time + attackCooldown;
                     AttackPlayer();
+                }
+            }
+            else if (chasingIndustry)
+            {
+                Vector3 targetPosition = IndustrialTargetPosition;
+                Vector3 flatToIndustry = Vector3.ProjectOnPlane(targetPosition - pos, up);
+                float tangentDistance = flatToIndustry.magnitude;
+                moveDir = flatToIndustry.sqrMagnitude > 0.0001f
+                    ? flatToIndustry.normalized
+                    : Vector3.ProjectOnPlane(transform.forward, up).normalized;
+                spd = tangentDistance > attackRange ? chaseSpeed * 0.85f : 0f;
+                float trueDistance = Vector3.Distance(targetPosition, pos);
+                if (tangentDistance <= attackRange && trueDistance <= attackRange + 1f
+                    && Time.time >= _nextAttackAt)
+                {
+                    _nextAttackAt = Time.time + attackCooldown;
+                    AttackIndustrialSource();
                 }
             }
             else
@@ -134,9 +179,16 @@ namespace VoxelEngine.Combat
 
         private void AttackPlayer()
         {
-            // 14.55.0 - one funnel for hostile damage: local victims take it
-            // directly, remote victims get the strike on their own machine.
+            // One funnel for hostile damage: local victims take it directly, remote victims
+            // get the strike on their own machine.
             VoxelEngine.Networking.HostileSync.StrikePlayer(_player, attackDamage, "Ghoul");
+        }
+
+        private void AttackIndustrialSource()
+        {
+            if (!HasActiveIndustrialTarget) return;
+            int damage = Mathf.Max(1, Mathf.RoundToInt(attackDamage * 0.65f));
+            _industrialTargetBlock.Damage(damage, recipient: null);
         }
     }
 }

@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.72.0-dev`
+**Current Version:** `14.73.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.73.0-dev] They Follow the Smoke
+
+**The first pollution-driven threat-director behaviour is live: active static industrial sources attract host-authoritative Ghoul scouts that follow the operating machine instead of merely appearing near the player.**
+
+#### Added
+- **Live industrial scent targeting.** The active-emitter registry can select the strongest operating air/runoff source inside a bounded radius without allocating a temporary list. Equal-rate selection is stable, inactive emitters are ignored, and surface scouts deliberately reject grid-mounted exhaust they cannot navigate to safely.
+- **Source-seeking Ghoul scouts.** A Ghoul attracted by pollution receives the emitting `PlacedBlock` as an industrial objective. Outside player detection range it follows the local spherical tangent toward that machine and attacks the block through the existing damage, visible-crack, removal, drop and multiplayer replication paths.
+- **Readable threat warning.** The host receives a cooldown-limited `INDUSTRIAL SCENT` notification naming the machine that attracted a scout. Dedicated servers skip local UI cleanly.
+
+#### Changed
+- **Cleanup breaks the scent instead of deleting enemies.** Switching off, filtering or otherwise stopping an emitter immediately invalidates its industrial objective and prevents it from attracting new scouts once local pressure recovers. Existing Ghouls return to normal player hunting and wandering, preserving the rule that cleanup changes future pressure rather than erasing living threats.
+- **Player targets retain priority.** A source-seeking Ghoul still switches to the nearest player entering its normal detection range, and returns to the machine only while the source remains active.
+- **Host authority remains singular.** Guests never select sources, spawn scouts, damage machines or create competing AI. Existing `HostileSync` spawn, pose, health and removal replication remains the only hostile population seen by clients.
+- **Dedicated-host population focus is safer.** The supplemental hostile spawner can use replicated player avatars when no local `PlayerStats` exists, and despawn distance is measured against the nearest connected player rather than only the host player.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.73.0-dev`.
 
 ### [14.72.0-dev] Scatter, Sorted
 

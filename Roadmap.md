@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.72.0-dev`
-**Roadmap Version:** `14.72.0-dev`
+**Current Version:** `14.73.0-dev`
+**Roadmap Version:** `14.73.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.73.0-dev - They Follow the Smoke
+- Active static pollution outlets attract host-authoritative Ghoul scouts to their exact machine
+- Scouts attack emitting blocks, but nearby players retain target priority and stopped sources lose the scent
+- Dedicated hosts can anchor supplemental hostile population to replicated players without a local avatar
+
 ### 14.72.0-dev - Scatter, Sorted
 - Biome-folder prefabs synchronize into independent environment, enemy, passive and building scatter categories
 - Re-runnable centralized setup preserves existing entry tuning and gives defaults only to newly discovered prefabs
@@ -48,11 +53,6 @@
 - Logistics Map hover inspection names buildings and resolves their current owning team from replicated placer identity
 - Pollution cells expose exact air/runoff percentages and SI mass; ocean hover distinguishes clean from polluted water
 - Additive ownership metadata persists, replicates and survives tier upgrades while legacy buildings remain explicitly unowned
-
-### 14.68.0-dev - What the Rain Leaves Behind
-- Persistent runoff/soil-water cells, rain wash transfer, lateral seepage, slow recovery and host/client telemetry are active
-- Pollution Harvester extracts runoff into Remediation Sludge; water pumps expose quality and capped contamination throughput loss
-- Emissions panels collapse into a foldout; Logistics Map includes toggleable placed-building footprints and dual air/runoff overlays
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -346,7 +346,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev added live active-source attribution, rising-threshold alerts and cleanup guidance; 14.71.0-dev adds reversible local flora/fauna/hostile pressure and body-themed scenery. Historical attribution, climate load, orbital debris, bespoke creature ecology and territorial threats remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev added live attribution and cleanup guidance; 14.71.0-dev added reversible ecology pressure; 14.73.0-dev begins exact-source threat attraction with Ghoul scouts. Historical attribution, climate load, orbital debris, bespoke creature ecology and higher threat tiers remain later phases.)*
 
 #### Pollution Sources
 
@@ -371,6 +371,7 @@ Industrial activity creates pollution that spreads outward from its source and c
 - Moderate pollution creates packs, ambushes, and repeated attacks on exposed logistics.
 - High pollution creates organized waves, elite mutations, flying attackers, and planet-specific siege creatures.
 - Extreme pollution can awaken regional bosses or provoke territorial factions.
+- ~~Active static emitters attract host-authoritative Ghoul scouts that attack the source until it stops emitting.~~ *(14.73.0-dev)*
 - ~~More pollution increases capped hostile count and spawn frequency; cleanup reverses both pressure multipliers.~~ *(14.71.0-dev)* Enemy tiers, source tracking, organized waves and detection-distance escalation remain open.
 - ~~Destroying or filtering the source gradually lowers future pressure without deleting enemies already alive.~~ *(14.71.0-dev)*
 
@@ -1765,6 +1766,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Live nearby-source attribution and warning thresholds shipped 14.70.0-dev; historical attribution, dormant-region transport and production-statistics integration remain open.
    - ~~Reversible local flora density/vitality, compatible-livestock activity and capped hostile cadence/cap pressure~~ *(14.71.0-dev)*.
    - ~~Canonical body biomes receive deterministic identity scenery while intentionally barren worlds remain sparse~~ *(14.71.0-dev; centralized celestial-world Setup Wizard action)*.
+   - ~~Active static pollution sources attract host-authoritative Ghoul scouts to attack the emitting block~~ *(14.73.0-dev)*.
    - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
    - Dedicated Planet Ecology Profiles remain open for bespoke passive life, pollution responders, enemy tiers, loot and bosses.
 
