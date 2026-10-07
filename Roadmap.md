@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `16.0.0-dev`
-**Roadmap Version:** `16.0.0-dev`
+**Current Version:** `16.0.1-dev`
+**Roadmap Version:** `16.0.1-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 16.0.1-dev - Streaming, Grass and Shoreline Corrections
+- Progressive nearest-first grass, narrow edit remesh bounds and unchanged-material fast path implemented
+- Collider-grounded new scatter and dry enemy footing implemented
+- Cached liquid halo and fallback mapping corrections implemented; Unity acceptance open
+
 ### 16.0.0-dev - Regional Biomes, Named PBR and Conservative Water
 - ~~Regional mountain masks and shared temperate biome windows~~ *(16.0.0-dev)*
 - ~~Named triplanar PBR library with per-material legacy fallback~~ *(16.0.0-dev)*
@@ -49,10 +54,6 @@
 - Supplemental and biome-scattered Ghouls share profile habitat rules
 - Centralized setup creates missing profiles while preserving authored tuning
 
-### 14.73.3-dev - Unity-Compatible Map Cursor Input
-- Logistics Map wheel zoom reads the pointer through the Unity-supported mouse-position API
-- Cursor-anchored zoom behaviour remains unchanged
-- The 14.73.2-dev map, ruin-inspection and machine-scrolling patch compiles past this API mismatch
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -2610,7 +2611,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## Landscape and water validation still open
-- [ ] Unity/Burst/HLSL compilation and runtime conservation fixture *(16.0.0-dev)*
+- [x] User Unity conservation fixture pass *(16.0.0-dev)*
+- [ ] Unity/Burst/HLSL compilation and conservation regression *(16.0.1-dev)*
 - [ ] Fresh-seed biome coverage and mountain-region review *(16.0.0-dev)*
 - [ ] Shoreline, thin-stream, pump/boat and save/reload acceptance *(16.0.0-dev)*
 - [ ] Grass/streaming/fluid frame-time and texture-memory profiling *(16.0.0-dev)*
+
+- [ ] 16.0.1-dev Editor profiling, shoreline acceptance and existing floating-scenery repair

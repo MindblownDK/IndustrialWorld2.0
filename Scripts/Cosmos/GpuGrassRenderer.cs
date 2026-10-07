@@ -171,12 +171,11 @@ namespace VoxelEngine.Cosmos
 
             // 9.18.2 - PLAYER EDITS rebuild the field: mining grass (or the ground under
             // it) must remove its blades immediately, not when the player next walks 12 m.
-            // Bumped once per edit batch by VoxelEditor; rate-limited so a drilling spree
-            // cannot rebuild more than ~1.6 times per second.
+            // Bumped once per edit batch; cancel obsolete candidates before publishing again.
             var sphere = SphereWorld.Instance;
-            if (sphere != null && sphere.PlayerEditVersion != _lastEditVersion
-                && Time.unscaledTime - _lastRebuildTime >= 0.6f)
+            if (sphere != null && sphere.PlayerEditVersion != _lastEditVersion)
             {
+                DisposeField(); // Never draw anchors from terrain preceding this edit.
                 _lastEditVersion = sphere.PlayerEditVersion;
                 RebuildField();
                 _lastRebuildPos = viewer.position;
@@ -194,7 +193,7 @@ namespace VoxelEngine.Cosmos
 
             // Rebuild when the viewer has moved enough.
             if (Vector3.Distance(viewer.position, _lastRebuildPos) > rebuildThreshold || !_built
-                || Time.unscaledTime >= _nextStreamingRefresh)
+                || (_fieldBuild == null && Time.unscaledTime >= _nextStreamingRefresh))
             {
                 RebuildField();
                 _lastRebuildPos = viewer.position;
@@ -260,7 +259,7 @@ namespace VoxelEngine.Cosmos
         // -- Field rebuild --
         private void RebuildField()
         {
-            if (_fieldBuild != null) return;
+            if (_fieldBuild != null) StopCoroutine(_fieldBuild);
             _fieldBuild = StartCoroutine(BuildFieldProgressively());
         }
 
@@ -297,23 +296,27 @@ namespace VoxelEngine.Cosmos
             int step = Mathf.Max(3, Mathf.Max(densityStep, budgetStep));
             var candidates = new List<Matrix4x4>(Mathf.CeilToInt(Mathf.PI * range * range / (step * step)) * 24);
 
-            int processedCells = 0;
-            int processedRoots = 0;
-            // Every candidate begins on a tangent plane around the viewer, then is projected
-            // along the radial direction onto the true spherical voxel surface. This avoids
-            // the old top-of-planet XZ scan that made grass vanish or lie incorrectly elsewhere.
+            var cells = new List<Vector2Int>();
             for (int v = -voxelRange; v <= voxelRange; v += step)
             for (int u = -voxelRange; u <= voxelRange; u += step)
+                if (u * u + v * v <= range * range) cells.Add(new Vector2Int(u, v));
+            cells.Sort((a, b) => a.sqrMagnitude.CompareTo(b.sqrMagnitude));
+            DisposeField();
+            int capacity = Mathf.Max(1, cells.Count * 48);
+            _localMatrices = new NativeArray<Matrix4x4>(capacity, Allocator.Persistent);
+            _matrices = new NativeArray<Matrix4x4>(capacity, Allocator.Persistent);
+            double sliceStart = Time.realtimeSinceStartupAsDouble;
+            foreach (Vector2Int cell in cells)
             {
-                if (++processedCells % 24 == 0)
+                int u = cell.x, v = cell.y;
+                if (Time.realtimeSinceStartupAsDouble - sliceStart >= 0.002)
                 {
+                    PublishGrass(candidates);
                     yield return null;
-                    if (body == null || viewer == null || ActiveWorld.Current != world
-                        || (body.transform.InverseTransformPoint(viewer.position) - viewerLocal).sqrMagnitude > range * range * 0.25f)
+                    sliceStart = Time.realtimeSinceStartupAsDouble;
+                    if (body == null || viewer == null || ActiveWorld.Current != world)
                     { _fieldBuild = null; yield break; }
                 }
-                if (u * u + v * v > range * range) continue;
-
                 Vector3 probeLocal = viewerLocal + tangentA * u + tangentB * v;
                 Vector3 radial = probeLocal.sqrMagnitude > 0.0001f ? probeLocal.normalized : localUp;
                 if (!TryFindRadialGrassSurface(world, radial, out Vector3Int surfaceVoxel,
@@ -344,9 +347,11 @@ namespace VoxelEngine.Cosmos
                 // Both cell discovery and root probes are yielded in bounded batches.
                 for (int blade = 0; blade < bladeCount; blade++)
                 {
-                    if (++processedRoots % 48 == 0)
+                    if (Time.realtimeSinceStartupAsDouble - sliceStart >= 0.002)
                     {
+                        PublishGrass(candidates);
                         yield return null;
+                        sliceStart = Time.realtimeSinceStartupAsDouble;
                         if (body == null || viewer == null || ActiveWorld.Current != world)
                         { _fieldBuild = null; yield break; }
                     }
@@ -364,26 +369,25 @@ namespace VoxelEngine.Cosmos
                         * Quaternion.FromToRotation(Vector3.up, rootUp);
                     float height = bladeHeight * Mathf.Lerp(0.72f, 1.18f, patch)
                         * (1f + rng.NextFloat(-heightVariance, heightVariance));
-                    candidates.Add(Matrix4x4.TRS(anchor, rotation,
-                        new Vector3(bladeWidth * rng.NextFloat(0.7f, 1.25f), height, height)));
+                    float width = bladeWidth * rng.NextFloat(0.7f, 1.25f);
+                    candidates.Add(Matrix4x4.TRS(anchor, rotation, new Vector3(width, height, width)));
                 }
             }
 
-            DisposeField();
+            PublishGrass(candidates);
             _fieldBuild = null;
             _nextStreamingRefresh = Time.unscaledTime + 4f;
-            _instanceCount = candidates.Count;
-            Debug.Log($"[Grass] blades={_instanceCount} density={density:0.00}/m2 tier={GraphicsPreset.Current} range={range:0}m");
-            if (_instanceCount == 0) yield break;
-            _localMatrices = new NativeArray<Matrix4x4>(_instanceCount, Allocator.Persistent);
-            _matrices = new NativeArray<Matrix4x4>(_instanceCount, Allocator.Persistent);
+        }
+
+        private void PublishGrass(List<Matrix4x4> candidates)
+        {
             Matrix4x4 bodyLW = body.transform.localToWorldMatrix;
-            _lastBodyLocalToWorld = bodyLW;
-            for (int i = 0; i < _instanceCount; i++)
+            for (int i = _instanceCount; i < candidates.Count; i++)
             {
                 _localMatrices[i] = candidates[i];
                 _matrices[i] = bodyLW * candidates[i];
             }
+            _instanceCount = candidates.Count;
         }
 
         private bool TryGroundTuft(IVoxelWorld world, ref Vector3 localSurface, ref Vector3 localUp)
@@ -393,14 +397,17 @@ namespace VoxelEngine.Cosmos
             Vector3 up = body.transform.TransformDirection(localUp).normalized;
             Ray ray = new Ray(root + up * 5f, -up);
             // Resolve the local chunk across a radial boundary; at most one raycast per cell.
+            Chunk previousChunk = null;
             for (int offset = 2; offset >= -2; offset--)
             {
                 Vector3 sample = localSurface + localUp * offset;
                 Vector3Int coord = Vector3Int.FloorToInt(sample /
                     (VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE));
                 if (!sphere.TryGetChunk(coord, out Chunk chunk) || chunk == null
-                    || chunk.meshCollider == null || !chunk.meshCollider.enabled
+                    || chunk.isDirty || chunk.meshCollider == null || !chunk.meshCollider.enabled
                     || chunk.meshCollider.sharedMesh == null) continue;
+                if (chunk == previousChunk) continue;
+                previousChunk = chunk;
                 if (!chunk.meshCollider.Raycast(ray, out RaycastHit hit, 10f)) continue;
                 if (Vector3.Dot(hit.normal, up) < 0.65f) return false;
                 localSurface = body.transform.InverseTransformPoint(hit.point);

@@ -121,8 +121,10 @@ void VsxTangentFrame(float3 up, out float3 t1, out float3 t2)
 }
 float2 VsxPlaneCoord(float3 p, float3 up)
 {
-    float3 t1, t2; VsxTangentFrame(up, t1, t2);
-    return float2(dot(p, t1), dot(p, t2));
+    // p is radial on planets: dot(p, a tangent recomputed from p) is always zero.
+    // Fixed oblique body-space axes keep procedural cracks/ripples spatially varying.
+    return float2(dot(p, float3(0.73, 0.39, 0.56)),
+                  dot(p, float3(-0.42, 0.86, 0.28)));
 }
 
 // 2D voronoi (3x3) -- F1 distance + its cell hash. Cracks, facets, columns.

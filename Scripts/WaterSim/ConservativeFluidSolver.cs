@@ -73,8 +73,8 @@ namespace VoxelEngine.WaterSim
                             int rankB = LiquidPhysics.DensityRank(FluidMaterialUtility.LiquidFromVoxel(b));
                             if ((ra - rb) * (rankA - rankB) > 0f)
                             {
-                                source.SetVoxelLocal(x, y, z, b);
-                                target.SetVoxelLocal(localQ.x, localQ.y, localQ.z, a);
+                                WriteLiquid(world, source, x, y, z, b);
+                                WriteLiquid(world, target, localQ.x, localQ.y, localQ.z, a);
                                 if (target != source) dirtyNeighbours[axisIndex] = true; changed = true;
                             }
                         }
@@ -96,8 +96,8 @@ namespace VoxelEngine.WaterSim
                     if (donor.waterLevel == 0) FluidMaterialUtility.ClearLiquid(ref donor);
                     receiver.density = -1;
                     FluidMaterialUtility.SetLiquid(ref receiver, liquid, (byte)(receiver.waterLevel + amount));
-                    source.SetVoxelLocal(x, y, z, fromA ? donor : receiver);
-                    target.SetVoxelLocal(localQ.x, localQ.y, localQ.z, fromA ? receiver : donor);
+                    WriteLiquid(world, source, x, y, z, fromA ? donor : receiver);
+                    WriteLiquid(world, target, localQ.x, localQ.y, localQ.z, fromA ? receiver : donor);
                     if (target != source) dirtyNeighbours[axisIndex] = true; changed = true;
                 }
             }
@@ -107,10 +107,28 @@ namespace VoxelEngine.WaterSim
             return changed;
         }
 
+        private static void WriteLiquid(IVoxelWorld world, Chunk chunk, int x, int y, int z, Voxel value)
+        {
+            chunk.voxels[Chunk.LocalToPaddedIndex(x,y,z)] = value;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            int dx = x == 0 ? -1 : x == S-1 ? 1 : 0;
+            int dy = y == 0 ? -1 : y == S-1 ? 1 : 0;
+            int dz = z == 0 ? -1 : z == S-1 ? 1 : 0;
+            if (dx == 0 && dy == 0 && dz == 0) return;
+            for (int iz=0;iz<=(dz != 0 ? 1 : 0);iz++)
+            for (int iy=0;iy<=(dy != 0 ? 1 : 0);iy++)
+            for (int ix=0;ix<=(dx != 0 ? 1 : 0);ix++)
+            {
+                if (ix+iy+iz == 0) continue;
+                if (world.TryGetChunk(chunk.coord + new Vector3Int(ix*dx,iy*dy,iz*dz), out Chunk neighbour)
+                    && neighbour != null && neighbour.isGenerated) WaterMeshBuilder.Schedule(neighbour);
+            }
+        }
+
         private static void Dirty(Chunk chunk)
         {
             chunk.isModified = true;
-            chunk.isDirty = true;
+            // Liquid-only writes must not invalidate solid terrain/colliders.
             WaterMeshBuilder.Schedule(chunk);
             if (Application.isPlaying) FluidManager.Instance?.MarkActive(chunk.coord);
         }

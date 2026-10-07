@@ -186,6 +186,14 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 float camDist   = distance(_WorldSpaceCameraPos, IN.positionWS);
                 float detailFade = saturate(1.0 - camDist / 140.0);
                 float  matId        = floor(IN.color.a * 255.0 + 0.5);   // pure-float id (9.17.1 pink fix)
+                // Per-fragment exposure follows the actual mesh, not one chunk-wide slope flag.
+                if ((abs(matId - 22.0) < 0.5 || abs(matId - 3.0) < 0.5)
+                    && dot(worldNormal, terrainUp) < 0.72)
+                {
+                    float exposure = 1.0 - smoothstep(0.42, 0.72, dot(worldNormal, terrainUp));
+                    albedo = lerp(albedo, float3(0.38, 0.37, 0.35), exposure);
+                    matId = 1.0;
+                }
                 float3 vsxAlbedo    = float3(1, 1, 1);
                 float2 vsxGrad      = float2(0, 0);
                 float  vsxSmoothAdd = 0.0;

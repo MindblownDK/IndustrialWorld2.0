@@ -159,7 +159,8 @@ Shader "VoxelEngine/VoxelGrass"
 
                 // -- Real blade motion: height-squared wind bend + a constant lean along the
                 // facing so blades ARC instead of shearing as flat cards. --
-                float bend = heightFactor * heightFactor;
+                float bladeHeightWS = length(TransformObjectToWorld(float3(0, 1, 0)) - rootWS);
+                float bend = heightFactor * heightFactor * bladeHeightWS;
                 worldPos += windTangent * bend * sway * 0.8;
                 worldPos -= grassUp * bend * sway * 0.3;
                 worldPos += facing * (bend * _BladeLean * 0.35);

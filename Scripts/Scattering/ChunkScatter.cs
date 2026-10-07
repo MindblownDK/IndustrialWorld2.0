@@ -219,6 +219,8 @@ namespace VoxelEngine.Scattering
                         Vector3 worldUp = rootTransform != null ? rootTransform.TransformDirection(upDir).normalized : upDir;
                         Quaternion worldRot = rootTransform != null ? rootTransform.rotation * localBodyRot : localBodyRot;
 
+                        if ((isEnemy || isPassiveAnimal) && world is SphereWorld dryWorld
+                            && !dryWorld.IsDryFooting(worldPos)) continue;
                         bool isTree = IsTreePrefab(entry.prefab);
                         // Tree roots use a generous per-tree footprint, then reservation checks add
                         // the two radii together. Oak/pine canopies therefore retain a visible gap

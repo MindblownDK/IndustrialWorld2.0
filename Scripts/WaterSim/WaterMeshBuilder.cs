@@ -127,6 +127,8 @@ namespace VoxelEngine.WaterSim
 
         public static void SetMaterialOverrides(Material waterMaterial, Material oilMaterial)
         {
+            Material compatibleWater = IsVoxelWaterCompatible(waterMaterial) ? waterMaterial : null;
+            if (_externalWaterMat == compatibleWater && _externalOilMat == oilMaterial) return;
             var previousExternalWater = _externalWaterMat;
             var previousExternalOil = _externalOilMat;
 

@@ -116,6 +116,15 @@ namespace VoxelEngine.Combat
             if (!Physics.Raycast(spawnPos + up * 2f, -up, out var groundHit, 12f,
                     ~0, QueryTriggerInteraction.Ignore)) return;
             if (groundHit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) return;
+            if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphere)
+            {
+                Vector3 local = sphere.body.transform.InverseTransformPoint(groundHit.point);
+                Vector3 normal = local.normalized;
+                if (!sphere.TryGroundSurface(ref local, ref normal)) return;
+                Vector3 terrainPoint = sphere.body.transform.TransformPoint(local);
+                if (Vector3.Distance(terrainPoint, groundHit.point) > 0.2f
+                    || !sphere.IsDryFooting(terrainPoint)) return;
+            }
             spawnPos = groundHit.point + up * 1.2f;
 
             var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(-tangent, up));

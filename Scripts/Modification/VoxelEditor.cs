@@ -170,18 +170,16 @@ namespace VoxelEngine.Modification
                 // other surface-caching visual) rebuilds exactly when the player changes
                 // terrain, instead of waiting for them to walk 12 m.
                 VoxelEngine.Cosmos.SphereWorld.Instance?.NotifyPlayerEdit();
-                // Mark a coarse 2-chunk radius around the brush dirty to be safe.
+                // Surface nets and border padding depend on one cell beyond the brush.
+                // Floor both bounds: this also handles negative coordinates correctly.
                 int cs = VoxelConstants.CHUNK_SIZE;
-                Vector3Int chunkCenter = new Vector3Int(
-                    Mathf.FloorToInt(center.x / (float)cs),
-                    Mathf.FloorToInt(center.y / (float)cs),
-                    Mathf.FloorToInt(center.z / (float)cs));
-                int chunkR = Mathf.CeilToInt(radius / cs) + 1;
-                for (int z = -chunkR; z <= chunkR; z++)
-                for (int y = -chunkR; y <= chunkR; y++)
-                for (int x = -chunkR; x <= chunkR; x++)
+                Vector3Int min = Vector3Int.FloorToInt((Vector3)(center - Vector3Int.one * (r + 1)) / cs);
+                Vector3Int max = Vector3Int.FloorToInt((Vector3)(center + Vector3Int.one * (r + 1)) / cs);
+                for (int z = min.z; z <= max.z; z++)
+                for (int y = min.y; y <= max.y; y++)
+                for (int x = min.x; x <= max.x; x++)
                 {
-                    if (world.TryGetChunk(chunkCenter + new Vector3Int(x, y, z), out var ch) && ch.isGenerated)
+                    if (world.TryGetChunk(new Vector3Int(x, y, z), out var ch) && ch.isGenerated)
                         world.ScheduleMeshJob(ch);
                 }
             }

@@ -1493,7 +1493,8 @@ namespace VoxelEngine.Cosmos
                     Chunk chunk = pair.Value;
                     if (chunk == null || !chunk.isGenerated || chunk.isScattered) continue;
                     Mesh mesh = chunk.meshFilter != null ? chunk.meshFilter.sharedMesh : null;
-                    if (mesh == null) continue;
+                    if (mesh == null || chunk.isDirty || chunk.meshCollider == null
+                        || chunk.meshCollider.sharedMesh == null) continue;
                     if (mesh.vertexCount == 0)
                     {
                         chunk.isScattered = true;
@@ -1758,9 +1759,41 @@ namespace VoxelEngine.Cosmos
                 if (exterior.IsSolid || VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(exterior)) return false;
             }
 
-            // A tiny outward lift keeps the prefab root above the voxel iso-surface rather than
-            // half a voxel inside its collider/mesh.
-            localSurface += radialUp * 0.06f;
+            return TryGroundSurface(ref localSurface, ref radialUp);
+        }
+
+        public bool TryGroundSurface(ref Vector3 localSurface, ref Vector3 radialUp)
+        {
+            if (body == null) return false;
+            Vector3 up = body.transform.TransformDirection(radialUp).normalized;
+            Ray ray = new Ray(body.transform.TransformPoint(localSurface) + up * 5f, -up);
+            Chunk previous = null;
+            for (int offset = 2; offset >= -2; offset--)
+            {
+                Vector3Int coord = LocalToChunk(localSurface + radialUp * offset);
+                if (!_chunks.TryGetValue(coord, out Chunk c) || c == previous) continue;
+                previous = c;
+                if (c.isDirty || c.meshCollider == null || !c.meshCollider.enabled
+                    || c.meshCollider.sharedMesh == null) continue;
+                if (!c.meshCollider.Raycast(ray, out RaycastHit hit, 10f)) continue;
+                localSurface = body.transform.InverseTransformPoint(hit.point);
+                radialUp = body.transform.InverseTransformDirection(hit.normal).normalized;
+                return true;
+            }
+            return false;
+        }
+
+        public bool IsDryFooting(Vector3 worldPoint)
+        {
+            if (body == null) return false;
+            Vector3 local = body.transform.InverseTransformPoint(worldPoint);
+            Vector3 up = local.normalized;
+            for (int i = 1; i <= 4; i++)
+            {
+                Vector3Int q = Vector3Int.FloorToInt((local + up * (i * 0.5f)) / VoxelConstants.VOXEL_SIZE);
+                if (!TryGetGeneratedVoxel(q, out Voxel v) || v.IsSolid
+                    || VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v)) return false;
+            }
             return true;
         }
 

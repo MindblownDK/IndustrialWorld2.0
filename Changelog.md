@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `16.0.0-dev`
+**Current Version:** `16.0.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [16.0.1-dev] Streaming, Grass and Shoreline Corrections
+
+#### Fixed
+- Water material overrides no longer scan all scene meshes when the material references are unchanged.
+- Mining remeshes the brush bounds plus a one-cell dependency halo instead of a conservative 125-chunk neighbourhood for small brushes. Tool strength/hardness is unchanged.
+- Grass publishes append-only instance batches during a nearest-first build, using a 2 ms work-slice target (not a hard frame-time guarantee). Edits cancel obsolete builds and clear stale anchors. Both horizontal axes now use blade width; shader bending scales with blade height.
+- New spherical scatter requires actual terrain collider grounding. Supplemental and scatter enemy paths reject submerged footing; supplemental enemies also verify the terrain hit. Existing spawned scenery is not migrated.
+- Procedural fallback plane coordinates use fixed body-relative axes instead of collapsing radial tangent projections. Both terrain shaders apply rock exposure on steep grass/clay surfaces using the rendered normal; voxel materials and terrain generation remain unchanged.
+- Liquid meshing caches a voxel halo, includes liquids found in neighbouring halo cells, and samples bank depth once per intersecting cube rather than per emitted vertex. Solid cells no longer contribute a fictitious positive water volume to the scalar average. Shared edges use canonical endpoint order; degenerate triangles are skipped.
+- Water colour depth uses bank depth rather than camera-ray length; shore intersections no longer force nearly opaque alpha.
+- Liquid-only writes preserve terrain dirty state and schedule neighbouring liquid meshes at changed borders. Transfer arithmetic and pump APIs are unchanged.
+
+#### Compatibility and validation
+- Patch over 16.0.0-dev; terrain revision stays 16. No new fresh-world requirement. Older pre-16 worlds remain incompatible under the existing rules.
+- User reported the 16.0.0 Unity fluid conservation fixture PASS, but rejected its visuals/performance. That test does not validate this patch's rendering.
+- Local validation covers C# syntax, whitespace, dependency-halo bounds, grass scale and scalar-field reference cases. No Unity/API/Burst/HLSL compilation or measured FPS improvement is claimed.
+- Open: synchronous fluid/mesh work can still stall streaming; exact shore coverage, thin streams, existing floating scenery, grass regrowth while editing, mining feel and target frame rate require Unity review. The slope fix is visual exposure, not changed voxel geology.
 
 ### [16.0.0-dev] Regional Biomes, Named PBR and Conservative Water
 

@@ -344,7 +344,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 bool hasValidDepth = rawDepth > 0.00001f && rawDepth < 0.99999f;
                 float depthDiff = hasValidDepth ? max(0, sceneEyeDepth - waterEyeDepth) : 15.0f;
                 float screenDepth01 = saturate(depthDiff / _DepthFade);
-                float deep01 = hasValidDepth ? screenDepth01 : geometryDepth01;
+                float deep01 = geometryDepth01;
                 float shoreAtten = saturate(shoreDepthMask);
                 float3 refracted = SampleSceneColor(refractUV).rgb;
                 if (length(refracted) < 0.001f) refracted = _DeepColor.rgb;
@@ -413,7 +413,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 // Voxel-authored shallow water is intentionally clearer so beaches
                 // and lake beds remain visible. Deep water keeps the dense ocean body.
                 alpha = lerp(0.72, alpha, saturate(deep01 * 1.35));
-                alpha = lerp(alpha, 0.99, shoreFactor * 0.85);
+                // Do not force shallow shore intersections to opaque black bands.
                 alpha = lerp(alpha, min(alpha + 0.12, 0.99), fresnel);
                 alpha = max(alpha, lerp(0.70, 0.94, deep01));
                 alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
