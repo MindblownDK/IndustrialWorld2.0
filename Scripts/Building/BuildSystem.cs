@@ -1087,6 +1087,7 @@ namespace VoxelEngine.Building
             pb.Item   = block;
             pb.Hp     = block.blockHealth;
             pb.onGrid = gridSnap;
+            pb.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
 
             var payloadReceiver = go.GetComponentInChildren<IPlacedBlockPayloadReceiver>();
             if (payloadReceiver != null && inventory != null)
@@ -1199,6 +1200,7 @@ namespace VoxelEngine.Building
             placed.Item = item;
             placed.Hp = item.blockHealth;
             placed.onGrid = true;
+            placed.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
 
             Quaternion worldRotation = grid.transform.rotation
                 * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);

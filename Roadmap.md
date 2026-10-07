@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.68.0-dev`
-**Roadmap Version:** `14.68.0-dev`
+**Current Version:** `14.69.0-dev`
+**Roadmap Version:** `14.69.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.69.0-dev - What the Map Knows
+- Logistics Map hover inspection names buildings and resolves their current owning team from replicated placer identity
+- Pollution cells expose exact air/runoff percentages and SI mass; ocean hover distinguishes clean from polluted water
+- Additive ownership metadata persists, replicates and survives tier upgrades while legacy buildings remain explicitly unowned
+
 ### 14.68.0-dev - What the Rain Leaves Behind
 - Persistent runoff/soil-water cells, rain wash transfer, lateral seepage, slow recovery and host/client telemetry are active
 - Pollution Harvester extracts runoff into Remediation Sludge; water pumps expose quality and capped contamination throughput loss
@@ -47,12 +52,6 @@
 
 ### 14.66.1-dev - Modern Identity
 - Pollution emitter staggering uses Unity's current entity-ID API instead of obsolete instance IDs
-
-### 14.66.0-dev - The Air Has Memory
-- Host-authoritative sparse body-local airborne pollution with wind, rain dilution, recovery, additive sidecar persistence and client snapshots
-- Direct source profiles wired to combustion, process, routed exhaust, scrubber capture and flare activity; electricity is not double-counted
-- Atmospheric Carbon Harvester closes the powered cleanup -> Carbon Concentrate -> Graphite loop; Setup Step 114 authors all content non-destructively
-- Optional Logistics Map heat layer, functional orbital burden, reversible smog visuals and local solar attenuation
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -346,7 +345,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev and its presentation pass shipped 14.67.0-dev. Phase 2 runoff foundations shipped 14.68.0-dev: direct effluent, rain wash transfer, persistent seepage/recovery, maps, water-pump quality and powered sludge recovery are live. Climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and its presentation pass shipped 14.67.0-dev. Phase 2 runoff foundations shipped 14.68.0-dev; 14.69.0-dev adds cell-level pollution/water hover inspection and replicated building-team identity. Climate load, orbital debris, ecology pressure and territorial threats remain later phases.)*
 
 #### Pollution Sources
 
@@ -361,7 +360,8 @@ Industrial activity creates pollution that spreads outward from its source and c
 - ~~Water and soil retain sparse runoff contamination longer than open air.~~ *(14.68.0-dev)*
 - Forests, filters, scrubbers, sealed processing, cleaner fuel, and advanced Crusader technology reduce pollution.
 - Dormant regions simulate pollution at a reduced tick rate.
-- Pollution maps and sensors show source intensity, spread direction, local danger, and predicted thresholds.
+- ~~Pollution map hover inspection reports local air, soil and water intensity with SI cell mass.~~ *(14.69.0-dev)*
+- Source direction, warning automation and predicted thresholds remain open.
 
 #### Enemy Attraction
 

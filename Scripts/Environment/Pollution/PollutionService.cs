@@ -332,7 +332,8 @@ namespace VoxelEngine.Environment
                 float runoff = 1f - Mathf.Exp(-Mathf.Max(0f, pair.Value.runoff) / LocalRunoffScale);
                 if (intensity < 0.01f && runoff < 0.01f) continue;
                 Vector3 world = body.transform.TransformPoint(CellCentre(pair.Key));
-                output.Add(new PollutionMapCell(world, intensity, runoff, CellSizeMetres));
+                output.Add(new PollutionMapCell(world, intensity, runoff, CellSizeMetres,
+                    pair.Value.airborneSmog, pair.Value.runoff));
             }
         }
 

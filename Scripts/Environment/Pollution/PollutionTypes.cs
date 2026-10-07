@@ -121,13 +121,18 @@ namespace VoxelEngine.Environment
         public readonly float Intensity01;
         public readonly float Runoff01;
         public readonly float SizeMetres;
+        public readonly float AirborneUnits;
+        public readonly float RunoffUnits;
 
-        public PollutionMapCell(Vector3 world, float intensity01, float runoff01, float sizeMetres)
+        public PollutionMapCell(Vector3 world, float intensity01, float runoff01, float sizeMetres,
+            float airborneUnits = 0f, float runoffUnits = 0f)
         {
             World = world;
             Intensity01 = Mathf.Clamp01(intensity01);
             Runoff01 = Mathf.Clamp01(runoff01);
             SizeMetres = Mathf.Max(1f, sizeMetres);
+            AirborneUnits = Mathf.Max(0f, airborneUnits);
+            RunoffUnits = Mathf.Max(0f, runoffUnits);
         }
     }
 

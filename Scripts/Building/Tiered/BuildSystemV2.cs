@@ -1129,6 +1129,7 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, BuildTier.Wood);
+            pb.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
             var load = go.GetComponent<StructuralLoadState>();
             if (load != null && _structuralSpan > 0) load.Arm(_structuralSpan, _structuralAnchor);
             else if (load == null && StructuralLoadState.IsFitting(def.family))
@@ -1175,6 +1176,7 @@ namespace VoxelEngine.Building.Tiered
             bool oldFitting = oldLoad != null && oldLoad.armed && oldLoad.fittingPiece;
             bool oldPillarAudit = oldLoad != null && oldLoad.armed && oldLoad.pillarPiece;
             PlacedTieredBlock oldHost = oldFitting ? oldLoad.hostPiece : null;
+            string oldOwnerId = target.ownerId ?? "";
 
             // Upgrading a frame rebuilds its GameObject; any fitting armed against
             // the old object must be re-pointed at the replacement or it would
@@ -1196,6 +1198,7 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, next);
+            pb.ownerId = oldOwnerId;
             var newLoad = go.GetComponent<StructuralLoadState>();
             if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan, oldAnchor);
             else if (oldVertical)

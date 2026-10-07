@@ -34,10 +34,11 @@ namespace VoxelEngine.UI
 {
     public static class LogisticsMapScreen
     {
-        private static VisualElement _root, _screen, _canvas, _sidebar, _labelLayer;
-        private static Label _headerLabel, _statusLabel;
+        private static VisualElement _root, _screen, _canvas, _sidebar, _labelLayer, _hoverCard;
+        private static Label _headerLabel, _statusLabel, _hoverTitle, _hoverDetail;
         private static ScrollView _list;
-        private static bool _open, _blocking;
+        private static bool _open, _blocking, _pointerInside;
+        private static Vector2 _pointerCanvas;
 
         // ── View ─────────────────────────────────────────────────────────────────
         private static float _zoom = 1f;
@@ -99,15 +100,17 @@ namespace VoxelEngine.UI
             public readonly float HalfEastMetres;
             public readonly float HalfNorthMetres;
             public readonly Color Colour;
+            public readonly bool Ocean;
 
             public TerrainTile(float eastMetres, float northMetres,
-                float halfEastMetres, float halfNorthMetres, Color colour)
+                float halfEastMetres, float halfNorthMetres, Color colour, bool ocean)
             {
                 EastMetres = eastMetres;
                 NorthMetres = northMetres;
                 HalfEastMetres = halfEastMetres;
                 HalfNorthMetres = halfNorthMetres;
                 Colour = colour;
+                Ocean = ocean;
             }
         }
 
@@ -164,23 +167,43 @@ namespace VoxelEngine.UI
             // Labels are positioned against the canvas rect, so a resize moves
             // every one of them - relayout on geometry just like on pan.
             _canvas.RegisterCallback<GeometryChangedEvent>(_ => InvalidateView());
+            _canvas.RegisterCallback<PointerEnterEvent>(e =>
+            {
+                _pointerInside = true;
+                _pointerCanvas = _canvas.WorldToLocal((Vector2)e.position);
+                UpdateHover();
+            });
+            _canvas.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                _pointerInside = false;
+                HideHover();
+            });
             _canvas.RegisterCallback<PointerDownEvent>(e =>
             {
                 _dragging = true;
                 _dragStart = e.position;
                 _panStart = _pan;
+                HideHover();
                 _canvas.CapturePointer(e.pointerId);
             });
             _canvas.RegisterCallback<PointerMoveEvent>(e =>
             {
-                if (!_dragging) return;
-                _pan = _panStart + ((Vector2)e.position - _dragStart);
-                InvalidateView();
+                _pointerInside = true;
+                _pointerCanvas = _canvas.WorldToLocal((Vector2)e.position);
+                if (_dragging)
+                {
+                    _pan = _panStart + ((Vector2)e.position - _dragStart);
+                    InvalidateView();
+                    return;
+                }
+                UpdateHover();
             });
             _canvas.RegisterCallback<PointerUpEvent>(e =>
             {
                 _dragging = false;
                 _canvas.ReleasePointer(e.pointerId);
+                _pointerCanvas = _canvas.WorldToLocal((Vector2)e.position);
+                UpdateHover();
             });
 
             _headerLabel = new Label("LOGISTICS MAP");
@@ -209,7 +232,7 @@ namespace VoxelEngine.UI
             _labelLayer.pickingMode = PickingMode.Ignore;
             _canvas.Add(_labelLayer);
 
-            var hint = new Label("DRAG TO PAN   ·   SCROLL TO ZOOM   ·   L / ESC TO CLOSE");
+            var hint = new Label("HOVER TO INSPECT   ·   DRAG TO PAN   ·   SCROLL TO ZOOM   ·   L / ESC TO CLOSE");
             hint.style.position = Position.Absolute;
             hint.style.bottom = 12;
             hint.style.width = Length.Percent(100);
@@ -219,6 +242,41 @@ namespace VoxelEngine.UI
             hint.style.color = new StyleColor(new Color(0.38f, 0.44f, 0.55f));
             hint.pickingMode = PickingMode.Ignore;
             _canvas.Add(hint);
+
+            _hoverCard = new VisualElement { name = "LogisticsMapHover" };
+            _hoverCard.style.position = Position.Absolute;
+            _hoverCard.style.width = 270;
+            _hoverCard.style.paddingLeft = 11;
+            _hoverCard.style.paddingRight = 11;
+            _hoverCard.style.paddingTop = 8;
+            _hoverCard.style.paddingBottom = 8;
+            _hoverCard.style.backgroundColor = new StyleColor(new Color(0.035f, 0.045f, 0.060f, 0.96f));
+            _hoverCard.style.borderLeftWidth = 3;
+            _hoverCard.style.borderTopWidth = 1;
+            _hoverCard.style.borderRightWidth = 1;
+            _hoverCard.style.borderBottomWidth = 1;
+            _hoverCard.style.borderTopColor = new StyleColor(new Color(0.24f, 0.31f, 0.38f, 0.95f));
+            _hoverCard.style.borderRightColor = new StyleColor(new Color(0.24f, 0.31f, 0.38f, 0.95f));
+            _hoverCard.style.borderBottomColor = new StyleColor(new Color(0.24f, 0.31f, 0.38f, 0.95f));
+            _hoverCard.style.display = DisplayStyle.None;
+            _hoverCard.pickingMode = PickingMode.Ignore;
+            T.Radius(_hoverCard, 7);
+
+            _hoverTitle = new Label();
+            _hoverTitle.style.fontSize = 11;
+            _hoverTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _hoverTitle.style.letterSpacing = 1.1f;
+            _hoverTitle.pickingMode = PickingMode.Ignore;
+            _hoverCard.Add(_hoverTitle);
+
+            _hoverDetail = new Label();
+            _hoverDetail.style.fontSize = 9;
+            _hoverDetail.style.marginTop = 3;
+            _hoverDetail.style.whiteSpace = WhiteSpace.Normal;
+            _hoverDetail.style.color = new StyleColor(new Color(0.68f, 0.75f, 0.82f));
+            _hoverDetail.pickingMode = PickingMode.Ignore;
+            _hoverCard.Add(_hoverDetail);
+            _canvas.Add(_hoverCard);
 
             // ── Sidebar ──
             _sidebar = new VisualElement { name = "LogisticsMapSidebar" };
@@ -339,6 +397,8 @@ namespace VoxelEngine.UI
         {
             if (!_open) return;
             _open = false;
+            _pointerInside = false;
+            HideHover();
             if (_screen != null) _screen.style.display = DisplayStyle.None;
             if (_blocking) { UIState.PopBlock(); _blocking = false; }
         }
@@ -352,8 +412,9 @@ namespace VoxelEngine.UI
         private static void Refresh()
         {
             LogisticsMapData.Rebuild(ViewerPosition());
-            if (_showPollution) PollutionService.GetActiveBodyMapCells(_pollutionCells);
-            else _pollutionCells.Clear();
+            // Keep sparse cells available for water hover inspection even when the painted
+            // pollution layer is off; nothing is rendered or shown permanently.
+            PollutionService.GetActiveBodyMapCells(_pollutionCells);
             BuildList();
 
             string pollution = string.Empty;
@@ -380,6 +441,7 @@ namespace VoxelEngine.UI
             if (_canvas == null) return;
             _canvas.MarkDirtyRepaint();
             LayoutLabels();
+            if (!_dragging) UpdateHover();
         }
 
         /// <summary>Fits the whole network in view, so the map never opens on empty space.</summary>
@@ -654,6 +716,174 @@ namespace VoxelEngine.UI
         private static Vector2 Project(Vector3 world, Vector2 centre, float metresPerPixel)
             => Project(world, centre, metresPerPixel, _projectionFrame);
 
+        // ── Hover inspection ─────────────────────────────────────────────────────
+        private static void UpdateHover()
+        {
+            if (!_open || !_pointerInside || _dragging || _canvas == null || _hoverCard == null)
+            {
+                HideHover();
+                return;
+            }
+
+            Rect r = _canvas.contentRect;
+            if (r.width < 10f || r.height < 10f || !r.Contains(_pointerCanvas))
+            {
+                HideHover();
+                return;
+            }
+
+            Vector2 centre = new(r.width * 0.5f + _pan.x, r.height * 0.5f + _pan.y);
+            float metresPerPixel = _baseScale / Mathf.Max(0.0001f, _zoom);
+            _projectionFrame = BuildMapFrame(_anchor);
+
+            if (_showBuildings && TryHoveredBuilding(_pointerCanvas, centre, metresPerPixel,
+                out MapFootprint building))
+            {
+                string team = string.IsNullOrEmpty(building.OwnerId)
+                    ? "UNKNOWN (LEGACY / UNOWNED)"
+                    : string.IsNullOrEmpty(building.TeamName) ? "NO TEAM" : building.TeamName;
+                string detail = "TEAM  ·  " + team;
+                var owner = !string.IsNullOrEmpty(building.OwnerId)
+                    ? VoxelEngine.Networking.NetworkSession.GetPlayer(building.OwnerId)
+                    : null;
+                if (owner != null && !string.IsNullOrWhiteSpace(owner.displayName))
+                    detail += "\nOWNER  ·  " + owner.displayName;
+                ShowHover(building.Name, detail, building.Ink, r);
+                return;
+            }
+
+            EnsureTerrainRaster(r, metresPerPixel, _projectionFrame);
+            bool overWater = IsOceanAt(_pointerCanvas, centre, metresPerPixel);
+            bool hasPollution = TryHoveredPollution(_pointerCanvas, centre, metresPerPixel,
+                out PollutionMapCell pollution);
+
+            if (overWater)
+            {
+                float runoff = hasPollution ? pollution.Runoff01 : 0f;
+                string detail = $"{runoff * 100f:0.0}% POLLUTED";
+                if (hasPollution && pollution.RunoffUnits > 0f)
+                    detail += "  ·  " + PollutionUnits.FormatContaminantMass(pollution.RunoffUnits);
+                if (_showPollution && hasPollution && pollution.Intensity01 >= 0.01f)
+                    detail += $"\nAIR ABOVE  ·  {pollution.Intensity01 * 100f:0.0}%  ·  "
+                        + PollutionUnits.FormatMass(pollution.AirborneUnits);
+                Color waterInk = runoff >= 0.01f ? RunoffColour(runoff) : new Color(0.38f, 0.76f, 0.94f);
+                ShowHover(runoff >= 0.01f ? "POLLUTED WATER" : "CLEAN WATER",
+                    detail, waterInk, r);
+                return;
+            }
+
+            if (_showPollution && hasPollution)
+            {
+                bool air = pollution.Intensity01 >= 0.01f;
+                bool runoff = pollution.Runoff01 >= 0.01f;
+                string title = air && runoff ? "MIXED POLLUTION"
+                    : air ? "AIR POLLUTION" : "SOIL / WATER POLLUTION";
+                string detail = string.Empty;
+                if (air)
+                    detail = $"AIR  ·  {pollution.Intensity01 * 100f:0.0}%  ·  "
+                        + PollutionUnits.FormatMass(pollution.AirborneUnits);
+                if (runoff)
+                {
+                    if (!string.IsNullOrEmpty(detail)) detail += "\n";
+                    detail += $"RUNOFF  ·  {pollution.Runoff01 * 100f:0.0}%  ·  "
+                        + PollutionUnits.FormatContaminantMass(pollution.RunoffUnits);
+                }
+                Color ink = runoff && !air ? RunoffColour(pollution.Runoff01)
+                    : PollutionColour(pollution.Intensity01);
+                ShowHover(title, detail, ink, r);
+                return;
+            }
+
+            HideHover();
+        }
+
+        private static bool TryHoveredBuilding(Vector2 pointer, Vector2 centre,
+            float metresPerPixel, out MapFootprint result)
+        {
+            result = default;
+            float best = float.MaxValue;
+            bool found = false;
+            var buildings = LogisticsMapData.Buildings;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                MapFootprint candidate = buildings[i];
+                Vector2 p = Project(candidate.World, centre, metresPerPixel);
+                float half = Mathf.Max(6f,
+                    Mathf.Clamp(candidate.RadiusMetres / metresPerPixel, 1.5f, 80f));
+                float distance = Mathf.Abs(pointer.x - p.x) + Mathf.Abs(pointer.y - p.y);
+                float normalized = distance / half;
+                if (normalized > 1f || normalized >= best) continue;
+                best = normalized;
+                result = candidate;
+                found = true;
+            }
+            return found;
+        }
+
+        private static bool TryHoveredPollution(Vector2 pointer, Vector2 centre,
+            float metresPerPixel, out PollutionMapCell result)
+        {
+            result = default;
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < _pollutionCells.Count; i++)
+            {
+                PollutionMapCell candidate = _pollutionCells[i];
+                Vector2 p = Project(candidate.World, centre, metresPerPixel);
+                float half = Mathf.Max(3f, candidate.SizeMetres / metresPerPixel * 0.5f);
+                float dx = Mathf.Abs(pointer.x - p.x);
+                float dy = Mathf.Abs(pointer.y - p.y);
+                if (dx > half || dy > half) continue;
+                float normalized = Mathf.Max(dx, dy) / half;
+                if (normalized >= best) continue;
+                best = normalized;
+                result = candidate;
+                found = true;
+            }
+            return found;
+        }
+
+        private static bool IsOceanAt(Vector2 pointer, Vector2 centre, float metresPerPixel)
+        {
+            float east = (pointer.x - centre.x) * metresPerPixel;
+            float north = (centre.y - pointer.y) * metresPerPixel;
+            for (int i = 0; i < _terrainTiles.Count; i++)
+            {
+                TerrainTile tile = _terrainTiles[i];
+                if (Mathf.Abs(east - tile.EastMetres) > tile.HalfEastMetres
+                    || Mathf.Abs(north - tile.NorthMetres) > tile.HalfNorthMetres) continue;
+                return tile.Ocean;
+            }
+            return false;
+        }
+
+        private static void ShowHover(string title, string detail, Color accent, Rect viewport)
+        {
+            if (_hoverCard == null) return;
+            _hoverTitle.text = title ?? string.Empty;
+            _hoverTitle.style.color = new StyleColor(accent);
+            _hoverDetail.text = detail ?? string.Empty;
+            _hoverCard.style.borderLeftColor = new StyleColor(accent);
+            _hoverCard.style.display = DisplayStyle.Flex;
+
+            int lines = 1;
+            if (!string.IsNullOrEmpty(detail))
+                for (int i = 0; i < detail.Length; i++) if (detail[i] == '\n') lines++;
+            float estimatedHeight = 39f + lines * 14f;
+            float x = Mathf.Clamp(_pointerCanvas.x + 16f, 6f,
+                Mathf.Max(6f, viewport.width - 276f));
+            float y = _pointerCanvas.y + 17f;
+            if (y + estimatedHeight > viewport.height - 8f)
+                y = _pointerCanvas.y - estimatedHeight - 12f;
+            _hoverCard.style.left = x;
+            _hoverCard.style.top = Mathf.Max(6f, y);
+        }
+
+        private static void HideHover()
+        {
+            if (_hoverCard != null) _hoverCard.style.display = DisplayStyle.None;
+        }
+
         private static void Paint(MeshGenerationContext ctx)
         {
             var painter = ctx.painter2D;
@@ -859,7 +1089,7 @@ namespace VoxelEngine.UI
                         Mathf.Clamp01(colour.b * shade),
                         0.82f);
                     _terrainTiles.Add(new TerrainTile(eastMetres, northMetres,
-                        halfEast, halfNorth, colour));
+                        halfEast, halfNorth, colour, ocean));
                 }
             }
         }

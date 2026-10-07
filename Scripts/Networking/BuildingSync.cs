@@ -35,6 +35,7 @@ namespace VoxelEngine.Networking
         public Vector3 Position;
         public Quaternion Rotation;
         public int Hp;
+        public string OwnerId;     // stable placer identity; empty = legacy/unowned
         public float RailingRise;
         public float PillarHeight;
         // Door/hatch state (14.6.0).
@@ -60,7 +61,7 @@ namespace VoxelEngine.Networking
         {
             if (def == null || !ShouldAnnounce()) return;
             NetworkBootstrap.Instance.SendPiecePlaced(def.family.ToString(), (int)tier,
-                pos, rot, railingRise, pillarHeight);
+                pos, rot, railingRise, pillarHeight, NetworkSession.LocalPlayerId ?? "");
         }
 
         public static void AnnounceRemoved(BuildFamily family, Vector3 pos)
@@ -161,12 +162,13 @@ namespace VoxelEngine.Networking
         // ─────────────── network -> local world (bootstrap calls these) ───────────────
 
         public static void ApplyPlaced(string family, int tier, Vector3 pos, Quaternion rot,
-            float railingRise, float pillarHeight)
+            float railingRise, float pillarHeight, string ownerId)
         {
             var def = ResolveDefinition(family);
             if (def == null) return;
             if (FindPieceAt(family, pos) != null) return;   // already present - duplicate-safe
-            SpawnRemote(def, tier, pos, rot, railingRise, pillarHeight, hp: 0, playSound: true);
+            SpawnRemote(def, tier, pos, rot, railingRise, pillarHeight, hp: 0,
+                ownerId: ownerId, playSound: true);
         }
 
         /// <summary>Join-in-progress merge (14.5.0): apply a chunk of pieces the
@@ -181,15 +183,18 @@ namespace VoxelEngine.Networking
                 var piece = FindPieceAt(p.Family, p.Position);
                 if (piece == null)
                     piece = SpawnRemote(def, p.Tier, p.Position, p.Rotation, p.RailingRise,
-                        p.PillarHeight, p.Hp, playSound: false);
-                else if (p.Hp > 0 && p.Hp != piece.hp)
+                        p.PillarHeight, p.Hp, p.OwnerId, playSound: false);
+                else
                 {
-                    // Rejoin convergence: an already-present piece adopts the
-                    // origin's hp so cracks and remaining hits stay in step.
-                    piece.hp = p.Hp;
-                    int maxHp = Mathf.Max(1, def.GetStats((BuildTier)p.Tier).hp);
-                    VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(
-                        piece, 1f - Mathf.Clamp01(piece.hp / (float)maxHp));
+                    if (p.Hp > 0 && p.Hp != piece.hp)
+                    {
+                        // Rejoin convergence: an already-present piece adopts the
+                        // origin's hp so cracks and remaining hits stay in step.
+                        piece.hp = p.Hp;
+                        int maxHp = Mathf.Max(1, def.GetStats((BuildTier)p.Tier).hp);
+                        VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(
+                            piece, 1f - Mathf.Clamp01(piece.hp / (float)maxHp));
+                    }
                 }
                 if (piece == null) continue;
                 // 14.56.0 - snapshots carry hash-stripped public forms. A
@@ -233,6 +238,7 @@ namespace VoxelEngine.Networking
                     Position = pb.transform.position,
                     Rotation = pb.transform.rotation,
                     Hp = pb.hp,
+                    OwnerId = pb.ownerId ?? "",
                     RailingRise = rise,
                     PillarHeight = height,
                     DoorOpen = doorOpen,
@@ -255,7 +261,7 @@ namespace VoxelEngine.Networking
         /// <summary>Restore-style instantiation shared by live placement and the
         /// snapshot merge. Remote pieces stay UNARMED - see file header.</summary>
         private static PlacedTieredBlock SpawnRemote(TieredBlockDefinition def, int tier, Vector3 pos,
-            Quaternion rot, float railingRise, float pillarHeight, int hp, bool playSound)
+            Quaternion rot, float railingRise, float pillarHeight, int hp, string ownerId, bool playSound)
         {
             var prefab = def.GetPrefab((BuildTier)tier);
             if (prefab == null) return null;
@@ -271,6 +277,7 @@ namespace VoxelEngine.Networking
                 var pb = go.GetComponent<PlacedTieredBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
                 pb.Initialize(def, (BuildTier)tier);
+                pb.ownerId = ownerId ?? "";
                 if (hp > 0)
                 {
                     // Carry damage across the join - cracks match the origin world.
@@ -468,6 +475,7 @@ namespace VoxelEngine.Networking
             {
                 Quaternion rot = piece != null ? piece.transform.rotation : Quaternion.identity;
                 Vector3 exactPos = piece != null ? piece.transform.position : pos;
+                string ownerId = piece != null ? (piece.ownerId ?? "") : "";
                 float pillarHeight = 0f;
                 if (piece != null && piece.TryGetComponent<AdjustablePillar>(out var oldPillar))
                     pillarHeight = oldPillar.currentHeight;
@@ -480,6 +488,7 @@ namespace VoxelEngine.Networking
                 var pb = go.GetComponent<PlacedTieredBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
                 pb.Initialize(def, (BuildTier)newTier);
+                pb.ownerId = ownerId;
             }
             finally { IsApplyingRemote = false; }
         }

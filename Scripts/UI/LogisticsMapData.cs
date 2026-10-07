@@ -14,6 +14,7 @@
 //   • Drone routes and ports    (DroneNetwork / DronePort)
 //   • Logistic chest clusters   (Chest with a port lock) as "base zones"
 //   • Roads                     (RoadSurfaceUtility)
+//   • Static buildings          (PlacedBlock / PlacedTieredBlock) with ownership
 //
 // These were built across many versions and never had a shared view. The map is that
 // view: it is where the player finally sees whether their networks actually join up.
@@ -25,6 +26,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Environment;
+using VoxelEngine.Networking;
 using VoxelEngine.Transport;
 
 namespace VoxelEngine.UI
@@ -78,12 +80,19 @@ namespace VoxelEngine.UI
         public readonly Vector3 World;
         public readonly float RadiusMetres;
         public readonly Color Ink;
+        public readonly string Name;
+        public readonly string OwnerId;
+        public readonly string TeamName;
 
-        public MapFootprint(Vector3 world, float radiusMetres, Color ink)
+        public MapFootprint(Vector3 world, float radiusMetres, Color ink,
+            string name, string ownerId, string teamName)
         {
             World = world;
             RadiusMetres = Mathf.Max(0.75f, radiusMetres);
             Ink = ink;
+            Name = string.IsNullOrWhiteSpace(name) ? "Building" : name;
+            OwnerId = ownerId ?? string.Empty;
+            TeamName = teamName ?? string.Empty;
         }
     }
 
@@ -357,9 +366,11 @@ namespace VoxelEngine.UI
             {
                 var block = placed[i];
                 if (block == null || block.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) continue;
-                if (block.GetComponent<AsphaltRoad>() != null) continue; // already represented by the road layer
+                if (block.GetComponent<AsphaltRoad>() != null) continue; // dedicated road layer
+                if (block.GetComponentInChildren<RailTrack>(true) != null) continue; // dedicated rail layer
+                string name = block.Item != null ? block.Item.displayName : block.gameObject.name;
                 AddBuilding(block.gameObject, block.Item != null ? block.Item.category : string.Empty,
-                    _buildingSeen, grow);
+                    name, block.ownerId, _buildingSeen, grow);
             }
 
             var tiered = Object.FindObjectsByType<VoxelEngine.Building.Tiered.PlacedTieredBlock>(
@@ -368,12 +379,15 @@ namespace VoxelEngine.UI
             {
                 var block = tiered[i];
                 if (block == null || block.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) continue;
-                AddBuilding(block.gameObject, "Structure", _buildingSeen, grow);
+                string name = block.definition != null
+                    ? $"{block.definition.displayName} ({block.tier})"
+                    : block.gameObject.name;
+                AddBuilding(block.gameObject, "Structure", name, block.ownerId, _buildingSeen, grow);
             }
         }
 
-        private static void AddBuilding(GameObject root, string category, HashSet<GameObject> seen,
-            System.Action<Vector3> grow)
+        private static void AddBuilding(GameObject root, string category, string name, string ownerId,
+            HashSet<GameObject> seen, System.Action<Vector3> grow)
         {
             if (root == null || !seen.Add(root)) return;
             Bounds bounds = new(root.transform.position, Vector3.one * 1.5f);
@@ -397,9 +411,24 @@ namespace VoxelEngine.UI
                     : lower.Contains("storage")
                         ? new Color(0.50f, 0.68f, 0.94f, 0.76f)
                         : new Color(0.62f, 0.68f, 0.72f, 0.62f);
-            _buildings.Add(new MapFootprint(bounds.center, radius, ink));
+            TeamData team = TeamRegistry.TeamOf(ownerId);
+            string teamName = team != null && !string.IsNullOrWhiteSpace(team.name)
+                ? team.name
+                : string.Empty;
+            _buildings.Add(new MapFootprint(bounds.center, radius, ink,
+                CleanBuildingName(name), ownerId, teamName));
             grow(bounds.min);
             grow(bounds.max);
+        }
+
+        private static string CleanBuildingName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "Building";
+            string clean = value.Replace("(Clone)", string.Empty)
+                .Replace("(remote)", string.Empty)
+                .Replace("(restored)", string.Empty)
+                .Trim();
+            return string.IsNullOrEmpty(clean) ? "Building" : clean;
         }
 
         // ── Deep deposits ────────────────────────────────────────────────────────

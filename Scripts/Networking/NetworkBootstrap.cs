@@ -411,6 +411,7 @@ namespace VoxelEngine.Networking
         public Quaternion Rotation;
         public float RailingRise;
         public float PillarHeight;
+        public string OwnerId;
     }
 
     public struct PieceRemovedBroadcast : IBroadcast
@@ -1744,13 +1745,14 @@ namespace VoxelEngine.Networking
         // the server applies remote edits locally and relays to everyone else.
 
         public void SendPiecePlaced(string family, int tier, Vector3 pos, Quaternion rot,
-            float railingRise, float pillarHeight)
+            float railingRise, float pillarHeight, string ownerId)
         {
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(new PiecePlacedBroadcast
             {
                 Family = family, Tier = tier, Position = pos, Rotation = rot,
-                RailingRise = railingRise, PillarHeight = pillarHeight
+                RailingRise = railingRise, PillarHeight = pillarHeight,
+                OwnerId = ownerId ?? ""
             });
         }
 
@@ -1778,9 +1780,11 @@ namespace VoxelEngine.Networking
         private void OnServerPiecePlaced(NetworkConnection conn, PiecePlacedBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
+            if (!conn.IsLocalClient && _playerIdByConnection.TryGetValue(conn.ClientId, out string placerId))
+                msg.OwnerId = placerId ?? "";
             if (!conn.IsLocalClient)
                 BuildingSync.ApplyPlaced(msg.Family, msg.Tier, msg.Position, msg.Rotation,
-                    msg.RailingRise, msg.PillarHeight);
+                    msg.RailingRise, msg.PillarHeight, msg.OwnerId);
             RelayToOthers(conn, msg);
         }
 
@@ -2220,7 +2224,7 @@ namespace VoxelEngine.Networking
             // terrain cannot host the piece - drop building traffic entirely.
             if (_serverStarted || WorldMismatch) return;
             BuildingSync.ApplyPlaced(msg.Family, msg.Tier, msg.Position, msg.Rotation,
-                msg.RailingRise, msg.PillarHeight);
+                msg.RailingRise, msg.PillarHeight, msg.OwnerId);
         }
 
         private void OnClientPieceRemoved(PieceRemovedBroadcast msg, Channel channel)
@@ -3033,6 +3037,12 @@ namespace VoxelEngine.Networking
         private void OnServerBlockPlaced(NetworkConnection conn, BlockPlacedBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
+            if (!conn.IsLocalClient && _playerIdByConnection.TryGetValue(conn.ClientId, out string placerId))
+            {
+                BlockSnapshot stamped = msg.Snap;
+                stamped.OwnerId = placerId ?? "";
+                msg.Snap = stamped;
+            }
             if (!conn.IsLocalClient) BlockSync.ApplyPlaced(msg.Snap);
             RelayToOthers(conn, msg);
         }
@@ -3054,6 +3064,16 @@ namespace VoxelEngine.Networking
         private void OnServerBlockSnapshot(NetworkConnection conn, BlockSnapshotBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
+            if (!conn.IsLocalClient && msg.Blocks != null
+                && _playerIdByConnection.TryGetValue(conn.ClientId, out string placerId))
+            {
+                for (int i = 0; i < msg.Blocks.Count; i++)
+                {
+                    BlockSnapshot stamped = msg.Blocks[i];
+                    stamped.OwnerId = placerId ?? "";
+                    msg.Blocks[i] = stamped;
+                }
+            }
             if (!conn.IsLocalClient) BlockSync.ApplySnapshot(msg.Blocks);
             RelayToOthers(conn, msg);
         }
@@ -4459,6 +4479,16 @@ namespace VoxelEngine.Networking
         private void OnServerBaseSnapshot(NetworkConnection conn, BaseSnapshotBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
+            if (!conn.IsLocalClient && msg.Pieces != null
+                && _playerIdByConnection.TryGetValue(conn.ClientId, out string placerId))
+            {
+                for (int i = 0; i < msg.Pieces.Count; i++)
+                {
+                    PieceSnapshot stamped = msg.Pieces[i];
+                    stamped.OwnerId = placerId ?? "";
+                    msg.Pieces[i] = stamped;
+                }
+            }
             if (!conn.IsLocalClient) BuildingSync.ApplySnapshot(msg.Pieces);
             RelayToOthers(conn, msg);
         }

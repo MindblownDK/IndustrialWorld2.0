@@ -787,6 +787,7 @@ namespace VoxelEngine.Persistence
                     rot = pb.transform.rotation,
                     rotY = pb.transform.eulerAngles.y,
                     hp = pb.Hp,
+                    ownerId = pb.ownerId ?? "",
                     container = TryFindContainer(pb.gameObject)
                 };
                 var cryobed = pb.GetComponentInChildren<VoxelEngine.Building.Cryobed>(true);
@@ -1514,7 +1515,8 @@ namespace VoxelEngine.Persistence
                     pos    = pb.transform.position,
                     rot    = pb.transform.rotation,
                     rotY   = pb.transform.eulerAngles.y,
-                    hp     = pb.hp
+                    hp     = pb.hp,
+                    ownerId = pb.ownerId ?? ""
                 };
                 var codeLock = pb.GetComponentInChildren<CodeLock>(true);
                 if (codeLock != null)
@@ -3575,6 +3577,7 @@ namespace VoxelEngine.Persistence
                 var pb = go.GetComponent<PlacedBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
+                pb.ownerId = sb.ownerId ?? "";
                 // A battered base still looks battered after a reload (9.30.0).
                 VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(pb, pb.Damage01);
                 var conveyor = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
@@ -4497,6 +4500,7 @@ namespace VoxelEngine.Persistence
                 var pb = go.GetComponent<PlacedTieredBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
                 pb.Initialize(def, (BuildTier)ps.tier);
+                pb.ownerId = ps.ownerId ?? "";
                 pb.hp = ps.hp > 0 ? ps.hp : pb.hp;
                 // Cracks from the saved HP (9.30.0).
                 int maxHp = Mathf.Max(1, def.GetStats((BuildTier)ps.tier).hp);
@@ -5350,6 +5354,9 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlacedBlock
         {
             public string itemId;
+            // Additive 14.69.0: stable placer identity for map ownership telemetry.
+            // Empty in legacy saves is intentionally displayed as legacy/unowned.
+            public string ownerId = "";
             // Additive 14.30.0: beacon identity and sharing (milestone 10). One
             // payload serves both beacon blocks - the grid Beacon rides it inside
             // SavedGridBlock.runtime, the stationary radar tower rides it here
@@ -5670,6 +5677,8 @@ namespace VoxelEngine.Persistence
             public string family; public int tier;
             public Vector3 pos;   public Quaternion rot; public float rotY;
             public int hp;
+            // Additive 14.69.0: stable placer identity; empty is a legacy piece.
+            public string ownerId = "";
             // Code lock (13.17.0; ids since 14.0.0 - pre-release schema change,
             // per-player authorization keyed by player id).
             public bool hasCodeLock; public string lockCode;

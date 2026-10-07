@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.68.0-dev`
+**Current Version:** `14.69.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.69.0-dev] What the Map Knows
+
+**The Logistics Map is now inspectable rather than purely visual: hovering identifies buildings and their owning team, reads exact air and runoff burden from pollution cells, and distinguishes clean water from polluted water with local contamination measurements.**
+
+#### Added
+- **Building ownership tooltips.** Hovering a mapped building shows its player-facing name, current owning team and the owner name when that player is present. New static and tiered placements carry a stable placer ID through saves, live placement replication and join snapshots; upgrades preserve it.
+- **Save-compatible legacy handling.** The new ownership fields are additive. Existing buildings with no historical placer metadata remain intact and are honestly labelled `UNKNOWN (LEGACY / UNOWNED)` instead of being silently claimed by whoever loads the world.
+- **Pollution inspection.** Hovering a visible pollution cell reports exact air and runoff percentages plus SI PM-equivalent and contaminant-equivalent mass held in that sparse map cell.
+- **Water contamination inspection.** Hovering mapped ocean water identifies `CLEAN WATER` or `POLLUTED WATER`, reports the polluted percentage and contaminant-equivalent mass, and can include airborne burden above the water when the pollution layer is visible.
+
+#### Changed
+- The map footer now advertises hover inspection alongside pan and zoom controls.
+- `Scripts/Core/GameVersion.cs`, `Changelog.md` and `Roadmap.md` are synchronized to the save-compatible feature version `14.69.0-dev`.
 
 ### [14.68.0-dev] What the Rain Leaves Behind
 

@@ -13,6 +13,8 @@ namespace VoxelEngine.Building.Tiered
         public TieredBlockDefinition definition;
         public BuildTier tier;
         public int       hp;
+        /// <summary>Stable placer identity. Empty means a legacy/unowned piece.</summary>
+        public string    ownerId = "";
 
         public void Initialize(TieredBlockDefinition def, BuildTier t)
         {

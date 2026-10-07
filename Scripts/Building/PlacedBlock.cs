@@ -16,6 +16,8 @@ namespace VoxelEngine.Building
         public BlockItem Item;            // assigned at placement time
         public int       Hp = 100;
         public bool      onGrid = true;
+        /// <summary>Stable placer identity. Empty means a legacy/unowned block.</summary>
+        public string    ownerId = "";
 
         /// <summary>0..1 structural loss derived from the authored block health.</summary>
         public float Damage01

@@ -34,6 +34,7 @@ namespace VoxelEngine.Networking
         public Vector3 Position;
         public Quaternion Rotation;
         public int Hp;
+        public string OwnerId;     // stable placer identity; empty = legacy/unowned
         public int ConveyorShape;   // -1 = not a conveyor
         public int CableVariant;    // -1 = not a cable
         public int CableLength;
@@ -162,6 +163,7 @@ namespace VoxelEngine.Networking
                 Position = block.transform.position,
                 Rotation = block.transform.rotation,
                 Hp = block.Hp,
+                OwnerId = block.ownerId ?? "",
                 ConveyorShape = -1,
                 CableVariant = -1
             };
@@ -223,6 +225,7 @@ namespace VoxelEngine.Networking
                 if (block == null) block = go.AddComponent<PlacedBlock>();
                 block.Item = item;
                 block.Hp = snap.Hp > 0 ? snap.Hp : item.blockHealth;
+                block.ownerId = snap.OwnerId ?? "";
                 VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(block, block.Damage01);
 
                 // Placement-time cosmetic choices travel with the block.
