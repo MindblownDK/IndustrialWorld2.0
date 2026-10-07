@@ -27,6 +27,8 @@ namespace VoxelEngine.WaterSim
             public Voxel[] voxels;
             public bool[] known;
             public Vector3 velocity;
+            internal float flowTimestamp; // Main-thread capture time for shader fade-out.
+            internal byte flowShaderMask;
         }
         public sealed class Surface
         {
@@ -63,6 +65,8 @@ namespace VoxelEngine.WaterSim
             {
                 if (!present[liquidIndex]) continue;
                 var liquid = (LiquidType)liquidIndex;
+                float flowTimestampTag = (snapshot.flowShaderMask & (1 << liquidIndex)) != 0
+                    ? snapshot.flowTimestamp + 2f : 1f;
                 bool any = false;
                 for (int z=0;z<N;z++) for(int y=0;y<N;y++) for(int x=0;x<N;x++)
                 {
@@ -88,7 +92,7 @@ namespace VoxelEngine.WaterSim
                     // detached surface when all eight source samples are solid.
                     if (!known || (!wet && allSolid) || !positive || !negative) continue;
                     float depth = BankDepth(new Vector3(x+0.5f,y+0.5f,z+0.5f), snapshot);
-                    Color bank = new Color(Mathf.Clamp01(depth/3f),1f,Mathf.Clamp01(depth/8f),1f);
+                    Color bank = new Color(Mathf.Clamp01(depth/3f),1f,Mathf.Clamp01(depth/8f),flowTimestampTag);
                     for(int t=0;t<6;t++)
                     {
                         int count=0; Vector3 inside=Vector3.zero,outside=Vector3.zero; int ni=0,no=0;

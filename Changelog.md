@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.4-dev`
+**Current Version:** `17.1.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.6-dev] Flow-Driven Water Crests
+
+**Type:** PATCH — save-compatible, visual-only water-flow animation. No save schema, voxel format, fluid-transfer behavior, conservation, or public API changes.
+
+**GitHub title:** `[17.1.6-dev] Add solver-driven water flow crests`
+
+#### Improved
+- Solver-backed voxel-liquid surfaces now show a separate, gently curved crest/foam band and subtle flow-aligned normal cue while the existing smoothed movement vector is active. The cue follows the solver's direction/speed data and fades from its render snapshot.
+- Planetary flow direction is transformed into world space for rendering only. Accepted wind-driven surface waves, procedural ocean-patch waves, and boat-wake logic remain unchanged.
+
+#### Compatibility and validation
+- PATCH over 17.1.5-dev. Existing flow simulation, transfer calculations, conservation, solver cadence, saves, terrain, voxel storage, and public APIs are unchanged.
+- Thomas reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev. Those fixtures do not test the new visual; 17.1.6-dev has not been compiled or visually tested in Unity. The 17.1.5-dev camera correction also remains pending Unity verification.
+- Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
+- Boat-wake visual work follows acceptance of both the 17.1.5-dev camera correction and this mined-water flow animation.
+
+### [17.1.5-dev] Correct Above-Water Camera Effects
+
+**Type:** PATCH — save-compatible underwater camera-state correction. No save schema, voxel format, liquid-transfer behavior, or public API changes.
+
+**GitHub title:** `[17.1.5-dev] Correct above-water camera effects`
+
+#### Fixed
+- Underwater camera effects now test whether the camera point lies below the actual fractional fill surface in its voxel. Spherical worlds use body-relative radial height; flat-world fallback uses voxel-local vertical fill.
+- `PlayerWaterState.IsHeadUnderwater` uses the same fill-aware test, so a voxel containing liquid beneath the head no longer marks the head submerged.
+- The global underwater post-effect flag is cleared whenever the camera is above water and when its component is disabled, avoiding a stale screen effect across world/camera transitions.
+- Surface-wave shading and the existing wake registry are unchanged. Boat-wake visual work remains deferred until this camera correction and 17.1.6-dev flow animation are accepted.
+
+#### Compatibility and validation
+- PATCH over 17.1.4-dev. No liquid solver, transfer, save, terrain, or voxel-storage changes.
+- Thomas reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev. Those fixtures do not test camera effects; 17.1.5-dev has not been compiled or visually verified in Unity.
+- Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
 
 ### [17.1.4-dev] Tighten Shoreline Validation Bounds
 
@@ -17,7 +50,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.3-dev. This is an editor-fixture-only change; saves, voxel data, fluid transfer, runtime APIs, and rendered behavior are unchanged.
-- Thomas reports FluidValidation PASS; the 17.1.3-dev SurfaceValidation run stopped at the over-broad bank-sliver assertion. The corrected fixture still needs to be rerun in Unity; no new Unity compilation, visual, or FPS result is claimed.
+- Thomas reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev, including the corrected bank-sliver assertion. The fixtures do not validate underwater camera behavior, visuals, or FPS; the above-water camera effect is addressed in 17.1.5.
 - Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
 
 ### [17.1.3-dev] Faster Water Waves and Quieter Shores

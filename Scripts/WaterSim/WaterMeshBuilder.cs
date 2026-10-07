@@ -155,6 +155,19 @@ namespace VoxelEngine.WaterSim
                 task=Task.Run(()=>SmoothLiquidMesher.Extract(snapshot)) });
         }
 
+        private static byte GetFlowShaderMask()
+        {
+            byte mask = 0;
+            for (int i = 0; i < _liquidMats.Length; i++)
+            {
+                Material material = _liquidMats[i];
+                if (material != null && material.shader != null
+                    && material.shader.name == "VoxelEngine/VoxelWaterURP")
+                    mask |= (byte)(1 << i);
+            }
+            return mask;
+        }
+
         private static SmoothLiquidMesher.Snapshot Capture(IVoxelWorld world,Chunk chunk)
         {
             const int S=VoxelConstants.CHUNK_SIZE, H=SmoothLiquidMesher.HaloSize;
@@ -170,9 +183,12 @@ namespace VoxelEngine.WaterSim
             float seaRadius = 0f;
             if (world is SphereWorld sphereWorld && sphereWorld.body != null)
                 seaRadius = sphereWorld.body.SeaRadius / VoxelConstants.VOXEL_SIZE;
+            Vector3 flowVelocity = ConservativeFluidSolver.GetFlow(chunk);
+            if (world is SphereWorld flowWorld && flowWorld.body != null)
+                flowVelocity = flowWorld.body.transform.TransformDirection(flowVelocity);
             var snapshot=new SmoothLiquidMesher.Snapshot { origin=chunk.coord*S, planet=planet,
-                seaRadius=seaRadius, velocity=ConservativeFluidSolver.GetFlow(chunk),
-                voxels=new Voxel[H*H*H], known=new bool[H*H*H] };
+                seaRadius=seaRadius, velocity=flowVelocity, flowTimestamp=Time.time,
+                flowShaderMask=GetFlowShaderMask(), voxels=new Voxel[H*H*H], known=new bool[H*H*H] };
             for(int z=-2;z<=S+2;z++) for(int y=-2;y<=S+2;y++) for(int x=-2;x<=S+2;x++)
             {
                 int dx=x<0?-1:x>=S?1:0,dy=y<0?-1:y>=S?1:0,dz=z<0?-1:z>=S?1:0;

@@ -45,13 +45,15 @@ namespace VoxelEngine.Player
                 float submerged = Mathf.Max(0f, -PlanetWaterUtility.SignedDistanceToSea(transform.position));
 
                 Vector3 up = PlanetWaterUtility.WorldUp(transform.position);
+                Vector3 headPosition = transform.position + up * 1.6f;
+                Vector3Int headVoxelPosition = world.WorldToVoxel(headPosition);
                 var pFeetVoxel  = world.GetVoxelWorld(world.WorldToVoxel(transform.position));
                 var pWaistVoxel = world.GetVoxelWorld(world.WorldToVoxel(transform.position + up * 0.8f));
-                var pHeadVoxel  = world.GetVoxelWorld(world.WorldToVoxel(transform.position + up * 1.6f));
+                var pHeadVoxel  = world.GetVoxelWorld(headVoxelPosition);
 
                 bool pFeetInLiquid  = FluidMaterialUtility.IsFluid(pFeetVoxel)  || pFeetVoxel.material  == (byte)Materials.MaterialId.WaterLiquid;
                 bool pWaistInLiquid = FluidMaterialUtility.IsFluid(pWaistVoxel) || pWaistVoxel.material == (byte)Materials.MaterialId.WaterLiquid;
-                bool pHeadInLiquid  = FluidMaterialUtility.IsFluid(pHeadVoxel)  || pHeadVoxel.material  == (byte)Materials.MaterialId.WaterLiquid;
+                bool pHeadInLiquid  = IsPointSubmerged(world, headPosition, headVoxelPosition, pHeadVoxel);
 
                 bool actuallyInWater = pFeetInLiquid || pWaistInLiquid || pHeadInLiquid;
 
@@ -79,8 +81,9 @@ namespace VoxelEngine.Player
             Vector3 feet = transform.position;
             Vector3 head = feet + Vector3.up * 1.6f;
 
+            Vector3Int headVoxelPosition = world.WorldToVoxel(head);
             var feetVoxel = world.GetVoxelWorld(world.WorldToVoxel(feet));
-            var headVoxel = world.GetVoxelWorld(world.WorldToVoxel(head));
+            var headVoxel = world.GetVoxelWorld(headVoxelPosition);
 
             WaterSurfaceY = SampleWaterSurface(world, feet);
             float flatSubmerged = WaterSurfaceY > -9000 ? (WaterSurfaceY - feet.y) : 0f;
@@ -88,7 +91,7 @@ namespace VoxelEngine.Player
 
             const float SWIM_DEPTH = 0.85f;
             IsSwimming       = feetInLiquid && (WaterSurfaceY <= -9000 || flatSubmerged > SWIM_DEPTH);
-            IsHeadUnderwater = headVoxel.waterLevel > 10 && !headVoxel.IsSolid;
+            IsHeadUnderwater = IsPointSubmerged(world, head, headVoxelPosition, headVoxel);
             WaterDepth       = IsSwimming ? Mathf.Clamp01(Mathf.Max(flatSubmerged, 1.8f) / 1.8f) : 0f;
 
             // 9.16.0 Part 3 — per-liquid state (flat fallback; planets use the radial branch).
@@ -100,6 +103,37 @@ namespace VoxelEngine.Player
             IsContactingLiquid = IsSwimming;
             SwimSpeedScale = IsSwimming ? LiquidPlayerPhysics.SwimSpeedScale(Liquid) : 1f;
             BuoyancyBias = IsSwimming ? LiquidPlayerPhysics.BuoyancyBias(Liquid) : 0f;
+        }
+
+        /// <summary>
+        /// Tests the actual point against this voxel's filled portion. A voxel may contain
+        /// liquid below the player's head/camera without the point itself being submerged.
+        /// </summary>
+        internal static bool IsPointSubmerged(IVoxelWorld world, Vector3 worldPosition)
+        {
+            if (world == null) return false;
+            Vector3Int voxelPosition = world.WorldToVoxel(worldPosition);
+            return IsPointSubmerged(world, worldPosition, voxelPosition, world.GetVoxelWorld(voxelPosition));
+        }
+
+        private static bool IsPointSubmerged(IVoxelWorld world, Vector3 worldPosition,
+            Vector3Int voxelPosition, Voxel voxel)
+        {
+            if (!FluidMaterialUtility.IsFluid(voxel)) return false;
+            float fill = voxel.waterLevel / 255f;
+            const float surfaceEpsilon = 0.005f;
+
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+            {
+                float voxelSize = VoxelConstants.VOXEL_SIZE;
+                Vector3 localPoint = sphere.body.transform.InverseTransformPoint(worldPosition) / voxelSize;
+                float cellCenterRadius = ((Vector3)voxelPosition + Vector3.one * 0.5f).magnitude;
+                float filledSurfaceRadius = cellCenterRadius + fill - 0.5f;
+                return localPoint.magnitude < filledSurfaceRadius - surfaceEpsilon;
+            }
+
+            float localHeight = worldPosition.y / VoxelConstants.VOXEL_SIZE - voxelPosition.y;
+            return localHeight < fill - surfaceEpsilon;
         }
 
         /// <summary>Folds a voxel into the dominant-liquid vote (9.16.0 Part 3).</summary>

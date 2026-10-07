@@ -142,7 +142,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 normWS : TEXCOORD1;
                 float  fog    : TEXCOORD2;
                 float4 scrPos : TEXCOORD3;
-                float2 flowUV : TEXCOORD4;
+                float3 flowUV : TEXCOORD4;
                 float4 data   : TEXCOORD5;
             };
 
@@ -201,8 +201,7 @@ Shader "VoxelEngine/VoxelWaterURP"
             }
 
             float3 DirectionalWaveNormal(float3 surfaceCoord, float3 radialUp,
-                float shoreWaveFade, float tideMask, float t,
-                out float3 waveBearing, out float crestFoam)
+                float shoreWaveFade, float tideMask, float t, out float crestFoam)
             {
                 float seaState = saturate(_WeatherSeaState);
                 float3 globalWind = _WeatherWindDirWS.xyz;
@@ -211,17 +210,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                     globalWind *= rsqrt(globalWindLengthSq);
                 else
                     globalWind = normalize(float3(0.83, 0.0, 0.56));
-
-                float3 projectedWind = globalWind - radialUp * dot(globalWind, radialUp);
-                float windLengthSq = dot(projectedWind, projectedWind);
-                if (windLengthSq > 0.0001)
-                    waveBearing = projectedWind * rsqrt(windLengthSq);
-                else
-                {
-                    float3 fallbackAxis = abs(radialUp.y) < 0.85
-                        ? float3(0, 1, 0) : float3(1, 0, 0);
-                    waveBearing = normalize(cross(fallbackAxis, radialUp));
-                }
 
                 // Keep phase axes body-centred (not tangent-projected positions, which
                 // collapse to zero on a sphere); project only their derivatives for normals.
@@ -294,7 +282,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 worldPos = TransformObjectToWorld(posOS);
 
                 float3 radialUp = NativeWaterUp(worldPos);
-                float topFacing = saturate(dot(TransformObjectToWorldNormal(i.normOS), radialUp));
                 float shoreDepthMask = saturate(i.color.r);
                 float tideMask = i.color.g;
 
@@ -305,11 +292,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 o.normWS = TransformObjectToWorldNormal(i.normOS);
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
-                o.flowUV = i.uv2;
-                // data.w carries geometry-authored water depth (0 shallow .. 1 deep).
-                // The procedural patch renderer writes this from voxel water depth so
-                // shallow beaches/lakes still look clear even when camera depth is unavailable.
-                o.data = float4(shoreDepthMask, tideMask, topFacing, saturate(i.color.b));
+                o.flowUV = float3(i.uv2, i.color.a - 2.0);
+                // data.z gates solver-flow crests. Native voxel-liquid meshes encode snapshot
+                // time in the otherwise-unused vertex alpha; the procedural ocean patch opts out.
+                // data.w is geometry-authored water depth, including the patch's value when scene depth is absent.
+                o.data = float4(shoreDepthMask, tideMask, step(1.5, i.color.a), saturate(i.color.b));
                 return o;
             }
 
@@ -318,8 +305,15 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float t = _Time.y;
                 float3 V = normalize(_WorldSpaceCameraPos - i.posWS);
                 float3 geoN = normalize(i.normWS);
-                float2 flowDir = i.flowUV;
+                float2 flowDir = i.flowUV.xy;
                 float flowSpeed = length(flowDir);
+                float2 flowDirectionUV = flowSpeed > 0.0001 ? flowDir / flowSpeed : float2(0.0, 0.0);
+                // Flow snapshot time is forwarded through flowUV.z; stale crests fade without
+                // additional simulation ticks or per-frame mesh updates.
+                float flowAge = max(0.0, t - i.flowUV.z);
+                float flowFreshness = 1.0 - smoothstep(1.0, 2.2, flowAge);
+                float flowActivity = smoothstep(0.04, 0.4, flowSpeed) * saturate(i.data.z) * flowFreshness;
+                float flowSpeedClamped = min(flowSpeed, 2.2);
                 float shoreDepthMask = i.data.x;
                 float tideMask = i.data.y;
                 float geometryDepth01 = saturate(i.data.w);
@@ -330,7 +324,10 @@ Shader "VoxelEngine/VoxelWaterURP"
                 tanA = normalize(tanA);
                 float3 tanB = normalize(cross(radialUp, tanA));
                 float3 surfaceCoord = i.posWS - _VoxelWaterBodyCenter.xyz;
-                float2 surfUV = float2(dot(surfaceCoord,float3(0.73,0.39,0.56)),dot(surfaceCoord,float3(-0.42,0.86,0.28)));
+                float3 surfaceAxisA = float3(0.73, 0.39, 0.56);
+                float3 surfaceAxisB = float3(-0.42, 0.86, 0.28);
+                float2 surfUV = float2(dot(surfaceCoord, surfaceAxisA), dot(surfaceCoord, surfaceAxisB));
+                float2 flowPerpUV = float2(-flowDirectionUV.y, flowDirectionUV.x);
                 bool isSideFace = dot(geoN,radialUp) < 0.3;
 
                 // Use both voxel-authored bank thickness and the camera's actual terrain
@@ -349,13 +346,27 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float bankWaveFade = smoothstep(0.025, bankFadeEnd, geometryDepth01);
                 float sceneWaveFade = hasValidDepth ? smoothstep(0.25, 2.0, depthDiff) : 1.0;
                 float shoreWaveFade = min(bankWaveFade, sceneWaveFade);
+                // Preserve some flow readability in shallow water while ordinary swell stays calm at banks.
+                float flowShoreFade = lerp(0.42, 1.0, shoreWaveFade);
+                float flowWarp = sin(dot(surfUV, flowPerpUV) * 0.55 + t * 0.25) * 0.18;
+                float flowPhase = dot(surfUV, flowDirectionUV) * 1.8 + flowWarp
+                    - t * (0.22 + flowSpeedClamped * 1.65);
+                float flowSin, flowCos;
+                sincos(flowPhase, flowSin, flowCos);
+                float flowCrestMask = smoothstep(0.58, 0.93, flowSin * 0.5 + 0.5);
+                float3 flowTangentWS = flowDirectionUV.x * surfaceAxisA + flowDirectionUV.y * surfaceAxisB;
+                flowTangentWS -= radialUp * dot(flowTangentWS, radialUp);
+                float flowTangentLengthSq = dot(flowTangentWS, flowTangentWS);
+                flowTangentWS = flowTangentLengthSq > 0.0001
+                    ? flowTangentWS * rsqrt(flowTangentLengthSq) : float3(0.0, 0.0, 0.0);
 
-                float3 waveBearing;
                 float waveCrestFoam;
                 float3 waveN = DirectionalWaveNormal(surfaceCoord, radialUp, shoreWaveFade,
-                    tideMask, t, waveBearing, waveCrestFoam);
+                    tideMask, t, waveCrestFoam);
                 float3 N = normalize(lerp(radialUp, waveN, saturate(_FlowNormalStrength)));
                 if (isSideFace) N = geoN;
+                else N = normalize(N - flowTangentWS * flowCos * flowActivity * flowShoreFade
+                    * saturate(_FlowNormalStrength) * 0.11);
                 float3 detailN = normalize(float3(dot(N,tanA), dot(N,radialUp), dot(N,tanB)));
 
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
@@ -377,15 +388,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 // Crest foam is phase-locked to the same wind-driven swell as the normals,
                 // so whitecaps travel with the waves instead of crawling as unrelated noise.
                 float crestFoam = waveCrestFoam * 0.34;
-                float2 windUV = float2(
-                    dot(waveBearing,float3(0.73,0.39,0.56)),
-                    dot(waveBearing,float3(-0.42,0.86,0.28)));
-                float2 foamScrollUV = surfUV - windUV * t * 0.18;
-                // Solver velocity remains a low-weight foam cue only. It no longer steers
-                // surface normals, avoiding chunk-sized changes in the apparent wave bearing.
-                float flowFoam = smoothstep(1.0, 2.6, flowSpeed) * _FlowFoamStrength * 0.28
-                    * shoreWaveFade;
-                flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
+                // A separate, gently warped crest band travels with the existing solver flow
+                // vector; its visual strength follows the solver's smoothed flow decay.
+                float2 foamScrollUV = surfUV - flowDirectionUV * t * (0.07 + flowSpeedClamped * 0.12);
+                float flowFoam = flowCrestMask * flowActivity * flowShoreFade * _FlowFoamStrength * 0.52;
+                flowFoam *= saturate(FBM(foamScrollUV * 1.5 + flowPerpUV * flowWarp) * 1.5);
                 float wakeFoam = NativeWakeFoam(i.posWS, radialUp);
                 float foam = saturate(shoreFoam + crestFoam + flowFoam + wakeFoam);
 

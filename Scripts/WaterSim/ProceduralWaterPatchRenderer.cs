@@ -51,6 +51,7 @@ namespace VoxelEngine.WaterSim
         private Transform _cachedViewpoint;
         private float _nextRebuild;
         private bool _hasValidMesh;
+        private bool _usesVoxelWaterFlowShader;
         private Vector3 _lastAnchor = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
 
         private readonly List<Vector3> _vertices = new(16384);
@@ -125,6 +126,8 @@ namespace VoxelEngine.WaterSim
                 waterMaterial = CreateDefaultMaterial();
 
             _renderer.sharedMaterial = waterMaterial;
+            _usesVoxelWaterFlowShader = waterMaterial != null && waterMaterial.shader != null
+                && waterMaterial.shader.name == "VoxelEngine/VoxelWaterURP";
             _renderer.shadowCastingMode = ShadowCastingMode.Off;
             _renderer.receiveShadows = false;
             _renderer.enabled = true;
@@ -274,7 +277,8 @@ namespace VoxelEngine.WaterSim
             _uv2s.Add(s.flow);
             float shallow = Mathf.InverseLerp(deepDepth, shallowDepth, s.depth);
             float depth01 = Mathf.InverseLerp(shallowDepth, deepDepth, s.depth);
-            _colors.Add(new Color(Mathf.Lerp(1f, 0.35f, shallow), 1f, depth01, 1f));
+            _colors.Add(new Color(Mathf.Lerp(1f, 0.35f, shallow), 1f, depth01,
+                _usesVoxelWaterFlowShader ? 0f : 1f));
             return index;
         }
 

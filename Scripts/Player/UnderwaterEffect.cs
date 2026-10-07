@@ -43,27 +43,10 @@ namespace VoxelEngine.Player
         void LateUpdate()
         {
             _waterState = GetComponentInParent<PlayerWaterState>();
-            IsUnderwater = false;
-
-            if (_waterState != null && _waterState.IsHeadUnderwater) IsUnderwater = true;
-
-            if (!IsUnderwater)
-            {
-                var world = VoxelEngine.Core.ActiveWorld.Current;
-                if (world != null)
-                {
-                    var vp = world.WorldToVoxel(transform.position);
-                    var v = world.GetVoxelWorld(vp);
-                    // A planet's sea radius is only a broad ocean shell. Camera FX
-                    // must be driven by a real local liquid voxel so mountains, dry
-                    // coasts, and the far side of an offset planet never look submerged.
-                    if (VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v) || (v.waterLevel > 10 && !v.IsSolid))
-                        IsUnderwater = true;
-                    else if (!VoxelEngine.WaterSim.PlanetWaterUtility.IsPlanetWorld
-                        && _waterState != null && _waterState.WaterSurfaceY > transform.position.y)
-                        IsUnderwater = true;
-                }
-            }
+            var world = VoxelEngine.Core.ActiveWorld.Current;
+            // Test the camera point against the filled part of its voxel. A wet voxel
+            // alone is not proof that the camera is below its fractional liquid surface.
+            IsUnderwater = PlayerWaterState.IsPointSubmerged(world, transform.position);
 
             if (IsUnderwater)
             {
@@ -125,9 +108,10 @@ namespace VoxelEngine.Player
                 Shader.SetGlobalColor("_UnderwaterFogColor", tint);
                 _applied = true;
             }
-            else if (_applied && _saved)
+            else
             {
-                Restore();
+                if (_applied && _saved) Restore();
+                else Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
             }
         }
 
@@ -152,6 +136,7 @@ namespace VoxelEngine.Player
         void OnDisable()
         {
             if (_applied && _saved) Restore();
+            else Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
         }
     }
 }
