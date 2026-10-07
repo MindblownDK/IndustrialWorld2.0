@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.0.0-dev`
-**Roadmap Version:** `17.0.0-dev`
+**Current Version:** `17.1.0-dev`
+**Roadmap Version:** `17.1.0-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 17.1.0-dev - Meadow and Surface Detail
+- Fuller default tufts, rare blossoms and excavation eligibility implemented
+- Water detail and scalar polygon continuity adjustments implemented
+- Flow speed, black artifacts and fresh visual/FPS acceptance open
 
 ### 17.0.0-dev - Surface Stability Pass
 - Cached triangle grass and solid-sample mining implemented

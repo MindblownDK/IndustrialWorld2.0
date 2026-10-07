@@ -1,9 +1,22 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.0.0-dev`
+**Current Version:** `17.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.0-dev] Meadow Tufts and Water Surface Detail
+
+#### Added and adjusted
+- Default grass tufts use nine varied curved leaves rather than three narrow upright leaves. Stable rare crossed blossoms and translucent light response are procedural original content; no external asset is included.
+- Grass requires Grass material and an analytic exterior eligibility veto per triangle; exposed clay and deep excavated floors are rejected. This coarse test does not prove all shallow edits or authored biome overrides are covered.
+- Water normal detail gains a second scale; reflection has a colour floor and water/terrain intersections receive a short depth-alpha fade.
+- Removed per-tetrahedron wet gating so reconstructed bank surfaces are not individually discarded within an otherwise continuous scalar field. This targets triangular omissions but requires visual validation; no claim that all black artifacts are resolved.
+
+#### Compatibility and validation
+- Save-compatible minor feature pass over 17.0.0-dev; terrain identity stays 17. Mining, transfer arithmetic, pump/boat APIs and named PBR mapping unchanged.
+- User reports 17.0.0 mining working, improved FPS and shore matching; both Unity fixtures PASS. Those results do not validate this update.
+- Changed C# syntax and whitespace checked locally. No Unity/API/HLSL compilation or runtime tests performed. Added leaf geometry increases GPU cost; FPS must be compared. Fluid scheduling/flow speed is unchanged in this pass and remains open. Flowers are lightweight stylised geometry, not photoreal texture assets.
 
 ### [17.0.0-dev] Stable Grass Patches, Mining Targets and Snapshot Water
 

@@ -78,7 +78,7 @@ namespace VoxelEngine.WaterSim
                         values[c]=field[index]; positions[c]=(Vector3)(origin+q);
                         wet |= relevant[index]; positive |= values[c]>=0; negative |= values[c]<0;
                     }
-                    if (!known || !wet || !positive || !negative) continue;
+                    if (!known || !positive || !negative) continue;
                     float depth = BankDepth(new Vector3(x+0.5f,y+0.5f,z+0.5f), snapshot);
                     Color bank = new Color(Mathf.Clamp01(depth/3f),1f,Mathf.Clamp01(depth/8f),1f);
                     for(int t=0;t<6;t++)
@@ -86,13 +86,6 @@ namespace VoxelEngine.WaterSim
                         int count=0; Vector3 inside=Vector3.zero,outside=Vector3.zero; int ni=0,no=0;
                         for(int j=0;j<4;j++) {int c=Tetra[t,j]; if(values[c]>=0){inside+=positions[c];ni++;}else{outside+=positions[c];no++;}}
                         if(ni==0||no==0) continue;
-                        bool realWet = false;
-                        for(int j=0;j<4;j++)
-                        {
-                            Vector3Int at = Vector3Int.RoundToInt(positions[Tetra[t,j]] - (Vector3)origin);
-                            realWet |= FluidMaterialUtility.Matches(Read(snapshot, at), liquid);
-                        }
-                        if (!realWet) continue;
                         Vector3 normal=(outside/no-inside/ni).normalized;
                         for(int e=0;e<6;e++)
                         {

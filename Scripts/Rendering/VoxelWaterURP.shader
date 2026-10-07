@@ -240,8 +240,10 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 p = uv - flowDir * t * 0.12;
                 float a = dot(p,float2(0.35,0.17))+t*0.6;
                 float b = dot(p,float2(-0.19,0.42))-t*0.45;
+                float c=dot(p,float2(1.7,-1.1))+t*0.8;
                 float2 slope = float2(cos(a)*0.35-cos(b)*0.19,cos(a)*0.17+cos(b)*0.42);
-                return normalize(float3(-slope.x*_NormalScale*0.14,1,-slope.y*_NormalScale*0.14));
+                slope += cos(c)*float2(0.13,-0.09);
+                return normalize(float3(-slope.x*_NormalScale*0.28,1,-slope.y*_NormalScale*0.28));
             }
 
             V2F vert(A2V i)
@@ -355,6 +357,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 refractWeight *= (1.0 - shoreFactor * 0.9);
                 float3 col = lerp(waterCol.rgb, refracted, refractWeight);
                 float3 sky = SampleSH(N) * 0.85 + mainLight.color.rgb * 0.10;
+                sky=max(sky,float3(0.16,0.24,0.3));
                 col = lerp(col, sky, fresnel * 0.35);
                 col += mainLight.color.rgb * (specBroad + specTight + glitter) * saturate(mainLight.distanceAttenuation);
                 col += sssColor;
@@ -379,7 +382,9 @@ Shader "VoxelEngine/VoxelWaterURP"
                 alpha = lerp(0.72, alpha, saturate(deep01 * 1.35));
                 // Do not force shallow shore intersections to opaque black bands.
                 alpha = lerp(alpha, min(alpha + 0.12, 0.99), fresnel);
-                alpha = max(alpha, lerp(0.70, 0.94, deep01));
+                alpha = max(alpha, lerp(0.48, 0.94, deep01));
+                // Soft intersection, not a bright opaque jagged band at the bank.
+                alpha *= hasValidDepth ? saturate(depthDiff / 0.18) : 1.0;
                 alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
 
                 col = MixFog(col, i.fog);

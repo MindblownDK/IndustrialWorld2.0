@@ -131,7 +131,11 @@ Shader "VoxelEngine/VoxelGrass"
                 OUT.heightFactor = heightFactor;
 
                 float3 rootWS = TransformObjectToWorld(float3(0, 0, 0));
-                float3 worldPos = TransformObjectToWorld(IN.positionOS.xyz);
+                float3 localPosition=IN.positionOS.xyz;
+                float flowerSeed=hash(floor((rootWS-_VoxelTerrainBodyCenter.xyz)*7.0));
+                bool flower=IN.uv.x>1.5;
+                if(flower && flowerSeed>0.015) localPosition=float3(0,0,0);
+                float3 worldPos = TransformObjectToWorld(localPosition);
                 float3 worldNormal = TransformObjectToWorldNormal(IN.normalOS);
 
                 float3 grassUp = GrassUp(worldPos);
@@ -185,6 +189,7 @@ Shader "VoxelEngine/VoxelGrass"
                 color = lerp(color, color * float3(1.14, 1.0, 0.72), hue * 0.5);  // dry-ish / lush variation
                 color *= 0.92;                            // gusts brighten
                 color *= 0.72 + 0.28 * heightFactor;                     // roots sit in shade
+                if(flower) color=lerp(float3(0.85,0.76,0.2),float3(0.6,0.35,0.72),frac(flowerSeed*873.0));
                 OUT.color = color;
 
                 OUT.positionWS = worldPos;
@@ -211,7 +216,8 @@ Shader "VoxelEngine/VoxelGrass"
                 float wrap = saturate((ndl + 0.35) / 1.35);          // wrapped - never pitch dark
 
                 float3 ambient = SampleSH(grassUp) * 0.55 + float3(0.10, 0.12, 0.08);
-                float3 diffuse = mainLight.color * wrap;
+                float transmission=pow(saturate(dot(viewDir,-mainLight.direction)),3.0)*0.22*IN.heightFactor;
+                float3 diffuse = mainLight.color * (wrap+transmission);
 
                 float3 finalColor = IN.color * (ambient + diffuse);
                 finalColor = MixFog(saturate(finalColor), IN.fogCoord);

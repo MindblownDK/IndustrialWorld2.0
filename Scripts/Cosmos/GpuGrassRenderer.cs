@@ -273,7 +273,12 @@ namespace VoxelEngine.Cosmos
                 Vector3 cross = Vector3.Cross(b-a,c-a);
                 float area = cross.magnitude * 0.5f;
                 if (area < 0.0001f) continue;
-                Vector3 radial = ((a+b+c)/3f).normalized;
+                Vector3 midpoint=(a+b+c)/3f;
+                Vector3 radial = midpoint.normalized;
+                // Analytic exterior veto per triangle, not per blade. No grass under
+                // a beach or on a newly dug tunnel floor merely because it is soil.
+                if (!_world.TrySampleAnalyticMapSurface(radial,out float exterior,out byte exteriorMat,out bool ocean)
+                    || ocean || exteriorMat == (byte)MaterialId.Sand || midpoint.magnitude < exterior-1.25f) continue;
                 Vector3 normal = cross.normalized;
                 if (Vector3.Dot(normal,radial) < 0.72f) continue;
                 uint hash = (uint)(patch.chunk.coord.x*73856093 ^ patch.chunk.coord.y*19349663 ^ patch.chunk.coord.z*83492791 ^ (t+1)*104729);
@@ -291,7 +296,7 @@ namespace VoxelEngine.Cosmos
                     if (!_world.TryGetVoxelReady(q,out Voxel above) || above.waterLevel > 0) continue;
                     Quaternion rotation = Quaternion.AngleAxis(rng.NextFloat(0,360),radial) * Quaternion.FromToRotation(Vector3.up,radial);
                     float height = bladeHeight * (1f+rng.NextFloat(-heightVariance,heightVariance));
-                    float width = bladeWidth * rng.NextFloat(0.8f,1.2f);
+                    float width = Mathf.Max(0.065f,bladeWidth) * rng.NextFloat(0.8f,1.35f);
                     roots.Add(Matrix4x4.TRS(root-radial*0.025f,rotation,new Vector3(width,height,width)));
                 }
             }
@@ -306,7 +311,7 @@ namespace VoxelEngine.Cosmos
         }
 
         private bool IsSoil(byte material) => material == (byte)MaterialId.Grass
-            || (_supportsClay && material == (byte)MaterialId.Clay);
+            ;
 
         private void ApplyEcologyColour(EcologyReading ecology)
         {
@@ -368,20 +373,32 @@ namespace VoxelEngine.Cosmos
             var tuftVertices = new List<Vector3>(21);
             var tuftUvs = new List<Vector2>(21);
             var tuftTriangles = new List<int>(45);
-            for (int leaf = 0; leaf < 3; leaf++)
+            for (int leaf = 0; leaf < 9; leaf++)
             {
-                float angle = leaf * Mathf.PI * 2f / 3f;
-                float height = leaf == 0 ? 1f : leaf == 1 ? 0.78f : 0.9f;
+                float angle = leaf * 2.399963f;
+                float height = 0.55f + (leaf % 4) * 0.15f;
                 for (int vertex = 0; vertex < verts.Length; vertex++)
                 {
                     Vector3 v = verts[vertex];
                     // Keep basal spread small; most of the volume comes from leaf curvature.
-                    float bend = v.y * v.y * 0.12f;
+                    float bend = v.y * v.y * (0.8f + leaf * 0.15f);
                     tuftVertices.Add(new Vector3(v.x * Mathf.Cos(angle) - (v.z + bend) * Mathf.Sin(angle),
                         v.y * height, v.x * Mathf.Sin(angle) + (v.z + bend) * Mathf.Cos(angle)));
                     tuftUvs.Add(uvs[vertex]);
                 }
                 foreach (int index in tris) tuftTriangles.Add(leaf * verts.Length + index);
+            }
+            // Small crossed blossom, visible on a stable 1.5% of tufts in the shader.
+            for(int petal=0;petal<2;petal++)
+            {
+                int start=tuftVertices.Count;
+                float angle=petal*Mathf.PI*0.5f;
+                Vector3 side=new Vector3(Mathf.Cos(angle)*1.1f,0,Mathf.Sin(angle)*1.1f);
+                Vector3 top=new Vector3(0,0.85f,0);
+                tuftVertices.Add(top-side);tuftVertices.Add(top+side);
+                tuftVertices.Add(top+side+Vector3.up*0.18f);tuftVertices.Add(top-side+Vector3.up*0.18f);
+                for(int j=0;j<4;j++)tuftUvs.Add(new Vector2(2f,0.9f));
+                tuftTriangles.AddRange(new[]{start,start+2,start+1,start,start+3,start+2});
             }
             mesh.SetVertices(tuftVertices);
             mesh.SetUVs(0, tuftUvs);
