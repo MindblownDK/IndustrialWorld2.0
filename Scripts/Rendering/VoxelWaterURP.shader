@@ -163,9 +163,12 @@ Shader "VoxelEngine/VoxelWaterURP"
                 return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelWaterIsPlanet)));
             }
 
-            float NativeWakeFoam(float3 worldPos, float3 waterUp)
+            void NativeWakeResponse(float3 worldPos, float3 waterUp, float t,
+                float shoreWaveFade, float crestActivity, out float foam, out float3 normalOffset)
             {
-                float foam = 0.0;
+                foam = 0.0;
+                normalOffset = 0.0;
+                float deepWater = saturate(shoreWaveFade);
                 [unroll]
                 for (int wi = 0; wi < VOXEL_WAKE_MAX; wi++)
                 {
@@ -173,31 +176,60 @@ Shader "VoxelEngine/VoxelWaterURP"
                     float4 wakePos = _VoxelWakePositions[wi];
                     float4 wakeDir = _VoxelWakeDirections[wi];
                     float4 wakeData = _VoxelWakeData[wi];
-                    float life = wakeData.z;
-                    if (life <= 0.001) continue;
+                    float life = saturate(wakeData.z);
+                    if (life <= 0.001 || wakeData.y <= 0.001) continue;
 
-                    float3 direction = wakeDir.xyz;
+                    float3 direction = wakeDir.xyz - waterUp * dot(wakeDir.xyz, waterUp);
                     float directionLengthSq = dot(direction, direction);
                     if (directionLengthSq <= 0.0001) continue;
                     direction *= rsqrt(directionLengthSq);
+                    float3 side = cross(waterUp, direction);
+                    float sideLengthSq = dot(side, side);
+                    if (sideLengthSq <= 0.0001) continue;
+                    side *= rsqrt(sideLengthSq);
 
                     float3 delta = worldPos - wakePos.xyz;
                     delta -= waterUp * dot(delta, waterUp);
                     float forward = dot(delta, direction);
                     float trail = max(0.0, -forward);
-                    float wakeLength = max(0.1, wakeData.x);
+                    float width = max(0.2, wakeDir.w);
+                    float wakeLength = max(0.1, wakeData.x * lerp(0.45, 1.0, deepWater));
                     if (trail > wakeLength) continue;
 
-                    float lateral = length(delta - direction * forward);
-                    float width = max(0.2, wakeDir.w);
-                    float spread = width + trail * 0.24;
-                    float lineWidth = lerp(0.22, max(0.5, width * 0.55), saturate(trail / wakeLength));
+                    float lateralSigned = dot(delta, side);
+                    float lateral = abs(lateralSigned);
+                    float spread = width * lerp(0.76, 1.0, deepWater)
+                        + trail * lerp(0.12, 0.24, deepWater);
+                    float lineWidth = max(0.22, width * lerp(0.14, 0.24, saturate(trail / wakeLength)));
                     float vLine = exp(-abs(lateral - spread) / lineWidth);
-                    float propWash = exp(-lateral / max(0.4, width * 0.75)) * exp(-trail / max(0.4, wakeLength * 0.25));
-                    float tailFade = saturate(1.0 - trail / wakeLength);
-                    foam = max(foam, (vLine * 0.95 + propWash * 0.7) * tailFade * wakeData.y * life);
+                    float propWash = exp(-lateral / max(0.4, width * 0.62))
+                        * exp(-trail / max(0.4, wakeLength * 0.22));
+                    float tailFade = 1.0 - smoothstep(wakeLength * 0.72, wakeLength, trail);
+                    float branchStart = smoothstep(0.0, max(0.2, width * 0.4), trail);
+
+                    float speed = max(0.0, wakeData.w);
+                    float phase = trail * (1.55 + speed * 0.015) + lateral * 0.32
+                        - t * (0.75 + speed * 0.22);
+                    float waveSin, waveCos;
+                    sincos(phase, waveSin, waveCos);
+                    float rippleCrest = smoothstep(0.5, 0.9, waveSin * 0.5 + 0.5);
+                    float lifeEnvelope = tailFade * life * saturate(wakeData.y);
+                    float shoreEnergy = lerp(0.55, 1.0, deepWater);
+                    float nearShoreWash = lerp(1.25, 0.82, deepWater);
+                    float crestBoost = 1.0 + saturate(crestActivity) * 0.55;
+                    float branchFoam = vLine * (0.82 + 0.18 * rippleCrest) * branchStart;
+                    float localFoam = branchFoam + propWash * nearShoreWash
+                        + propWash * rippleCrest * 0.18;
+                    foam = max(foam, saturate(localFoam * lifeEnvelope * shoreEnergy * crestBoost));
+
+                    float ridge = vLine * branchStart + propWash * 0.32;
+                    float slope = waveCos * ridge * lifeEnvelope * shoreEnergy * 0.075;
+                    normalOffset += side * sign(lateralSigned) * slope - direction * slope * 0.34;
                 }
-                return saturate(foam);
+
+                float slopeLengthSq = dot(normalOffset, normalOffset);
+                if (slopeLengthSq > 0.12 * 0.12)
+                    normalOffset *= 0.12 * rsqrt(slopeLengthSq);
             }
 
             float3 DirectionalWaveNormal(float3 surfaceCoord, float3 radialUp,
@@ -368,10 +400,15 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float waveCrestFoam;
                 float3 waveN = DirectionalWaveNormal(surfaceCoord, radialUp, shoreWaveFade,
                     tideMask, t, waveCrestFoam);
+                float wakeFoam = 0.0;
+                float3 wakeNormalOffset = 0.0;
+                if (!isSideFace && _VoxelWakeCount > 0)
+                    NativeWakeResponse(i.posWS, radialUp, t, shoreWaveFade,
+                        max(waveCrestFoam, flowCrestMask * flowActivity), wakeFoam, wakeNormalOffset);
                 float3 N = normalize(lerp(radialUp, waveN, saturate(_FlowNormalStrength)));
                 if (isSideFace) N = geoN;
                 else N = normalize(N - flowTangentWS * flowCos * flowActivity * flowShoreFade
-                    * saturate(_FlowNormalStrength) * 0.11);
+                    * saturate(_FlowNormalStrength) * 0.11 + wakeNormalOffset);
                 float3 detailN = normalize(float3(dot(N,tanA), dot(N,radialUp), dot(N,tanB)));
 
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
@@ -400,7 +437,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                     saturate(FBM(foamScrollUV * 1.5 + flowPerpUV * flowWarp) * 1.5));
                 float flowFoam = flowCrestMask * flowActivity * flowShoreFade
                     * _FlowFoamStrength * 0.72 * flowFoamTexture;
-                float wakeFoam = NativeWakeFoam(i.posWS, radialUp);
                 float foam = saturate(shoreFoam + crestFoam + flowFoam + wakeFoam);
 
                 float NdV = saturate(dot(V, N));

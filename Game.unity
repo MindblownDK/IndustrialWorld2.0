@@ -553,6 +553,50 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f7a8b9c0d1e4f25a6b7c8d9e0f1a2b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.ConveyorShapeWheel
+--- !u!1 &262155986
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 262155988}
+  - component: {fileID: 262155987}
+  m_Layer: 0
+  m_Name: NativeWaterWakeSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &262155987
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 262155986}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b6f9d2c4a1e4d82b3c5f7a9e1d4c6b8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.NativeWaterWakeSystem
+--- !u!4 &262155988
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 262155986}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &281107231
 GameObject:
   m_ObjectHideFlags: 0
@@ -1555,6 +1599,79 @@ MonoBehaviour:
   m_PivotReferenceSize: 0
   m_Pivot: 0
   m_WorldSpaceCollider: {fileID: 0}
+--- !u!1 &1814746295
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1814746298}
+  - component: {fileID: 1814746297}
+  - component: {fileID: 1814746296}
+  m_Layer: 0
+  m_Name: NativeSphericalWater
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1814746296
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1814746295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4022903ea58b45d4893cca7fd16c999c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.FluidPerformanceBootstrap
+  renderNativeWater: 1
+  useNativeVolumetricAssist: 0
+  tickRate: 6
+  maxChunksPerTick: 3
+  computeFrameSkip: 2
+--- !u!114 &1814746297
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1814746295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4b851e2e6854245b1a964889509be79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.PlanetWaterRendererBootstrap
+  oceanProfile: {fileID: 0}
+  meshBuildBudgetPerFrame: 1
+  renderVoxelLiquidSurfaces: 1
+  renderNativeSphericalOceanPatch: 0
+  nativeOceanSearchRadius: 384
+  nativeOceanTileSize: 12
+  rescheduleVisibleLiquidSurfaces: 0
+  liquidRescheduleChunkRadius: 1
+  liquidRescheduleInterval: 2
+  waterMaterialOverride: {fileID: 2100000, guid: 030fe0d2da450034dbeda1f27bf95914, type: 2}
+  oilMaterialOverride: {fileID: 2100000, guid: 93936a11b5827fc428fffb20fa9ebd32, type: 2}
+--- !u!4 &1814746298
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1814746295}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1971353574
 GameObject:
   m_ObjectHideFlags: 0
@@ -1614,3 +1731,5 @@ SceneRoots:
   - {fileID: 200235773}
   - {fileID: 1019278974}
   - {fileID: 1267250225}
+  - {fileID: 1814746298}
+  - {fileID: 262155988}

@@ -253,8 +253,11 @@ namespace VoxelEngine.Maritime
         /// spherical planets instead of being written into a flat XZ texture.
         /// </summary>
         public static void RegisterShipWake(Vector3 shipPos, Vector3 velocity, float hullSize)
+            => RegisterShipWake(shipPos, velocity, hullSize, 0);
+
+        internal static void RegisterShipWake(Vector3 shipPos, Vector3 velocity, float hullSize, int ownerId)
         {
-            VoxelEngine.WaterSim.NativeWaterWakeSystem.RegisterWake(shipPos, velocity, hullSize);
+            VoxelEngine.WaterSim.NativeWaterWakeSystem.RegisterWake(shipPos, velocity, hullSize, ownerId);
         }
 
     }

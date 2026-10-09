@@ -75,6 +75,7 @@ namespace VoxelEngine.Maritime
         // ── References ────────────────────────────────────────────────
         private Rigidbody _rb;
         private GridEntity _grid;
+        private int _wakeOwnerId;
         private float _cellSize = 1f;
 
         // ── Job data (persistent, rebuilt only on change) ─────────────
@@ -114,6 +115,7 @@ namespace VoxelEngine.Maritime
         {
             _rb = GetComponent<Rigidbody>();
             _grid = GetComponent<GridEntity>();
+            _wakeOwnerId = GetEntityId().GetHashCode();
             if (settings == null) settings = MaritimeSettings.Default;
             if (_grid != null) _cellSize = _grid.gridSize.CellSize();
             else _cellSize = VoxelEngine.Core.VoxelConstants.VOXEL_SIZE;
@@ -250,7 +252,7 @@ namespace VoxelEngine.Maritime
             if (math.lengthsq(totalTorque) > 1e-6f)
                 _rb.AddTorque((Vector3)totalTorque * s.torqueGain, ForceMode.Force);
 
-            WaterProbeSystem.RegisterShipWake(_rb.worldCenterOfMass, _rb.linearVelocity, _grid.BlockCount);
+            WaterProbeSystem.RegisterShipWake(_rb.worldCenterOfMass, _rb.linearVelocity, _grid.BlockCount, _wakeOwnerId);
         }
 
         // Pre-allocated scratch so the per-tick position copy stays GC-free.

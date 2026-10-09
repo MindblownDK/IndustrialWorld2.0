@@ -1,9 +1,9 @@
 // Assets/Scripts/VoxelEngine/WaterSim/NativeWaterWakeSystem.cs
 //
 // Native, spherical-aware water wake registry. Maritime propulsion submits a
-// lightweight wake stamp; the in-house VoxelWaterURP shader consumes the fixed
-// small array for foam and a subtle radial surface displacement. No external
-// ocean package, plane, or flat-world coordinate assumption is involved.
+// lightweight moving hull stamp; the in-house VoxelWaterURP shader builds a
+// tapered V, animated crest shading, and shallow-water response from a fixed
+// small array. No external ocean package or flat-world coordinate assumption.
 
 using UnityEngine;
 using VoxelEngine.Core;
@@ -23,9 +23,12 @@ namespace VoxelEngine.WaterSim
             public Vector3 position;
             public Vector3 direction;
             public float width;
-            public float length;
+            public float trailLength;
+            public float speed;
             public float strength;
             public float lastSubmitted;
+            public int ownerId;
+            public bool active;
         }
 
         public static NativeWaterWakeSystem Instance { get; private set; }
@@ -52,12 +55,15 @@ namespace VoxelEngine.WaterSim
 
         /// <summary>
         /// Called by the native maritime system. Stamps are accepted only while the hull is
-        /// actually over real simulated water, then projected onto the body's radial sea shell.
+        /// over real simulated water, then projected to its local surface (radially on a planet).
         /// </summary>
         public static void RegisterWake(Vector3 worldPosition, Vector3 velocity, float hullSize)
+            => RegisterWake(worldPosition, velocity, hullSize, 0);
+
+        internal static void RegisterWake(Vector3 worldPosition, Vector3 velocity, float hullSize, int ownerId)
         {
             EnsureInstance();
-            Instance?.Submit(worldPosition, velocity, hullSize);
+            Instance?.Submit(worldPosition, velocity, hullSize, ownerId);
         }
 
         private void Awake()
@@ -89,7 +95,7 @@ namespace VoxelEngine.WaterSim
             }
         }
 
-        private void Submit(Vector3 worldPosition, Vector3 velocity, float hullSize)
+        private void Submit(Vector3 worldPosition, Vector3 velocity, float hullSize, int ownerId)
         {
             var world = ActiveWorld.Current;
             if (world == null) return;
@@ -100,24 +106,39 @@ namespace VoxelEngine.WaterSim
 
             Vector3 tangentVelocity = Vector3.ProjectOnPlane(velocity, up);
             float speed = tangentVelocity.magnitude;
-            if (speed < 0.45f) return;
+            if (speed < 0.55f) return;
 
             if (!TryFindWaterSurface(world, worldPosition, up, hullSize, out Vector3 surface)) return;
 
             Vector3 direction = tangentVelocity / speed;
             float width = Mathf.Clamp(0.7f + Mathf.Sqrt(Mathf.Max(1f, hullSize)) * 0.18f, 0.8f, 8f);
             float length = Mathf.Clamp(width * 5.5f + speed * 1.35f, 6f, 72f);
-            float strength = Mathf.Clamp01((speed - 0.4f) / 9f) * Mathf.Lerp(0.45f, 1f, Mathf.Clamp01(hullSize / 50f));
-            int slot = FindReusableSlot(surface, direction);
+            float speedStrength = Mathf.Clamp01((speed - 0.45f) / 5.5f);
+            float hullStrength = Mathf.Lerp(0.65f, 1f, Mathf.Clamp01(hullSize / 50f));
+            float strength = speedStrength * hullStrength;
+            float now = Time.unscaledTime;
+            int slotIndex = FindReusableSlot(surface, direction, now, ownerId);
+            ref WakeSlot previous = ref _slots[slotIndex];
+            float trailLength = 0f;
+            if (previous.active && now - previous.lastSubmitted < WakeLifetime
+                && Vector3.Dot(previous.direction, direction) > 0.75f)
+            {
+                Vector3 displacement = Vector3.ProjectOnPlane(surface - previous.position, up);
+                float forwardTravel = Mathf.Max(0f, Vector3.Dot(displacement, direction));
+                trailLength = Mathf.Min(length, previous.trailLength + forwardTravel);
+            }
 
-            _slots[slot] = new WakeSlot
+            _slots[slotIndex] = new WakeSlot
             {
                 position = surface,
                 direction = direction,
                 width = width,
-                length = length,
+                trailLength = trailLength,
+                speed = speed,
                 strength = strength,
-                lastSubmitted = Time.unscaledTime
+                lastSubmitted = now,
+                ownerId = ownerId,
+                active = true
             };
         }
 
@@ -138,34 +159,41 @@ namespace VoxelEngine.WaterSim
                 if (world is SphereWorld sphere && sphere.body != null)
                 {
                     Vector3 localCenter = PlanetWaterUtility.VoxelCenterToLocalPosition(voxelPos);
-                    Vector3 localUp = localCenter.sqrMagnitude > 0.0001f ? localCenter.normalized : Vector3.up;
+                    Vector3 localHullPosition = PlanetWaterUtility.WorldToBodyLocal(worldPosition);
+                    Vector3 localUp = localHullPosition.sqrMagnitude > 0.0001f
+                        ? localHullPosition.normalized
+                        : localCenter.sqrMagnitude > 0.0001f ? localCenter.normalized : Vector3.up;
                     float surfaceRadius = localCenter.magnitude
                         + (voxel.waterLevel / 255f - 0.5f) * VoxelConstants.VOXEL_SIZE;
                     surface = sphere.body.transform.TransformPoint(localUp * surfaceRadius);
                 }
                 else
                 {
-                    surface = new Vector3(
-                        (voxelPos.x + 0.5f) * VoxelConstants.VOXEL_SIZE,
+                    surface = new Vector3(worldPosition.x,
                         (voxelPos.y + voxel.waterLevel / 255f) * VoxelConstants.VOXEL_SIZE,
-                        (voxelPos.z + 0.5f) * VoxelConstants.VOXEL_SIZE);
+                        worldPosition.z);
                 }
                 return true;
             }
             return false;
         }
 
-        private int FindReusableSlot(Vector3 position, Vector3 direction)
+        private int FindReusableSlot(Vector3 position, Vector3 direction, float now, int ownerId)
         {
+            int available = -1;
             int oldest = 0;
             float oldestTime = float.MaxValue;
             for (int i = 0; i < MaxWakes; i++)
             {
                 ref WakeSlot slot = ref _slots[i];
-                if (slot.lastSubmitted <= 0f || Time.unscaledTime - slot.lastSubmitted > WakeLifetime)
-                    return i;
+                if (!slot.active || now - slot.lastSubmitted >= WakeLifetime)
+                {
+                    slot.active = false;
+                    if (available < 0) available = i;
+                    continue;
+                }
 
-                if ((slot.position - position).sqrMagnitude < 20f * 20f
+                if (slot.ownerId == ownerId && (slot.position - position).sqrMagnitude < 20f * 20f
                     && Vector3.Dot(slot.direction, direction) > 0.75f)
                     return i;
 
@@ -175,7 +203,7 @@ namespace VoxelEngine.WaterSim
                     oldest = i;
                 }
             }
-            return oldest;
+            return available >= 0 ? available : oldest;
         }
 
         private void PublishShaderState()
@@ -184,19 +212,21 @@ namespace VoxelEngine.WaterSim
             float now = Time.unscaledTime;
             for (int i = 0; i < MaxWakes; i++)
             {
-                WakeSlot slot = _slots[i];
-                float fade = slot.lastSubmitted <= 0f ? 0f : Mathf.Clamp01(1f - (now - slot.lastSubmitted) / WakeLifetime);
-                if (fade <= 0f)
+                ref WakeSlot slot = ref _slots[i];
+                float age = now - slot.lastSubmitted;
+                if (!slot.active || age >= WakeLifetime)
                 {
+                    slot.active = false;
                     _positions[i] = Vector4.zero;
                     _directions[i] = Vector4.zero;
                     _data[i] = Vector4.zero;
                     continue;
                 }
 
-                _positions[count] = new Vector4(slot.position.x, slot.position.y, slot.position.z, fade);
+                float life = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(age / WakeLifetime));
+                _positions[count] = new Vector4(slot.position.x, slot.position.y, slot.position.z, life);
                 _directions[count] = new Vector4(slot.direction.x, slot.direction.y, slot.direction.z, slot.width);
-                _data[count] = new Vector4(slot.length, slot.strength, fade, 0f);
+                _data[count] = new Vector4(slot.trailLength, slot.strength, life, slot.speed);
                 count++;
             }
 

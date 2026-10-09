@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.7-dev`
+**Current Version:** `17.1.8-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.8-dev] Shaped Boat Wakes and Shore Interaction
+
+**Type:** PATCH — render-only maritime water effect. No propulsion, buoyancy, fluid simulation, save data, or public wake API changes.
+
+**GitHub title:** `[17.1.8-dev] Shape boat wakes and blend them into shorelines`
+
+#### Improved
+- Existing maritime movement now grows the registered wake from actual hull travel, so a boat does not draw a full-length trail as soon as it starts moving. Per-hull ownership keeps nearby ships' wakes separate; the fixed-capacity registry reuses active and expired slots without per-frame allocations.
+- The URP water shader renders diverging V-shaped crest arms, a central prop wash, animated transverse ripples, and a subtle wake-normal response. Wake foam strengthens where it meets wind-driven or solver-driven flow crests.
+- Near shore, the long fan shortens and narrows while a restrained prop wash remains, avoiding a deep-water wake shape pasted unchanged onto shallow banks.
+- Wake stamps remain conditional on detected real water and use a tangent direction for spherical surfaces.
+
+#### Compatibility and validation
+- Hull movement, thrust, buoyancy, fluid transfers, the public wake-submission API, save data, materials, and setup-authored values are unchanged. Wake data remains transient and fixed-capacity; no setup-content changes.
+- Thomas reports Unity FluidValidation and SurfaceValidation PASS for the 17.1.7 transfer-capture and localized-projection assertions. The surface fixture explicitly does not validate shader appearance, FPS, mining, or grass; fill-front visual acceptance and the 17.1.5 camera check remain open.
+- This update's Unity shader compilation, wake appearance/performance, turns/stopping, and near-shore response have not been verified in this workspace.
+- No prefab, recipe, item, research, or Voxel Engine Setup changes are required.
 
 ### [17.1.7-dev] Localized Water Flow Crests
 
@@ -20,7 +38,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.6-dev. Solver transfer math, conservation, voxel levels, chunk storage, saves, solver cadence, wake registry, and public APIs are unchanged. New flow fields are transient rendering metadata.
-- Thomas supplied FluidValidation and SurfaceValidation PASS results for the baseline. The new transfer-capture and localized-projection assertions, Unity C#/HLSL compilation, in-game fill-front appearance, and fade still require Unity validation; this workspace cannot run Unity.
+- Thomas reports Unity FluidValidation and SurfaceValidation PASS for the 17.1.7 transfer-capture and localized-projection assertions. SurfaceValidation explicitly does not validate shader appearance, FPS, mining, or grass; in-game fill-front appearance/fade and the 17.1.5 camera check remain open.
 - No prefab, item, recipe, research, or Voxel Engine Setup changes are required.
 
 ### [17.1.6-dev] Flow-Driven Water Crests
