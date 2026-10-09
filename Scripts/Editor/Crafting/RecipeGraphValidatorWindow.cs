@@ -37,7 +37,7 @@ namespace VoxelEngine.EditorTools
         {
             EditorGUILayout.Space(8f);
             EditorGUILayout.LabelField("Production Recipe Graph Validator", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Scans crafting, smelting, and machine recipes. No assets are modified.", EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.LabelField("Validates registered crafting recipes, plus smelting and machine recipes. Unregistered crafting assets are listed as inactive info; if no registry asset exists, all crafting assets are validated. Scanning never mutates assets.", EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.Space(8f);
 
             using (new EditorGUILayout.HorizontalScope())
@@ -84,16 +84,54 @@ namespace VoxelEngine.EditorTools
             var smelting = LoadAssets<SmeltingRecipe>();
             var machine = LoadAssets<MachineRecipe>();
             var resourceItems = LoadAssets<ItemDefinition>();
+            var recipeRegistries = LoadAssets<RecipeRegistry>();
+            var registeredRecipes = new HashSet<RecipeDefinition>();
+            foreach (var registry in recipeRegistries)
+            {
+                if (registry.recipes == null) continue;
+                foreach (var recipe in registry.recipes)
+                    if (recipe != null) registeredRecipes.Add(recipe);
+            }
 
-            ValidateCraftingRecipes(crafting);
+            bool validateAllAssetsAsFallback = recipeRegistries.Count == 0;
+            var inactiveCrafting = validateAllAssetsAsFallback
+                ? crafting.Where(IsRetiredLegacySmallGridDoor).ToList()
+                : crafting.Where(recipe => !registeredRecipes.Contains(recipe)).ToList();
+            var inactiveSet = new HashSet<RecipeDefinition>(inactiveCrafting);
+            var activeCrafting = validateAllAssetsAsFallback
+                ? crafting.Where(recipe => !inactiveSet.Contains(recipe)).ToList()
+                : crafting.Where(registeredRecipes.Contains).ToList();
+            if (validateAllAssetsAsFallback && crafting.Count > 0)
+                _warnings.Add("No RecipeRegistry asset was found; all crafting recipe assets are being validated as a fallback.");
+            else if (activeCrafting.Count == 0 && crafting.Count > 0)
+                _warnings.Add("No crafting recipe assets are registered; all discovered crafting assets are inactive until registered.");
+
+            if (inactiveCrafting.Count > 0)
+            {
+                _info.Add($"Excluded {inactiveCrafting.Count} unregistered crafting recipe asset(s) from the active graph.");
+                foreach (var recipe in inactiveCrafting.Where(recipe =>
+                             recipe.outputItem == null || recipe.outputCount <= 0 ||
+                             recipe.inputs == null || recipe.inputs.Length == 0))
+                {
+                    _info.Add($"Inactive recipe asset (not referenced by any RecipeRegistry): {AssetDatabase.GetAssetPath(recipe)}");
+                }
+            }
+
+            ValidateCraftingRecipes(activeCrafting);
             ValidateSmeltingRecipes(smelting);
             ValidateMachineRecipes(machine);
-            ValidateOutputDuplicates(crafting, smelting, machine);
-            ValidateReachability(crafting, smelting, machine, resourceItems);
-            ValidateCycles(crafting, smelting, machine);
+            ValidateOutputDuplicates(activeCrafting, smelting, machine);
+            ValidateReachability(activeCrafting, smelting, machine, resourceItems);
+            ValidateCycles(activeCrafting, smelting, machine);
 
-            _lastReport = BuildReport(crafting.Count, smelting.Count, machine.Count);
+            _lastReport = BuildReport(crafting.Count, activeCrafting.Count, smelting.Count, machine.Count);
             Debug.Log($"[RecipeGraphValidator] Scan complete. Errors={_errors.Count}, Warnings={_warnings.Count}, Info={_info.Count}");
+        }
+
+        private static bool IsRetiredLegacySmallGridDoor(RecipeDefinition recipe)
+        {
+            string path = AssetDatabase.GetAssetPath(recipe).Replace('\\', '/');
+            return path == "Assets/VoxelEngineAssets/GridSystem/Recipes/Recipe_SmallGridSlidingDoor.asset";
         }
 
         private static List<T> LoadAssets<T>() where T : Object
@@ -318,13 +356,14 @@ namespace VoxelEngine.EditorTools
             visited.Add(node);
         }
 
-        private string BuildReport(int craftingCount, int smeltingCount, int machineCount)
+        private string BuildReport(int craftingAssetCount, int activeCraftingCount, int smeltingCount, int machineCount)
         {
             var builder = new StringBuilder();
             builder.AppendLine("# Production Recipe Graph Validation Report");
             builder.AppendLine($"Generated: {System.DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             builder.AppendLine();
-            builder.AppendLine($"Crafting recipes: {craftingCount}");
+            builder.AppendLine($"Crafting recipe assets scanned: {craftingAssetCount}");
+            builder.AppendLine($"Registered crafting recipes: {activeCraftingCount}");
             builder.AppendLine($"Smelting recipes: {smeltingCount}");
             builder.AppendLine($"Machine recipes: {machineCount}");
             builder.AppendLine($"Errors: {_errors.Count}");

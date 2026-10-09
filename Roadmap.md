@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.8-dev`
-**Roadmap Version:** `17.1.8-dev`
+**Current Version:** `17.1.9-dev`
+**Roadmap Version:** `17.1.9-dev`
 **Date:** 2026-10-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.1.9-dev - Repair Registered Production Recipes
+- Setup repair restores empty factory and assembler recipe inputs from existing authored ingredient tuples
+- Validator follows `RecipeRegistry` membership and reports malformed orphan assets as inactive info
+- Thomas's Unity scan reports 0 errors/warnings across 239 crafting, 4 smelting, and 8 machine recipes
+
 ### 17.1.8-dev - Shaped Boat Wakes and Shore Interaction
 - Maritime motion grows wakes from measured hull travel, with diverging crest arms and prop wash
 - Wake ripples/normal cues interact with wind and solver-flow crests; shallow banks compress the fan
@@ -48,11 +53,6 @@
 - Camera and player-head submersion use the actual fractional liquid fill at the queried point
 - Stale underwater post-effect flag is cleared when above water and when disabled
 - Unity camera verification remains open as a separate water/wake acceptance item
-
-### 17.1.4-dev - Shoreline Fixture Boundary Correction
-- Regression checks only vertices strictly inside the synthetic all-solid cube
-- Shared-face intersections no longer trigger false failures; Thomas reports both fixtures PASS
-- Runtime water, simulation, sand and wake behavior unchanged
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -1228,7 +1228,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
-| Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Unity validation covered the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
+| Recipe graph validation | ✅ COMPLETED | 17.1.9-dev wires `RecipeGraphRepairUtility` into `Tools > Voxel Engine > Voxel Engine Setup`; Thomas's Unity scan confirms 0 errors/warnings for 239 registered crafting, 4 smelting, and 8 machine recipes, with 211 unregistered assets accepted outside the active graph. |
 | Production-line UI | ✅ COMPLETED | Final polish pass: themed-panel tokens everywhere, entrance pop animation (0.18s scale+opacity), hover scale 1.02x + BgHover, responsive minWidth 300/280, flex wrap at 1280×720 to ultrawide, styled scrollers with production accent, micro-interactions on recipe cards and bottleneck hints, theme-aware text colors via UIThemeManager. Crusher/Assembler UIs, live Production Statistics with bottleneck/surplus hints, hideable hints, Recipe Browser dependency view, recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, theme override, pinned recipes with copy/clear, inventory-aware material summary, missing-only filter, CSV export, batch planning, machine-count estimates, copyable plans, shopping lists, method summaries, dependency chains — all polished. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ✅ COMPLETED | `UIThemeDefinition` full spec, 10 enriched assets + `UIThemeDatabase`, USS variables reactive via `OnThemeChanged`, `ThemedPanel`/`ThemedDocument`, `UIThemeApplier`, Interface tab with description, preview, RGB chips, opacity/radius/glow/animation sliders, copy/import/reset — scroll-preserving rebuilds. Premium editor explanatory text removed as requested. |

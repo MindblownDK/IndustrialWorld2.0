@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.8-dev`
+**Current Version:** `17.1.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.9-dev] Repair Production Recipe Inputs Safely
+
+**Type:** PATCH — editor-only recipe setup and validation. No runtime balance, save schema, or public gameplay API changes.
+
+**GitHub title:** `[17.1.9-dev] Repair missing production recipe links safely`
+
+#### Fixed
+- Existing factory `RecipeDefinition` and `MachineRecipe` assets now regain ingredient lists from the exact tuples already authored in Voxel Engine Setup, but only when their input list is empty and every source ingredient resolves. Non-empty ingredient lists and authored output, station, timing, unlock, and byproduct values remain untouched.
+- The Setup repair pass now covers the reported Assembler Mk.1–3, Conveyor Basic/Chute/Fast/Express, Crusher, Funnel, LED Strip factory recipes, and four assembler machine recipes. It replaces only empty or wholly unusable input arrays when every source ingredient resolves; it does not write partial costs or overwrite a list that still has valid authored ingredients.
+- The retired `GridSystem/Recipes/Recipe_SmallGridSlidingDoor.asset` is removed from any `RecipeRegistry` by the repair step, but the asset itself is preserved. The validator treats registered crafting recipes as the active graph and reports malformed unregistered recipe assets as inactive Info; if no `RecipeRegistry` asset exists, it falls back to validating all discovered crafting assets.
+
+#### Compatibility and validation
+- Thomas's Unity report at 2026-10-09 19:18:53 confirms 0 errors and 0 warnings across 239 registered crafting recipes, 4 smelting recipes, and 8 machine recipes. The 211 unregistered crafting assets are accepted as outside the active production graph; no registry entries were added for them.
+- The retired sliding-door recipe and generic `Recipe_PowerRelay` are both unregistered and remain preserved as assets; no ingredient costs were invented. The six cross-method duplicate outputs are informational alternate production routes, and the Portable Hydrogen Tank duplicate is absent from the active-graph findings.
 
 ### [17.1.8-dev] Shaped Boat Wakes and Shore Interaction
 

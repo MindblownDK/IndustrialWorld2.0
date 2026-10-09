@@ -34,6 +34,7 @@ namespace VoxelEngine.EditorTools
             var byPath = items.ToDictionary(AssetDatabase.GetAssetPath, item => item);
             var byName = BuildItemNameIndex(items);
 
+            repaired += RemoveRetiredLegacyRecipesFromRegistries();
             repaired += CopyValidDuplicateRecipeLinks();
             repaired += RepairKnownCraftingRecipes(byPath, byName);
             repaired += RepairKnownSmeltingRecipes(byPath, byName);
@@ -43,6 +44,24 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
             Debug.Log($"[RecipeGraphRepair] Complete. Repaired links: {repaired}. Created base items: {created}. Run the Recipe Graph Validator again.");
             EditorUtility.DisplayDialog("Recipe Graph Repair", $"Repair complete.\n\nRepaired links: {repaired}\nCreated base items: {created}\n\nRun the Recipe Graph Validator again.", "OK");
+        }
+
+        private static int RemoveRetiredLegacyRecipesFromRegistries()
+        {
+            var retiredDoor = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(
+                $"{Root}/GridSystem/Recipes/Recipe_SmallGridSlidingDoor.asset");
+            if (retiredDoor == null) return 0;
+
+            int removed = 0;
+            foreach (var registry in LoadAssets<RecipeRegistry>())
+            {
+                if (registry.recipes == null) continue;
+                int count = registry.recipes.RemoveAll(recipe => recipe == retiredDoor);
+                if (count <= 0) continue;
+                EditorUtility.SetDirty(registry);
+                removed += count;
+            }
+            return removed;
         }
 
         private static List<T> LoadAssets<T>() where T : Object
@@ -158,7 +177,10 @@ namespace VoxelEngine.EditorTools
 
         private static bool NeedsInputRepair(RecipeIngredient[] inputs)
         {
-            return inputs == null || inputs.Length == 0 || inputs.Any(input => input.item == null || input.count <= 0);
+            // Rebuild only a genuinely empty/unusable array. If an authored list has
+            // at least one valid ingredient, leave it intact rather than replacing
+            // the owner's recipe choices while repairing one broken reference.
+            return inputs == null || inputs.Length == 0 || !inputs.Any(input => input.item != null && input.count > 0);
         }
 
         private static int RepairKnownCraftingRecipes(Dictionary<string, ItemDefinition> byPath, Dictionary<string, ItemDefinition> byName)
@@ -174,12 +196,13 @@ namespace VoxelEngine.EditorTools
                 bool changed = false;
                 if (recipe.outputItem == null && output != null) { recipe.outputItem = output; changed = true; repaired++; }
                 if (recipe.outputCount <= 0 && outputCount > 0) { recipe.outputCount = outputCount; changed = true; repaired++; }
-                if (NeedsInputRepair(recipe.inputs))
+                if (NeedsInputRepair(recipe.inputs) && inputs.Length > 0 && inputs.All(i => i.item != null && i.count > 0))
                 {
-                    var valid = inputs.Where(i => i.item != null && i.count > 0)
+                    recipe.inputs = inputs
                         .Select(i => new RecipeIngredient { item = i.item, count = i.count })
                         .ToArray();
-                    if (valid.Length > 0) { recipe.inputs = valid; changed = true; repaired++; }
+                    changed = true;
+                    repaired++;
                 }
                 if (changed) EditorUtility.SetDirty(recipe);
             }
@@ -240,6 +263,38 @@ namespace VoxelEngine.EditorTools
                 (copperWire ?? copper, 16),
                 (circuit, 2));
 
+            var advancedCircuit = Item("Item_AdvCircuit") ?? Item("Item_AdvancedCircuit") ?? Item("Advanced Circuit");
+            Repair("Factory/Recipes/Recipe_AssemblerMk1.asset",
+                PathItem("Factory/Items/Block_AssemblerMk1.asset") ?? Item("Assembler Mk.1"), 1,
+                (ironPlate, 8), (ironGear, 4), (circuit, 2));
+            Repair("Factory/Recipes/Recipe_AssemblerMk2.asset",
+                PathItem("Factory/Items/Block_AssemblerMk2.asset") ?? Item("Assembler Mk.2"), 1,
+                (steelPlate, 8), (ironGear, 6), (circuit, 4), (copperWire, 6));
+            Repair("Factory/Recipes/Recipe_AssemblerMk3.asset",
+                PathItem("Factory/Items/Block_AssemblerMk3.asset") ?? Item("Assembler Mk.3"), 1,
+                (steelPlate, 14), (ironGear, 10), (advancedCircuit ?? circuit, 4), (copperWire, 12));
+            Repair("Factory/Recipes/Recipe_ConveyorBasic.asset",
+                PathItem("Factory/Items/Block_ConveyorBasic.asset") ?? Item("Basic Conveyor Belt"), 2,
+                (ironPlate, 2), (ironGear, 1));
+            Repair("Factory/Recipes/Recipe_ConveyorChute.asset",
+                PathItem("Factory/Items/Block_ConveyorChute.asset") ?? Item("Conveyor Chute"), 2,
+                (ironPlate, 2), (ironGear, 1));
+            Repair("Factory/Recipes/Recipe_ConveyorFast.asset",
+                PathItem("Factory/Items/Block_ConveyorFast.asset") ?? Item("Fast Conveyor Belt"), 2,
+                (ironPlate, 3), (ironGear, 2), (copperWire, 2));
+            Repair("Factory/Recipes/Recipe_ConveyorExpress.asset",
+                PathItem("Factory/Items/Block_ConveyorExpress.asset") ?? Item("Express Conveyor Belt"), 2,
+                (steelPlate, 2), (ironGear, 3), (copperWire, 6), (circuit, 1));
+            Repair("Factory/Recipes/Recipe_Crusher.asset",
+                PathItem("Factory/Items/Block_Crusher.asset") ?? Item("Crusher"), 1,
+                (ironPlate, 6), (ironGear, 4), (circuit, 1));
+            Repair("Factory/Recipes/Recipe_Funnel.asset",
+                PathItem("Factory/Items/Block_Funnel.asset") ?? Item("Funnel"), 1,
+                (ironPlate, 2), (ironGear, 1));
+            Repair("Factory/Recipes/Recipe_LEDStripFactory.asset",
+                PathItem("Factory/Items/Block_LEDStripFactory.asset") ?? Item("LED Strip"), 2,
+                (copperWire, 4), (glass, 1));
+
             foreach (var family in new[] { "Foundation", "Wall", "Floor", "Doorway", "Door", "Window", "Stairs", "Roof", "Pillar", "HalfWall" })
                 Repair($"Recipes/Recipe_Tok_{family}.asset", PathItem($"Tiered/Tokens/Token_{family}.asset") ?? Item($"Token_{family}"), 1, (woodLog, 1));
 
@@ -275,11 +330,10 @@ namespace VoxelEngine.EditorTools
             {
                 var recipe = AssetDatabase.LoadAssetAtPath<MachineRecipe>($"{Root}/{path}");
                 if (recipe == null || !NeedsMachineInputRepair(recipe.inputs)) return;
-                var valid = inputs.Where(i => i.item != null && i.count > 0)
+                if (inputs.Length == 0 || !inputs.All(i => i.item != null && i.count > 0)) return;
+                recipe.inputs = inputs
                     .Select(i => new MachineRecipeSlot { item = i.item, count = i.count })
                     .ToArray();
-                if (valid.Length == 0) return;
-                recipe.inputs = valid;
                 EditorUtility.SetDirty(recipe);
                 repaired++;
             }
@@ -287,6 +341,18 @@ namespace VoxelEngine.EditorTools
             Repair("Factory/MachineRecipes/MachineRecipe_CrushIronOre.asset", (Item("Item_IronOre") ?? Item("Iron Ore"), 1));
             Repair("Factory/MachineRecipes/MachineRecipe_CrushCopperOre.asset", (Item("Item_CopperOre") ?? Item("Copper Ore"), 1));
             Repair("Factory/MachineRecipes/MachineRecipe_CrushStone.asset", (Item("Item_Stone") ?? Item("Stone"), 1));
+
+            var ironPlate = Item("Item_IronPlate") ?? Item("Iron Plate");
+            var copperIngot = Item("Item_CopperIngot") ?? Item("Copper Ingot");
+            var copperWire = Item("Item_CopperWire") ?? Item("Item_CopperLVWire") ?? Item("Copper LV Wire") ?? Item("Copper Wire");
+            var circuit = Item("Item_Circuit") ?? Item("Electronic Circuit");
+            var plastic = Item("Item_Plastic") ?? Item("Plastic Bar") ?? Item("Plastic");
+
+            Repair("Factory/MachineRecipes/MachineRecipe_AssembleGear.asset", (ironPlate, 2));
+            Repair("Factory/MachineRecipes/MachineRecipe_AssembleCopperWire.asset", (copperIngot, 1));
+            Repair("Factory/MachineRecipes/MachineRecipe_AssembleCircuit.asset", (ironPlate, 1), (copperWire, 3));
+            Repair("Factory/MachineRecipes/MachineRecipe_AssembleAdvancedCircuit.asset",
+                (circuit, 2), (plastic, 2), (copperWire, 4));
 
             var crushStone = AssetDatabase.LoadAssetAtPath<MachineRecipe>($"{Root}/Factory/MachineRecipes/MachineRecipe_CrushStone.asset");
             var sand = Item("Item_Sand") ?? Item("Sand");
@@ -301,7 +367,7 @@ namespace VoxelEngine.EditorTools
 
         private static bool NeedsMachineInputRepair(MachineRecipeSlot[] inputs)
         {
-            return inputs == null || inputs.Length == 0 || inputs.Any(input => input.item == null || input.count <= 0);
+            return inputs == null || inputs.Length == 0 || !inputs.Any(input => input.item != null && input.count > 0);
         }
     }
 }

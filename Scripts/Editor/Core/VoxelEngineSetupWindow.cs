@@ -8897,10 +8897,30 @@ root =>
                     }
                     recipe.inputs = valid.ToArray();
                 }
-                else if (recipe.outputItem == null && output != null)
+                else
                 {
-                    recipe.outputItem = output;
-                    repairedLinkCount++;
+                    if (recipe.outputItem == null && output != null)
+                    {
+                        recipe.outputItem = output;
+                        repairedLinkCount++;
+                    }
+
+                    // Existing authored recipes keep every populated value. The
+                    // setup's source tuple is used only to restore an empty input list.
+                    if (recipe.inputs == null || recipe.inputs.Length == 0)
+                    {
+                        var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                        foreach (var (item, count) in inputs)
+                        {
+                            if (item != null && count > 0)
+                                valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+                        }
+                        if (valid.Count > 0 && valid.Count == inputs.Length)
+                        {
+                            recipe.inputs = valid.ToArray();
+                            repairedLinkCount++;
+                        }
+                    }
                 }
 
                 if (recipeRegistry != null && !recipeRegistry.recipes.Contains(recipe))
@@ -8979,10 +8999,30 @@ root =>
                     recipe.processSeconds = seconds;
                     recipe.unlockedByDefault = unlocked;
                 }
-                else if (recipe.outputItem == null && output != null)
+                else
                 {
-                    recipe.outputItem = output;
-                    repairedLinkCount++;
+                    if (recipe.outputItem == null && output != null)
+                    {
+                        recipe.outputItem = output;
+                        repairedLinkCount++;
+                    }
+
+                    // Rehydrate only an empty list; preserve non-empty authored
+                    // ingredient choices and all other machine recipe settings.
+                    if (recipe.inputs == null || recipe.inputs.Length == 0)
+                    {
+                        var validInputs = new List<VoxelEngine.Simulation.MachineRecipeSlot>();
+                        foreach (var (item, count) in inputs)
+                        {
+                            if (item != null && count > 0)
+                                validInputs.Add(new VoxelEngine.Simulation.MachineRecipeSlot { item = item, count = count });
+                        }
+                        if (validInputs.Count > 0 && validInputs.Count == inputs.Length)
+                        {
+                            recipe.inputs = validInputs.ToArray();
+                            repairedLinkCount++;
+                        }
+                    }
                 }
                 EditorUtility.SetDirty(recipe);
                 return recipe;
