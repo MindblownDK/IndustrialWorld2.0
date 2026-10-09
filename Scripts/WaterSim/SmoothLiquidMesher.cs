@@ -15,6 +15,8 @@ namespace VoxelEngine.WaterSim
             new Vector3Int(0,0,1), new Vector3Int(1,0,1), new Vector3Int(1,1,1), new Vector3Int(0,1,1) };
         private static readonly int[,] Tetra = { {0,5,1,6}, {0,1,2,6}, {0,2,3,6}, {0,3,7,6}, {0,7,4,6}, {0,4,5,6} };
         private static readonly int[,] Edges = { {0,1}, {0,2}, {0,3}, {1,2}, {1,3}, {2,3} };
+        private static readonly Vector3 FlowProjectionAxisA = new(0.73f,0.39f,0.56f);
+        private static readonly Vector3 FlowProjectionAxisB = new(-0.42f,0.86f,0.28f);
 
         public const int HaloSize = VoxelConstants.CHUNK_SIZE + 5; // [-2,S+2], including head-extension support
         public sealed class Snapshot
@@ -27,7 +29,12 @@ namespace VoxelEngine.WaterSim
             public Voxel[] voxels;
             public bool[] known;
             public Vector3 velocity;
-            internal float flowTimestamp; // Main-thread capture time for shader fade-out.
+            internal float flowTimestamp; // Main-thread capture time for non-water liquid flow.
+            internal float waterFlowTimestamp = -1f; // Last actual water transfer, not a mesh rebuild time.
+            internal Vector2[] waterSurfaceFlow;
+            internal float[] waterImpact;
+            internal Vector3 flowAxisX = Vector3.right;
+            internal Vector3 flowAxisZ = Vector3.forward;
             internal byte flowShaderMask;
         }
         public sealed class Surface
@@ -35,6 +42,7 @@ namespace VoxelEngine.WaterSim
             public readonly List<Vector3> vertices = new();
             public readonly List<Vector3> normals = new();
             public readonly List<Vector2> uv = new(), flow = new();
+            internal readonly List<Vector4> flowData = new();
             public readonly List<Color> colors = new();
             public readonly List<int>[] triangles = { new(), new(), new(), new(), new(), new(), new() };
         }
@@ -48,7 +56,7 @@ namespace VoxelEngine.WaterSim
             Voxel[] halo = snapshot.voxels;
             var output = new Surface();
             var vertices=output.vertices; var normals=output.normals;
-            var uv=output.uv; var flow=output.flow; var colors=output.colors;
+            var uv=output.uv; var flow=output.flow; var flowData=output.flowData; var colors=output.colors;
             var triangles=output.triangles;
             var present = new bool[7];
             foreach (Voxel v in halo)
@@ -65,8 +73,10 @@ namespace VoxelEngine.WaterSim
             {
                 if (!present[liquidIndex]) continue;
                 var liquid = (LiquidType)liquidIndex;
-                float flowTimestampTag = (snapshot.flowShaderMask & (1 << liquidIndex)) != 0
-                    ? snapshot.flowTimestamp + 2f : 1f;
+                bool flowShaderAvailable = (snapshot.flowShaderMask & (1 << liquidIndex)) != 0;
+                float flowTimestamp = liquid == LiquidType.Water
+                    ? snapshot.waterFlowTimestamp : snapshot.flowTimestamp;
+                if (!flowShaderAvailable) flowTimestamp = -1f;
                 bool any = false;
                 for (int z=0;z<N;z++) for(int y=0;y<N;y++) for(int x=0;x<N;x++)
                 {
@@ -92,7 +102,7 @@ namespace VoxelEngine.WaterSim
                     // detached surface when all eight source samples are solid.
                     if (!known || (!wet && allSolid) || !positive || !negative) continue;
                     float depth = BankDepth(new Vector3(x+0.5f,y+0.5f,z+0.5f), snapshot);
-                    Color bank = new Color(Mathf.Clamp01(depth/3f),1f,Mathf.Clamp01(depth/8f),flowTimestampTag);
+                    Color bank = new Color(Mathf.Clamp01(depth/3f),1f,Mathf.Clamp01(depth/8f),1f);
                     for(int t=0;t<6;t++)
                     {
                         int count=0; Vector3 inside=Vector3.zero,outside=Vector3.zero; int ni=0,no=0;
@@ -140,7 +150,16 @@ namespace VoxelEngine.WaterSim
                             Vector3 up=snapshot.planet ? p.normalized : Vector3.up;
                             normals.Add(Vector3.Dot(normal,up)>0.3f ? up : normal);
                             uv.Add(new Vector2(p.x+p.y*0.19f,p.z+p.y*0.23f));
-                            flow.Add(visualFlow);
+                            Vector2 vertexFlow = visualFlow;
+                            float vertexImpact = 0f;
+                            if (liquid == LiquidType.Water)
+                            {
+                                Vector2 localFlow = SampleWaterFlowAndImpact(snapshot, p, out vertexImpact);
+                                Vector3 worldFlow = snapshot.flowAxisX * localFlow.x + snapshot.flowAxisZ * localFlow.y;
+                                vertexFlow = ProjectFlow(worldFlow);
+                            }
+                            flow.Add(vertexFlow);
+                            flowData.Add(new Vector4(vertexFlow.x, vertexFlow.y, flowTimestamp, vertexImpact));
                             colors.Add(bank);
                         }
                         for(int j=1;j<count-1;j++)
@@ -160,13 +179,48 @@ namespace VoxelEngine.WaterSim
             if(chunk.waterMesh==null) chunk.waterMesh=new Mesh{name="ContinuousLiquidSurface"};
             var mesh=chunk.waterMesh; mesh.Clear(); mesh.indexFormat=IndexFormat.UInt32;
             mesh.SetVertices(surface.vertices); mesh.SetNormals(surface.normals);
-            mesh.SetUVs(0,surface.uv); mesh.SetUVs(1,surface.flow); mesh.SetColors(surface.colors);
+            mesh.SetUVs(0,surface.uv); mesh.SetUVs(1,surface.flowData); mesh.SetColors(surface.colors);
             mesh.subMeshCount=7;
             for(int i=0;i<7;i++) mesh.SetTriangles(surface.triangles[i],i,false);
             mesh.RecalculateBounds();
             chunk.waterMeshFilter.sharedMesh=mesh;
             chunk.waterMeshRenderer.sharedMaterials=WaterMeshBuilder.LiquidMaterialArray();
             chunk.waterMeshGO.SetActive(true);
+        }
+
+        private static Vector2 ProjectFlow(Vector3 velocity)
+            => new Vector2(Vector3.Dot(velocity,FlowProjectionAxisA),Vector3.Dot(velocity,FlowProjectionAxisB));
+
+        private static Vector2 SampleWaterFlowAndImpact(Snapshot snapshot, Vector3 position, out float impact)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            int cellCount = S * S;
+            Vector2[] flow = snapshot.waterSurfaceFlow;
+            float[] impactField = snapshot.waterImpact;
+            bool hasFlow = flow != null && flow.Length == cellCount;
+            bool hasImpact = impactField != null && impactField.Length == cellCount;
+            impact = 0f;
+            if (!hasFlow && !hasImpact) return Vector2.zero;
+
+            float x = Mathf.Clamp(position.x - snapshot.origin.x,0f,S - 1f);
+            float z = Mathf.Clamp(position.z - snapshot.origin.z,0f,S - 1f);
+            int x0 = Mathf.FloorToInt(x), z0 = Mathf.FloorToInt(z);
+            int x1 = Mathf.Min(x0 + 1,S - 1), z1 = Mathf.Min(z0 + 1,S - 1);
+            float tx = x - x0, tz = z - z0;
+            Vector2 sampledFlow = Vector2.zero;
+            if (hasFlow)
+            {
+                Vector2 a = Vector2.Lerp(flow[x0 + z0 * S],flow[x1 + z0 * S],tx);
+                Vector2 b = Vector2.Lerp(flow[x0 + z1 * S],flow[x1 + z1 * S],tx);
+                sampledFlow = Vector2.Lerp(a,b,tz);
+            }
+            if (hasImpact)
+            {
+                float a = Mathf.Lerp(impactField[x0 + z0 * S],impactField[x1 + z0 * S],tx);
+                float b = Mathf.Lerp(impactField[x0 + z1 * S],impactField[x1 + z1 * S],tx);
+                impact = Mathf.Clamp01(Mathf.Lerp(a,b,tz));
+            }
+            return sampledFlow;
         }
 
         private static Voxel Read(Snapshot snapshot, Vector3Int p)

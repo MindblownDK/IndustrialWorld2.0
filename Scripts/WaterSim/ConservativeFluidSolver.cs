@@ -10,22 +10,147 @@ namespace VoxelEngine.WaterSim
     /// A tick rotates its axis and scan ordering to avoid a permanent preferred direction.</summary>
     public static class ConservativeFluidSolver
     {
-        private sealed class FlowState { public int epoch; public Vector3 velocity; }
+        private sealed class FlowState
+        {
+            public int epoch;
+            public int surfaceFlowStep = int.MinValue;
+            public Vector3 velocity;
+            public Vector2[] waterSurfaceFlow;
+            public float[] waterImpact;
+            public float lastWaterFlowTime = -1f;
+        }
+
         private static readonly Dictionary<Chunk, FlowState> Flows = new();
+        private static readonly Vector3Int[] Axes = { Vector3Int.right, Vector3Int.up, new Vector3Int(0, 0, 1) };
+        private const float WaterFlowFieldDecay = 0.55f;
+        private const float WaterFlowVisualScale = 2.2f;
+        private const float WaterImpactVisualScale = 1.5f;
+        private const float WaterRimVisualScale = 1.4f;
+
         public static void Reset() => Flows.Clear();
+
         public static Vector3 GetFlow(Chunk chunk)
-            => Flows.TryGetValue(chunk, out FlowState state) && state.epoch == chunk.streamEpoch ? state.velocity : Vector3.zero;
+        {
+            return chunk != null && Flows.TryGetValue(chunk, out FlowState state)
+                && state.epoch == chunk.streamEpoch ? state.velocity : Vector3.zero;
+        }
+
+        private static FlowState GetFlowState(Chunk chunk)
+        {
+            if (chunk == null) return null;
+            if (!Flows.TryGetValue(chunk, out FlowState state))
+            {
+                state = new FlowState { epoch = chunk.streamEpoch };
+                Flows.Add(chunk, state);
+            }
+            else if (state.epoch != chunk.streamEpoch)
+            {
+                state.epoch = chunk.streamEpoch;
+                state.surfaceFlowStep = int.MinValue;
+                state.velocity = Vector3.zero;
+                state.waterSurfaceFlow = null;
+                state.waterImpact = null;
+                state.lastWaterFlowTime = -1f;
+            }
+            return state;
+        }
+
         private static void SetFlow(Chunk chunk, Vector3 flow)
         {
-            if (!Flows.TryGetValue(chunk,out FlowState state)) { state = new FlowState(); Flows.Add(chunk,state); }
-            if (state.epoch != chunk.streamEpoch) state.velocity = Vector3.zero;
-            state.epoch = chunk.streamEpoch; state.velocity = Vector3.Lerp(state.velocity, flow, 0.5f);
+            FlowState state = GetFlowState(chunk);
+            if (state == null) return;
+            state.velocity = Vector3.Lerp(state.velocity, flow, 0.5f);
         }
-        private static readonly Vector3Int[] Axes = { Vector3Int.right, Vector3Int.up, new Vector3Int(0, 0, 1) };
+
+        /// <summary>Copies the transient, water-only render flow field for a worker snapshot.</summary>
+        internal static void CaptureWaterSurfaceFlow(Chunk chunk, out Vector2[] horizontal, out float[] impact, out float timestamp)
+        {
+            horizontal = null;
+            impact = null;
+            timestamp = -1f;
+            if (chunk == null || !Flows.TryGetValue(chunk, out FlowState state) || state.epoch != chunk.streamEpoch)
+                return;
+
+            horizontal = state.waterSurfaceFlow != null ? (Vector2[])state.waterSurfaceFlow.Clone() : null;
+            impact = state.waterImpact != null ? (float[])state.waterImpact.Clone() : null;
+            timestamp = state.lastWaterFlowTime;
+        }
+
+        private static void BeginWaterSurfaceFlowStep(Chunk chunk, int simulationStep)
+            => BeginWaterSurfaceFlowStep(GetFlowState(chunk), simulationStep);
+
+        private static void BeginWaterSurfaceFlowStep(FlowState state, int simulationStep)
+        {
+            if (state == null || state.surfaceFlowStep == simulationStep) return;
+            state.surfaceFlowStep = simulationStep;
+
+            if (state.waterSurfaceFlow != null)
+            {
+                for (int i = 0; i < state.waterSurfaceFlow.Length; i++)
+                    state.waterSurfaceFlow[i] *= WaterFlowFieldDecay;
+            }
+            if (state.waterImpact != null)
+            {
+                for (int i = 0; i < state.waterImpact.Length; i++)
+                    state.waterImpact[i] *= WaterFlowFieldDecay;
+            }
+        }
+
+        private static void AddWaterSurfaceFlow(FlowState state, int x, int z, Vector2 impulse, float impact)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            if (state == null || x < 0 || x >= S || z < 0 || z >= S
+                || (impulse.sqrMagnitude <= 0.000001f && impact <= 0f)) return;
+
+            int index = x + z * S;
+            if (impulse.sqrMagnitude > 0.000001f)
+            {
+                if (state.waterSurfaceFlow == null) state.waterSurfaceFlow = new Vector2[S * S];
+                state.waterSurfaceFlow[index] = Vector2.ClampMagnitude(
+                    state.waterSurfaceFlow[index] + impulse, WaterFlowVisualScale);
+            }
+            if (impact > 0f)
+            {
+                if (state.waterImpact == null) state.waterImpact = new float[S * S];
+                state.waterImpact[index] = Mathf.Max(state.waterImpact[index], Mathf.Clamp01(impact));
+            }
+            state.lastWaterFlowTime = Time.time;
+        }
+
+        private static void RecordWaterTransfer(Chunk chunk, int x, int z, Vector3Int direction,
+            int amount, int maxAmount, int simulationStep)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            if (chunk == null || x < 0 || x >= S || z < 0 || z >= S || amount <= 0 || maxAmount <= 0) return;
+
+            FlowState state = GetFlowState(chunk);
+            if (state == null) return;
+            BeginWaterSurfaceFlowStep(state, simulationStep);
+
+            float fraction = Mathf.Clamp01(amount / (float)maxAmount);
+            if (direction.y == 0)
+            {
+                Vector2 horizontal = new Vector2(direction.x, direction.z) * (fraction * WaterFlowVisualScale);
+                AddWaterSurfaceFlow(state, x, z, horizontal, 0f);
+                return;
+            }
+
+            AddWaterSurfaceFlow(state, x, z, Vector2.zero, fraction * WaterImpactVisualScale);
+
+            // A vertical transfer pulls the visible surface toward the opening. Encode a
+            // short inward-flow ring around its column so a falling stream also has a
+            // readable travelling crest instead of a purely vertical, unrenderable vector.
+            float rimStrength = fraction * WaterRimVisualScale;
+            AddWaterSurfaceFlow(state, x - 1, z, Vector2.right * rimStrength, 0f);
+            AddWaterSurfaceFlow(state, x + 1, z, Vector2.left * rimStrength, 0f);
+            AddWaterSurfaceFlow(state, x, z - 1, Vector2.up * rimStrength, 0f);
+            AddWaterSurfaceFlow(state, x, z + 1, Vector2.down * rimStrength, 0f);
+        }
 
         public static bool Step(IVoxelWorld world, Chunk source, int step)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
+            BeginWaterSurfaceFlowStep(source, step);
             bool changed = false;
             Vector3 netFlow = Vector3.zero;
             int transfers = 0;
@@ -109,6 +234,13 @@ namespace VoxelEngine.WaterSim
                         Mathf.Min(donor.waterLevel, 255 - receiver.waterLevel));
                     if (amount <= 0) continue;
                     netFlow += (Vector3)axis * (fromA ? amount : -amount) / 255f; transfers++;
+                    if (liquid == LiquidType.Water)
+                    {
+                        Vector3Int flowDirection = fromA ? axis : new Vector3Int(-axis.x, -axis.y, -axis.z);
+                        RecordWaterTransfer(source, x, z, flowDirection, amount, rate, step);
+                        if (target != source || axis.y == 0)
+                            RecordWaterTransfer(target, localQ.x, localQ.z, flowDirection, amount, rate, step);
+                    }
                     donor.waterLevel -= (byte)amount;
                     if (donor.waterLevel == 0) FluidMaterialUtility.ClearLiquid(ref donor);
                     receiver.density = -1;

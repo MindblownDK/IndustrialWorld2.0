@@ -22,12 +22,38 @@ namespace VoxelEngine.EditorTools
             Require(a.vertices.Count>0,"full pool missing");
             var b=System.Threading.Tasks.Task.Run(()=>SmoothLiquidMesher.Extract(s)).GetAwaiter().GetResult();
             Require(a.vertices.Count==b.vertices.Count,"worker differs");
+            Require(a.flow.Count==a.vertices.Count,"flow channel length differs from vertices");
             for(int i=0;i<a.vertices.Count;i++)
             {
                 Require(a.vertices[i]==b.vertices[i],"worker vertex differs");
                 Require(!float.IsNaN(a.vertices[i].x),"invalid vertex");
                 Require(a.colors[i].b>=0 && a.colors[i].b<=1,"depth channel");
             }
+
+            const int chunkSize = VoxelConstants.CHUNK_SIZE;
+            var localFlow = new Vector2[chunkSize*chunkSize];
+            for(int z=8;z<24;z++) for(int x=8;x<24;x++)
+                localFlow[x+z*chunkSize]=Vector2.right*0.8f;
+            var flowSnapshot = new SmoothLiquidMesher.Snapshot
+            {
+                origin = s.origin,
+                planet = s.planet,
+                voxels = (Voxel[])s.voxels.Clone(),
+                known = (bool[])s.known.Clone()
+            };
+            SetSnapshotField(flowSnapshot,"waterSurfaceFlow",localFlow);
+            SetSnapshotField(flowSnapshot,"waterImpact",new float[chunkSize*chunkSize]);
+            SetSnapshotField(flowSnapshot,"waterFlowTimestamp",12.5f);
+            SetSnapshotField(flowSnapshot,"flowShaderMask",(byte)1);
+            var flowingSurface=SmoothLiquidMesher.Extract(flowSnapshot);
+            bool hasDirectionalFlow=false, hasZero=false;
+            for(int i=0;i<flowingSurface.flow.Count;i++)
+            {
+                hasDirectionalFlow |= flowingSurface.flow[i].x>0.01f;
+                hasZero |= flowingSurface.flow[i].sqrMagnitude<0.000001f;
+            }
+            Require(flowingSurface.flow.Count==flowingSurface.vertices.Count,"local flow channel length differs from vertices");
+            Require(hasDirectionalFlow && hasZero,"per-column water flow was not projected and localized on the surface");
 
             var bankSupport = new SmoothLiquidMesher.Snapshot
             {
@@ -82,7 +108,13 @@ namespace VoxelEngine.EditorTools
 
             Array.Clear(s.known,0,s.known.Length);
             Require(SmoothLiquidMesher.Extract(s).vertices.Count==0,"unknown boundary rendered");
-            Debug.Log("[SurfaceValidation] PASS: full pool, deterministic worker extraction, finite vertices, depth range, solid-only bank sliver suppression, unknown boundaries, fractional sea-level film suppression. Visuals/FPS/mining/grass are NOT validated by this fixture.");
+            Debug.Log("[SurfaceValidation] PASS: full pool, deterministic worker extraction, finite vertices, depth range, localized flow projection, solid-only bank sliver suppression, unknown boundaries, fractional sea-level film suppression. Shader appearance/FPS/mining/grass are NOT validated by this fixture.");
+        }
+        private static void SetSnapshotField(SmoothLiquidMesher.Snapshot snapshot,string name,object value)
+        {
+            FieldInfo field=typeof(SmoothLiquidMesher.Snapshot).GetField(name,BindingFlags.Instance|BindingFlags.NonPublic);
+            Require(field!=null,"render-flow snapshot field missing: "+name);
+            field.SetValue(snapshot,value);
         }
         private static void Require(bool ok,string message) { if(!ok) throw new InvalidOperationException("Surface validation: "+message); }
     }

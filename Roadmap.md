@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.6-dev`
-**Roadmap Version:** `17.1.6-dev`
+**Current Version:** `17.1.7-dev`
+**Roadmap Version:** `17.1.7-dev`
 **Date:** 2026-10-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,15 +29,20 @@
 
 ## 0. Recently Done
 
+### 17.1.7-dev - Localized Fill-Front Water Crests
+- Actual water transfers create per-column render flow, avoiding chunk-average cancellation
+- Vertical fills add inward crest cues around the affected surface column; stopped flow fades by transfer age
+- Unity shader and in-game visual validation open; boat wakes remain deferred
+
 ### 17.1.6-dev - Flow-Driven Water Crests
-- Solver-backed voxel liquids gain a separate directional crest/foam cue from existing movement data
-- The flow cue fades from its render snapshot; fluid transfer and accepted ordinary waves remain unchanged
-- Mine-flow visual acceptance open; boat wakes wait for both flow and camera validation
+- Solver-backed voxel liquids gained a separate directional crest/foam cue from movement data
+- The first flow cue faded from its render snapshot; fluid transfer and ordinary waves remained unchanged
+- Mine-flow visual acceptance carried forward to 17.1.7-dev; boat wakes still wait for flow and camera validation
 
 ### 17.1.5-dev - Accurate Underwater Camera State
 - Camera and player-head submersion use the actual fractional liquid fill at the queried point
 - Stale underwater post-effect flag is cleared when above water and when disabled
-- Unity camera verification open; boat wakes also wait for 17.1.6-dev flow acceptance
+- Unity camera verification open; boat wakes also wait for 17.1.7-dev flow acceptance
 
 ### 17.1.4-dev - Shoreline Fixture Boundary Correction
 - Regression checks only vertices strictly inside the synthetic all-solid cube
@@ -48,12 +53,6 @@
 - Shader-only crest timing increased; voxel-fluid simulation and liquid transfer unchanged
 - Shore waves, foam and caustics fade at banks; solid-only bank-sliver gate added
 - Unity visual/fixture acceptance open; sand unchanged
-
-### 17.1.2-dev - Coherent Water Crests and Softer Shores
-- Body-centred wind-aligned wave normals and phase-locked crest foam implemented
-- Fractional sea-level bank films suppressed; procedural sand relief softened
-- User reports fluid and surface fixtures PASS, good FPS and accepted sand
-
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -83,7 +82,7 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
-- **Boat-wake visuals** (queued after 17.1.5-dev camera and 17.1.6-dev mined-water flow-crest acceptance): wake shape, crest interaction, and near-shore behavior are next after both open issues are accepted.
+- **Boat-wake visuals** (queued after 17.1.5-dev camera and 17.1.7-dev mined-water flow-crest acceptance): wake shape, crest interaction, and near-shore behavior are next after both open issues are accepted.
 - **Auto-craft queue EDITS are host-echo, not intent-RPC** (accepted 14.43.0, narrowed 14.58.0): the simulation itself is host-only since 14.58.0, but a guest's queue/bank edit still applies locally and replicates through the seam - an edit landing in the same instant as a host convergence pass can be overwritten and needs re-doing. Cosmetic-rare; full intent conversion only if live play ever surfaces it.
 - **Storage security enforcement: host-validated since 14.57.0.** Guest container overwrites into guarded networks are checked against the Security Block rules on the host and denied writes are converged away; the per-machine UI gates remain as UX. The machine sims themselves are host-only since 14.58.0 (SimulationIsRemote gate).
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
@@ -2613,7 +2612,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## Landscape and water validation still open
 - [ ] 17.1.5-dev verify the camera effect is off above water and returns below the fractional surface
-- [ ] 17.1.6-dev verify mined-water flow crests follow flow direction/speed and fade when movement settles; wakes wait for both validations
+- [ ] 17.1.7-dev verify localized fill-front crests follow water transfer and fade when movement settles; wakes wait for both validations
 - [ ] 17.1.1-dev fresh-seed temperate biome coverage
 - [x] User Unity conservation fixture pass *(16.0.0-dev)*
 - [ ] Unity/Burst/HLSL compilation and conservation regression *(16.0.1-dev)*

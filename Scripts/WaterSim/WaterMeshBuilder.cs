@@ -184,10 +184,20 @@ namespace VoxelEngine.WaterSim
             if (world is SphereWorld sphereWorld && sphereWorld.body != null)
                 seaRadius = sphereWorld.body.SeaRadius / VoxelConstants.VOXEL_SIZE;
             Vector3 flowVelocity = ConservativeFluidSolver.GetFlow(chunk);
+            Vector3 flowAxisX = Vector3.right;
+            Vector3 flowAxisZ = Vector3.forward;
             if (world is SphereWorld flowWorld && flowWorld.body != null)
+            {
                 flowVelocity = flowWorld.body.transform.TransformDirection(flowVelocity);
+                flowAxisX = flowWorld.body.transform.TransformDirection(Vector3.right).normalized;
+                flowAxisZ = flowWorld.body.transform.TransformDirection(Vector3.forward).normalized;
+            }
+            ConservativeFluidSolver.CaptureWaterSurfaceFlow(chunk, out Vector2[] waterSurfaceFlow,
+                out float[] waterImpact, out float waterFlowTimestamp);
             var snapshot=new SmoothLiquidMesher.Snapshot { origin=chunk.coord*S, planet=planet,
                 seaRadius=seaRadius, velocity=flowVelocity, flowTimestamp=Time.time,
+                waterFlowTimestamp=waterFlowTimestamp, waterSurfaceFlow=waterSurfaceFlow,
+                waterImpact=waterImpact, flowAxisX=flowAxisX, flowAxisZ=flowAxisZ,
                 flowShaderMask=GetFlowShaderMask(), voxels=new Voxel[H*H*H], known=new bool[H*H*H] };
             for(int z=-2;z<=S+2;z++) for(int y=-2;y<=S+2;y++) for(int x=-2;x<=S+2;x++)
             {

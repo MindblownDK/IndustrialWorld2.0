@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.6-dev`
+**Current Version:** `17.1.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.1.7-dev] Localized Water Flow Crests
+
+**Type:** PATCH — save-compatible, render-only water-flow cue. No save schema, voxel format, fluid-transfer/conservation, public gameplay API, or setup-content changes.
+
+**GitHub title:** `[17.1.7-dev] Make water flow crests visible at fill fronts`
+
+#### Improved
+- Water-surface shading now uses short-lived per-column render data recorded from actual conservative water transfers. Unlike the prior chunk-wide average, opposing flows at different surface columns no longer cancel each other and leave the whole surface visually still.
+- Vertical water transfers seed a compact inward flow band around the affected column, so water entering a mined opening also produces a surface crest cue.
+- Flow direction, transfer time, and impact strength travel in a dedicated UV channel. The fade begins at the last water transfer, not at an unrelated mesh rebuild; vertex-color alpha remains a bounded flow-enable flag rather than a timestamp carrier.
+- The flow crest mask and foam response are more readable while the existing wind-driven waves and boat wakes remain unchanged.
+- The editor validation fixtures now verify both sides of the render path: a conserved cross-chunk water transfer records local flow data, and the mesher projects that data only where the synthetic surface field is active.
+
+#### Compatibility and validation
+- PATCH over 17.1.6-dev. Solver transfer math, conservation, voxel levels, chunk storage, saves, solver cadence, wake registry, and public APIs are unchanged. New flow fields are transient rendering metadata.
+- Thomas supplied FluidValidation and SurfaceValidation PASS results for the baseline. The new transfer-capture and localized-projection assertions, Unity C#/HLSL compilation, in-game fill-front appearance, and fade still require Unity validation; this workspace cannot run Unity.
+- No prefab, item, recipe, research, or Voxel Engine Setup changes are required.
 
 ### [17.1.6-dev] Flow-Driven Water Crests
 

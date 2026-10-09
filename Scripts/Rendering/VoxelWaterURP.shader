@@ -131,7 +131,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float4 posOS  : POSITION;
                 float3 normOS : NORMAL;
                 float2 uv     : TEXCOORD0;
-                float2 uv2    : TEXCOORD1;
+                float4 uv2    : TEXCOORD1;
                 float4 color  : COLOR;
             };
 
@@ -142,7 +142,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 normWS : TEXCOORD1;
                 float  fog    : TEXCOORD2;
                 float4 scrPos : TEXCOORD3;
-                float3 flowUV : TEXCOORD4;
+                float4 flowUV : TEXCOORD4;
                 float4 data   : TEXCOORD5;
             };
 
@@ -292,11 +292,12 @@ Shader "VoxelEngine/VoxelWaterURP"
                 o.normWS = TransformObjectToWorldNormal(i.normOS);
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
-                o.flowUV = float3(i.uv2, i.color.a - 2.0);
-                // data.z gates solver-flow crests. Native voxel-liquid meshes encode snapshot
-                // time in the otherwise-unused vertex alpha; the procedural ocean patch opts out.
+                // UV1 carries world-projected flow direction, the last transfer time, and
+                // localized vertical-impact strength. Timing stays out of vertex colour;
+                // normalized alpha remains a safe enable bit for surfaces without flow data.
+                o.flowUV = i.uv2;
                 // data.w is geometry-authored water depth, including the patch's value when scene depth is absent.
-                o.data = float4(shoreDepthMask, tideMask, step(1.5, i.color.a), saturate(i.color.b));
+                o.data = float4(shoreDepthMask, tideMask, step(0.5, i.color.a), saturate(i.color.b));
                 return o;
             }
 
@@ -308,12 +309,16 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 flowDir = i.flowUV.xy;
                 float flowSpeed = length(flowDir);
                 float2 flowDirectionUV = flowSpeed > 0.0001 ? flowDir / flowSpeed : float2(0.0, 0.0);
-                // Flow snapshot time is forwarded through flowUV.z; stale crests fade without
-                // additional simulation ticks or per-frame mesh updates.
+                // Flow time comes from the last actual transfer. A mesh rebuild cannot
+                // restart an old crest, and settled water fades without extra solver ticks.
+                float flowTimestampValid = step(-0.5, i.flowUV.z);
                 float flowAge = max(0.0, t - i.flowUV.z);
-                float flowFreshness = 1.0 - smoothstep(1.0, 2.2, flowAge);
-                float flowActivity = smoothstep(0.04, 0.4, flowSpeed) * saturate(i.data.z) * flowFreshness;
-                float flowSpeedClamped = min(flowSpeed, 2.2);
+                float flowFreshness = (1.0 - smoothstep(0.9, 2.1, flowAge)) * flowTimestampValid;
+                float horizontalFlowActivity = smoothstep(0.015, 0.22, flowSpeed);
+                float impactFlowActivity = saturate(i.flowUV.w) * 0.82;
+                float flowActivity = max(horizontalFlowActivity, impactFlowActivity)
+                    * flowFreshness * saturate(i.data.z);
+                float flowSpeedClamped = min(max(flowSpeed, impactFlowActivity * 0.6), 2.2);
                 float shoreDepthMask = i.data.x;
                 float tideMask = i.data.y;
                 float geometryDepth01 = saturate(i.data.w);
@@ -353,7 +358,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                     - t * (0.22 + flowSpeedClamped * 1.65);
                 float flowSin, flowCos;
                 sincos(flowPhase, flowSin, flowCos);
-                float flowCrestMask = smoothstep(0.58, 0.93, flowSin * 0.5 + 0.5);
+                float flowCrestMask = smoothstep(0.52, 0.84, flowSin * 0.5 + 0.5);
                 float3 flowTangentWS = flowDirectionUV.x * surfaceAxisA + flowDirectionUV.y * surfaceAxisB;
                 flowTangentWS -= radialUp * dot(flowTangentWS, radialUp);
                 float flowTangentLengthSq = dot(flowTangentWS, flowTangentWS);
@@ -388,11 +393,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 // Crest foam is phase-locked to the same wind-driven swell as the normals,
                 // so whitecaps travel with the waves instead of crawling as unrelated noise.
                 float crestFoam = waveCrestFoam * 0.34;
-                // A separate, gently warped crest band travels with the existing solver flow
-                // vector; its visual strength follows the solver's smoothed flow decay.
+                // A localized, gently warped crest band follows the most recent water
+                // transfers; both lateral flow and vertical-fill impact share this fade.
                 float2 foamScrollUV = surfUV - flowDirectionUV * t * (0.07 + flowSpeedClamped * 0.12);
-                float flowFoam = flowCrestMask * flowActivity * flowShoreFade * _FlowFoamStrength * 0.52;
-                flowFoam *= saturate(FBM(foamScrollUV * 1.5 + flowPerpUV * flowWarp) * 1.5);
+                float flowFoamTexture = lerp(0.45, 1.0,
+                    saturate(FBM(foamScrollUV * 1.5 + flowPerpUV * flowWarp) * 1.5));
+                float flowFoam = flowCrestMask * flowActivity * flowShoreFade
+                    * _FlowFoamStrength * 0.72 * flowFoamTexture;
                 float wakeFoam = NativeWakeFoam(i.posWS, radialUp);
                 float foam = saturate(shoreFoam + crestFoam + flowFoam + wakeFoam);
 

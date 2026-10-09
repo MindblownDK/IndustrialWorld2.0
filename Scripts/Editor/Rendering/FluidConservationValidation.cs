@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Unity.Collections;
 using UnityEditor;
 using UnityEngine;
@@ -28,6 +29,8 @@ namespace VoxelEngine.EditorTools
                     bool moved=ConservativeFluidSolver.Step(world,a,0);
                     Require(moved,"Water must move");Require(world.Volume()==before,"Seam transfer conservation");
                     Require(b.GetVoxelLocal(0,4,4).waterLevel>0,"Transfer must cross a chunk seam");
+                    RequireWaterFlowRecorded(a,S-1,4);
+                    RequireWaterFlowRecorded(b,0,4);
                     for(int tick=1;tick<=24;tick++){ConservativeFluidSolver.Step(world,a,tick);ConservativeFluidSolver.Step(world,b,tick);}
                     Require(world.Volume()==before,"Closed-world conservation over 25 steps");
                 }
@@ -41,9 +44,21 @@ namespace VoxelEngine.EditorTools
                     Require(world.Volume((byte)MaterialId.CrudeOil)==oil,"Oil conservation");
                     Require(world.Volume((byte)MaterialId.WaterLiquid)==water,"Water conservation with oil and negative coordinates");
                 }
-                Debug.Log("[FluidValidation] PASS: seam movement, total volume, separate water/oil volume, negative coordinates, unloaded closed boundaries.");
+                Debug.Log("[FluidValidation] PASS: seam movement, total volume, separate water/oil volume, negative coordinates, unloaded closed boundaries, localized water-flow capture.");
             }
             finally { WaterMeshBuilder.RenderingEnabled=rendering; ConservativeFluidSolver.Reset(); }
+        }
+        private static void RequireWaterFlowRecorded(Chunk chunk,int x,int z)
+        {
+            MethodInfo capture=typeof(ConservativeFluidSolver).GetMethod(
+                "CaptureWaterSurfaceFlow",BindingFlags.Static|BindingFlags.NonPublic);
+            Require(capture!=null,"water-flow snapshot method missing");
+            object[] args={chunk,null,null,-1f};
+            capture.Invoke(null,args);
+            Vector2[] field=args[1] as Vector2[];
+            Require(field!=null && field[x+z*VoxelConstants.CHUNK_SIZE].sqrMagnitude>0.000001f,
+                "water seam transfer did not record localized render flow");
+            Require((float)args[3]>=0f,"water-flow transfer timestamp missing");
         }
         private static void Require(bool condition,string message){if(!condition)throw new InvalidOperationException("Fluid validation: "+message);}
         private sealed class TestWorld : IVoxelWorld, IDisposable
