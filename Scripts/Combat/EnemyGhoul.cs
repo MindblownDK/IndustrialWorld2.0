@@ -32,6 +32,11 @@ namespace VoxelEngine.Combat
         private float _nextAttackAt;
         private PollutionEmitter _industrialTarget;
         private PlacedBlock _industrialTargetBlock;
+        private PlacedBlock _logisticsTarget;
+        private bool _ambushHold;
+        private bool _raidLogistics;
+        private float _ambushUntil;
+        private float _nextLogisticsScan;
 
         public bool HasActiveIndustrialTarget => _industrialTarget != null
             && _industrialTargetBlock != null && _industrialTarget.IsActivelyEmitting;
@@ -50,7 +55,29 @@ namespace VoxelEngine.Combat
             _industrialTargetBlock = emitter != null
                 ? emitter.GetComponentInParent<PlacedBlock>()
                 : null;
+            if (emitter == null)
+            {
+                _ambushHold = false;
+                _raidLogistics = false;
+                _logisticsTarget = null;
+            }
         }
+
+        /// <summary>
+        /// Holds this recruit off the approach instead of walking straight to the
+        /// source. Player contact or the hold expiring releases it. The source
+        /// leash is unchanged.
+        /// </summary>
+        public void BeginAmbush(float holdSeconds)
+        {
+            _ambushHold = true;
+            _ambushUntil = Time.time + Mathf.Max(5f, holdSeconds);
+            _home = transform.position;
+            _wanderTarget = _home;
+            _nextWanderAt = Time.time + 1.5f;
+        }
+
+        public void EnableLogisticsRaid() => _raidLogistics = true;
 
         protected override void Awake()
         {
@@ -92,7 +119,9 @@ namespace VoxelEngine.Combat
             bool chasingPlayer = _player != null && distP <= detectRange;
             if (_industrialTarget != null && !HasActiveIndustrialTarget)
                 SetIndustrialTarget(null);
-            bool chasingIndustry = !chasingPlayer && HasActiveIndustrialTarget;
+            if (chasingPlayer || (_ambushHold && Time.time >= _ambushUntil))
+                _ambushHold = false;
+            bool chasingIndustry = !chasingPlayer && !_ambushHold && HasActiveIndustrialTarget;
 
             Vector3 moveDir;
             float spd;
@@ -113,7 +142,11 @@ namespace VoxelEngine.Combat
             }
             else if (chasingIndustry)
             {
-                Vector3 targetPosition = IndustrialTargetPosition;
+                RefreshLogisticsTarget(pos, up);
+                bool strikingLogistics = _logisticsTarget != null;
+                Vector3 targetPosition = strikingLogistics
+                    ? _logisticsTarget.transform.position
+                    : IndustrialTargetPosition;
                 Vector3 flatToIndustry = Vector3.ProjectOnPlane(targetPosition - pos, up);
                 float tangentDistance = flatToIndustry.magnitude;
                 moveDir = flatToIndustry.sqrMagnitude > 0.0001f
@@ -125,7 +158,8 @@ namespace VoxelEngine.Combat
                     && Time.time >= _nextAttackAt)
                 {
                     _nextAttackAt = Time.time + attackCooldown;
-                    AttackIndustrialSource();
+                    if (strikingLogistics) AttackLogistics();
+                    else AttackIndustrialSource();
                 }
             }
             else
@@ -164,9 +198,25 @@ namespace VoxelEngine.Combat
 
         private void PickWander()
         {
-            Vector2 r = UnityEngine.Random.insideUnitCircle * wanderRadius;
+            float radius = _ambushHold ? 1.5f : wanderRadius;
+            Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
             _wanderTarget = _home + new Vector3(r.x, 0f, r.y);
             _nextWanderAt = Time.time + wanderPause;
+        }
+
+        private void RefreshLogisticsTarget(Vector3 position, Vector3 up)
+        {
+            if (!_raidLogistics)
+            {
+                _logisticsTarget = null;
+                return;
+            }
+            if (_logisticsTarget != null && (_logisticsTarget.Hp <= 0
+                || Vector3.Distance(_logisticsTarget.transform.position, position) > ExposedLogistics.RaidRangeMetres + 2.5f))
+                _logisticsTarget = null;
+            if (_logisticsTarget != null || Time.time < _nextLogisticsScan) return;
+            _nextLogisticsScan = Time.time + 0.4f;
+            _logisticsTarget = ExposedLogistics.FindNearest(position, up, _industrialTargetBlock);
         }
 
         private void EnsurePlayer()
@@ -187,8 +237,15 @@ namespace VoxelEngine.Combat
         private void AttackIndustrialSource()
         {
             if (!HasActiveIndustrialTarget) return;
-            int damage = Mathf.Max(1, Mathf.RoundToInt(attackDamage * 0.65f));
-            _industrialTargetBlock.Damage(damage, recipient: null);
+            _industrialTargetBlock.Damage(IndustrialBiteDamage(), recipient: null);
         }
+
+        private void AttackLogistics()
+        {
+            if (_logisticsTarget == null || _logisticsTarget.Hp <= 0) return;
+            _logisticsTarget.Damage(IndustrialBiteDamage(), recipient: null);
+        }
+
+        private int IndustrialBiteDamage() => Mathf.Max(1, Mathf.RoundToInt(attackDamage * 0.65f));
     }
 }

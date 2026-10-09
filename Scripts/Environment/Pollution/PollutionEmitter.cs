@@ -80,6 +80,65 @@ namespace VoxelEngine.Environment
         }
 
         /// <summary>
+        /// Strongest live outlet whose own cell pressure reaches the caller and whose
+        /// distance is inside the pressure-scaled scent radius. A severe source can
+        /// recruit from farther away than a mild one. This is current scent, not a
+        /// reconstructed history of machines that have already stopped.
+        /// </summary>
+        public static bool TryFindRecruitingSource(Vector3 focus, float authoredRange, float minimumPressure,
+            out PollutionEmitter strongest, out float sourcePressure, bool surfaceSourcesOnly = false)
+        {
+            strongest = null;
+            sourcePressure = 0f;
+            float ceiling = PollutionScentRules.SearchCeiling(authoredRange);
+            float ceilingSq = ceiling * ceiling;
+            float bestRate = 0.0001f;
+            int bestId = int.MaxValue;
+            float bestPressure = 0f;
+
+            for (int i = s_active.Count - 1; i >= 0; i--)
+            {
+                PollutionEmitter emitter = s_active[i];
+                if (emitter == null)
+                {
+                    s_active.RemoveAt(i);
+                    continue;
+                }
+                if (!emitter.IsActivelyEmitting) continue;
+                if (surfaceSourcesOnly && emitter.GetComponentInParent<GridEntity>() != null) continue;
+                if (surfaceSourcesOnly
+                    && emitter.GetComponentInParent<VoxelEngine.Building.PlacedBlock>() == null) continue;
+
+                Vector3 release = emitter.ReleasePoint;
+                float distanceSq = (release - focus).sqrMagnitude;
+                if (distanceSq > ceilingSq) continue;
+
+                // An active outlet inside the authored radius is itself a scent, so a
+                // machine that has only just started still recruits one scout. Cell
+                // pressure is what extends the radius and grows the pack.
+                float pressure = EcologyPressure.Sample(release).Pressure01;
+                float authored = Mathf.Max(1f, authoredRange);
+                if (distanceSq <= authored * authored && pressure < minimumPressure)
+                    pressure = minimumPressure;
+                if (pressure < minimumPressure) continue;
+                float allowed = PollutionScentRules.EscalatedRange(authoredRange, pressure);
+                if (distanceSq > allowed * allowed) continue;
+
+                float rate = emitter.CurrentAirbornePerSecond + emitter.CurrentRunoffPerSecond;
+                int id = emitter.GetEntityId().GetHashCode();
+                if (rate < bestRate || (Mathf.Approximately(rate, bestRate) && id >= bestId))
+                    continue;
+                bestRate = rate;
+                bestId = id;
+                bestPressure = pressure;
+                strongest = emitter;
+            }
+
+            sourcePressure = bestPressure;
+            return strongest != null;
+        }
+
+        /// <summary>
         /// Resolves the emitters whose readings should be presented for a selected machine.
         /// Most machines own their emitter. Maritime engines deliberately route combustion
         /// through exhaust pipes, so selecting an engine reports the serving pipe(s) instead.

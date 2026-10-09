@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.9-dev`
+**Current Version:** `17.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.3.0-dev] Add Ghoul Ambushes and Logistics Raids
+
+**Type:** MINOR — save-compatible threat behaviour. No save schema, voxel format, recipe, research, prefab, emission multiplier, or authored block-health changes.
+
+**GitHub title:** `[17.3.0-dev] Add Ghoul ambushes and logistics raids`
+
+#### Added
+- Stressed pollution and above now places one member of a Ghoul pack off the approach, about halfway from the source toward the player and 8 m to the side. A lone scout does not split into an ambush, and the ambush is skipped when the player is already within 18 m of the source or the footing check fails. That recruit then spawns with the rest of the pack at the machine.
+- An ambusher waits in place for up to 45 seconds. Walking into its normal detection range makes it attack. If the player never arrives, or the source stops, the hold ends and it falls back to the existing source chase. Cleanup still does not delete a living Ghoul.
+- From the same stressed band, recruits walking to the source bite exposed static transport they can reach: conveyors, chutes, splitters, funnels, and item, water, and gas pipes. The bite uses the existing industrial damage fraction, so authored block health remains the balance. They stay on a segment until it breaks, then continue toward the source. Grid and ship runs are not targets.
+- The scent notice names an approach ambush when one was actually placed. Pack size, scent radius, and the live cap are unchanged.
+
+#### Compatibility and validation
+- MINOR over 17.2.0-dev. Saves, emission multipliers, Ghoul prefab stats, and public machine APIs are unchanged.
+- Host authority is unchanged. Guests do not choose ambush points or damage logistics.
+- Residual emission history, organized waves, elites, and siege creatures remain open.
+- Tools > Voxel Engine > Validate Pollution Scent Rules now also checks ambush count, raid band, and approach placement. It writes no content. Unity compilation and in-game ambush appearance have not been run in this workspace.
+- No prefab, item, recipe, research, or Voxel Engine Setup content pass is required.
+
+### [17.2.0-dev] Escalate Industrial Scent into Packs and Bearings
+
+**Type:** MINOR — save-compatible threat behaviour and map readout. No save schema, voxel format, recipe, research, prefab, or emission-balance changes.
+
+**GitHub title:** `[17.2.0-dev] Escalate industrial scent into packs and bearings`
+
+#### Added
+- An active static pollution source inside the authored attraction radius still recruits, including a machine that has only just started. Cell pressure extends that radius and sets the arrival size: mild pressure sends one Ghoul scout, stressed pressure sends a pair, and declining or collapsed pressure sends a capped trio. The live hostile cap still binds, so a pack never exceeds the remaining slots.
+- Scent radius scales the authored attraction distance, from that distance at no pressure up to twice it when the source cell is fully pressured. The default 48 m therefore reaches 96 m only at full pressure. A custom authored radius is scaled, never overwritten.
+- Recruited Ghouls keep a modestly longer player-detection range in heavier smog, up to 1.75 times the prefab value. Attack damage, attack range, and movement speeds are unchanged.
+- Recruits with a live industrial objective stay at that machine even if the player walks beyond ordinary despawn range. Stopping, filtering, or destroying the source clears the leash. Living Ghouls are not deleted by cleanup; they return to normal hunting and then obey the existing player-distance cull.
+- Logistics Map contributor rows now include a surface bearing and distance from the hovered cell, using the same tangent north as the map. A source inside 4 m reads AT CELL. Residual cells with no running outlet still say no active source is nearby. No emission history is invented.
+- The industrial-scent notice names the machine, the bearing from the player, and whether the arrival was a scout or a pack. Dedicated servers still skip the local notice.
+
+#### Compatibility and validation
+- MINOR over 17.1.9-dev. Pollution saves, machine process state, emission multipliers, Ghoul prefab stats, and public machine APIs are unchanged. `GameVersion` advances from the stale 17.1.0 display constant to 17.2.0-dev.
+- Host authority is unchanged. Guests do not select sources or spawn Ghouls. Grid-mounted exhaust is still ignored by surface recruitment.
+- Ambushes, attacks on exposed logistics, organized waves, elite mutations, siege creatures, and historical attribution remain open.
+- An editor check at Tools > Voxel Engine > Validate Pollution Scent Rules covers the range, pack, detection, and bearing rules without writing content. Unity compilation and in-game recruitment have not been run in this workspace.
+- No prefab, item, recipe, research, or Voxel Engine Setup content pass is required.
 
 ### [17.1.9-dev] Repair Production Recipe Inputs Safely
 

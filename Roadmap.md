@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.1.9-dev`
-**Roadmap Version:** `17.1.9-dev`
+**Current Version:** `17.3.0-dev`
+**Roadmap Version:** `17.3.0-dev`
 **Date:** 2026-10-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.3.0-dev - Approach Ambushes and Exposed Logistics Raids
+- Stressed pollution places one Ghoul from a pack off the approach; a lone scout does not split, and bad footing falls back to the machine
+- That ambusher waits, then releases to the existing source chase if the player arrives, the hold ends, or the source stops
+- Recruits from the same band bite exposed static belts and pipes on the way in, using the existing industrial bite
+
+### 17.2.0-dev - Industrial Scent Packs and Source Direction
+- Active static sources recruit a pressure-scaled Ghoul pack inside a radius that scales the authored attraction distance
+- A live source keeps those recruits leashed; stopping the source ends recruitment and releases the leash without deleting them
+- Logistics Map contributor rows show a surface bearing and distance; residual cells still claim no emission history
+
 ### 17.1.9-dev - Repair Registered Production Recipes
 - Setup repair restores empty factory and assembler recipe inputs from existing authored ingredient tuples
 - Validator follows `RecipeRegistry` membership and reports malformed orphan assets as inactive info
@@ -43,16 +53,6 @@
 - Actual water transfers create per-column render flow, avoiding chunk-average cancellation
 - Vertical fills add inward crest cues around the affected surface column; stopped flow fades by transfer age
 - Thomas reports transfer-capture and localized-projection fixture PASS; in-game shader appearance remains open
-
-### 17.1.6-dev - Flow-Driven Water Crests
-- Solver-backed voxel liquids gained a separate directional crest/foam cue from movement data
-- The first flow cue faded from its render snapshot; fluid transfer and ordinary waves remained unchanged
-- Mine-flow visual acceptance carried forward to 17.1.7-dev; wake implementation followed in 17.1.8-dev
-
-### 17.1.5-dev - Accurate Underwater Camera State
-- Camera and player-head submersion use the actual fractional liquid fill at the queried point
-- Stale underwater post-effect flag is cleared when above water and when disabled
-- Unity camera verification remains open as a separate water/wake acceptance item
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -83,6 +83,7 @@
 
 ### Open Scope (named with the version that deferred it)
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
+- **Pollution history and higher threat tiers** (deferred 17.3.0; earlier slices 14.70.0 / 14.73.0 / 17.2.0): live bearings, capped packs, approach ambushes and exposed static logistics raids shipped. Residual-load history, organized waves, elites and siege creatures remain open.
 - **Auto-craft queue EDITS are host-echo, not intent-RPC** (accepted 14.43.0, narrowed 14.58.0): the simulation itself is host-only since 14.58.0, but a guest's queue/bank edit still applies locally and replicates through the seam - an edit landing in the same instant as a host convergence pass can be overwritten and needs re-doing. Cosmetic-rare; full intent conversion only if live play ever surfaces it.
 - **Storage security enforcement: host-validated since 14.57.0.** Guest container overwrites into guarded networks are checked against the Security Block rules on the host and denied writes are converged away; the per-machine UI gates remain as UX. The machine sims themselves are host-only since 14.58.0 (SimulationIsRemote gate).
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
@@ -347,7 +348,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
-*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev added live attribution and cleanup guidance; 14.71.0-dev added reversible ecology pressure; 14.73.0-dev begins exact-source threat attraction with Ghoul scouts. Historical attribution, climate load, orbital debris, bespoke creature ecology and higher threat tiers remain later phases.)*
+*(Phase 1 shipped 14.66.0-dev and Phase 2 runoff foundations shipped 14.68.0-dev. Map inspection landed in 14.69.0-dev; 14.70.0-dev added live attribution and cleanup guidance; 14.71.0-dev added reversible ecology pressure; 14.73.0-dev begins exact-source threat attraction with Ghoul scouts; 17.2.0-dev adds pressure-scaled scent range, capped Ghoul packs and source bearings; 17.3.0-dev adds approach ambushes and exposed static logistics raids. Historical attribution, climate load, orbital debris, bespoke creature ecology, waves, elites and siege creatures remain later phases.)*
 
 #### Pollution Sources
 
@@ -363,17 +364,17 @@ Industrial activity creates pollution that spreads outward from its source and c
 - Forests, filters, scrubbers, sealed processing, cleaner fuel, and advanced Crusader technology reduce pollution.
 - Dormant regions simulate pollution at a reduced tick rate.
 - ~~Pollution map hover inspection reports local air, soil and water intensity with SI cell mass.~~ *(14.69.0-dev)*
-- ~~Live nearby-source rankings, warning cards and next-band forecasts.~~ *(14.70.0-dev)* Source direction and historical attribution remain open.
+- ~~Live nearby-source rankings, warning cards and next-band forecasts.~~ *(14.70.0-dev)* ~~Source direction on the logistics map.~~ *(17.2.0-dev)* Historical attribution remains open.
 
 #### Enemy Attraction
 
 - Pollution creates an industrial scent/energy signature that hostile creatures can track back to the exact source area.
-- Low pollution attracts scouts such as isolated Ghouls, scavengers, or curious predators.
-- Moderate pollution creates packs, ambushes, and repeated attacks on exposed logistics.
+- Low pollution attracts scouts such as isolated Ghouls, scavengers, or curious predators. ~~Isolated Ghoul scouts.~~ *(14.73.0-dev)* Scavengers and other curious predators remain open.
+- Moderate pollution creates packs, ambushes, and repeated attacks on exposed logistics. ~~Capped Ghoul packs.~~ *(17.2.0-dev)* ~~Approach ambushes and exposed static belt/pipe raids.~~ *(17.3.0-dev)*
 - High pollution creates organized waves, elite mutations, flying attackers, and planet-specific siege creatures.
 - Extreme pollution can awaken regional bosses or provoke territorial factions.
 - ~~Active static emitters attract host-authoritative Ghoul scouts that attack the source until it stops emitting.~~ *(14.73.0-dev)*
-- ~~More pollution increases capped hostile count and spawn frequency; cleanup reverses both pressure multipliers.~~ *(14.71.0-dev)* Enemy tiers, source tracking, organized waves and detection-distance escalation remain open.
+- ~~More pollution increases capped hostile count and spawn frequency; cleanup reverses both pressure multipliers.~~ *(14.71.0-dev)* ~~Detection distance escalates with source-cell pressure, up to twice the authored attraction radius.~~ *(17.2.0-dev)* Enemy tiers, organized waves and siege tracking remain open.
 - ~~Destroying or filtering the source gradually lowers future pressure without deleting enemies already alive.~~ *(14.71.0-dev)*
 
 ### Planet-Specific Hostile & Passive Ecology
@@ -1764,11 +1765,11 @@ Statuses are evidence-based and move forward only after code/content review and 
 16. **Pollution & Industrial Threat Director** - **PHASE 3 ECOLOGY FOUNDATION SHIPPED (14.71.0-dev)**
    - ~~Sparse body-local airborne pollution, transport, cleanup, optional map telemetry and body burden~~ *(14.66.0-dev; Setup Step 114)*.
    - ~~Persistent runoff/soil-water transport, recovery, mapping and water-pump response~~ *(14.68.0-dev; Setup Step 114)*.
-   - Live nearby-source attribution and warning thresholds shipped 14.70.0-dev; historical attribution, dormant-region transport and production-statistics integration remain open.
+   - Live nearby-source attribution and warning thresholds shipped 14.70.0-dev; ~~source bearings shipped 17.2.0-dev~~. Historical attribution, dormant-region transport and production-statistics integration remain open.
    - ~~Reversible local flora density/vitality, compatible-livestock activity and capped hostile cadence/cap pressure~~ *(14.71.0-dev)*.
    - ~~Canonical body biomes receive deterministic identity scenery while intentionally barren worlds remain sparse~~ *(14.71.0-dev; centralized celestial-world Setup Wizard action)*.
-   - ~~Active static pollution sources attract host-authoritative Ghoul scouts to attack the emitting block~~ *(14.73.0-dev)*.
-   - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
+   - ~~Active static pollution sources attract host-authoritative Ghoul scouts to attack the emitting block~~ *(14.73.0-dev)*. ~~Pressure-scaled range and capped packs~~ *(17.2.0-dev)*. ~~Approach ambushes and exposed static logistics raids~~ *(17.3.0-dev)*.
+   - Escalating source-seeking attacks: ~~scouts~~ *(14.73.0-dev)* → ~~packs~~ *(17.2.0-dev)* → elites → siege creatures → awakened regional bosses. Ambushes are a placement of the existing pack, not a new tier.
    - Dedicated Planet Ecology Profiles remain open for bespoke passive life, pollution responders, enemy tiers, loot and bosses.
 
 17. **Planetary Ecology & Territorial Space Factions**
@@ -1859,7 +1860,7 @@ Statuses are evidence-based and move forward only after code/content review and 
     - ScriptableObject planet profiles containing passive species, hostile species, resistances, pollution responses, elites, bosses, loot tables, and spawn budgets.
 
 31. **Threat Director**
-    - Converts pollution, progression, biome danger, territory, recent attacks, and cooldowns into fair source-seeking enemy pressure.
+    - Converts pollution, progression, biome danger, territory, recent attacks, and cooldowns into fair source-seeking enemy pressure. ~~Ghoul scent range, capped packs, approach ambushes and exposed logistics raids~~ *(17.2.0-dev, 17.3.0-dev)*. Elites, waves and siege creatures remain open.
 
 32. **Territorial Space AI**
     - Rogue Crusader borders, warnings, reputation, patrol routes, pursuit, retreat, reinforcements, boarding, and commander encounters.

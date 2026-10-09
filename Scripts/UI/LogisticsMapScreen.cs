@@ -1044,7 +1044,8 @@ namespace VoxelEngine.UI
                 for (int i = 0; i < shown; i++)
                 {
                     PollutionSourceReading source = _sourceReadings[i];
-                    detail += $"\n{i + 1}. {source.Name}\n   ";
+                    detail += $"\n{i + 1}. {source.Name}  ·  "
+                        + $"{PollutionScentRules.FormatDirection(cell.World, source.World)}\n   ";
                     bool wroteRate = false;
                     if (source.AirbornePerSecond > 0.0001f)
                     {
