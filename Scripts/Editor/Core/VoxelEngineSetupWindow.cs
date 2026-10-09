@@ -167,6 +167,7 @@ namespace VoxelEngine.EditorTools
             AddSetupGroup(parent, ref number, "Construction & Building Tools",
                 "Player-scale construction, shape wheels and build tools.", false,
                 Setup("Build tiered player construction content", BuildTieredContent),
+                Setup("Remove build-token crafting recipes", () => VoxelEngine.EditorTools.BuildTokenRecipeRemoval.Run()),
                 Setup("Setup grid shape variants", () => VoxelEngine.EditorTools.GridShapeVariantSetup.RunStep18()),
                 Setup("Build the paint tool and cosmetic finishes", BuildPaintToolContent),
                 Setup("Wire the hammer build wheel", () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep100()),
@@ -290,7 +291,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
                 Setup("Rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
-                Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()));
+                Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
+                Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()));
         }
 
         private static void AddSetupGroup(UnityEngine.UIElements.VisualElement parent, ref int number,
@@ -2235,16 +2237,16 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(tok);
                 return tok;
             }
-            var tokFoundation = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation", new Color(0.55f, 0.40f, 0.25f), "The base of every building. Place on flat ground first; everything else snaps to its top and edges. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokWall       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Wall,       "Wall",       new Color(0.55f, 0.40f, 0.25f), "A solid 3.75 m wall panel. Snaps to foundation top edges. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation", new Color(0.55f, 0.40f, 0.25f), "The base of every building. Place on flat ground first; everything else snaps to its top and edges. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Wall,       "Wall",       new Color(0.55f, 0.40f, 0.25f), "A solid 3.75 m wall panel. Snaps to foundation top edges. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
             var tokDoorway    = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Doorway,    "Doorway",    new Color(0.55f, 0.40f, 0.25f), "A player-sized structural opening with a center socket for a separately placed Door. Select with the Hammer and place with RMB.");
-            var tokWindow     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Window,     "Window",     new Color(0.55f, 0.40f, 0.25f), "A wall with a window opening. Lets light through and lets you peek out. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokFloor      = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Floor,      "Floor",      new Color(0.55f, 0.40f, 0.25f), "A 3.75 m floor slab. Place on top of walls/pillars to make second stories. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokStairs     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Stairs,     "Stairs",     new Color(0.55f, 0.40f, 0.25f), "A full-storey staircase. Aim at a Foundation/Floor side or Doorway threshold to snap downward; aim at a top perimeter edge to build upward. RMB places at Wood tier. Press R (or Ctrl+Wheel) to rotate around the anchored tread.");
-            var tokRoof       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Roof,       "Roof",       new Color(0.55f, 0.40f, 0.25f), "A sloped roof slab. Place on top of walls to seal the room. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokPillar     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Pillar,     "Pillar",     new Color(0.55f, 0.40f, 0.25f), "A vertical column. Hosts walls on its sides and floors/roofs on its top. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokHalfWall   = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.HalfWall,   "HalfWall",   new Color(0.55f, 0.40f, 0.25f), "A half-height wall for railings and counters. Select with the Hammer and place with RMB.");
-            var tokDoor       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Door,       "Door",       new Color(0.48f, 0.34f, 0.22f), "A separate hinged door that snaps into a Doorway center socket and opens away from whichever side the player approaches. Place with RMB and toggle with RMB when not building.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Window,     "Window",     new Color(0.55f, 0.40f, 0.25f), "A wall with a window opening. Lets light through and lets you peek out. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Floor,      "Floor",      new Color(0.55f, 0.40f, 0.25f), "A 3.75 m floor slab. Place on top of walls/pillars to make second stories. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Stairs,     "Stairs",     new Color(0.55f, 0.40f, 0.25f), "A full-storey staircase. Aim at a Foundation/Floor side or Doorway threshold to snap downward; aim at a top perimeter edge to build upward. RMB places at Wood tier. Press R (or Ctrl+Wheel) to rotate around the anchored tread.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Roof,       "Roof",       new Color(0.55f, 0.40f, 0.25f), "A sloped roof slab. Place on top of walls to seal the room. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Pillar,     "Pillar",     new Color(0.55f, 0.40f, 0.25f), "A vertical column. Hosts walls on its sides and floors/roofs on its top. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.HalfWall,   "HalfWall",   new Color(0.55f, 0.40f, 0.25f), "A half-height wall for railings and counters. Select with the Hammer and place with RMB.");
+            MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Door,       "Door",       new Color(0.48f, 0.34f, 0.22f), "A separate hinged door that snaps into a Doorway center socket and opens away from whichever side the player approaches. Place with RMB and toggle with RMB when not building.");
             tokDoorway.description = "A player-sized structural opening with a center socket for a separately placed Door. Select with the Hammer and place with RMB.";
             EditorUtility.SetDirty(tokDoorway);
 
@@ -2271,7 +2273,7 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(hammer);
             }
 
-            // ---------- Add recipes for all 9 build tokens + the hammer (Crafting Bench tier) ----------
+            // ---------- Hammer recipe only. Build tokens are chosen on the hammer wheel. ----------
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             if (recipeRegistry == null)
             {
@@ -2297,20 +2299,9 @@ namespace VoxelEngine.EditorTools
                 return AddRecipe(assetName, displayName, output, outputCount, station, inputs);
             }
 
-            // Hammer is craftable in inventory (you need it to upgrade anything).
+            // Hammer is craftable in inventory (you need it to upgrade and to open the wheel).
             EnsureTieredRecipe("Recipe_Hammer", "Hammer", hammer, 1, VoxelEngine.Crafting.StationTier.None, ((VoxelEngine.Items.ItemDefinition)woodLog, 2), ((VoxelEngine.Items.ItemDefinition)plank, 2));
-
-            // Build tokens — all from the Crafting Bench so the player has a small barrier.
-            EnsureTieredRecipe("Recipe_Tok_Foundation", "Foundation Token", tokFoundation, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Wall", "Wall Token", tokWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Doorway", "Doorway Token", tokDoorway, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Window", "Window Token", tokWindow, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Floor", "Floor Token", tokFloor, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Stairs", "Stairs Token", tokStairs, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Roof", "Roof Token", tokRoof, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Pillar", "Pillar Token", tokPillar, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_HalfWall", "Half Wall Token", tokHalfWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            EnsureTieredRecipe("Recipe_Tok_Door", "Door Token", tokDoor, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 4), ((VoxelEngine.Items.ItemDefinition)woodLog, 1));
+            BuildTokenRecipeRemoval.Remove(out _, out _);
 
             // Apply the finite, late-game Quarry migration through the same tool run.
             // Only the explicitly requested depth/progression fields are changed.
@@ -2393,8 +2384,8 @@ namespace VoxelEngine.EditorTools
             EditorUtility.DisplayDialog("Voxel Engine",
                 "Tiered building content created!\n\n" +
                 "* 40 prefabs (10 families x 4 tiers) in " + tieredPrefabs + "\n" +
-                "* 10 build tokens + Hammer\n" +
-                "* 11 recipes created or connected in RecipeRegistry\n" +
+                "* Hammer recipe kept; build-token crafting recipes removed\n" +
+                "* Place building families from the hammer wheel\n" +
                 "* TieredBlockRegistry asset created\n" +
                 $"* Size-V5 prefabs migrated this run: {migratedSizeV5PrefabCount}\n" +
                 "* Seamless Foundation deck, bidirectional edge/doorway stairs, player-away Doors, and finite late-game Quarry migration verified\n\n" +

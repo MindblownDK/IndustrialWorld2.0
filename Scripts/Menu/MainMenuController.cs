@@ -47,6 +47,7 @@ namespace VoxelEngine.Menu
         private bool   _newAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
         private bool   _newFriendlyFire = WorldSession.DefaultFriendlyFire;
         private bool   _newAllowBannerPainting = true;
+        private bool   _newOfflineDeath = WorldSession.DefaultOfflineDeath;
         private int    _newOrbitPace = WorldSession.OrbitPaceRealistic;
 
         // Edit-world form values. Only non-generation settings are editable here.
@@ -59,6 +60,7 @@ namespace VoxelEngine.Menu
         private bool   _editAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
         private bool   _editFriendlyFire = WorldSession.DefaultFriendlyFire;
         private bool   _editAllowBannerPainting = true;
+        private bool   _editOfflineDeath = WorldSession.DefaultOfflineDeath;
         private string _menuStatus = string.Empty;
 
         // Multiplayer page: remembered between sessions so a friend's address
@@ -721,6 +723,16 @@ namespace VoxelEngine.Menu
             var bannerPaintHelp = T.Muted("Off = teams still pick gallery images, texts and the default emblem.");
             bannerPaintHelp.style.marginTop = 2;
             scroll.Add(bannerPaintHelp);
+
+            var offlineDeathToggle = new Toggle("Offline Death (you can die while logged out if oxygen runs out)");
+            offlineDeathToggle.SetValueWithoutNotify(_newOfflineDeath);
+            offlineDeathToggle.style.marginTop = 8;
+            offlineDeathToggle.style.color = new StyleColor(T.TextSecondary);
+            offlineDeathToggle.RegisterValueChangedCallback(e => _newOfflineDeath = e.newValue);
+            scroll.Add(offlineDeathToggle);
+            var offlineDeathHelp = T.Muted("Off = logout does not spend cryobed oxygen and does not kill you.");
+            offlineDeathHelp.style.marginTop = 2;
+            scroll.Add(offlineDeathHelp);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -832,6 +844,16 @@ namespace VoxelEngine.Menu
             var bannerPaintHelpEdit = T.Muted("Off = teams still pick gallery images, texts and the default emblem.");
             bannerPaintHelpEdit.style.marginTop = 2;
             panel.Add(bannerPaintHelpEdit);
+
+            var offlineDeathToggleEdit = new Toggle("Offline Death (you can die while logged out if oxygen runs out)");
+            offlineDeathToggleEdit.SetValueWithoutNotify(_editOfflineDeath);
+            offlineDeathToggleEdit.style.marginTop = 8;
+            offlineDeathToggleEdit.style.color = new StyleColor(T.TextSecondary);
+            offlineDeathToggleEdit.RegisterValueChangedCallback(e => _editOfflineDeath = e.newValue);
+            panel.Add(offlineDeathToggleEdit);
+            var offlineDeathHelpEdit = T.Muted("Off = logout does not spend cryobed oxygen and does not kill you. An older world stays on until this is saved off.");
+            offlineDeathHelpEdit.style.marginTop = 2;
+            panel.Add(offlineDeathHelpEdit);
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -1922,6 +1944,7 @@ namespace VoxelEngine.Menu
             _editAllowRuinLootRespawn = world.allowRuinLootRespawn;
             _editFriendlyFire = world.friendlyFire;
             _editAllowBannerPainting = world.allowBannerPainting;
+            _editOfflineDeath = world.offlineDeath;
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -1944,7 +1967,7 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire, _editAllowBannerPainting))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire, _editAllowBannerPainting, _editOfflineDeath))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
@@ -2023,6 +2046,7 @@ namespace VoxelEngine.Menu
             _session.allowRuinLootRespawn = _newAllowRuinLootRespawn;
             _session.friendlyFire = _newFriendlyFire;
             _session.allowBannerPainting = _newAllowBannerPainting;
+            _session.offlineDeath = _newOfflineDeath;
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

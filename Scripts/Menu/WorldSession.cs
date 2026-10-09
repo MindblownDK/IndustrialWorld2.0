@@ -27,6 +27,7 @@ namespace VoxelEngine.Menu
         public const bool DefaultAllowRuinLootRespawn = true;
         public const float DefaultFullVoxelRadiusKm = 50f;
         public const bool DefaultFriendlyFire = false;
+        public const bool DefaultOfflineDeath = true;
 
         /// <summary>Maximum simultaneous physical world drops. Conveyor packets use
         /// their own simulation and are deliberately never included in this limit.</summary>
@@ -61,6 +62,13 @@ namespace VoxelEngine.Menu
         /// Server Administration. The server owner's admin-tab teleport
         /// ignores this switch. Default ON.</summary>
         public bool allowTeammateTeleport = true;
+
+        /// <summary>World rule (17.4.0): may a player die, and may a claimed
+        /// cryobed spend oxygen, for time spent logged out? Default ON so an
+        /// existing world keeps today's behaviour until the switch is saved
+        /// off. The login check reads this rule after a guest has adopted
+        /// the host card.</summary>
+        public bool offlineDeath = DefaultOfflineDeath;
         public float PlayerInventoryWeightLimitKg => DefaultPlayerInventoryWeightKg * Mathf.Clamp(inventoryWeightPercent, 25, 1000) / 100f;
         public float ContainerWeightLimitKg => DefaultContainerWeightKg * Mathf.Clamp(containerWeightPercent, 25, 1000) / 100f;
 
@@ -238,6 +246,8 @@ namespace VoxelEngine.Menu
             // Class initializer = the answer a legacy host's card gives.
             public bool allowBannerPainting = true;
             public bool allowTeammateTeleport = true;
+            // Class initializer = the answer a legacy host's card gives.
+            public bool offlineDeath = true;
         }
 
         /// <summary>Host side: describe this world for a joining client.</summary>
@@ -257,6 +267,7 @@ namespace VoxelEngine.Menu
                 friendlyFire = friendlyFire,
                 allowBannerPainting = allowBannerPainting,
                 allowTeammateTeleport = allowTeammateTeleport,
+                offlineDeath = offlineDeath,
             };
             try { return JsonUtility.ToJson(card); }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] ExportWorldCardJson: " + ex.Message); return ""; }
@@ -284,6 +295,7 @@ namespace VoxelEngine.Menu
             friendlyFire = card.friendlyFire;
             allowBannerPainting = card.allowBannerPainting;
             allowTeammateTeleport = card.allowTeammateTeleport;
+            offlineDeath = card.offlineDeath;
             if (card.fullVoxelRadiusKm > 0f) fullVoxelRadiusKm = card.fullVoxelRadiusKm;
 
             worldName = JoinedCacheFolderName(hostWorldDisplayName);
@@ -485,7 +497,8 @@ namespace VoxelEngine.Menu
                 bool savedAllowRuinLootRespawn = DefaultAllowRuinLootRespawn;
                 bool savedFriendlyFire = DefaultFriendlyFire;
                 bool savedAllowBannerPainting = true;
-                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct, out var showDropVoidWarning, out var allowRuinLootRespawn, out var friendlyFireSetting, out var bannerPaintingSetting))
+                bool savedOfflineDeath = DefaultOfflineDeath;
+                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct, out var showDropVoidWarning, out var allowRuinLootRespawn, out var friendlyFireSetting, out var bannerPaintingSetting, out var offlineDeathSetting))
                 {
                     savedMaxDrops = maxDrops;
                     savedInventoryWeightPercent = invWeightPct;
@@ -494,6 +507,7 @@ namespace VoxelEngine.Menu
                     savedAllowRuinLootRespawn = allowRuinLootRespawn;
                     savedFriendlyFire = friendlyFireSetting;
                     savedAllowBannerPainting = bannerPaintingSetting;
+                    savedOfflineDeath = offlineDeathSetting;
                 }
                 result.Add(new WorldSummary
                 {
@@ -508,7 +522,8 @@ namespace VoxelEngine.Menu
                     showDropVoidWarning = savedShowDropVoidWarning,
                     allowRuinLootRespawn = savedAllowRuinLootRespawn,
                     friendlyFire = savedFriendlyFire,
-                    allowBannerPainting = savedAllowBannerPainting
+                    allowBannerPainting = savedAllowBannerPainting,
+                    offlineDeath = savedOfflineDeath
                 });
             }
             result.Sort((a, b) => b.lastWrite.CompareTo(a.lastWrite));
@@ -564,6 +579,8 @@ namespace VoxelEngine.Menu
             public int allowBannerPainting = 0;
             // Tri-state; legacy 0 reads as the default (ON).
             public int allowTeammateTeleport = 0;
+            // Tri-state; legacy 0 reads as the default (ON). 1 on, -1 off.
+            public int offlineDeath = 0;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -584,7 +601,8 @@ namespace VoxelEngine.Menu
                     fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f),
                     friendlyFire = this.friendlyFire ? 1 : -1,
                     allowBannerPainting = this.allowBannerPainting ? 1 : -1,
-                    allowTeammateTeleport = this.allowTeammateTeleport ? 1 : -1
+                    allowTeammateTeleport = this.allowTeammateTeleport ? 1 : -1,
+                    offlineDeath = this.offlineDeath ? 1 : -1
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -601,6 +619,7 @@ namespace VoxelEngine.Menu
             friendlyFire = DefaultFriendlyFire;
             allowBannerPainting = true;
             allowTeammateTeleport = true;
+            offlineDeath = DefaultOfflineDeath;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
@@ -616,6 +635,7 @@ namespace VoxelEngine.Menu
                     friendlyFire = data.friendlyFire == 1;
                     allowBannerPainting = data.allowBannerPainting != -1;
                     allowTeammateTeleport = data.allowTeammateTeleport != -1;
+                    offlineDeath = data.offlineDeath != -1;
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }
@@ -666,6 +686,18 @@ namespace VoxelEngine.Menu
             out bool savedShowDropVoidWarning, out bool savedAllowRuinLootRespawn,
             out bool savedFriendlyFire, out bool savedAllowBannerPainting)
         {
+            return TryReadWorldSettings(name, out savedMaxDroppedItems,
+                out savedInventoryWeightPercent, out savedContainerWeightPercent,
+                out savedShowDropVoidWarning, out savedAllowRuinLootRespawn,
+                out savedFriendlyFire, out savedAllowBannerPainting, out _);
+        }
+
+        public bool TryReadWorldSettings(string name, out int savedMaxDroppedItems,
+            out int savedInventoryWeightPercent, out int savedContainerWeightPercent,
+            out bool savedShowDropVoidWarning, out bool savedAllowRuinLootRespawn,
+            out bool savedFriendlyFire, out bool savedAllowBannerPainting,
+            out bool savedOfflineDeath)
+        {
             savedMaxDroppedItems = DefaultMaxDroppedItems;
             savedInventoryWeightPercent = DefaultInventoryWeightPercent;
             savedContainerWeightPercent = DefaultContainerWeightPercent;
@@ -673,6 +705,7 @@ namespace VoxelEngine.Menu
             savedAllowRuinLootRespawn = DefaultAllowRuinLootRespawn;
             savedFriendlyFire = DefaultFriendlyFire;
             savedAllowBannerPainting = true;
+            savedOfflineDeath = DefaultOfflineDeath;
             try
             {
                 string path = WorldSettingsPathFor(name);
@@ -686,6 +719,7 @@ namespace VoxelEngine.Menu
                 savedAllowRuinLootRespawn = data.allowRuinLootRespawn != -1;
                 savedFriendlyFire = data.friendlyFire == 1;
                 savedAllowBannerPainting = data.allowBannerPainting != -1;
+                savedOfflineDeath = data.offlineDeath != -1;
                 return true;
             }
             catch (Exception ex)
@@ -735,6 +769,15 @@ namespace VoxelEngine.Menu
 
         public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent, bool newShowDropVoidWarning, bool newAllowRuinLootRespawn, bool newFriendlyFire, bool newAllowBannerPainting)
         {
+            // Callers that predate the offline-death switch must not reset it.
+            TryReadWorldSettings(name, out _, out _, out _, out _, out _, out _, out _, out bool keepOfflineDeath);
+            return SaveWorldSettingsFor(name, newMaxDroppedItems, newInventoryWeightPercent,
+                newContainerWeightPercent, newShowDropVoidWarning, newAllowRuinLootRespawn,
+                newFriendlyFire, newAllowBannerPainting, keepOfflineDeath);
+        }
+
+        public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent, bool newShowDropVoidWarning, bool newAllowRuinLootRespawn, bool newFriendlyFire, bool newAllowBannerPainting, bool newOfflineDeath)
+        {
             try
             {
                 string folder = WorldFolderPath(name);
@@ -765,7 +808,8 @@ namespace VoxelEngine.Menu
                     fullVoxelRadiusKm = keepFullVoxelRadiusKm,
                     friendlyFire = newFriendlyFire ? 1 : -1,
                     allowBannerPainting = newAllowBannerPainting ? 1 : -1,
-                    allowTeammateTeleport = this.allowTeammateTeleport ? 1 : -1
+                    allowTeammateTeleport = this.allowTeammateTeleport ? 1 : -1,
+                    offlineDeath = newOfflineDeath ? 1 : -1
                 };
                 File.WriteAllText(WorldSettingsPathFor(name), JsonUtility.ToJson(data, true));
                 if (SanitizeWorldFolderName(name) == SanitizeWorldFolderName(worldName))
@@ -778,6 +822,7 @@ namespace VoxelEngine.Menu
                     friendlyFire = data.friendlyFire == 1;
                     allowBannerPainting = data.allowBannerPainting != -1;
                     allowTeammateTeleport = data.allowTeammateTeleport != -1;
+                    offlineDeath = data.offlineDeath != -1;
                 }
                 return true;
             }
@@ -1100,6 +1145,7 @@ namespace VoxelEngine.Menu
         public bool     allowRuinLootRespawn;
         public bool     friendlyFire;
         public bool     allowBannerPainting;
+        public bool     offlineDeath;
     }
 
     public struct AutosaveSlotSummary

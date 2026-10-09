@@ -447,6 +447,7 @@ namespace VoxelEngine.UI
             content.Add(RuleToggle("Ruin loot respawn", session.allowRuinLootRespawn, "allowRuinLootRespawn"));
             content.Add(RuleToggle("Banner painting", session.allowBannerPainting, "allowBannerPainting"));
             content.Add(RuleToggle("Teammate teleport", session.allowTeammateTeleport, "allowTeammateTeleport"));
+            content.Add(RuleToggle("Offline death", session.offlineDeath, "offlineDeath"));
             content.Add(RuleToggle("Drop-void warning", session.showDropVoidWarning, "showDropVoidWarning"));
             content.Add(RuleStepper("Max dropped items", session.maxDroppedItems, 50, 10000, 100, "maxDroppedItems"));
             content.Add(RuleStepper("Inventory weight %", session.inventoryWeightPercent, 25, 1000, 25, "inventoryWeightPercent"));

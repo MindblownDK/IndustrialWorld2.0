@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.3.0-dev`
-**Roadmap Version:** `17.3.0-dev`
+**Current Version:** `17.4.1-dev`
+**Roadmap Version:** `17.4.1-dev`
 **Date:** 2026-10-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.4.1-dev - Build Tokens Leave Crafting
+- Building families are chosen on the hammer wheel; token recipes are no longer craftable
+- The hammer recipe stays; a token already in an inventory can still be held
+- Setup removes the old token recipe assets without deleting token items
+
+### 17.4.0-dev - Offline Death Switch
+- Create World, Edit World, Server Administration, and `server_config.json` can turn offline death off
+- Missing or legacy world files stay on; off spends no cryobed oxygen and does not charge the gap later
+- The pollution-scent check is a Voxel Engine Setup action, not a Tools menu item
+
 ### 17.3.0-dev - Approach Ambushes and Exposed Logistics Raids
 - Stressed pollution places one Ghoul from a pack off the approach; a lone scout does not split, and bad footing falls back to the machine
 - That ambusher waits, then releases to the existing source chase if the player arrives, the hold ends, or the source stops
@@ -43,16 +53,6 @@
 - Setup repair restores empty factory and assembler recipe inputs from existing authored ingredient tuples
 - Validator follows `RecipeRegistry` membership and reports malformed orphan assets as inactive info
 - Thomas's Unity scan reports 0 errors/warnings across 239 crafting, 4 smelting, and 8 machine recipes
-
-### 17.1.8-dev - Shaped Boat Wakes and Shore Interaction
-- Maritime motion grows wakes from measured hull travel, with diverging crest arms and prop wash
-- Wake ripples/normal cues interact with wind and solver-flow crests; shallow banks compress the fan
-- Runtime wake appearance, turns/stopping, and near-shore response still need Unity visual acceptance
-
-### 17.1.7-dev - Localized Fill-Front Water Crests
-- Actual water transfers create per-column render flow, avoiding chunk-average cancellation
-- Vertical fills add inward crest cues around the affected surface column; stopped flow fades by transfer age
-- Thomas reports transfer-capture and localized-projection fixture PASS; in-game shader appearance remains open
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -2578,6 +2578,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.24.0-dev:** Added Space Helmet and Oxygen Tank equipment items/recipes, Life Support equipment slots in Inventory, save/load for helmet/tank slots, and underwater oxygen reserve/drain reduction when helmet+tank are equipped.
 - **6.24.1-dev:** Equipment UI now places Jetpack Bay and Life Support side-by-side to preserve backpack room, removes extra hint text, and activates underwater oxygen drain using head-underwater/deep-swim checks.
 - **6.26.6-dev:** Made cryobed UI live-ticking with oxygen tank visual (fill %, color cues), fixed linked spawn name resolving to actual cryobed name, and fixed world spawn fallback 0,250,0 bug by persisting final grounded spawn.
+- **17.4.0-dev:** Offline death is a world rule, default on. *(See Changelog.)*
 - **6.28.0-dev:** Completed offline survival: new `OfflineSurvivalService` saves UTC logout time/pos/cryobed to `offline_state.json` on every save/quit, on next login computes offline hours (clamped 0-720h, <2 min ignored), consumes `offlineOxygenPerHour * hours` from claimed `GridCryobed.oxygenStored` (or checks `Cryobed.IsPowered + HasOxygenEnvironment` for static), checks oxygen-rich environment (powered biofarm producing within 10 m, O₂ tank >5-10 L within 6-7 m, powered cryobed with O₂ within 6 m) when no claimed cryobed, and kills player offline (clears bed spawn, triggers `Die()` with feedback HUD showing reason) if O₂ depleted / no power / no O₂-rich env / cryobed destroyed. Room O₂ for static cryobed now checks nearby biofarm/tank/cryobed via `Cryobed.IsOxygenRichAt()` instead of always true.
 
 ### 11.5 Passive Oxygen Generation — ✅ COMPLETED (6.27.0-dev) + PATCHES 6.27.1 & 6.27.2

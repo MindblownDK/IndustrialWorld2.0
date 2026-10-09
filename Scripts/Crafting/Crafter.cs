@@ -21,12 +21,20 @@ namespace VoxelEngine.Crafting
             return true;
         }
 
+        /// <summary>17.4.1 — building families are chosen on the hammer wheel.
+        /// A recipe that outputs a build token is not craftable.</summary>
+        public static bool OutputsBuildToken(RecipeDefinition recipe)
+        {
+            return recipe != null && recipe.outputItem is VoxelEngine.Building.Tiered.BuildToken;
+        }
+
         /// <summary>
         /// Removes ingredients from 'source' and inserts the output into 'destination'.
         /// Returns true if the craft succeeded (ingredients were available AND output fit).
         /// </summary>
         public static bool TryCraft(IItemContainer source, IItemContainer destination, RecipeDefinition recipe, CraftQueue queue = null)
         {
+            if (OutputsBuildToken(recipe)) return false;
             if (!HasIngredients(source, recipe)) return false;
             if (destination is ItemContainer ic)
             {
@@ -140,6 +148,7 @@ namespace VoxelEngine.Crafting
             foreach (var recipe in registry.recipes)
             {
                 if (recipe == null || recipe.outputItem == null) continue;
+                if (OutputsBuildToken(recipe)) continue;
                 // Never surface hollow placeholders. They cannot be crafted safely
                 // and should not leak raw asset names into player-facing UIs.
                 if (recipe.inputs == null || recipe.inputs.Length == 0) continue;

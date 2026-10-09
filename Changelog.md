@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.3.0-dev`
+**Current Version:** `17.4.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.4.1-dev] Remove Build Tokens from Crafting
+
+**Type:** PATCH — crafting catalogue only. No save schema, voxel format, prefab, or hammer-wheel change.
+
+**GitHub title:** `[17.4.1-dev] Remove build tokens from crafting`
+
+#### Changed
+- Foundation, wall, doorway, window, floor, stairs, roof, pillar, half-wall, and door tokens are no longer craftable. The crafting list, the craft action, and the recipe browser skip any recipe whose output is a build token.
+- The hammer stays craftable. Building families are chosen on the hammer wheel.
+- A token already in an inventory can still be held. That legacy path was not deleted.
+
+#### Compatibility and validation
+- PATCH over 17.4.0-dev. Old saves load. Owned tokens are not removed.
+- Voxel Engine Setup, Construction & Building Tools, **Remove build-token crafting recipes** deletes the old recipe assets and clears them from recipe registries and research unlocks. It does not delete token items or the hammer recipe. Re-running tiered construction content no longer recreates those recipes.
+- Unity compilation and an in-game crafting-bench check have not been run in this workspace.
+
+### [17.4.0-dev] Add an Offline Death Switch
+
+**Type:** MINOR — save-compatible world rule. Additive sidecar field only. No voxel format, recipe, research, prefab, or emission change.
+
+**GitHub title:** `[17.4.0-dev] Add an offline death switch`
+
+#### Added
+- Create World, Edit World, and Server Administration now have an Offline Death switch. On is the existing login check: a claimed cryobed can spend oxygen, and running out, losing power, or losing the bed can kill you. Off skips that check, spends no oxygen, and moves the logout clock to now so a later re-enable does not charge the gap.
+- Existing worlds stay on. A missing sidecar field reads as on. The switch is off only after it is saved off.
+- `server_config.json` has `offlineDeath`. `-1` keeps the world file, `0` forces off, `1` forces on. A config that does not mention the key keeps the world value. An in-game admin edit writes the world sidecar and, on a dedicated server, writes the config back.
+- Joining clients adopt the host's value from the world card before their own login check. A dedicated server has no local player, so the config forces the rule; it does not invent a new absence timer.
+
+#### Compatibility and validation
+- MINOR over 17.3.0-dev. Old saves load. Turning the switch off is the only change in behaviour.
+- The pollution-scent check is no longer a Tools menu item. It is the Maintenance & Repair action Validate pollution scent rules on the Voxel Engine Setup screen. It still writes no content.
+- Unity compilation and an in-game login with the switch off have not been run in this workspace.
 
 ### [17.3.0-dev] Add Ghoul Ambushes and Logistics Raids
 
@@ -21,7 +54,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - MINOR over 17.2.0-dev. Saves, emission multipliers, Ghoul prefab stats, and public machine APIs are unchanged.
 - Host authority is unchanged. Guests do not choose ambush points or damage logistics.
 - Residual emission history, organized waves, elites, and siege creatures remain open.
-- Tools > Voxel Engine > Validate Pollution Scent Rules now also checks ambush count, raid band, and approach placement. It writes no content. Unity compilation and in-game ambush appearance have not been run in this workspace.
+- The scent check also covers ambush count, raid band, and approach placement. It writes no content. From 17.4.0-dev it lives on the Voxel Engine Setup screen, not the Tools menu. Unity compilation and in-game ambush appearance have not been run in this workspace.
 - No prefab, item, recipe, research, or Voxel Engine Setup content pass is required.
 
 ### [17.2.0-dev] Escalate Industrial Scent into Packs and Bearings
@@ -42,7 +75,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - MINOR over 17.1.9-dev. Pollution saves, machine process state, emission multipliers, Ghoul prefab stats, and public machine APIs are unchanged. `GameVersion` advances from the stale 17.1.0 display constant to 17.2.0-dev.
 - Host authority is unchanged. Guests do not select sources or spawn Ghouls. Grid-mounted exhaust is still ignored by surface recruitment.
 - Ambushes, attacks on exposed logistics, organized waves, elite mutations, siege creatures, and historical attribution remain open.
-- An editor check at Tools > Voxel Engine > Validate Pollution Scent Rules covers the range, pack, detection, and bearing rules without writing content. Unity compilation and in-game recruitment have not been run in this workspace.
+- An editor check covers the range, pack, detection, and bearing rules without writing content. From 17.4.0-dev that check is on the Voxel Engine Setup screen, not the Tools menu. Unity compilation and in-game recruitment have not been run in this workspace.
 - No prefab, item, recipe, research, or Voxel Engine Setup content pass is required.
 
 ### [17.1.9-dev] Repair Production Recipe Inputs Safely

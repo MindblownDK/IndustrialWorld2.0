@@ -6,7 +6,8 @@
 // Flow:
 //   • On SaveAll / OnApplicationQuit we write offline_state.json with UTC timestamp, player pos,
 //     and claimed cryobed info (pos + name).
-//   • On next login PlayerSpawner calls CheckOfflineSurvival() which:
+//   • On next login PlayerSpawner calls CheckOfflineSurvivalAndConsume() which:
+//     skips the whole check when the world rule offlineDeath is off (17.4.0).
 //       - Computes offline hours
 //       - If claimed cryobed exists and is GridCryobed, consumes oxygenStored = offlineHours * offlineOxygenPerHour
 //       - If enough O₂, survives; else O₂ → 0 and dies
@@ -61,6 +62,24 @@ namespace VoxelEngine.Player
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             DontDestroyOnLoad(gameObject);
+        }
+
+        /// <summary>17.4.0 - death is off, so the gap must not be charged later.
+        /// The logout clock moves to now; cryobed oxygen and the claim stay.</summary>
+        private void RefreshLogoutClock(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+                var file = JsonUtility.FromJson<OfflineStateFile>(File.ReadAllText(path));
+                if (file == null) return;
+                file.lastLogoutUtcIso = DateTime.UtcNow.ToString("o");
+                File.WriteAllText(path, JsonUtility.ToJson(file, true));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[OfflineSurvival] Could not refresh logout clock: " + ex.Message);
+            }
         }
 
         private string OfflinePath
@@ -129,6 +148,15 @@ namespace VoxelEngine.Player
                     return result;
                 }
 
+                var session = Menu.WorldSession.Instance;
+                if (session != null && !session.offlineDeath)
+                {
+                    RefreshLogoutClock(path);
+                    result.reason = "Offline death is off for this world — no oxygen spent";
+                    Debug.Log("[OfflineSurvival] " + result.reason);
+                    return result;
+                }
+
                 string json = File.ReadAllText(path);
                 var file = JsonUtility.FromJson<OfflineStateFile>(json);
                 if (file == null || string.IsNullOrEmpty(file.lastLogoutUtcIso))
@@ -160,7 +188,6 @@ namespace VoxelEngine.Player
                     return result;
                 }
 
-                var session = Menu.WorldSession.Instance;
                 bool hasClaimed = file.hasClaimedCryobed && session != null && session.hasBedSpawn;
                 result.hadCryobed = hasClaimed;
 

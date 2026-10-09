@@ -12,7 +12,7 @@ namespace VoxelEngine.EditorTools
     /// </summary>
     public static class PollutionScentValidation
     {
-        [MenuItem("Tools/Voxel Engine/Validate Pollution Scent Rules")]
+        /// <summary>Called from the Voxel Engine Setup screen. Not a Tools menu item.</summary>
         public static void Run()
         {
             int failures = 0;

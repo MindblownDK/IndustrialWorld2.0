@@ -1361,6 +1361,7 @@ namespace VoxelEngine.UI
                 foreach (var recipe in registry.recipes)
                 {
                     if (recipe == null || recipe.outputItem == null) continue;
+                    if (Crafter.OutputsBuildToken(recipe)) continue;
                     var entry = new RecipeEntry
                     {
                         Kind = RecipeKind(recipe.requiredStation),

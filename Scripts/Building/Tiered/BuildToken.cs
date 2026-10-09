@@ -5,11 +5,9 @@ using VoxelEngine.Items;
 namespace VoxelEngine.Building.Tiered
 {
     /// <summary>
-    /// An item that, when held in the active hotbar slot, lets the player place
-    /// a tiered building piece of `family`. Crafted via the player inventory or
-    /// the Crafting Bench. Stackable — placing consumes the cost from inventory,
-    /// not the token itself (so one Foundation token can place dozens as long as
-    /// the player has the materials).
+    /// Legacy item that, when held in the active hotbar slot, selects one
+    /// building family. New placement uses the hammer wheel. Tokens are not
+    /// crafted. Placing still spends the piece cost from inventory, not the token.
     /// </summary>
     [CreateAssetMenu(menuName = "Voxel Engine/Building/Build Token", fileName = "Token_New")]
     public class BuildToken : ItemDefinition

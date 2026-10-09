@@ -1063,8 +1063,14 @@ namespace VoxelEngine.Research
                 unlockRow.Add(unlockIcon);
 
                 int shown = 0;
+                int tokenUnlocks = 0;
                 foreach (var r in n.unlocksRecipes)
                 {
+                    if (r != null && r.outputItem is VoxelEngine.Building.Tiered.BuildToken)
+                    {
+                        tokenUnlocks++;
+                        continue;
+                    }
                     if (r == null || shown >= 4) continue;
                     string name = r.GetName();
                     if (string.IsNullOrEmpty(name)) name = r.displayName ?? r.name;
@@ -1075,9 +1081,14 @@ namespace VoxelEngine.Research
                     unlockRow.Add(ul);
                     shown++;
                 }
-                if (n.unlocksRecipes.Length > 4)
+                if (shown == 0)
                 {
-                    var more = new Label($"+{n.unlocksRecipes.Length - 4} more");
+                    unlockRow.RemoveFromHierarchy();
+                }
+                int visibleUnlocks = n.unlocksRecipes.Length - tokenUnlocks;
+                if (shown > 0 && visibleUnlocks > 4)
+                {
+                    var more = new Label($"+{visibleUnlocks - 4} more");
                     more.style.color = TextMuted;
                     more.style.fontSize = 10;
                     unlockRow.Add(more);

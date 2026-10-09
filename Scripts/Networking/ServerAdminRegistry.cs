@@ -418,6 +418,7 @@ namespace VoxelEngine.Networking
                 default:
                 {
                     if (!ApplyRuleLocal(key, value)) return $"Unknown setting '{key}'.";
+                    VoxelEngine.Menu.WorldSession.Instance?.SaveWorldSettings();
                     WritebackDedicated();
                     NetworkBootstrap.Instance?.BroadcastWorldRule(key, value);
                     return null;
@@ -441,6 +442,7 @@ namespace VoxelEngine.Networking
                 case "allowRuinLootRespawn": session.allowRuinLootRespawn = on; break;
                 case "allowBannerPainting": session.allowBannerPainting = on; break;
                 case "allowTeammateTeleport": session.allowTeammateTeleport = on; break;
+                case "offlineDeath": session.offlineDeath = on; break;
                 case "showDropVoidWarning": session.showDropVoidWarning = on; break;
                 case "maxDroppedItems":
                     if (!int.TryParse(value, out int drops)) return false;

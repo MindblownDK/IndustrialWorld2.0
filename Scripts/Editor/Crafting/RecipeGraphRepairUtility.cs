@@ -295,9 +295,6 @@ namespace VoxelEngine.EditorTools
                 PathItem("Factory/Items/Block_LEDStripFactory.asset") ?? Item("LED Strip"), 2,
                 (copperWire, 4), (glass, 1));
 
-            foreach (var family in new[] { "Foundation", "Wall", "Floor", "Doorway", "Door", "Window", "Stairs", "Roof", "Pillar", "HalfWall" })
-                Repair($"Recipes/Recipe_Tok_{family}.asset", PathItem($"Tiered/Tokens/Token_{family}.asset") ?? Item($"Token_{family}"), 1, (woodLog, 1));
-
             return repaired;
         }
 
