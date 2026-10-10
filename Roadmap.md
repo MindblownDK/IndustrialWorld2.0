@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.8.0-dev`
-**Roadmap Version:** `17.8.0-dev`
+**Current Version:** `17.9.0-dev`
+**Roadmap Version:** `17.9.0-dev`
 **Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.9.0-dev - Station, Combat, Placement, and Settings Repairs
+- Bench/Assembler interactions show inventory, station-filtered recipes, and general crafting; repair preserves custom prefabs
+- Station visual bounds, footprint-clamped deck/wall snaps, invalid ghost previews, 2 mm clearance, reliable melee sweeps, and distant hostile sleep; BuildHammer remains unchanged
+- Monitor refresh auto, live view-distance/theme updates, stable admin scroll, dev-only Infinite Health, and four item icons
+
 ### 17.8.0-dev - Sharper Jump and Fitted Viewmodels
 - Jump buffering, coyote time, matched launch gravity, and release-to-short-hop improve response
 - Assigned handheld prefabs fit a renderer-bounds limit by default, with a per-item opt-out
@@ -48,11 +53,6 @@
 - Coal Generator stays behind Electricity; Smelting uses Pack I only; absent optional LED recipe stays silent
 - RMB food use works in open air; Raw Meat cooks into edible Steak through Setup
 - Zero-time workstation recipes receive tier/ingredient defaults while authored positive durations remain unchanged
-
-### 17.5.0-dev - IndustrialCrusaders Progression and World Polish
-- Assembler tiers, higher conveyors, LED strips, and Grinder recipes now use staged research; starter swords are authored through Setup
-- Machines and chests deck-snap; dropped items use local gravity and contact pickup; orbital/grid jitter is damped
-- Research, inspection, held-item HUD, and game branding are refreshed; copper links are audited without deleting assets
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,6 +82,9 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Replacement station source art (17.9.0-dev):** runtime placement anchors enabled renderers and reports missing geometry; a replacement prefab with no enabled Renderer still needs its intended model assigned and play-mode verified.
+- **Static deck/wall placement (17.9.0-dev):** collider-footprint clamping and tiered-wall contact are implemented for ordinary static items; foundation-edge, corner, and station-floor play-mode acceptance is pending. BuildHammer snapping remains untouched.
+- **Full-project missing-icon audit (17.9.0-dev):** four item sprites were added, but the ItemIconSync Setup audit has not yet run in Unity against every ItemDefinition asset; additional unmatched IDs remain unverified.
 - **Advanced traversal (deferred 17.7.0-dev):** wallrunning, wall-jumps, and mantling are outside the momentum-and-slide pass.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
 - **Pollution history and higher threat tiers** (deferred 17.3.0; earlier slices 14.70.0 / 14.73.0 / 17.2.0): live bearings, capped packs, approach ambushes and exposed static logistics raids shipped. Residual-load history, organized waves, elites and siege creatures remain open.

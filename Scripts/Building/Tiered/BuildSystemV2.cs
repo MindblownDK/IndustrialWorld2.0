@@ -330,7 +330,9 @@ namespace VoxelEngine.Building.Tiered
             // 2) Fall back to grid snap or free placement on the hit surface.
             // Construction roots represent the bottom/hinge plane, not the center
             // of a module, so snap to grid intersections instead of cell centers.
-            const float surfaceOffset = 0.02f;
+            // Keep the free-placement contact margin at 2 mm: enough to avoid
+            // z-fighting without leaving the visible 2 cm seam at foundation edges.
+            const float surfaceOffset = 0.002f;
             Vector3 raw = hit.point + hit.normal * surfaceOffset;
 
             // Ground-standing pieces (walls, gates, compound walls) keep the aimed

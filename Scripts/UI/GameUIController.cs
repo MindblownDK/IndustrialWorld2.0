@@ -1149,6 +1149,9 @@ namespace VoxelEngine.UI
             if (!_inventoryOpen) UIState.PushBlock();
             ClearArmorUpgradeStationBinding();
             _openStation    = st;
+            // A station interaction opens both its filtered station list and the
+            // general crafting panel in the centre of the inventory layout.
+            CraftingScreen.Visible = true;
             _rightContainer = null; _openChest = null;
             _openFurnace    = null;
             _openElectric   = null;
@@ -1457,7 +1460,7 @@ namespace VoxelEngine.UI
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
-                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null;
+                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
                 {
                     _productionStatsOpen = false;
@@ -1476,13 +1479,11 @@ namespace VoxelEngine.UI
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
-                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null;
-                // The station pane (_openStation) renders its OWN crafting list on
-                // the right, so we suppress the center panel only in that case.
-                // For every other right panel (chest / furnace / storage terminal)
-                // we keep crafting available — the panel simply shrinks to sit in
-                // the gap between the inventory and the right panel.
-                if (CraftingScreen.Visible && _openStation == null && _openArmorUpgradeStation == null)
+                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
+                // The station pane has its own filtered list on the right; keep the
+                // general crafting surface visible in the centre at the same time.
+                // Armor-upgrade stations retain their dedicated modal layout.
+                if (CraftingScreen.Visible && _openArmorUpgradeStation == null)
                 {
                     BuildCenterCrafting(_contentLayer, aRightPanelIsOpen);
                     _craftPanelWasVisible = true;

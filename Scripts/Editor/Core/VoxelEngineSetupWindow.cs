@@ -307,7 +307,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Consolidate duplicate ore items", () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80()),
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
-                Setup("Rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
+                Setup("Audit and rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
+                Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
                 Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()));
         }
@@ -1371,7 +1372,10 @@ namespace VoxelEngine.EditorTools
             if (b == null) b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
             b.itemId = assetName.ToLower(); b.displayName = display;
             b.iconTint = tint; b.maxStack = 99; b.massPerUnit = 4f;
-            b.placedPrefab = prefab; b.gridSize = Vector3Int.one;
+            // A custom placed prefab is an authoring choice. Only repair an empty
+            // reference; never replace an already-linked custom model during Setup.
+            if (b.placedPrefab == null) b.placedPrefab = prefab;
+            b.gridSize = Vector3Int.one;
             b.allowStacking = true; b.blockHealth = 200; b.miningTier = 1;
             b.category = uiCategory;
             if (!AssetDatabase.Contains(b)) AssetDatabase.CreateAsset(b, path);
@@ -1568,6 +1572,16 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Crafting.StationTier tier, string display, bool isFurnace = false)
         {
             string path = $"{folder}/{name}.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (existing != null)
+            {
+                // Preserve hand-authored station geometry and tuned components.
+                // The repair adds only a missing interaction component/empty fields.
+                VoxelEngine.EditorTools.StationInteractionSetup.EnsurePrefabInteraction(
+                    existing, tier, display, repairTier: false);
+                return existing;
+            }
+
             var root = new GameObject(name);
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.name = "Mesh";

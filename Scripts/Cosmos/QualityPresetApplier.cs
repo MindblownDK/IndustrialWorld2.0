@@ -49,7 +49,7 @@ namespace VoxelEngine.Cosmos
             var sphere = SphereWorld.Instance;
             if (sphere != null)
             {
-                sphere.viewDistance = GraphicsPreset.ViewDistance;
+                sphere.viewDistance = Mathf.Clamp(GameSettings.ViewDistance, 1, 16);
                 sphere.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
             }
 
@@ -82,7 +82,7 @@ namespace VoxelEngine.Cosmos
                 waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             }
 
-            Debug.Log($"[QualityPresetApplier] Applied tier '{tier}' — viewDist:{GraphicsPreset.ViewDistance} " +
+            Debug.Log($"[QualityPresetApplier] Applied tier '{tier}' — viewDist:{GameSettings.ViewDistance} " +
                       $"grass:{GraphicsPreset.GrassDensityMul} LOD:{GraphicsPreset.LodResolution} " +
                       $"jobs:{GraphicsPreset.JobsPerFrame} waterfalls:{GraphicsPreset.WaterfallRange}");
         }

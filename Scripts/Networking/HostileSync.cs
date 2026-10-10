@@ -133,6 +133,7 @@ namespace VoxelEngine.Networking
         public static void NotifyDestroyed(Damageable enemy)
         {
             if (enemy == null) return;
+            HostileSleepManager.Forget(enemy);
             if (_idOf.TryGetValue(enemy, out int id))
             {
                 _idOf.Remove(enemy);
@@ -152,7 +153,9 @@ namespace VoxelEngine.Networking
         /// enemy so OnDestroy stays silent. No-op for anything unregistered.</summary>
         public static void NotifyDied(Damageable enemy)
         {
-            if (enemy == null || !_idOf.TryGetValue(enemy, out int id)) return;
+            if (enemy == null) return;
+            HostileSleepManager.Forget(enemy);
+            if (!_idOf.TryGetValue(enemy, out int id)) return;
             if (HostOnline) NetworkBootstrap.Instance.SendEnemyRemoved(id, died: true);
             _idOf.Remove(enemy);
             _hostEnemies.Remove(id);
@@ -326,6 +329,7 @@ namespace VoxelEngine.Networking
         public static void Pump()
         {
             if (NetworkSession.Mode == SessionMode.Client) { PumpReplicas(); return; }
+            HostileSleepManager.Pump(_hostEnemies.Values);
             if (!HostOnline) return;
 
             float now = Time.time;
@@ -336,8 +340,12 @@ namespace VoxelEngine.Networking
                 {
                     var enemy = pair.Value;
                     if (enemy == null) continue;
-                    NetworkBootstrap.Instance.SendEnemyPose(pair.Key,
-                        enemy.transform.position, enemy.transform.rotation);
+                    // A sleeping hostile is stationary. Keep health and the slower
+                    // re-announce snapshot flowing, but avoid sending redundant pose
+                    // packets at the active-AI cadence until it wakes.
+                    if (!HostileSleepManager.IsSleeping(enemy))
+                        NetworkBootstrap.Instance.SendEnemyPose(pair.Key,
+                            enemy.transform.position, enemy.transform.rotation);
 
                     if (!_lastSentHealth.TryGetValue(pair.Key, out float sent)
                         || Mathf.Abs(sent - enemy.Health) > 0.01f)

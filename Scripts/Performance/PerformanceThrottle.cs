@@ -8,6 +8,7 @@
 // before doing expensive work.
 
 using UnityEngine;
+using VoxelEngine.Settings;
 
 namespace VoxelEngine.Performance
 {
@@ -38,12 +39,24 @@ namespace VoxelEngine.Performance
         private float _fpsAccum;
         private int _fpsFrames;
         private float _fpsTimer;
+        private int _effectiveTargetFPS = 60;
 
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
-            Application.targetFrameRate = targetFPS;
+            GameSettings.OnChanged += ApplyFrameRateTarget;
+            ApplyFrameRateTarget();
+        }
+
+        private void ApplyFrameRateTarget()
+        {
+            _effectiveTargetFPS = Mathf.Max(30,
+                GameSettings.EffectiveRefreshRate > 0 ? GameSettings.EffectiveRefreshRate : targetFPS);
+            // With VSync enabled the display mode itself is the frame-rate authority.
+            // A hard-coded 60 target here defeated high-refresh monitors and could
+            // conflict with the selected fullscreen refresh mode.
+            Application.targetFrameRate = GameSettings.VSync > 0 ? -1 : _effectiveTargetFPS;
         }
 
         private void Update()
@@ -59,17 +72,18 @@ namespace VoxelEngine.Performance
                 _fpsFrames = 0;
                 _fpsTimer = 0f;
 
-                // Auto-adjust budgets based on performance.
-                IsUnderBudget = SmoothedFPS >= targetFPS * 0.9f;
+                // Auto-adjust budgets relative to the selected/monitored display rate.
+                int target = Mathf.Max(30, _effectiveTargetFPS);
+                IsUnderBudget = SmoothedFPS >= target * 0.9f;
 
-                if (SmoothedFPS < targetFPS * 0.5f)
+                if (SmoothedFPS < target * 0.5f)
                 {
                     // Very bad FPS — aggressive throttle
                     waterMeshBudget = 1;
                     minimapInterval = 4.0f;
                     fluidSimBudget = 1;
                 }
-                else if (SmoothedFPS < targetFPS * 0.75f)
+                else if (SmoothedFPS < target * 0.75f)
                 {
                     // Below target — moderate throttle
                     waterMeshBudget = 1;
@@ -88,6 +102,7 @@ namespace VoxelEngine.Performance
 
         private void OnDestroy()
         {
+            GameSettings.OnChanged -= ApplyFrameRateTarget;
             if (Instance == this) Instance = null;
         }
     }

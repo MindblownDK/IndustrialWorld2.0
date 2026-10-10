@@ -331,7 +331,7 @@ namespace VoxelEngine.Cosmos
             waterfalls.viewer = viewer;
 
             // Apply the current graphics preset to the visual systems.
-            world.viewDistance = GraphicsPreset.ViewDistance;
+            world.viewDistance = Mathf.Clamp(VoxelEngine.Settings.GameSettings.ViewDistance, 1, 16);
             grass.qualityDensityMul = new float[] { 0.45f, 0.6f, 1.2f, 1.8f };
             waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;

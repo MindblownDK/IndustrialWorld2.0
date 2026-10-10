@@ -39,6 +39,13 @@ namespace VoxelEngine.UI
         private static string _draftReason = ""; // the parting words, max 40 chars
 
         private static float _savedScroll;
+        private static ScrollView _activeScroll;
+
+        private static void CaptureScroll()
+        {
+            if (_activeScroll != null && _activeScroll.panel != null)
+                _savedScroll = Mathf.Max(0f, _activeScroll.scrollOffset.y);
+        }
 
         /// <summary>14.47.1 - everything this page draws, folded into one
         /// number. The pause menu rebuilds when it moves: admin state and
@@ -70,6 +77,11 @@ namespace VoxelEngine.UI
             scroll.style.maxHeight = 560;
             scroll.mode = ScrollViewMode.Vertical;
             UITheme.StyleScroller(scroll);
+            _activeScroll = scroll;
+            // Capture synchronously on pointer/key down, before the admin action
+            // changes ServerAdminRegistry.Version and the pause menu rebuilds us.
+            scroll.RegisterCallback<PointerDownEvent>(_ => CaptureScroll(), TrickleDown.TrickleDown);
+            scroll.RegisterCallback<KeyDownEvent>(_ => CaptureScroll(), TrickleDown.TrickleDown);
             var content = new VisualElement();
             scroll.Add(content);
 
@@ -80,7 +92,11 @@ namespace VoxelEngine.UI
                 if (restored) return;
                 restored = true;
                 if (restoreTo > 0f)
-                    scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0f, restoreTo));
+                    scroll.schedule.Execute(() =>
+                    {
+                        if (scroll.panel != null)
+                            scroll.scrollOffset = new Vector2(0f, restoreTo);
+                    }).ExecuteLater(30);
                 scroll.schedule.Execute(() =>
                 {
                     if (scroll.panel != null) _savedScroll = scroll.scrollOffset.y;
@@ -478,7 +494,7 @@ namespace VoxelEngine.UI
                 var row = Row();
                 row.style.justifyContent = Justify.FlexEnd;
                 row.Add(SmallBtn("APPLY NAME", () =>
-                    ServerAdminRegistry.Route(ServerAdminRegistry.OpSetRule, "serverName", _draftServerName, 0),
+                    SetRule("serverName", _draftServerName),
                     T.AccentCyan));
                 content.Add(row);
             }
@@ -543,7 +559,10 @@ namespace VoxelEngine.UI
         }
 
         private static void SetRule(string key, string value)
-            => ServerAdminRegistry.Route(ServerAdminRegistry.OpSetRule, key, value, 0);
+        {
+            CaptureScroll();
+            ServerAdminRegistry.Route(ServerAdminRegistry.OpSetRule, key, value, 0);
+        }
 
         // ───────────────────────── shared chrome ─────────────────────────
 

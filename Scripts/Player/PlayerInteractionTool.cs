@@ -1624,6 +1624,12 @@ namespace VoxelEngine.Player
                 }
 
                 var station = hit.collider.GetComponentInParent<CraftingStation>();
+                if (station == null)
+                {
+                    var placedStationBlock = hit.collider.GetComponentInParent<PlacedBlock>();
+                    if (placedStationBlock != null)
+                        station = placedStationBlock.GetComponentInChildren<CraftingStation>(true);
+                }
                 if (station != null) { UI.GameUIController.Instance?.OpenStation(station); return; }
             }
 
@@ -2041,6 +2047,43 @@ namespace VoxelEngine.Player
             Object.Destroy(go, 0.12f);
         }
 
+        private bool TryFindMeleeDamageable(Ray ray, float distance, float radius,
+            out VoxelEngine.Combat.IDamageable target, out RaycastHit targetHit)
+        {
+            target = null;
+            targetHit = default;
+            if (distance <= 0f) return false;
+
+            var hits = Physics.SphereCastAll(ray, Mathf.Max(0.05f, radius), distance,
+                ~0, QueryTriggerInteraction.Collide);
+            if (hits == null || hits.Length == 0) return false;
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            Transform selfRoot = transform.root;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var hit = hits[i];
+                var collider = hit.collider;
+                if (collider == null) continue;
+                if ((selfRoot != null && collider.transform.IsChildOf(selfRoot))
+                    || VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(collider, transform))
+                    continue;
+
+                var candidate = collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
+                if (candidate != null && candidate.IsAlive)
+                {
+                    target = candidate;
+                    targetHit = hit;
+                    return true;
+                }
+
+                // A solid non-damageable object is a real blocker. Ignore unrelated
+                // trigger volumes, but never allow the forgiving swing to hit through a wall.
+                if (!collider.isTrigger) return false;
+            }
+            return false;
+        }
+
         private void HandleWeaponAttack(VoxelEngine.Combat.WeaponItem weapon, Ray ray)
         {
             float dist = Mathf.Max(0.5f, weapon.range);
@@ -2102,31 +2145,18 @@ namespace VoxelEngine.Player
             }
 
 
-            // ── Melee: play the swing, then damage the closest target in front.
+            // ── Melee: a short, forgiving sphere sweep catches moving creatures
+            // without requiring a pixel-perfect crosshair. Nearest solid blockers
+            // still stop the swing, so walls cannot be hit through.
             GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
 
             VoxelEngine.Combat.IDamageable target = null;
             Vector3 hitPoint = ray.origin + ray.direction * dist;
-            if (TryRaycastIgnoringSelf(ray, out var mHit, dist))
+            float meleeSweepRadius = Mathf.Clamp(dist * 0.12f, 0.28f, 0.42f);
+            if (TryFindMeleeDamageable(ray, dist, meleeSweepRadius, out var sweptTarget, out var mHit))
             {
-                target = mHit.collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
+                target = sweptTarget;
                 hitPoint = mHit.point;
-            }
-            if (target == null)
-            {
-                // Forgiving arc: a sphere sweep in front of the camera catches close targets
-                // even when the crosshair isn't perfectly centered on them.
-                Vector3 center = ray.origin + ray.direction * (dist * 0.5f);
-                var cols = Physics.OverlapSphere(center, 0.65f, ~0, QueryTriggerInteraction.Ignore);
-                float best = float.MaxValue;
-                foreach (var c in cols)
-                {
-                    var d = c.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
-                    if (d == null || !d.IsAlive) continue;
-                    if (!(d is MonoBehaviour mb)) continue;
-                    float dd = Vector3.Distance(mb.transform.position, ray.origin);
-                    if (dd < best) { best = dd; target = d; }
-                }
             }
             // Other players (14.34.0): swept analytically because avatars carry
             // no colliders. The nearest body wins the swing.

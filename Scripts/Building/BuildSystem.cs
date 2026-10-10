@@ -62,12 +62,16 @@ namespace VoxelEngine.Building
         private static readonly RaycastHit[] s_buildRaycastProbe = new RaycastHit[64];
         private static readonly Collider[] s_staticAnchorProbe = new Collider[32];
         private static readonly Collider[] s_placementOverlapProbe = new Collider[64];
+        private static readonly Collider[] s_wallSnapProbe = new Collider[128];
         private readonly System.Collections.Generic.List<Collider> _staticSnapColliders = new(8);
+        private readonly System.Collections.Generic.List<VoxelEngine.Building.Tiered.PlacedTieredBlock> _wallSnapHosts = new(16);
+        private readonly System.Collections.Generic.List<TieredWallProjection> _wallSnapCandidates = new(16);
         private readonly System.Collections.Generic.Dictionary<BlockItem, StaticPlacementPrefabProfile> _staticPlacementProfiles = new();
 
         private sealed class StaticPlacementPrefabProfile
         {
             public Collider[] colliders;
+            public Renderer[] renderers;
             public bool isThinConduit;
             public bool isPortalPiece;
             public bool isSurfaceAttachment;
@@ -84,6 +88,16 @@ namespace VoxelEngine.Building
             public float halfU;
             public float halfV;
             public float spacing;
+        }
+
+        private struct TieredWallProjection
+        {
+            public float minUp;
+            public float maxUp;
+            public float minU;
+            public float maxU;
+            public float minV;
+            public float maxV;
         }
 
         /// <summary>Set while a port snap is rejected because the engine's service
@@ -229,6 +243,7 @@ namespace VoxelEngine.Building
                 _pipeGhostLastPosition = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
                 _pipeGhostLinks.Clear();
                 _appliedGhostMaterial = null;
+                EnsureGhostVisual(_ghost, block);
                 StripGhost(_ghost, _ghostMaterialValid);
                 _appliedGhostMaterial = _ghostMaterialValid;
                 TraceGhost("showing '" + block.displayName + "'");
@@ -301,8 +316,17 @@ namespace VoxelEngine.Building
                     ApplyGhostMaterialIfChanged(chainCanPlace ? _ghostMaterialValid : _ghostMaterialInvalid);
                     return;
                 }
-                _ghost.SetActive(false);
+                // Keep a red preview in front of the camera when the aim ray
+                // finds no collider. Placement still requires a real hit, but an
+                // empty scene/edge gap must not look like a missing prefab ghost.
+                _ghost.SetActive(true);
                 HidePrecisionLattice();
+                float previewDistance = Mathf.Clamp(reach * 0.4f, 2f, 4f);
+                Vector3 previewPosition = ray.GetPoint(previewDistance);
+                Quaternion previewRotation = GravityProvider.GetSurfaceRotation(previewPosition)
+                    * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                _ghost.transform.SetPositionAndRotation(previewPosition, previewRotation);
+                ApplyGhostMaterialIfChanged(_ghostMaterialInvalid);
                 return;
             }
             _ghostNoHitSince = -1f;
@@ -1079,9 +1103,36 @@ namespace VoxelEngine.Building
             var placedRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
             if (placedRoad != null) placedRoad.RefreshAfterPlacement();
 
-            // Make sure it has a collider for future raycasts.
-            if (go.GetComponentInChildren<Collider>() == null)
-                go.AddComponent<BoxCollider>();
+            // Make sure it has a solid collider for future interaction raycasts.
+            // Replacement stations may contain only a trigger or disabled collider;
+            // fit a fallback to the visible model instead of leaving an interaction
+            // gap or a unit box at a stale prefab pivot.
+            bool placedStation = go.GetComponentInChildren<VoxelEngine.Crafting.CraftingStation>(true) != null;
+            Collider[] authoredColliders = go.GetComponentsInChildren<Collider>(true);
+            bool hasEnabledSolidCollider = false;
+            for (int i = 0; i < authoredColliders.Length; i++)
+            {
+                var authoredCollider = authoredColliders[i];
+                if (authoredCollider != null && authoredCollider.enabled && !authoredCollider.isTrigger
+                    && authoredCollider.gameObject.activeInHierarchy)
+                {
+                    hasEnabledSolidCollider = true;
+                    break;
+                }
+            }
+            if (!hasEnabledSolidCollider && (placedStation || authoredColliders.Length == 0))
+            {
+                var fallbackCollider = go.AddComponent<BoxCollider>();
+                if (placedStation && TryGetRendererBoundsInRoot(go.transform, out Bounds visibleBounds))
+                {
+                    fallbackCollider.center = visibleBounds.center;
+                    Vector3 size = visibleBounds.size;
+                    size.x = Mathf.Max(0.15f, size.x);
+                    size.y = Mathf.Max(0.15f, size.y);
+                    size.z = Mathf.Max(0.15f, size.z);
+                    fallbackCollider.size = size;
+                }
+            }
 
             var pb = go.GetComponent<PlacedBlock>();
             if (pb == null) pb = go.AddComponent<PlacedBlock>();
@@ -1405,10 +1456,10 @@ namespace VoxelEngine.Building
         }
 
         /// <summary>
-        /// Machines and chests sit on a foundation or floor deck. The world 1 m
-        /// grid does not match a 3.75 m module, so the old fallback left them
-        /// floating above the slab. The held collider's bottom rests on the deck
-        /// top, and the footprint snaps to that piece's local lattice.
+        /// Static items sit on a foundation, floor, or station deck using their real
+        /// support footprint. Nearby tiered walls can pull ordinary furniture and
+        /// storage flush to the wall without changing the placement rotation. BuildHammer
+        /// placement is a separate path and is intentionally unaffected.
         /// </summary>
         private bool TryGetDeckSnapPose(RaycastHit hit, BlockItem held, out Vector3 pos, out Quaternion rot,
             out VoxelEngine.Building.Tiered.PlacedTieredBlock deckHost)
@@ -1417,11 +1468,8 @@ namespace VoxelEngine.Building
             rot = default;
             deckHost = null;
             // Deck support is a semantic snap, not the optional free-world grid.
-            // Keep machines and containers flush even while the player has toggled
-            // general grid snapping off.
             if (held == null || held.placedPrefab == null || hit.collider == null)
                 return false;
-            if (GetStaticPlacementPrefabProfile(held).usesDedicatedSnap) return false;
 
             var deck = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
             if (deck == null || deck.definition == null || !IsDeckFamily(deck.definition.family))
@@ -1432,6 +1480,10 @@ namespace VoxelEngine.Building
             up.Normalize();
             if (Vector3.Dot(hit.normal, up) < 0.55f) return false;
 
+            var profile = GetStaticPlacementPrefabProfile(held);
+            if (profile.usesDedicatedSnap && !CanUseDedicatedPlacementOnDeck(held, hit))
+                return false;
+
             Vector3 deckForward = Vector3.ProjectOnPlane(deck.transform.forward, up);
             if (deckForward.sqrMagnitude < 0.0001f) deckForward = Vector3.ProjectOnPlane(deck.transform.right, up);
             if (deckForward.sqrMagnitude < 0.0001f) return false;
@@ -1441,33 +1493,299 @@ namespace VoxelEngine.Building
             if (!TryGetComponentColliderProjectionRange(deck, up, out _, out float deckTop))
                 deckTop = Vector3.Dot(hit.point, up);
 
-            var profile = GetStaticPlacementPrefabProfile(held);
             float lift = gridSize * 0.5f;
-            if (TryGetPrefabColliderProjectionRange(held.placedPrefab, profile.colliders, rot, up, out float heldMin, out _))
-                lift = -heldMin;
-
+            bool station = held.placedPrefab.GetComponentInChildren<VoxelEngine.Crafting.CraftingStation>(true) != null;
             Vector3 right = Vector3.Cross(up, deckForward).normalized;
             Vector3 forward = Vector3.Cross(right, up).normalized;
+            float visualMinUp = 0f, visualMaxUp = 0f, visualMinU = 0f, visualMaxU = 0f, visualMinV = 0f, visualMaxV = 0f;
+            bool useStationVisualBounds = station
+                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, up,
+                    out visualMinUp, out visualMaxUp)
+                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, right,
+                    out visualMinU, out visualMaxU)
+                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, forward,
+                    out visualMinV, out visualMaxV);
+
+            float heldMinUp = 0f, heldMaxUp = 0f, heldMinU = 0f, heldMaxU = 0f, heldMinV = 0f, heldMaxV = 0f;
+            bool hasPlacementFootprint;
+            float visualCenterU = 0f, visualCenterV = 0f;
+            if (useStationVisualBounds)
+            {
+                // Station prefabs are authored from different pivots. Use the visible
+                // geometry when aligning the deck, wall, and edge footprint.
+                lift = -visualMinUp;
+                heldMinUp = visualMinUp;
+                heldMaxUp = visualMaxUp;
+                heldMinU = visualMinU;
+                heldMaxU = visualMaxU;
+                heldMinV = visualMinV;
+                heldMaxV = visualMaxV;
+                visualCenterU = (visualMinU + visualMaxU) * 0.5f;
+                visualCenterV = (visualMinV + visualMaxV) * 0.5f;
+                hasPlacementFootprint = true;
+            }
+            else
+            {
+                bool hasUpBounds = TryGetPrefabColliderProjectionRange(
+                    held.placedPrefab, profile.colliders, rot, up, out heldMinUp, out heldMaxUp);
+                bool hasUBounds = TryGetPrefabColliderProjectionRange(
+                    held.placedPrefab, profile.colliders, rot, right, out heldMinU, out heldMaxU);
+                bool hasVBounds = TryGetPrefabColliderProjectionRange(
+                    held.placedPrefab, profile.colliders, rot, forward, out heldMinV, out heldMaxV);
+                hasPlacementFootprint = hasUpBounds && hasUBounds && hasVBounds;
+                if (hasUpBounds) lift = -heldMinUp;
+            }
 
             float spacing = Mathf.Max(0.25f, gridSize);
             Vector3 origin = deck.transform.position;
+            float originU = Vector3.Dot(origin, right);
+            float originV = Vector3.Dot(origin, forward);
             float hitU = Vector3.Dot(hit.point - origin, right);
             float hitV = Vector3.Dot(hit.point - origin, forward);
-            float snapU = Mathf.Round(hitU / spacing) * spacing;
-            float snapV = Mathf.Round(hitV / spacing) * spacing;
-            if (TryGetComponentColliderProjectionRange(deck, right, out float minU, out float maxU)
-                && TryGetComponentColliderProjectionRange(deck, forward, out float minV, out float maxV))
+            float snapU = Mathf.Round(hitU / spacing) * spacing - visualCenterU;
+            float snapV = Mathf.Round(hitV / spacing) * spacing - visualCenterV;
+
+            float deckMinU = 0f, deckMaxU = 0f, deckMinV = 0f, deckMaxV = 0f;
+            bool hasDeckBounds = TryGetComponentColliderProjectionRange(deck, right, out deckMinU, out deckMaxU)
+                && TryGetComponentColliderProjectionRange(deck, forward, out deckMinV, out deckMaxV);
+            if (hasDeckBounds)
             {
-                float originU = Vector3.Dot(origin, right);
-                float originV = Vector3.Dot(origin, forward);
-                snapU = Mathf.Clamp(originU + snapU, minU, maxU) - originU;
-                snapV = Mathf.Clamp(originV + snapV, minV, maxV) - originV;
+                if (hasPlacementFootprint)
+                {
+                    // Clamp the collider/visual footprint, not just the prefab pivot,
+                    // to the deck. Oversized items are centered rather than pushed
+                    // arbitrarily over one edge.
+                    snapU = ClampFootprintToDeck(originU + snapU, deckMinU, deckMaxU, heldMinU, heldMaxU) - originU;
+                    snapV = ClampFootprintToDeck(originV + snapV, deckMinV, deckMaxV, heldMinV, heldMaxV) - originV;
+                }
+                else
+                {
+                    snapU = Mathf.Clamp(originU + snapU, deckMinU, deckMaxU) - originU;
+                    snapV = Mathf.Clamp(originV + snapV, deckMinV, deckMaxV) - originV;
+                }
             }
 
             Vector3 planar = origin + right * snapU + forward * snapV;
             pos = planar - up * Vector3.Dot(planar, up) + up * (deckTop + lift + 0.001f);
+
+            // Factory modules have their own port/shape contracts. They may use this
+            // deck support fallback where safe, but wall nudging is limited to ordinary
+            // static prefabs so belts and their authored lane spacing remain unchanged.
+            bool hasDedicatedPrefabPlacement = profile.usesDedicatedSnap || profile.isPortalPiece
+                || held.placedPrefab.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>() != null;
+            if (!hasDedicatedPrefabPlacement && hasPlacementFootprint && hasDeckBounds)
+            {
+                // Keep wall attraction local: an aimed centre placement must not
+                // jump across a room to the perimeter.
+                float wallSearchDistance = Mathf.Clamp(Mathf.Max(0.25f, gridSize * 0.5f), 0.25f, 0.75f);
+                SnapFootprintTowardTieredWalls(ref pos, deck, up, right, forward,
+                    heldMinUp, heldMaxUp, heldMinU, heldMaxU, heldMinV, heldMaxV,
+                    deckMinU, deckMaxU, deckMinV, deckMaxV, wallSearchDistance);
+            }
+
             deckHost = deck;
             return true;
+        }
+
+        private static float ClampFootprintToDeck(float desiredRoot, float deckMin, float deckMax,
+            float footprintMin, float footprintMax)
+        {
+            float fitMin = deckMin - footprintMin;
+            float fitMax = deckMax - footprintMax;
+            if (fitMin <= fitMax) return Mathf.Clamp(desiredRoot, fitMin, fitMax);
+            return (deckMin + deckMax - footprintMin - footprintMax) * 0.5f;
+        }
+
+        private static bool CanUseDedicatedPlacementOnDeck(BlockItem held, RaycastHit hit)
+        {
+            if (held == null || held.placedPrefab == null || IsThinConduitPlacement(held)
+                || VoxelEngine.Building.RoadPaver.IsRoadBlock(held))
+                return false;
+
+            var prefab = held.placedPrefab;
+            var belt = prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            if (belt != null)
+            {
+                // Factory-to-factory snaps run before this deck fallback. On a deck,
+                // keep the selected belt shape and only correct its support height.
+                return true;
+            }
+
+            return prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null;
+        }
+
+        private void SnapFootprintTowardTieredWalls(ref Vector3 position,
+            VoxelEngine.Building.Tiered.PlacedTieredBlock deck, Vector3 up, Vector3 right, Vector3 forward,
+            float heldMinUp, float heldMaxUp, float heldMinU, float heldMaxU, float heldMinV, float heldMaxV,
+            float deckMinU, float deckMaxU, float deckMinV, float deckMaxV, float maxSnapDistance)
+        {
+            if (deck == null) return;
+
+            float halfU = Mathf.Max(0.01f, (heldMaxU - heldMinU) * 0.5f);
+            float halfV = Mathf.Max(0.01f, (heldMaxV - heldMinV) * 0.5f);
+            float halfUp = Mathf.Max(0.2f, (heldMaxUp - heldMinUp) * 0.5f + 0.15f);
+            Vector3 probeCenter = position
+                + right * ((heldMinU + heldMaxU) * 0.5f)
+                + forward * ((heldMinV + heldMaxV) * 0.5f)
+                + up * ((heldMinUp + heldMaxUp) * 0.5f);
+            Vector3 probeHalfExtents = new Vector3(halfU + maxSnapDistance, halfUp, halfV + maxSnapDistance);
+            Quaternion probeRotation = Quaternion.LookRotation(forward, up);
+            int count = Physics.OverlapBoxNonAlloc(probeCenter, probeHalfExtents, s_wallSnapProbe,
+                probeRotation, ~0, QueryTriggerInteraction.Ignore);
+
+            _wallSnapHosts.Clear();
+            _wallSnapCandidates.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                var collider = s_wallSnapProbe[i];
+                s_wallSnapProbe[i] = null;
+                if (collider == null || collider.isTrigger) continue;
+
+                var wall = collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                if (wall == null || wall == deck || wall.definition == null
+                    || !IsWallSnapFamily(wall.definition.family) || _wallSnapHosts.Contains(wall))
+                    continue;
+
+                _wallSnapHosts.Add(wall);
+                if (!TryGetComponentColliderProjectionRanges(wall, up, right, forward,
+                        out float minUp, out float maxUp,
+                        out float minU, out float maxU, out float minV, out float maxV))
+                    continue;
+
+                _wallSnapCandidates.Add(new TieredWallProjection
+                {
+                    minUp = minUp,
+                    maxUp = maxUp,
+                    minU = minU,
+                    maxU = maxU,
+                    minV = minV,
+                    maxV = maxV
+                });
+            }
+
+            // Snap one horizontal axis at a time so a corner can constrain both
+            // dimensions while keeping the item's tangent position and orientation.
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bool snapU = pass == 0;
+                float bestDelta = 0f;
+                bool found = false;
+                float itemMinUp = Vector3.Dot(position, up) + heldMinUp;
+                float itemMaxUp = Vector3.Dot(position, up) + heldMaxUp;
+
+                for (int i = 0; i < _wallSnapCandidates.Count; i++)
+                {
+                    var candidate = _wallSnapCandidates[i];
+                    float wallSpanU = candidate.maxU - candidate.minU;
+                    float wallSpanV = candidate.maxV - candidate.minV;
+                    float thinSpan = Mathf.Min(wallSpanU, wallSpanV);
+                    float longSpan = Mathf.Max(wallSpanU, wallSpanV);
+                    if (thinSpan > 0.9f || longSpan < 0.75f) continue;
+
+                    bool wallNormalIsU = wallSpanU < wallSpanV;
+                    if (wallNormalIsU != snapU) continue;
+                    if (itemMaxUp <= candidate.minUp + 0.001f || itemMinUp >= candidate.maxUp - 0.001f)
+                        continue;
+
+                    Vector3 axis = snapU ? right : forward;
+                    Vector3 tangent = snapU ? forward : right;
+                    float heldMinAxis = snapU ? heldMinU : heldMinV;
+                    float heldMaxAxis = snapU ? heldMaxU : heldMaxV;
+                    float heldMinTangent = snapU ? heldMinV : heldMinU;
+                    float heldMaxTangent = snapU ? heldMaxV : heldMaxU;
+                    float wallMinAxis = snapU ? candidate.minU : candidate.minV;
+                    float wallMaxAxis = snapU ? candidate.maxU : candidate.maxV;
+                    float wallMinTangent = snapU ? candidate.minV : candidate.minU;
+                    float wallMaxTangent = snapU ? candidate.maxV : candidate.maxU;
+
+                    float itemMinTangent = Vector3.Dot(position, tangent) + heldMinTangent;
+                    float itemMaxTangent = Vector3.Dot(position, tangent) + heldMaxTangent;
+                    if (itemMaxTangent <= wallMinTangent + 0.001f
+                        || itemMinTangent >= wallMaxTangent - 0.001f)
+                        continue;
+
+                    float currentRoot = Vector3.Dot(position, axis);
+                    float itemCenter = currentRoot + (heldMinAxis + heldMaxAxis) * 0.5f;
+                    float wallCenter = (wallMinAxis + wallMaxAxis) * 0.5f;
+                    float negativeSideRoot = wallMinAxis - 0.002f - heldMaxAxis;
+                    float positiveSideRoot = wallMaxAxis + 0.002f - heldMinAxis;
+                    float targetRoot;
+                    if (itemCenter < wallCenter - 0.001f) targetRoot = negativeSideRoot;
+                    else if (itemCenter > wallCenter + 0.001f) targetRoot = positiveSideRoot;
+                    else targetRoot = Mathf.Abs(negativeSideRoot - currentRoot) <= Mathf.Abs(positiveSideRoot - currentRoot)
+                            ? negativeSideRoot : positiveSideRoot;
+
+                    float delta = targetRoot - currentRoot;
+                    float axisDeckMin = snapU ? deckMinU : deckMinV;
+                    float axisDeckMax = snapU ? deckMaxU : deckMaxV;
+                    if (Mathf.Abs(delta) > maxSnapDistance
+                        || targetRoot + heldMinAxis < axisDeckMin - 0.001f
+                        || targetRoot + heldMaxAxis > axisDeckMax + 0.001f)
+                        continue;
+
+                    if (!found || Mathf.Abs(delta) < Mathf.Abs(bestDelta))
+                    {
+                        bestDelta = delta;
+                        found = true;
+                    }
+                }
+
+                if (found) position += (snapU ? right : forward) * bestDelta;
+            }
+        }
+
+        private static bool IsWallSnapFamily(VoxelEngine.Building.Tiered.BuildFamily family)
+        {
+            switch (family)
+            {
+                case VoxelEngine.Building.Tiered.BuildFamily.Wall:
+                case VoxelEngine.Building.Tiered.BuildFamily.Doorway:
+                case VoxelEngine.Building.Tiered.BuildFamily.Window:
+                case VoxelEngine.Building.Tiered.BuildFamily.HalfWall:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationHull:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationCorridor:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationJunction:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationWindow:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationAirlock:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationDock:
+                case VoxelEngine.Building.Tiered.BuildFamily.StationDome:
+                case VoxelEngine.Building.Tiered.BuildFamily.WallFrame:
+                case VoxelEngine.Building.Tiered.BuildFamily.WindowPane:
+                case VoxelEngine.Building.Tiered.BuildFamily.Railing:
+                case VoxelEngine.Building.Tiered.BuildFamily.TriangularWall:
+                case VoxelEngine.Building.Tiered.BuildFamily.TriangularWallInverted:
+                case VoxelEngine.Building.Tiered.BuildFamily.CompoundWall:
+                case VoxelEngine.Building.Tiered.BuildFamily.GateFrame:
+                case VoxelEngine.Building.Tiered.BuildFamily.BigGateFrame:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryGetComponentColliderProjectionRanges(Component host,
+            Vector3 normalUp, Vector3 normalU, Vector3 normalV,
+            out float minUp, out float maxUp, out float minU, out float maxU, out float minV, out float maxV)
+        {
+            minUp = minU = minV = float.PositiveInfinity;
+            maxUp = maxU = maxV = float.NegativeInfinity;
+            bool any = false;
+            if (host == null) return false;
+
+            _staticSnapColliders.Clear();
+            host.GetComponentsInChildren<Collider>(true, _staticSnapColliders);
+            for (int i = 0; i < _staticSnapColliders.Count; i++)
+            {
+                var collider = _staticSnapColliders[i];
+                if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy || collider.isTrigger)
+                    continue;
+                EncapsulateWorldColliderProjection(collider, normalUp, ref any, ref minUp, ref maxUp);
+                EncapsulateWorldColliderProjection(collider, normalU, ref any, ref minU, ref maxU);
+                EncapsulateWorldColliderProjection(collider, normalV, ref any, ref minV, ref maxV);
+            }
+            return any;
         }
 
         private static bool IsDeckFamily(VoxelEngine.Building.Tiered.BuildFamily family)
@@ -1739,6 +2057,7 @@ namespace VoxelEngine.Building
             profile = new StaticPlacementPrefabProfile
             {
                 colliders = prefab != null ? prefab.GetComponentsInChildren<Collider>(true) : System.Array.Empty<Collider>(),
+                renderers = prefab != null ? prefab.GetComponentsInChildren<Renderer>(true) : System.Array.Empty<Renderer>(),
                 isThinConduit = isThinConduit,
                 isPortalPiece = isPortalPiece,
                 isSurfaceAttachment = isSurfaceAttachment,
@@ -1777,6 +2096,44 @@ namespace VoxelEngine.Building
                 var collider = _staticSnapColliders[i];
                 if (collider == null || !collider.enabled || collider.isTrigger) continue;
                 EncapsulateWorldColliderProjection(collider, normal, ref any, ref min, ref max);
+            }
+            return any;
+        }
+
+        /// <summary>Projection bounds of a prefab's visible renderer geometry in
+        /// its placed orientation. Used to anchor replacement station art whose
+        /// collider/root pivot is absent or does not match the visible model.</summary>
+        private static bool TryGetPrefabRendererProjectionRange(
+            GameObject prefab, Renderer[] renderers, Quaternion rootRotation, Vector3 normal,
+            out float min, out float max)
+        {
+            min = float.PositiveInfinity;
+            max = float.NegativeInfinity;
+            bool any = false;
+            if (prefab == null || renderers == null) return false;
+
+            Transform root = prefab.transform;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                Bounds local = renderer.localBounds;
+                Vector3 center = local.center;
+                Vector3 extents = local.extents;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 localPoint = center + new Vector3(
+                        (corner & 1) == 0 ? -extents.x : extents.x,
+                        (corner & 2) == 0 ? -extents.y : extents.y,
+                        (corner & 4) == 0 ? -extents.z : extents.z);
+                    Vector3 prefabWorldPoint = renderer.transform.TransformPoint(localPoint);
+                    Vector3 rootLocal = root.InverseTransformPoint(prefabWorldPoint);
+                    Vector3 placedPoint = rootRotation * Vector3.Scale(rootLocal, root.localScale);
+                    float projection = Vector3.Dot(placedPoint, normal);
+                    if (projection < min) min = projection;
+                    if (projection > max) max = projection;
+                    any = true;
+                }
             }
             return any;
         }
@@ -2821,6 +3178,37 @@ namespace VoxelEngine.Building
         }
 
         // ---------- Ghost material helpers ----------
+        private static bool TryGetRendererBoundsInRoot(Transform root, out Bounds bounds)
+        {
+            bounds = default;
+            if (root == null) return false;
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            bool any = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                Bounds local = renderer.localBounds;
+                Vector3 center = local.center;
+                Vector3 extents = local.extents;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 point = center + new Vector3(
+                        (corner & 1) == 0 ? -extents.x : extents.x,
+                        (corner & 2) == 0 ? -extents.y : extents.y,
+                        (corner & 4) == 0 ? -extents.z : extents.z);
+                    Vector3 rootPoint = root.InverseTransformPoint(renderer.transform.TransformPoint(point));
+                    if (!any)
+                    {
+                        bounds = new Bounds(rootPoint, Vector3.zero);
+                        any = true;
+                    }
+                    else bounds.Encapsulate(rootPoint);
+                }
+            }
+            return any;
+        }
+
         private static Material MakeGhostMaterial(Color color)
         {
             // Canonical URP transparent state (keyword + tags + blend + queue)
@@ -2829,6 +3217,38 @@ namespace VoxelEngine.Building
             // that newer URP render paths reject without drawing or complaining.
             return VoxelEngine.Rendering.RuntimeMaterials.MakeTranslucentLit(color);
         }
+
+        private void EnsureGhostVisual(GameObject root, BlockItem block)
+        {
+            if (root == null) return;
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy)
+                    return;
+            }
+
+            // Some replacement prefabs carry only scripts/colliders (or have every
+            // renderer disabled). Keep the placement preview legible as a bounds
+            // proxy; never add this stand-in to the actual placed prefab.
+            var fallback = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            fallback.name = "BuildGhostFallback";
+            fallback.transform.SetParent(root.transform, false);
+            Vector3Int grid = block != null ? block.gridSize : Vector3Int.one;
+            fallback.transform.localScale = new Vector3(
+                Mathf.Max(0.35f, grid.x), Mathf.Max(0.35f, grid.y), Mathf.Max(0.35f, grid.z));
+            var fallbackCollider = fallback.GetComponent<Collider>();
+            if (fallbackCollider != null) fallbackCollider.enabled = false;
+            var fallbackRenderer = fallback.GetComponent<Renderer>();
+            if (fallbackRenderer != null)
+            {
+                fallbackRenderer.sharedMaterial = _ghostMaterialValid;
+                fallbackRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                fallbackRenderer.receiveShadows = false;
+            }
+        }
+
         private static void StripGhost(GameObject root, Material mat)
         {
             foreach (var col in root.GetComponentsInChildren<Collider>(true)) col.enabled = false;

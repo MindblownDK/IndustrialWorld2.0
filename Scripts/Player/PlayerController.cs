@@ -24,10 +24,14 @@ namespace VoxelEngine.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour
     {
-        [Header("Testing")]
-        [Tooltip("Testing cheat: the player takes no damage while this is on.")]
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        [Header("Developer Testing")]
+        [Tooltip("Development-build test flag: the player takes no damage while this is on.")]
         public bool infiniteHealth = false;
-        /// <summary>Live testing cheat flag, read by PlayerStats.TakeDamage.</summary>
+#else
+        private bool infiniteHealth;
+#endif
+        /// <summary>Development-only live damage-bypass flag, read by PlayerStats.</summary>
         public static bool InfiniteHealth { get; private set; }
 
         [Header("Movement")]
@@ -284,11 +288,16 @@ namespace VoxelEngine.Player
             _cc = GetComponent<CharacterController>();
             UpgradeSerializedLocomotionDefaults();
             _lastGroundedTime = -999f;
-            // Prefab ticked in the inspector turns the cheat on once; Settings is then
-            // the source of truth so the Testing toggle actually sticks.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // Inspector testing can seed the developer preference once; after that
+            // GameSettings is the source of truth for the development-only toggle.
             if (infiniteHealth) VoxelEngine.Settings.GameSettings.InfiniteHealth = true;
             InfiniteHealth = VoxelEngine.Settings.GameSettings.InfiniteHealth;
             infiniteHealth = InfiniteHealth;
+#else
+            InfiniteHealth = false;
+            infiniteHealth = false;
+#endif
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
             // On spherical bodies the terrain has hills/mountains in every direction. The default
@@ -388,8 +397,13 @@ namespace VoxelEngine.Player
         // ============================================================
         private void Update()
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             InfiniteHealth = VoxelEngine.Settings.GameSettings.InfiniteHealth;
             infiniteHealth = InfiniteHealth;
+#else
+            InfiniteHealth = false;
+            infiniteHealth = false;
+#endif
             // If the spawner hasn't finished placing us yet, freeze entirely (no input, no gravity).
             // Prevents falling-through-ungenerated-chunks AND prevents the player taking
             // control before the saved position has been restored.

@@ -81,7 +81,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 23;   // v23: independent Slide action added
+        private const int    CURRENT_VERSION = 24;   // v24: monitor-auto refresh is the default when no explicit override is saved
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -93,6 +93,8 @@ namespace VoxelEngine.Settings
         public const int   DEFAULT_QUALITY   = -1;
         public const int   DEFAULT_DISPLAY   = 0;
         public const int   DEFAULT_VSYNC     = 1;
+        // Zero means follow the monitor's highest supported mode at the selected resolution.
+        public const int   DEFAULT_REFRESH_RATE = 0;
         public const int   DEFAULT_VIEWDIST  = 6;
         public const int   DEFAULT_AUTOSAVE  = 300;  // seconds; 0 = disabled
         public const float DEFAULT_VOICE_VOL = 1.0f;
@@ -113,7 +115,39 @@ namespace VoxelEngine.Settings
         }
         public static int ResolutionWidth   { get => PlayerPrefs.GetInt(K_RES_W, Screen.currentResolution.width);  set { PlayerPrefs.SetInt(K_RES_W, value);  Apply(); } }
         public static int ResolutionHeight  { get => PlayerPrefs.GetInt(K_RES_H, Screen.currentResolution.height); set { PlayerPrefs.SetInt(K_RES_H, value);  Apply(); } }
-        public static int RefreshRate       { get => PlayerPrefs.GetInt(K_REFRESH, (int)Mathf.Round((float)Screen.currentResolution.refreshRateRatio.value)); set { PlayerPrefs.SetInt(K_REFRESH, value); Apply(); } }
+        /// <summary>Explicit refresh override in Hz, or zero to follow the monitor.</summary>
+        public static int RefreshRate       { get => PlayerPrefs.GetInt(K_REFRESH, DEFAULT_REFRESH_RATE); set { PlayerPrefs.SetInt(K_REFRESH, Mathf.Max(0, value)); Apply(); } }
+        /// <summary>The explicit override when set, otherwise the fastest supported mode
+        /// matching the selected resolution (falling back to the current display mode).</summary>
+        public static int EffectiveRefreshRate
+        {
+            get
+            {
+                int selected = RefreshRate;
+                return selected > 0
+                    ? selected
+                    : ResolveMonitorRefreshRate(ResolutionWidth, ResolutionHeight);
+            }
+        }
+
+        private static int ResolveMonitorRefreshRate(int width, int height)
+        {
+            int best = 0;
+            Resolution[] supported = Screen.resolutions;
+            if (supported != null)
+            {
+                for (int i = 0; i < supported.Length; i++)
+                {
+                    var mode = supported[i];
+                    if (width > 0 && height > 0 && (mode.width != width || mode.height != height)) continue;
+                    int hz = Mathf.RoundToInt((float)mode.refreshRateRatio.value);
+                    if (hz > best) best = hz;
+                }
+            }
+            if (best <= 0)
+                best = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+            return Mathf.Max(1, best);
+        }
 
         // ----- Camera / Input -----
         public static float Fov              { get => PlayerPrefs.GetFloat(K_FOV, DEFAULT_FOV);   set { PlayerPrefs.SetFloat(K_FOV, value);  Notify(); } }
@@ -172,7 +206,25 @@ namespace VoxelEngine.Settings
             PlayerPrefs.Save();
         }
         public static bool  ScreenShake      { get => PlayerPrefs.GetInt("ve_screenshake", 1) != 0; set { PlayerPrefs.SetInt("ve_screenshake", value ? 1 : 0); Notify(); } }
-        public static bool  InfiniteHealth    { get => PlayerPrefs.GetInt("ve_infinitehealth", 0) != 0; set { PlayerPrefs.SetInt("ve_infinitehealth", value ? 1 : 0); Notify(); } }
+        /// <summary>Developer-only damage bypass. Release players cannot read or set it.</summary>
+        public static bool InfiniteHealth
+        {
+            get
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                return PlayerPrefs.GetInt("ve_infinitehealth", 0) != 0;
+#else
+                return false;
+#endif
+            }
+            set
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                PlayerPrefs.SetInt("ve_infinitehealth", value ? 1 : 0);
+                Notify();
+#endif
+            }
+        }
 
         // ----- Audio -----
         public static float MasterVolume     { get => PlayerPrefs.GetFloat(K_VOL, DEFAULT_VOLUME); set { PlayerPrefs.SetFloat(K_VOL, value); Apply(); } }
@@ -394,6 +446,8 @@ namespace VoxelEngine.Settings
 
             // v23: the generic pass above gives the new Slide action LeftAlt when
             // no valid binding exists; existing Crouch and non-empty custom binds stay.
+            // v24: an unset refresh preference now means Monitor (Auto); an explicit
+            // saved refresh choice is preserved as a deliberate player override.
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);
@@ -419,9 +473,12 @@ namespace VoxelEngine.Settings
             int rw = ResolutionWidth, rh = ResolutionHeight;
             var fsm = FullscreenMode;
             int curHz = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+            int effectiveRefreshRate = RefreshRate > 0
+                ? RefreshRate
+                : ResolveMonitorRefreshRate(rw, rh);
             bool resChanged     = rw > 0 && rh > 0 && (rw != Screen.width || rh != Screen.height);
             bool modeChanged    = fsm != Screen.fullScreenMode;
-            bool refreshChanged = RefreshRate > 0 && RefreshRate != curHz;
+            bool refreshChanged = effectiveRefreshRate > 0 && effectiveRefreshRate != curHz;
             if (rw > 0 && rh > 0 && (resChanged || modeChanged || refreshChanged))
             {
                 if (fsm == FullScreenMode.Windowed)
@@ -435,7 +492,7 @@ namespace VoxelEngine.Settings
                     }
                 }
                 Screen.SetResolution(rw, rh, fsm,
-                    new RefreshRate { numerator = (uint)Mathf.Max(1, RefreshRate), denominator = 1 });
+                    new UnityEngine.RefreshRate { numerator = (uint)Mathf.Max(1, effectiveRefreshRate), denominator = 1 });
             }
 
             PlayerPrefs.Save();
@@ -472,6 +529,7 @@ namespace VoxelEngine.Settings
             FullscreenMode   = FullScreenMode.FullScreenWindow;
             ResolutionWidth  = Screen.currentResolution.width;
             ResolutionHeight = Screen.currentResolution.height;
+            RefreshRate      = DEFAULT_REFRESH_RATE;
             FlyMode          = false;
             PersistFlyModePreference();
             VoiceMode        = VoiceTalkMode.PushToTalk;

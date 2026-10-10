@@ -1,9 +1,33 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.8.0-dev`
+**Current Version:** `17.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.9.0-dev] Stabilize Stations, Combat, Placement, and Live Settings
+
+**Type:** MINOR — save-compatible interaction, placement, performance, settings, and item-art update. No world/save schema changed.
+
+**GitHub title:** `[17.9.0-dev] Stabilize stations, combat, placement, and live settings`
+
+#### Fixed and changed
+- Bench and Assembler interactions now show inventory, the station-filtered recipe list, and the general crafting panel together. Missing station links/components have a non-destructive repair action; existing custom prefab links and geometry are preserved.
+- Station placement on structural decks now anchors to visible renderer bounds, helping replaced models with offset pivots land visibly flush. A missing enabled solid station collider—including trigger-only setups—gets a fallback fitted to visible bounds after placement. If the source prefab has no enabled renderer, the repair reports it instead of inventing or replacing custom art.
+- Ordinary static items now use their collider/visible footprint to stay within foundation, floor, and BuildHammer-created station-floor bounds, rest on the deck, and pull flush to nearby tiered walls when the measured footprint is already close. The 90-degree orientation and collider footprint are retained; conveyor factory snaps remain first, and BuildHammer snapping is unchanged. Unity corner placement still needs play-mode verification.
+- Factory modules can use collider-based deck support when a floor itself is targeted; existing machine/port connection snaps still run first, and the selected conveyor shape and rotation steps remain intact. Thin conduits and roads retain their dedicated paths; wall nudging is limited to ordinary static items to preserve conveyor lane behavior.
+- Placement ghosts stay visible as invalid red previews when the aim ray finds no surface; renderer-less previews get a bounds proxy. Placement itself still requires a valid surface. The tiered free-placement surface offset is reduced from 20 mm to 2 mm.
+- Melee weapon attacks use a forgiving swept sphere while solid obstacles still block hits. The shared melee path now lands more reliably on moving creatures.
+- Authoritative host/offline hostile AI sleeps in place beyond 80 m and wakes inside 55 m. Health, objects, networking registration, and wake-up state remain intact; Ghouls with active industrial targets stay awake. Sleeping hostiles keep health and five-second late-join snapshots but skip redundant 0.25-second pose packets; client replicas are untouched.
+- An unset refresh-rate preference now means Monitor (Auto): use the fastest supported mode at the selected resolution. Explicit refresh selections are preserved. Frame-rate throttling follows that effective display rate, and VSync remains the display's authority.
+- View Distance changes now reach the active world immediately instead of being overwritten by the quality preset. Theme preview refreshes in place when a theme or accent changes, and world-rule edits capture the in-game admin scroll position before panel rebuilds.
+- Infinite Health is absent from release-player settings and is compiled as a development/editor-only test path.
+- Added transparent Sprite icons for Wooden Sword, Stone Sword, Iron Sword, and Steak. The existing icon sync binds them by item ID without replacing healthy item references.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.9.0-dev`, MINOR over `17.8.0-dev`. No world/save schema changed. Settings migration v24 uses Monitor (Auto) only when no explicit refresh override is saved; explicit values and keybinds are retained.
+- Optional station repair is under `Tools > Voxel Engine > Voxel Engine Setup > Maintenance & Repair`. The icon binder also remains available there; the new PNGs import as Sprites and are eligible for automatic binding.
+- Unity compilation, Setup execution, and play-mode acceptance checks have not been run in this workspace. The supplied workspace did not include the complete station model hierarchy, so its mesh/rendering could not be verified in Unity; the repair logs missing renderers, empty measurable bounds, and pivot offsets so remaining model-specific issues can be identified without overwriting custom art.
 
 ### [17.8.0-dev] Sharpen Jump Response and Auto-Fit Held Viewmodels
 

@@ -439,6 +439,13 @@ namespace VoxelEngine.UI
                 themeDescLabel.text = UIThemeManager.DescriptionFor(UIThemeManager.Current);
             }
 
+            // The preview is a live view, not a snapshot. Unsubscribe when its
+            // element leaves the panel so tab rebuilds do not accumulate listeners.
+            Action onThemeChanged = RefreshPreview;
+            UIThemeManager.OnThemeChanged += onThemeChanged;
+            previewHolder.RegisterCallback<DetachFromPanelEvent>(
+                _ => UIThemeManager.OnThemeChanged -= onThemeChanged);
+
             p.Add(T.Divider());
             p.Add(SectionLabel("Custom Accent Override"));
             p.Add(ToggleRow("Enable Custom Accent", "Override the current theme accent with your own RGB color. Reactive — no reload needed.",
@@ -532,10 +539,13 @@ namespace VoxelEngine.UI
                 rebuild?.Invoke();
             }));
             p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay."));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             p.Add(T.Divider());
-            p.Add(SectionLabel("Testing"));
-            p.Add(ToggleRow("Infinite Health", "Testing cheat: the player takes no damage while this is on.",
+            p.Add(SectionLabel("Developer Testing"));
+            p.Add(ToggleRow("Infinite Health (Development Only)",
+                "Development build only: the player takes no damage while this test flag is on.",
                 GameSettings.InfiniteHealth, on => GameSettings.InfiniteHealth = on));
+#endif
         }
 
         private static VisualElement ThemePreview()
@@ -997,12 +1007,15 @@ namespace VoxelEngine.UI
             if (rates.Count == 0)
                 rates.Add(Mathf.Max(1, Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value)));
 
-            var list = new List<int>(rates);
+            // Zero is the monitor-following mode; explicit Hz values remain available
+            // for players who want a fixed display mode or cap.
+            var list = new List<int> { GameSettings.DEFAULT_REFRESH_RATE };
+            list.AddRange(rates);
             var choices = new List<string>();
             int curIdx = 0;
             for (int i = 0; i < list.Count; i++)
             {
-                choices.Add($"{list[i]} Hz");
+                choices.Add(i == 0 ? "Monitor (Auto)" : $"{list[i]} Hz");
                 if (list[i] == GameSettings.RefreshRate) curIdx = i;
             }
 
