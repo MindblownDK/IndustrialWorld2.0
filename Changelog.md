@@ -1,9 +1,24 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.11.0-dev`
+**Current Version:** `17.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.12.0-dev] Add Shared Interior Placement Lattice
+
+**Type:** MINOR — save-compatible placement feature. No world/save schema changed.
+
+**GitHub title:** `[17.12.0-dev] Add shared interior placement lattice`
+
+#### Changed
+- Ordinary stationary `BlockItem` prefabs placed on tiered building decks now use a fixed 1 m lattice referenced to the shared construction frame (world origin, or the active body's center on radial worlds), rather than resetting grid phase at each deck-piece pivot.
+- Added a visible floor lattice whose lines match placement coordinates across adjacent deck pieces. Edge clamping selects a full-footprint lattice cell when one fits, preserves a safe continuous clamp when none fits, and retains the existing local wall-contact adjustment.
+- Dynamic prefabs, tiered construction pieces, and items with dedicated placement/snap behavior are excluded. `BuildSystemV2` and BuildHammer structural snapping are unchanged.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.12.0-dev`, MINOR over `17.11.0-dev`. No world/save schema changed.
+- Unity compilation, Setup execution, and Play Mode validation remain unverified in this workspace; the shared-lattice preview and placement still need in-game acceptance.
 
 ### [17.11.0-dev] Filter Inventory Crafting by Clicked Station
 

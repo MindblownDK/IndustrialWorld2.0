@@ -31,6 +31,7 @@ namespace VoxelEngine.Building
         /// <summary>The modern build reach (m). Anything shorter is treated as a stale
         /// serialized value from an older player prefab and auto-upgraded in Awake().</summary>
         public const float BuildReach = 16f;
+        private const float InteriorLatticeSpacing = 1f;
         public bool  gridSnap = true;
         public float gridSize = 1f;
         public float ghostAlpha = 0.5f;
@@ -76,6 +77,7 @@ namespace VoxelEngine.Building
             public bool isThinConduit;
             public bool isPortalPiece;
             public bool isSurfaceAttachment;
+            public bool usesInteriorLattice;
             public Vector3 portalHalfExtents;
             public bool usesDedicatedSnap;
         }
@@ -89,6 +91,8 @@ namespace VoxelEngine.Building
             public float halfU;
             public float halfV;
             public float spacing;
+            public bool usesSharedGridOrigin;
+            public Vector3 sharedGridOrigin;
         }
 
         private struct TieredWallProjection
@@ -972,9 +976,15 @@ namespace VoxelEngine.Building
                 var preview = new GameObject("StaticSurfaceLatticePreview");
                 _staticSurfaceLattice = preview.AddComponent<StaticSurfaceLatticePreview>();
             }
-            _staticSurfaceLattice.Show(_surfaceLatticePose.center, _surfaceLatticePose.axisU,
-                _surfaceLatticePose.axisV, _surfaceLatticePose.halfU,
-                _surfaceLatticePose.halfV, _surfaceLatticePose.spacing);
+            if (_surfaceLatticePose.usesSharedGridOrigin)
+                _staticSurfaceLattice.ShowAligned(_surfaceLatticePose.center, _surfaceLatticePose.axisU,
+                    _surfaceLatticePose.axisV, _surfaceLatticePose.halfU,
+                    _surfaceLatticePose.halfV, _surfaceLatticePose.spacing,
+                    _surfaceLatticePose.sharedGridOrigin);
+            else
+                _staticSurfaceLattice.Show(_surfaceLatticePose.center, _surfaceLatticePose.axisU,
+                    _surfaceLatticePose.axisV, _surfaceLatticePose.halfU,
+                    _surfaceLatticePose.halfV, _surfaceLatticePose.spacing);
         }
 
         private void HideStaticSurfaceLattice()
@@ -1507,6 +1517,10 @@ namespace VoxelEngine.Building
             var profile = GetStaticPlacementPrefabProfile(held);
             if (profile.usesDedicatedSnap && !CanUseDedicatedPlacementOnDeck(held, hit))
                 return false;
+            bool useInteriorLattice = profile.usesInteriorLattice;
+            float spacing = useInteriorLattice
+                ? InteriorLatticeSpacing
+                : Mathf.Max(0.25f, gridSize);
 
             Vector3 deckForward = Vector3.ProjectOnPlane(deck.transform.forward, up);
             if (deckForward.sqrMagnitude < 0.0001f) deckForward = Vector3.ProjectOnPlane(deck.transform.right, up);
@@ -1517,7 +1531,7 @@ namespace VoxelEngine.Building
             if (!TryGetComponentColliderProjectionRange(deck, up, out _, out float deckTop))
                 deckTop = Vector3.Dot(hit.point, up);
 
-            float lift = gridSize * 0.5f;
+            float lift = spacing * 0.5f;
             bool station = held.placedPrefab.GetComponentInChildren<VoxelEngine.Crafting.CraftingStation>(true) != null;
             Vector3 right = Vector3.Cross(up, deckForward).normalized;
             Vector3 forward = Vector3.Cross(right, up).normalized;
@@ -1568,21 +1582,44 @@ namespace VoxelEngine.Building
                 lift = -heldMinUp;
             }
 
-            float spacing = Mathf.Max(0.25f, gridSize);
             Vector3 origin = deck.transform.position;
             float originU = Vector3.Dot(origin, right);
             float originV = Vector3.Dot(origin, forward);
-            float hitU = Vector3.Dot(hit.point - origin, right);
-            float hitV = Vector3.Dot(hit.point - origin, forward);
-            float snapU = Mathf.Round(hitU / spacing) * spacing - footprintCenterU;
-            float snapV = Mathf.Round(hitV / spacing) * spacing - footprintCenterV;
+
+            // Building modules are 7.5 m wide. Resetting a 1 m grid at each
+            // deck pivot shifts the phase by 0.5 m across adjacent modules.
+            // Ordinary stationary items use the same shared construction origin
+            // on every deck, so their cells line up across the whole building.
+            Vector3 sharedGridOrigin = useInteriorLattice
+                ? GetSharedInteriorLatticeOrigin()
+                : origin;
+            float sharedOriginU = Vector3.Dot(sharedGridOrigin, right);
+            float sharedOriginV = Vector3.Dot(sharedGridOrigin, forward);
+            float hitU = Vector3.Dot(hit.point, right);
+            float hitV = Vector3.Dot(hit.point, forward);
+            float snapU = sharedOriginU
+                + Mathf.Round((hitU - sharedOriginU) / spacing) * spacing
+                - footprintCenterU - originU;
+            float snapV = sharedOriginV
+                + Mathf.Round((hitV - sharedOriginV) / spacing) * spacing
+                - footprintCenterV - originV;
 
             float deckMinU = 0f, deckMaxU = 0f, deckMinV = 0f, deckMaxV = 0f;
             bool hasDeckBounds = TryGetComponentColliderProjectionRange(deck, right, out deckMinU, out deckMaxU)
                 && TryGetComponentColliderProjectionRange(deck, forward, out deckMinV, out deckMaxV);
             if (hasDeckBounds)
             {
-                if (hasPlacementFootprint)
+                if (useInteriorLattice)
+                {
+                    // Keep edge placements on the same shared cell wherever at least
+                    // one full-footprint cell fits; only use a continuous clamp when
+                    // the authored footprint leaves no legal lattice cell on this deck.
+                    snapU = ClampFootprintToDeckOnLattice(originU + snapU, deckMinU, deckMaxU,
+                        heldMinU, heldMaxU, sharedOriginU - footprintCenterU, spacing) - originU;
+                    snapV = ClampFootprintToDeckOnLattice(originV + snapV, deckMinV, deckMaxV,
+                        heldMinV, heldMaxV, sharedOriginV - footprintCenterV, spacing) - originV;
+                }
+                else if (hasPlacementFootprint)
                 {
                     // Clamp the collider/visual footprint, not just the prefab pivot,
                     // to the deck. Oversized items are centered rather than pushed
@@ -1599,6 +1636,24 @@ namespace VoxelEngine.Building
 
             Vector3 planar = origin + right * snapU + forward * snapV;
             pos = planar - up * Vector3.Dot(planar, up) + up * (deckTop + lift + 0.001f);
+
+            if (useInteriorLattice && hasDeckBounds)
+            {
+                _surfaceLatticePose = new StaticSurfaceLatticePose
+                {
+                    valid = true,
+                    center = right * ((deckMinU + deckMaxU) * 0.5f)
+                        + forward * ((deckMinV + deckMaxV) * 0.5f)
+                        + up * (deckTop + 0.006f),
+                    axisU = right,
+                    axisV = forward,
+                    halfU = (deckMaxU - deckMinU) * 0.5f,
+                    halfV = (deckMaxV - deckMinV) * 0.5f,
+                    spacing = spacing,
+                    usesSharedGridOrigin = true,
+                    sharedGridOrigin = sharedGridOrigin
+                };
+            }
 
             // Factory modules have their own port/shape contracts. They may use this
             // deck support fallback where safe, but wall nudging is limited to ordinary
@@ -1682,6 +1737,35 @@ namespace VoxelEngine.Building
 
             if (!foundSupport) return false;
             return TryGetDeckSnapPose(deckHit, held, out pos, out rot, out deckHost);
+        }
+
+        private static Vector3 GetSharedInteriorLatticeOrigin()
+        {
+            // Match the construction grid's stable world/body anchor rather than
+            // the transform pivot of whichever floor panel happens to be targeted.
+            return GravityProvider.IsRadial && GravityProvider.ActiveBody != null
+                ? GravityProvider.ActiveBody.transform.position
+                : Vector3.zero;
+        }
+
+        private static float ClampFootprintToDeckOnLattice(float desiredRoot, float deckMin, float deckMax,
+            float footprintMin, float footprintMax, float latticeRootOrigin, float spacing)
+        {
+            float fitMin = deckMin - footprintMin;
+            float fitMax = deckMax - footprintMax;
+            if (fitMin > fitMax)
+                return (deckMin + deckMax - footprintMin - footprintMax) * 0.5f;
+
+            float minIndex = Mathf.Ceil((fitMin - latticeRootOrigin) / spacing - 0.0001f);
+            float maxIndex = Mathf.Floor((fitMax - latticeRootOrigin) / spacing + 0.0001f);
+            if (minIndex <= maxIndex)
+            {
+                float desiredIndex = Mathf.Round((desiredRoot - latticeRootOrigin) / spacing);
+                return latticeRootOrigin + Mathf.Clamp(desiredIndex, minIndex, maxIndex) * spacing;
+            }
+
+            // Extremely narrow/oversized surfaces can have no full-footprint grid cell.
+            return Mathf.Clamp(desiredRoot, fitMin, fitMax);
         }
 
         private static float ClampFootprintToDeck(float desiredRoot, float deckMin, float deckMax,
@@ -2151,6 +2235,20 @@ namespace VoxelEngine.Building
             bool isSurfaceAttachment = prefab != null
                 && (isThinConduit
                  || prefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null);
+            bool hasTieredBuildPiece = prefab != null
+                && (prefab.GetComponentInChildren<VoxelEngine.Building.Tiered.PlacedTieredBlock>(true) != null
+                    || prefab.GetComponentInChildren<VoxelEngine.Building.Tiered.BuildSocket>(true) != null);
+            bool hasDynamicBody = prefab != null && prefab.GetComponentInChildren<Rigidbody>(true) != null;
+            bool hasDedicatedStaticPart = prefab != null
+                && prefab.GetComponentInChildren<VoxelEngine.Power.Wind.WindTurbinePart>(true) != null;
+            bool usesDedicatedSnap = prefab == null
+                || isThinConduit
+                || VoxelEngine.Building.RoadPaver.IsRoadBlock(held)
+                || prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null;
             profile = new StaticPlacementPrefabProfile
             {
                 colliders = prefab != null ? prefab.GetComponentsInChildren<Collider>(true) : System.Array.Empty<Collider>(),
@@ -2158,15 +2256,10 @@ namespace VoxelEngine.Building
                 isThinConduit = isThinConduit,
                 isPortalPiece = isPortalPiece,
                 isSurfaceAttachment = isSurfaceAttachment,
+                usesInteriorLattice = prefab != null && !usesDedicatedSnap && !isPortalPiece
+                    && !hasTieredBuildPiece && !hasDynamicBody && !hasDedicatedStaticPart,
                 portalHalfExtents = isPortalPiece ? PortalPieceHalfExtents(prefab) : Vector3.zero,
-                usesDedicatedSnap = prefab == null
-                    || isThinConduit
-                    || VoxelEngine.Building.RoadPaver.IsRoadBlock(held)
-                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true) != null
-                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null
-                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true) != null
-                    || prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
-                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null
+                usesDedicatedSnap = usesDedicatedSnap
             };
             _staticPlacementProfiles[held] = profile;
             return profile;
@@ -3411,6 +3504,15 @@ namespace VoxelEngine.Building
         /// static collider face. The supplied basis is world-space and orthonormal.</summary>
         public void Show(Vector3 center, Vector3 axisU, Vector3 axisV,
             float halfU, float halfV, float spacing)
+            => ShowCore(center, axisU, axisV, halfU, halfV, spacing, Vector3.zero, false);
+
+        /// <summary>Draws floor cells on exact coordinates shared by adjacent deck panels.</summary>
+        public void ShowAligned(Vector3 center, Vector3 axisU, Vector3 axisV,
+            float halfU, float halfV, float spacing, Vector3 sharedGridOrigin)
+            => ShowCore(center, axisU, axisV, halfU, halfV, spacing, sharedGridOrigin, true);
+
+        private void ShowCore(Vector3 center, Vector3 axisU, Vector3 axisV,
+            float halfU, float halfV, float spacing, Vector3 sharedGridOrigin, bool alignToSharedGrid)
         {
             if (halfU <= 0.001f || halfV <= 0.001f || spacing <= 0.001f)
             {
@@ -3429,25 +3531,44 @@ namespace VoxelEngine.Building
             if (axisV.sqrMagnitude <= 0.0001f) axisV = Vector3.Cross(axisU, Vector3.forward);
             axisV.Normalize();
 
-            // A very large authored face should remain readable and inexpensive.
-            int divisionsU = Mathf.Clamp(Mathf.RoundToInt((halfU * 2f) / spacing), 1, 64);
-            int divisionsV = Mathf.Clamp(Mathf.RoundToInt((halfV * 2f) / spacing), 1, 64);
-            float stepU = (halfU * 2f) / divisionsU;
-            float stepV = (halfV * 2f) / divisionsV;
-
             _vertices.Clear();
             _indices.Clear();
-            for (int i = 0; i <= divisionsU; i++)
+            if (alignToSharedGrid)
             {
-                float offset = -halfU + i * stepU;
-                AddLine(center + axisU * offset - axisV * halfV,
-                    center + axisU * offset + axisV * halfV);
+                float centerU = Vector3.Dot(center, axisU);
+                float centerV = Vector3.Dot(center, axisV);
+                float originU = Vector3.Dot(sharedGridOrigin, axisU);
+                float originV = Vector3.Dot(sharedGridOrigin, axisV);
+                float minU = centerU - halfU, maxU = centerU + halfU;
+                float minV = centerV - halfV, maxV = centerV + halfV;
+                float u = originU + Mathf.Ceil((minU - originU) / spacing - 0.0001f) * spacing;
+                float v = originV + Mathf.Ceil((minV - originV) / spacing - 0.0001f) * spacing;
+                for (int i = 0; i < 64 && u <= maxU + 0.001f; i++, u += spacing)
+                    AddLine(center + axisU * (u - centerU) - axisV * halfV,
+                        center + axisU * (u - centerU) + axisV * halfV);
+                for (int i = 0; i < 64 && v <= maxV + 0.001f; i++, v += spacing)
+                    AddLine(center + axisV * (v - centerV) - axisU * halfU,
+                        center + axisV * (v - centerV) + axisU * halfU);
             }
-            for (int i = 0; i <= divisionsV; i++)
+            else
             {
-                float offset = -halfV + i * stepV;
-                AddLine(center + axisV * offset - axisU * halfU,
-                    center + axisV * offset + axisU * halfU);
+                // Surface-mounted utilities keep their existing face-centered preview.
+                int divisionsU = Mathf.Clamp(Mathf.RoundToInt((halfU * 2f) / spacing), 1, 64);
+                int divisionsV = Mathf.Clamp(Mathf.RoundToInt((halfV * 2f) / spacing), 1, 64);
+                float stepU = (halfU * 2f) / divisionsU;
+                float stepV = (halfV * 2f) / divisionsV;
+                for (int i = 0; i <= divisionsU; i++)
+                {
+                    float offset = -halfU + i * stepU;
+                    AddLine(center + axisU * offset - axisV * halfV,
+                        center + axisU * offset + axisV * halfV);
+                }
+                for (int i = 0; i <= divisionsV; i++)
+                {
+                    float offset = -halfV + i * stepV;
+                    AddLine(center + axisV * offset - axisU * halfU,
+                        center + axisV * offset + axisU * halfU);
+                }
             }
 
             _mesh.Clear();
