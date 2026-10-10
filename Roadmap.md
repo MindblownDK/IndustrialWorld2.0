@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.9.0-dev`
-**Roadmap Version:** `17.9.0-dev`
+**Current Version:** `17.11.0-dev`
+**Roadmap Version:** `17.11.0-dev`
 **Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.11.0-dev - Filter Inventory Crafting by Clicked Station
+- Bench/Assembler recipe availability follows the clicked station tier; timed crafts use its queue
+- Non-station inventory crafting retains proximity and storage-network recipe rules
+- Server/storage research assignments preserved; Crafting Card and Welder icon assets added; Unity acceptance remains pending
+
+### 17.10.0-dev - Align Station Crafting, Placement, and Transfers
+- Bench/Assembler opens inventory crafting without the dedicated right-side station panel; the clicked station queue remains active
+- Placement commit shares the preview ray; tiered-wall support reuses deck footprint math; Shift-drag transfers each visited slot once
+- Ten requested alpha icons added; exact-ID repair and full read-only icon audit are available, while Crafting Card and Welder art remain open
+
 ### 17.9.0-dev - Station, Combat, Placement, and Settings Repairs
 - Bench/Assembler interactions show inventory, station-filtered recipes, and general crafting; repair preserves custom prefabs
 - Station visual bounds, footprint-clamped deck/wall snaps, invalid ghost previews, 2 mm clearance, reliable melee sweeps, and distant hostile sleep; BuildHammer remains unchanged
@@ -43,16 +53,6 @@
 - Non-ice ground scrubs sideways drift toward steering input and restores stronger no-input friction
 - Ice keeps its low-grip movement; slide and air steering retain their momentum-focused handling
 - No save schema, keybind migration, or Voxel Engine Setup content changes
-
-### 17.7.0-dev - High-Momentum Player Movement
-- Ground acceleration and air strafing carry tangent momentum; sprint speed and slide boost are raised
-- Buffered/coyote jumps enable hold-to-bunny-hop and momentum-preserving slide-jumps
-- Slide is a separate rebindable hold action; C stays crouch and radial/ice/road/deck support remains
-
-### 17.6.0-dev - Food, Progression and Timed Workstation Crafting
-- Coal Generator stays behind Electricity; Smelting uses Pack I only; absent optional LED recipe stays silent
-- RMB food use works in open air; Raw Meat cooks into edible Steak through Setup
-- Zero-time workstation recipes receive tier/ingredient defaults while authored positive durations remain unchanged
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -83,8 +83,13 @@
 
 ### Open Scope (named with the version that deferred it)
 - **Replacement station source art (17.9.0-dev):** runtime placement anchors enabled renderers and reports missing geometry; a replacement prefab with no enabled Renderer still needs its intended model assigned and play-mode verified.
-- **Static deck/wall placement (17.9.0-dev):** collider-footprint clamping and tiered-wall contact are implemented for ordinary static items; foundation-edge, corner, and station-floor play-mode acceptance is pending. BuildHammer snapping remains untouched.
-- **Full-project missing-icon audit (17.9.0-dev):** four item sprites were added, but the ItemIconSync Setup audit has not yet run in Unity against every ItemDefinition asset; additional unmatched IDs remain unverified.
+- **Static deck/wall placement (17.10.0-dev):** collider-footprint clamping and the direct tiered-wall-to-supporting-deck probe are implemented for ordinary static items; foundation-edge, corner, snug wall contact, and station-floor play-mode acceptance is pending. BuildHammer snapping remains untouched.
+- **Station and transfer runtime acceptance (17.10.0-dev):** Bench/Assembler inventory-only panel ownership, nearby-tier recipe filtering, queue retention, multi-panel Shift-drag, and release/cancel behavior remain unverified in Unity.
+- **17.9 runtime acceptance (17.10.0-dev):** melee reliability, distant-hostile sleep, refresh-rate FPS cap, live settings updates, admin scroll retention, and release-player Infinite Health exclusion still need Unity build/play validation.
+- **Full-project missing-icon audit (17.10.0-dev):** exact-ID rebind and full mismatch/missing/ambiguous reporting are implemented; ten requested sprites were added, but Crafting Card and Welder art are still missing and the Setup audit has not run in Unity.
+- **Setup 79 duplicate IDs (17.10.0-dev):** `cobalt`, `item_depleteduranium`, `item_enrichedfuelrod`, `item_highlevelwaste`, `item_leupellet`, `item_spentfuelrod`, `sand`, `seed_carrot`, `seed_corn`, and `seed_wheat` remain unresolved until their duplicate asset paths are reviewed; do not rename/delete an owner by guess.
+- **Storage/server research gating (17.10.0-dev):** the current setup maps core server/storage recipes to Logistics Network, NAS/16K capacity to Mass Storage, and Wireless Terminal to Wireless Access; Thomas must confirm this mapping before any retargeting.
+- **Water Pump recipe report (17.10.0-dev):** source setup authors separate Water Pump and Marine Water Pump outputs/recipes; neither was removed. Confirm whether the reported repeated UI row persists after Setup before treating it as an accidental duplicate.
 - **Advanced traversal (deferred 17.7.0-dev):** wallrunning, wall-jumps, and mantling are outside the momentum-and-slide pass.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
 - **Pollution history and higher threat tiers** (deferred 17.3.0; earlier slices 14.70.0 / 14.73.0 / 17.2.0): live bearings, capped packs, approach ambushes and exposed static logistics raids shipped. Residual-load history, organized waves, elites and siege creatures remain open.

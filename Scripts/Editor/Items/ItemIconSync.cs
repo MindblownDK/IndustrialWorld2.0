@@ -1,24 +1,18 @@
 // Assets/Scripts/Editor/Items/ItemIconSync.cs
 //
-// Self-healing icon binder. Assigns the premium sticker icons from
-//   Assets/VoxelEngineAssets/ItemIcons/<Category>/<itemId>.png
-// to EVERY ItemDefinition asset whose serialized icon reference is missing —
-// any folder, including duplicate/legacy definitions.
+// Non-destructive item icon binder and audit. Missing references are restored by
+// exact itemId from any category under Assets/VoxelEngineAssets/ItemIcons. The
+// manually-run Setup action also reports assets with no matching PNG, ambiguous
+// duplicate icon filenames, and bindings that do not match the item's exact id.
 //
-// WHY AUTO: icon bindings are stored as sprite GUID references inside each
-// ItemDefinition. If a PNG ever gets re-imported without its companion .meta
-// (fresh clone, partial copy, manual file drop), Unity regenerates a new GUID
-// and every reference silently goes null — the item still displays its name
-// and description, so the crafting UI shows coloured fallback boxes with no
-// obvious error. This sync runs automatically after every editor load and
-// re-binds by itemId whenever the reference is missing, so the project heals
-// itself no matter how the files arrived.
-//
-// Non-destructive: items whose icon already resolves are never touched, and
-// items without a generated PNG are left alone (reported in the log summary).
+// Existing healthy references are preserved. Only the explicitly listed repair
+// ids are rebound when their current sprite is missing or points at another
+// filename; all other mismatches are reported for review, never rewritten.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -29,15 +23,30 @@ namespace VoxelEngine.EditorTools
         private const string IconRoot = "Assets/VoxelEngineAssets/ItemIcons";
         private const string SessionKey = "IW.ItemIconSync.Ran";
 
-        /// <summary>Runs once per editor session, right after the initial import
-        /// pipeline settles. Cheap when everything is already bound (the common
-        /// case) — it only writes when it actually fixed something.</summary>
+        private static readonly HashSet<string> ExactIconRepairIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "dirt",
+            "code_lock",
+            "security_block",
+            "team_banner",
+            "grid_team_banner",
+            "crusader_shield",
+            "data_pipe",
+            "wireless_terminal",
+            "external_storage",
+            "blank_pattern",
+            "crafting_card",
+            "welder_tool"
+        };
+
+        /// <summary>Runs once per editor session after the import pipeline settles.
+        /// Writes only when a missing reference or an explicitly targeted bad link
+        /// can be repaired from a matching ItemIcons sprite.</summary>
         [InitializeOnLoadMethod]
         private static void AutoSync()
         {
             if (SessionState.GetBool(SessionKey, false)) return;
             SessionState.SetBool(SessionKey, true);
-            // Delay until AssetDatabase is fully ready after a domain reload.
             EditorApplication.delayCall += () =>
             {
                 if (!EditorApplication.isPlayingOrWillChangePlaymode)
@@ -45,66 +54,166 @@ namespace VoxelEngine.EditorTools
             };
         }
 
+        /// <summary>
+        /// Restores missing item icons and repairs only the explicitly requested
+        /// ids. A manual run performs a full read-only audit of all other bindings.
+        /// </summary>
         public static void Sync(bool auto = false)
         {
-            var guids = AssetDatabase.FindAssets("t:ItemDefinition");
-            int assigned = 0, already = 0, noIcon = 0;
-            var misses = new List<string>();
+            var iconIndex = BuildIconIndex();
+            var itemGuids = AssetDatabase.FindAssets("t:ItemDefinition");
+            int assigned = 0;
+            int alreadyExact = 0;
+            int missingPng = 0;
+            int missingReferenceWithoutPng = 0;
+            int mismatchedBinding = 0;
+            int ambiguousPng = 0;
+            var missing = new List<string>();
+            var mismatches = new List<string>();
+            var ambiguities = new List<string>();
 
-            foreach (var g in guids)
+            foreach (var guid in itemGuids)
             {
-                string path = AssetDatabase.GUIDToAssetPath(g);
-                var def = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(path);
-                if (def == null || string.IsNullOrEmpty(def.itemId)) continue;
+                string itemPath = AssetDatabase.GUIDToAssetPath(guid);
+                var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(itemPath);
+                if (item == null || string.IsNullOrWhiteSpace(item.itemId)) continue;
 
-                // Healthy binding — leave it exactly as the pipeline wrote it.
-                if (def.icon != null) { already++; continue; }
+                Sprite expected = ResolveIcon(item.itemId, item.icon, iconIndex, out string ambiguousPaths);
+                if (expected == null)
+                {
+                    if (!string.IsNullOrEmpty(ambiguousPaths))
+                    {
+                        ambiguousPng++;
+                        ambiguities.Add($"{item.itemId} ({itemPath}) -> {ambiguousPaths}");
+                    }
+                    else
+                    {
+                        missingPng++;
+                        if (item.icon == null) missingReferenceWithoutPng++;
+                        missing.Add($"{item.itemId}  ({itemPath})" +
+                            (item.icon != null ? $"; current icon: {AssetDatabase.GetAssetPath(item.icon)}" : ""));
+                    }
+                    continue;
+                }
 
-                var sprite = LoadIcon(def.itemId);
-                if (sprite == null) { noIcon++; misses.Add($"{def.itemId}  ({path})"); continue; }
+                if (item.icon == expected)
+                {
+                    alreadyExact++;
+                    continue;
+                }
 
-                var so = new SerializedObject(def);
-                var prop = so.FindProperty("icon");
-                if (prop == null) continue;
-                prop.objectReferenceValue = sprite;
-                so.ApplyModifiedPropertiesWithoutUndo();
-                EditorUtility.SetDirty(def);
-                assigned++;
+                bool forceExactRepair = ExactIconRepairIds.Contains(item.itemId);
+                if (item.icon == null || forceExactRepair)
+                {
+                    string oldIconPath = item.icon != null
+                        ? AssetDatabase.GetAssetPath(item.icon)
+                        : "<missing>";
+                    var serializedItem = new SerializedObject(item);
+                    var iconProperty = serializedItem.FindProperty("icon");
+                    if (iconProperty == null) continue;
+                    iconProperty.objectReferenceValue = expected;
+                    serializedItem.ApplyModifiedPropertiesWithoutUndo();
+                    EditorUtility.SetDirty(item);
+                    assigned++;
+
+                    if (forceExactRepair && oldIconPath != "<missing>")
+                        mismatches.Add($"{item.itemId}  ({itemPath}) -> repaired {oldIconPath} to {AssetDatabase.GetAssetPath(expected)}");
+                }
+                else
+                {
+                    mismatchedBinding++;
+                    mismatches.Add($"{item.itemId}  ({itemPath}) -> current {AssetDatabase.GetAssetPath(item.icon)}; expected {AssetDatabase.GetAssetPath(expected)}; left unchanged");
+                }
             }
 
             if (assigned > 0) AssetDatabase.SaveAssets();
 
-            // Log only when useful: always on manual run, on auto only if it fixed
-            // something or found PNG-less items (i.e. the project was actually sick).
-            if (!auto || assigned > 0 || noIcon > 0)
-            {
-                string summary =
-                    $"[ItemIconSync] re-bound={assigned}  already-ok={already}  no-png={noIcon}" +
-                    (misses.Count > 0 && !auto ? "\nMissing PNG for:\n  " + string.Join("\n  ", misses) : "");
-                if (assigned > 0) Debug.LogWarning(summary);
-                else Debug.Log(summary);
-            }
+            // Automatic repair remains quiet when a healthy project has no missing
+            // references. The manual Setup action always prints the complete audit.
+            if (auto && assigned == 0 && missingReferenceWithoutPng == 0) return;
+
+            var report = new StringBuilder()
+                .Append("[ItemIconSync] rebound=").Append(assigned)
+                .Append("  exact=").Append(alreadyExact)
+                .Append("  no-matching-png=").Append(missingPng)
+                .Append("  wrong-binding-left-alone=").Append(mismatchedBinding)
+                .Append("  ambiguous-png=").Append(ambiguousPng);
+
+            if (!auto && missing.Count > 0)
+                AppendReportList(report, "Items without an exact itemId PNG:", missing);
+            if (!auto && ambiguities.Count > 0)
+                AppendReportList(report, "Ambiguous duplicate icon filenames (not rebound):", ambiguities);
+            if (!auto && mismatches.Count > 0)
+                AppendReportList(report, "Icon binding differences:", mismatches);
+
+            if (assigned > 0 || missingPng > 0 || mismatchedBinding > 0 || ambiguousPng > 0)
+                Debug.LogWarning(report.ToString());
+            else
+                Debug.Log(report.ToString());
         }
 
-        /// <summary>Finds the generated sticker sprite for an itemId anywhere
-        /// under the ItemIcons tree — category folder may vary, so we search by
-        /// file name and require an exact <itemId>.png match. Falls back to a
-        /// couple of friendly legacy name variants just in case.</summary>
-        private static Sprite LoadIcon(string itemId)
+        private static Dictionary<string, List<Sprite>> BuildIconIndex()
         {
-            string[] candidates = { itemId, itemId.Replace("item_", ""), itemId.Replace("gitem_", "") };
-            foreach (var c in candidates)
+            var index = new Dictionary<string, List<Sprite>>(StringComparer.OrdinalIgnoreCase);
+            if (!AssetDatabase.IsValidFolder(IconRoot)) return index;
+
+            foreach (var guid in AssetDatabase.FindAssets("t:Sprite", new[] { IconRoot }))
             {
-                foreach (var g in AssetDatabase.FindAssets($"{c} t:Sprite"))
+                string path = AssetDatabase.GUIDToAssetPath(guid).Replace('\\', '/');
+                if (!path.StartsWith(IconRoot + "/", StringComparison.OrdinalIgnoreCase)) continue;
+                var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+                if (sprite == null) continue;
+
+                string fileName = Path.GetFileNameWithoutExtension(path);
+                if (!index.TryGetValue(fileName, out var matches))
                 {
-                    string p = AssetDatabase.GUIDToAssetPath(g);
-                    if (!p.Replace('\\', '/').Contains("/ItemIcons/")) continue;
-                    if (Path.GetFileNameWithoutExtension(p) != c) continue;
-                    var s = AssetDatabase.LoadAssetAtPath<Sprite>(p);
-                    if (s != null) return s;
+                    matches = new List<Sprite>(1);
+                    index.Add(fileName, matches);
                 }
+                matches.Add(sprite);
+            }
+            return index;
+        }
+
+        private static Sprite ResolveIcon(string itemId, Sprite current,
+            Dictionary<string, List<Sprite>> iconIndex, out string ambiguousPaths)
+        {
+            ambiguousPaths = null;
+            string[] candidates =
+            {
+                itemId,
+                itemId.Replace("item_", ""),
+                itemId.Replace("gitem_", "")
+            };
+
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                string candidate = candidates[i];
+                if (string.IsNullOrEmpty(candidate) || !iconIndex.TryGetValue(candidate, out var matches))
+                    continue;
+
+                if (current != null)
+                {
+                    for (int j = 0; j < matches.Count; j++)
+                        if (matches[j] == current) return current;
+                }
+
+                if (matches.Count == 1) return matches[0];
+
+                var paths = new List<string>(matches.Count);
+                for (int j = 0; j < matches.Count; j++)
+                    paths.Add(AssetDatabase.GetAssetPath(matches[j]));
+                ambiguousPaths = string.Join(", ", paths);
+                return null;
             }
             return null;
+        }
+
+        private static void AppendReportList(StringBuilder report, string title, List<string> lines)
+        {
+            report.Append('\n').Append(title);
+            for (int i = 0; i < lines.Count; i++)
+                report.Append("\n  ").Append(lines[i]);
         }
     }
 }

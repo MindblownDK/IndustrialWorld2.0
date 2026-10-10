@@ -1,9 +1,43 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.9.0-dev`
+**Current Version:** `17.11.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.11.0-dev] Filter Inventory Crafting by Clicked Station
+
+**Type:** MINOR — save-compatible crafting interaction and item-art update. No world/save schema changed.
+
+**GitHub title:** `[17.11.0-dev] Filter inventory crafting by clicked station`
+
+#### Changed
+- When a Crafting Bench or Assembler is opened, the inventory recipe list is capped at the clicked station's tier and timed crafts use that station's queue. Ordinary inventory crafting retains its nearby-tier and storage-network rules.
+- Replacing the station surface with another inventory, machine, terminal, armor station, recipe browser, or closing the UI clears the station-scoped recipe context and detaches the prior queue refresh binding.
+- Added transparent Crafting Card and Welder Sprite icons with Unity Sprite importer metadata; the existing exact-ID repair/audit path already targets both IDs.
+- Confirmed the existing research mapping: server recipes → Logistics Network; NAS/16K storage → Mass Storage; Wireless Terminal → Wireless Access. No mapping changes were made.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.11.0-dev`, MINOR over `17.10.0-dev`. No world/save schema changed.
+- Unity compilation, Setup execution, and Play Mode validation remain unverified in this workspace. The clicked-tier behavior and queue binding still need in-game acceptance.
+
+### [17.10.0-dev] Align Station Crafting, Placement, and Inventory Transfers
+
+**Type:** MINOR — save-compatible interaction, placement, inventory, and item-art update. No world/save schema changed.
+
+**GitHub title:** `[17.10.0-dev] Align station crafting, placement, and inventory transfers`
+
+#### Fixed and changed
+- Right-clicking a Crafting Bench or Assembler now opens the inventory-owned crafting surface without mounting a legacy right-side station panel; stale specialized-panel references are cleared first. The clicked station's craft queue remains active, while the center recipe list continues to use nearby accessible station tiers.
+- Placement commits now recast the same filtered center-camera ray as the preview and refuse to place without a valid matching surface hit. A direct hit on a tiered wall probes for its supporting deck and reuses the deck footprint solver; authored collider bounds are authoritative when measurable, with renderer bounds retained only as a station fallback. BuildHammer snapping is unchanged.
+- Shift+hold-and-drag across inventory slots now routes each visited container/slot pair through the existing Shift-click transfer logic once per gesture. Releasing, cancelling, closing, losing the input device, or losing the live panel resets the sweep.
+- Added transparent item Sprite art for Dirt, Code Lock, Security Block, Team Banner, Grid Team Banner, Crusader Shield, Data Pipe, Wireless Terminal, External Storage, and Blank Pattern. Crafting Card and Welder icons remain open.
+- ItemIconSync now rebinds the named repair IDs to exact itemId-matched sprites and its manual Setup action reports missing PNGs, ambiguous duplicate filenames, and mismatched bindings across ItemDefinition assets. Non-target mismatches are diagnostic-only.
+- Retained the separate Water Pump and Marine Water Pump recipe assets; no recipe or duplicate item-ID assets were removed or renamed.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.10.0-dev`, MINOR over `17.9.0-dev`. No world/save schema changed.
+- Unity compilation, the Setup Wizard, and Play Mode acceptance tests have not been run in this workspace. Wall snugness, station-screen ownership in the live UI, multi-panel Shift-drag behavior, and icon binding remain subject to Thomas's Unity verification.
 
 ### [17.9.0-dev] Stabilize Stations, Combat, Placement, and Live Settings
 

@@ -4,8 +4,8 @@
 //
 //   • Bottom hotbar (always on)
 //   • Tab opens player inventory on the LEFT
-//   • Looking at a chest/furnace/crafting bench and pressing RMB opens that container on the RIGHT
-//   • Crafting recipes appear on the LEFT pane when no container is open OR when station is opened
+//   • RMB opens containers and machine panels on the RIGHT; Bench/Assembler open inventory crafting
+//   • Crafting recipes appear in the center surface, filtered by the active station context
 //
 // Layout (rough):
 //   ┌──────────────────────────────────────────────────────┐
@@ -70,6 +70,8 @@ namespace VoxelEngine.UI
         private bool _pollutionTelemetryExpanded;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
+        // Non-null only while a Crafting Bench or Assembler is open through the inventory crafting surface.
+        private CraftingStation _inventoryCraftStation;
         private VoxelEngine.Power.CoalGeneratorFuel _openCoalGen;
         private VoxelEngine.Transport.Quarry _openQuarry;
         private VoxelEngine.Nuclear.ReactorCore _openReactor;
@@ -167,6 +169,8 @@ namespace VoxelEngine.UI
         private VisualElement _dragGhost;
         private VisualElement _dropVoidOverlay;
         private VisualElement _tankTypeVoidOverlay;
+        private bool _quickTransferDragActive;
+        private readonly HashSet<QuickTransferSlotKey> _quickTransferDragVisited = new();
 
         private struct DragSource
         {
@@ -597,9 +601,9 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
-            _rightContainer = null; _openChest = null;
+            _rightContainer = null; _openChest = null; _openLootBag = null;
             _openStation    = null;
-            _activeQueue    = null;
+            ClearActiveQueueBinding();
 
             // QoL: if the player has at least one online wireless transmitter,
             // pressing Inventory auto-opens the wireless storage panel beside the
@@ -627,6 +631,7 @@ namespace VoxelEngine.UI
         public void OpenRecipeBrowserFor(ItemDefinition item)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             RecipeBrowserUI.FocusItem(item);
             _inventoryOpen = true;
             _recipeBrowserOpen = true;
@@ -756,6 +761,7 @@ namespace VoxelEngine.UI
         public void OpenContainer(IItemContainer c, VoxelEngine.Building.Chest owningChest)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _rightContainer = c;
             _openChest      = owningChest;
             _openLootBag    = null;
@@ -801,6 +807,7 @@ namespace VoxelEngine.UI
         public void OpenFurnace(Furnace f)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _openFurnace    = f;
             _openElectric   = null;
             _openQuarry     = null;
@@ -826,6 +833,7 @@ namespace VoxelEngine.UI
         public void OpenElectricFurnace(ElectricFurnace ef)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _openElectric   = ef;
             _openFurnace    = null;
             _openQuarry     = null;
@@ -850,6 +858,7 @@ namespace VoxelEngine.UI
         public void OpenCoalGenerator(VoxelEngine.Power.CoalGeneratorFuel fuel)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _openCoalGen    = fuel;
             _openFurnace    = null; _openElectric = null;
             _openQuarry     = null;
@@ -874,6 +883,7 @@ namespace VoxelEngine.UI
         public void OpenQuarry(VoxelEngine.Transport.Quarry quarry)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _openQuarry     = quarry;
             _openFurnace    = null; _openElectric = null;
             _openCoalGen    = null;
@@ -895,6 +905,7 @@ namespace VoxelEngine.UI
         public void OpenMachine(MonoBehaviour machine)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
@@ -1074,6 +1085,7 @@ namespace VoxelEngine.UI
         {
             if (grid == null) return;
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             // Clear all other open targets.
             _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
@@ -1111,6 +1123,14 @@ namespace VoxelEngine.UI
             _openArmorUpgradeStation = null;
         }
 
+        private void ClearActiveQueueBinding()
+        {
+            if (_activeQueue != null)
+                _activeQueue.OnChanged -= Refresh;
+            _activeQueue = null;
+            _inventoryCraftStation = null;
+        }
+
         public void OpenArmorUpgradeStation(VoxelEngine.Combat.ArmorUpgradeStation station)
         {
             if (station == null) return;
@@ -1120,8 +1140,8 @@ namespace VoxelEngine.UI
             _openArmorUpgradeStation = station;
             _openArmorUpgradeStation.OnStateChanged += Refresh;
             _openStation = null;
-            _activeQueue = null;
-            _rightContainer = null; _openChest = null;
+            ClearActiveQueueBinding();
+            _rightContainer = null; _openChest = null; _openLootBag = null;
             _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _openQuarry = null; _openReactor = null; _openTurbine = null;
             _openPortReactor = null; _openProcessor = null; _openReprocessor = null;
@@ -1146,13 +1166,16 @@ namespace VoxelEngine.UI
 
         public void OpenStation(CraftingStation st)
         {
+            if (st == null) return;
             if (!_inventoryOpen) UIState.PushBlock();
             ClearArmorUpgradeStationBinding();
-            _openStation    = st;
-            // A station interaction opens both its filtered station list and the
-            // general crafting panel in the centre of the inventory layout.
+            bool inventoryCraftingOnly = st.tier == Crafting.StationTier.CraftingBench
+                || st.tier == Crafting.StationTier.Assembler;
+            // Crafting Bench and Assembler use only the inventory crafting surface.
+            // Other specialized stations keep their existing right-side station panel.
+            _openStation = inventoryCraftingOnly ? null : st;
             CraftingScreen.Visible = true;
-            _rightContainer = null; _openChest = null;
+            _rightContainer = null; _openChest = null; _openLootBag = null;
             _openFurnace    = null;
             _openElectric   = null;
             _openCoalGen    = null;
@@ -1161,22 +1184,27 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null; _openBiofarm = null;
             _openHydroEngine= null; _openGasTank = null; _openRefuelPad = null; _openWaterPump = null; _openBiofarm = null; _openWindTurbine = null; _openGridBlock = null; _openOilRefinery = null; _openDistillationPlant = null; _openCatalyticCracker = null; _openFlareStack = null; _openWaterTower = null; _openRadarBeacon = null; _openRailStation = null; _openRailSwitch = null; _openSteamEngine = null; _openSchedule = null; _openDisplay = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null; _openGridTerminal = null;
+            _openPortalController = null; _openStaticSeasonMonitor = null; _openDronePort = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
+            _openVoltageStation = null;
             _inventoryOpen  = true;
+            ClearActiveQueueBinding();
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
             if (_activeQueue == null) _activeQueue = st.gameObject.AddComponent<CraftQueue>();
             _activeQueue.OnChanged -= Refresh; _activeQueue.OnChanged += Refresh;
+            _inventoryCraftStation = inventoryCraftingOnly ? st : null;
             UnlockCursor();
             Refresh();
         }
         public void CloseAll()
         {
+            ResetQuickTransferDrag();
             VoxelEngine.GridSystem.UI.GridControlHud.CloseEditor();
             CloseItemPortsOverlay();
             CloseDropVoidOverlay();
@@ -1208,7 +1236,7 @@ namespace VoxelEngine.UI
             _openVoltageStation = null;
             _productionStatsOpen = false;
             _recipeBrowserOpen = false;
-            _activeQueue    = null;
+            ClearActiveQueueBinding();
             _openCoalGen    = null;
             UnwatchAllContainers();
             CancelDrag();   // drop the held item back into source slot if user closes mid-drag
@@ -2695,6 +2723,7 @@ namespace VoxelEngine.UI
         public void OpenDefense(Component d)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearActiveQueueBinding();
             _rightContainer = null; _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _openQuarry = null; _openReactor = null; _openStation = null; _recipeBrowserOpen = false;
             _productionStatsOpen = false; _openChest = null; _openGridTerminal = null;
@@ -3619,7 +3648,8 @@ namespace VoxelEngine.UI
                 panel, recipes, source, inventory.container,
                 resolveQueue: r =>
                 {
-                    if (_activeQueue != null) return _activeQueue;
+                    if (_inventoryCraftStation != null && _activeQueue != null)
+                        return _activeQueue;
                     if (r != null && r.requiredStation != Crafting.StationTier.None)
                         return FindNearestQueueForTier(r.requiredStation, inventory.transform.position);
                     return null;
@@ -3631,19 +3661,18 @@ namespace VoxelEngine.UI
 
         /// <summary>
         /// Computes the recipe set + ingredient source the inventory-side crafting
-        /// screen should use, honouring storage-network access and station tiers.
-        /// Extracted from the old inline crafting block so both the center panel
-        /// and any future caller can reuse the exact same priority rules.
+        /// screen should use. An explicitly opened Bench/Assembler scopes recipes
+        /// to that clicked tier; otherwise proximity and storage-network access
+        /// determine the normal inventory recipe ceiling.
         /// </summary>
         private (System.Collections.Generic.List<Crafting.RecipeDefinition> recipes, IItemContainer source, Crafting.StationTier maxStation) ResolveCraftContext()
         {
             // ── Crafting source priority (per user spec) ─────────────
-            //   1) If the player has opened a Storage Terminal (wired OR wireless),
-            //      OR is in the inventory with an active wireless transmitter, we
-            //      treat the storage network as a tier-Assembler crafting station
-            //      AND let crafting pull ingredients from inventory FIRST, then
-            //      from the network. Gated by the res_storage_crafting research node.
-            //   2) Otherwise, crafting only uses the inventory and respects normal
+            //   1) An opened Storage Terminal / active wireless link can add
+            //      network ingredients. With res_storage_crafting unlocked, ordinary
+            //      inventory crafting also raises its recipe ceiling to Assembler;
+            //      an explicitly opened Bench/Assembler remains capped at its tier.
+            //   2) Otherwise, crafting uses the inventory and respects normal
             //      station-tier rules (Crafting Bench / Furnace / Assembler).
             var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
             bool storageCraftingUnlocked = rmCheck != null
@@ -3657,8 +3686,11 @@ namespace VoxelEngine.UI
             VoxelEngine.Storage.ServerRack passiveWirelessRack = GetActiveWirelessRack();
             bool wirelessActive = passiveWirelessRack != null && passiveWirelessRack.IsOnline;
 
-            var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
-            if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
+            bool clickedInventoryStation = _inventoryCraftStation != null;
+            var maxStation = clickedInventoryStation
+                ? _inventoryCraftStation.tier
+                : Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
+            if (!clickedInventoryStation && storageCraftingUnlocked && (craftRack != null || wirelessActive)
                 && (int)maxStation < (int)Crafting.StationTier.Assembler)
                 maxStation = Crafting.StationTier.Assembler;
 
@@ -5093,6 +5125,32 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             public int            index;
         }
 
+        private readonly struct QuickTransferSlotKey : IEquatable<QuickTransferSlotKey>
+        {
+            public readonly IItemContainer container;
+            public readonly int index;
+
+            public QuickTransferSlotKey(IItemContainer container, int index)
+            {
+                this.container = container;
+                this.index = index;
+            }
+
+            public bool Equals(QuickTransferSlotKey other)
+                => ReferenceEquals(container, other.container) && index == other.index;
+
+            public override bool Equals(object obj)
+                => obj is QuickTransferSlotKey other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                int containerHash = container != null
+                    ? System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(container)
+                    : 0;
+                return unchecked((containerHash * 397) ^ index);
+            }
+        }
+
         // ============================================================
         //              PANEL-WIDE DRAG / DROP HANDLING
         // ============================================================
@@ -5296,6 +5354,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         private void CancelDrag()
         {
             _dragSource.active = false;
+            ResetQuickTransferDrag();
             if (_dragGhost != null) { _dragGhost.RemoveFromHierarchy(); _dragGhost = null; }
         }
 
@@ -6180,26 +6239,46 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
         private void UpdateDragDrop()
         {
-            if (!_inventoryOpen) return;
-            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null) return;
+            if (!_inventoryOpen)
+            {
+                ResetQuickTransferDrag();
+                return;
+            }
+            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null)
+            {
+                ResetQuickTransferDrag();
+                return;
+            }
 
             // --- Read mouse state directly from the device ---
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
-            if (mouse == null) return;
+            if (mouse == null)
+            {
+                ResetQuickTransferDrag();
+                return;
+            }
             Vector2 screenPos    = mouse.position.ReadValue();
             bool    lmbPressed   = mouse.leftButton.wasPressedThisFrame;
+            bool    lmbHeld      = mouse.leftButton.isPressed;
+            bool    lmbReleased  = mouse.leftButton.wasReleasedThisFrame;
             bool    rmbPressed   = mouse.rightButton.wasPressedThisFrame;
             var kb = UnityEngine.InputSystem.Keyboard.current;
             bool    shiftHeld    = kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
 #else
             Vector2 screenPos    = Input.mousePosition;
             bool    lmbPressed   = Input.GetMouseButtonDown(0);
+            bool    lmbHeld      = Input.GetMouseButton(0);
+            bool    lmbReleased  = Input.GetMouseButtonUp(0);
             bool    rmbPressed   = Input.GetMouseButtonDown(1);
             bool    shiftHeld    = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 #endif
             // Convert screen pixels -> panel coords (UI uses Y-down origin).
-            if (!HasLivePanel()) return;
+            if (!HasLivePanel())
+            {
+                ResetQuickTransferDrag();
+                return;
+            }
             Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
                 new Vector2(screenPos.x, Screen.height - screenPos.y));
 
@@ -6207,6 +6286,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             if (lmbPressed)
             {
+                ResetQuickTransferDrag();
                 if (slotRef == null)
                 {
                     if (_dragSource.active)
@@ -6241,10 +6321,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         return;
                 }
 
-                // Shift+LMB = quick-transfer to the OTHER side (player inventory <-> open container).
+                // Shift+LMB starts a transfer sweep. Every slot crossed while the
+                // button stays down routes through the same QuickTransfer rules as
+                // a regular Shift-click (including equipment, machines and storage).
                 if (shiftHeld)
                 {
-                    QuickTransfer(slotRef.container, slotRef.index);
+                    BeginQuickTransferDrag(slotRef);
                     return;
                 }
                 if (_dragSource.active)
@@ -6257,10 +6339,59 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     if (!stack.IsEmpty) BeginDrag(slotRef.container, slotRef.index);
                 }
             }
-            else if (rmbPressed && slotRef != null)
+
+            if (_quickTransferDragActive)
             {
-                SplitOrMove(slotRef.container, slotRef.index);
+                if (lmbReleased)
+                {
+                    if (shiftHeld) QuickTransferDragSlot(slotRef);
+                    ResetQuickTransferDrag();
+                    return;
+                }
+                if (!lmbHeld)
+                {
+                    ResetQuickTransferDrag();
+                    return;
+                }
+                if (shiftHeld)
+                {
+                    QuickTransferDragSlot(slotRef);
+                    return;
+                }
+                // Releasing Shift ends sweep mode; do not reinterpret the held
+                // mouse press as the start of a conventional item drag.
+                ResetQuickTransferDrag();
+                return;
             }
+
+            if (rmbPressed && slotRef != null)
+                SplitOrMove(slotRef.container, slotRef.index);
+        }
+
+        private void BeginQuickTransferDrag(SlotRef slotRef)
+        {
+            ResetQuickTransferDrag();
+            if (slotRef == null || slotRef.container == null) return;
+            _quickTransferDragActive = true;
+            QuickTransferDragSlot(slotRef);
+        }
+
+        private void QuickTransferDragSlot(SlotRef slotRef)
+        {
+            if (!_quickTransferDragActive || slotRef == null || slotRef.container == null)
+                return;
+            if (slotRef.index < 0 || slotRef.index >= slotRef.container.Slots.Count)
+                return;
+
+            var key = new QuickTransferSlotKey(slotRef.container, slotRef.index);
+            if (!_quickTransferDragVisited.Add(key)) return;
+            QuickTransfer(slotRef.container, slotRef.index);
+        }
+
+        private void ResetQuickTransferDrag()
+        {
+            _quickTransferDragActive = false;
+            _quickTransferDragVisited.Clear();
         }
 
         // Hotkey-on-hover: pressing 1..9/0 while hovering an inventory slot SWAPS that

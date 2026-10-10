@@ -63,6 +63,7 @@ namespace VoxelEngine.Building
         private static readonly Collider[] s_staticAnchorProbe = new Collider[32];
         private static readonly Collider[] s_placementOverlapProbe = new Collider[64];
         private static readonly Collider[] s_wallSnapProbe = new Collider[128];
+        private static readonly RaycastHit[] s_wallDeckSupportProbe = new RaycastHit[32];
         private readonly System.Collections.Generic.List<Collider> _staticSnapColliders = new(8);
         private readonly System.Collections.Generic.List<VoxelEngine.Building.Tiered.PlacedTieredBlock> _wallSnapHosts = new(16);
         private readonly System.Collections.Generic.List<TieredWallProjection> _wallSnapCandidates = new(16);
@@ -1045,7 +1046,23 @@ namespace VoxelEngine.Building
                 return false;
             }
 
-            var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
+            if (block == null || block.placedPrefab == null)
+                return false;
+
+            // Preview and commit must use the same filtered camera ray. PlayerInteractionTool
+            // also raycasts for UI dispatch, but its trigger/liquid filters are deliberately
+            // different; trusting that hit made the placed pose diverge from the visible ghost.
+            if (shootCamera != null)
+            {
+                Ray placementRay = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+                if (!TryRaycastIgnoringSelf(placementRay, out hit, reach))
+                    return false;
+                viewDir = placementRay.direction;
+            }
+            if (hit.collider == null)
+                return false;
+
+            var targetGrid = hit.collider.GetComponentInParent<GridEntity>();
             if (targetGrid != null && IsUnifiedPipe(block))
             {
                 // Rebuild the aim ray from the camera so port selection can match the
@@ -1436,6 +1453,13 @@ namespace VoxelEngine.Building
             if (TryGetFactorySnapPose(hit, block, out pos, out rot))
                 return;
 
+            // If the player aims directly at a BuildHammer wall, find the deck below
+            // the face on the player's side and route the pose through the same deck
+            // footprint solver used when the floor itself is targeted. This keeps
+            // furniture grounded while letting its collider meet the wall snugly.
+            if (TryGetTieredWallDeckSnapPose(hit, block, out pos, out rot, out _deckSnapHost))
+                return;
+
             if (TryGetDeckSnapPose(hit, block, out pos, out rot, out _deckSnapHost))
                 return;
 
@@ -1497,22 +1521,37 @@ namespace VoxelEngine.Building
             bool station = held.placedPrefab.GetComponentInChildren<VoxelEngine.Crafting.CraftingStation>(true) != null;
             Vector3 right = Vector3.Cross(up, deckForward).normalized;
             Vector3 forward = Vector3.Cross(right, up).normalized;
-            float visualMinUp = 0f, visualMaxUp = 0f, visualMinU = 0f, visualMaxU = 0f, visualMinV = 0f, visualMaxV = 0f;
-            bool useStationVisualBounds = station
-                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, up,
-                    out visualMinUp, out visualMaxUp)
-                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, right,
-                    out visualMinU, out visualMaxU)
-                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, forward,
-                    out visualMinV, out visualMaxV);
-
             float heldMinUp = 0f, heldMaxUp = 0f, heldMinU = 0f, heldMaxU = 0f, heldMinV = 0f, heldMaxV = 0f;
-            bool hasPlacementFootprint;
-            float visualCenterU = 0f, visualCenterV = 0f;
-            if (useStationVisualBounds)
+            bool hasUpColliderBounds = TryGetPrefabColliderProjectionRange(
+                held.placedPrefab, profile.colliders, rot, up, out heldMinUp, out heldMaxUp);
+            bool hasUColliderBounds = TryGetPrefabColliderProjectionRange(
+                held.placedPrefab, profile.colliders, rot, right, out heldMinU, out heldMaxU);
+            bool hasVColliderBounds = TryGetPrefabColliderProjectionRange(
+                held.placedPrefab, profile.colliders, rot, forward, out heldMinV, out heldMaxV);
+            bool hasColliderFootprint = hasUpColliderBounds && hasUColliderBounds && hasVColliderBounds;
+            bool hasPlacementFootprint = hasColliderFootprint;
+            float footprintCenterU = 0f, footprintCenterV = 0f;
+
+            if (hasColliderFootprint)
             {
-                // Station prefabs are authored from different pivots. Use the visible
-                // geometry when aligning the deck, wall, and edge footprint.
+                // Authored colliders are the placement authority when measurable. For
+                // Crafting Bench and Assembler this respects Thomas's centered child
+                // transforms and correctly sized BoxColliders instead of re-centering
+                // the pose from a renderer's mesh bounds.
+                lift = -heldMinUp;
+                footprintCenterU = (heldMinU + heldMaxU) * 0.5f;
+                footprintCenterV = (heldMinV + heldMaxV) * 0.5f;
+            }
+            else if (station
+                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, up,
+                    out float visualMinUp, out float visualMaxUp)
+                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, right,
+                    out float visualMinU, out float visualMaxU)
+                && TryGetPrefabRendererProjectionRange(held.placedPrefab, profile.renderers, rot, forward,
+                    out float visualMinV, out float visualMaxV))
+            {
+                // Renderer bounds are a fallback only for stations with no complete
+                // solid-collider footprint; they keep legacy/custom pivots placeable.
                 lift = -visualMinUp;
                 heldMinUp = visualMinUp;
                 heldMaxUp = visualMaxUp;
@@ -1520,20 +1559,13 @@ namespace VoxelEngine.Building
                 heldMaxU = visualMaxU;
                 heldMinV = visualMinV;
                 heldMaxV = visualMaxV;
-                visualCenterU = (visualMinU + visualMaxU) * 0.5f;
-                visualCenterV = (visualMinV + visualMaxV) * 0.5f;
+                footprintCenterU = (visualMinU + visualMaxU) * 0.5f;
+                footprintCenterV = (visualMinV + visualMaxV) * 0.5f;
                 hasPlacementFootprint = true;
             }
-            else
+            else if (hasUpColliderBounds)
             {
-                bool hasUpBounds = TryGetPrefabColliderProjectionRange(
-                    held.placedPrefab, profile.colliders, rot, up, out heldMinUp, out heldMaxUp);
-                bool hasUBounds = TryGetPrefabColliderProjectionRange(
-                    held.placedPrefab, profile.colliders, rot, right, out heldMinU, out heldMaxU);
-                bool hasVBounds = TryGetPrefabColliderProjectionRange(
-                    held.placedPrefab, profile.colliders, rot, forward, out heldMinV, out heldMaxV);
-                hasPlacementFootprint = hasUpBounds && hasUBounds && hasVBounds;
-                if (hasUpBounds) lift = -heldMinUp;
+                lift = -heldMinUp;
             }
 
             float spacing = Mathf.Max(0.25f, gridSize);
@@ -1542,8 +1574,8 @@ namespace VoxelEngine.Building
             float originV = Vector3.Dot(origin, forward);
             float hitU = Vector3.Dot(hit.point - origin, right);
             float hitV = Vector3.Dot(hit.point - origin, forward);
-            float snapU = Mathf.Round(hitU / spacing) * spacing - visualCenterU;
-            float snapV = Mathf.Round(hitV / spacing) * spacing - visualCenterV;
+            float snapU = Mathf.Round(hitU / spacing) * spacing - footprintCenterU;
+            float snapV = Mathf.Round(hitV / spacing) * spacing - footprintCenterV;
 
             float deckMinU = 0f, deckMaxU = 0f, deckMinV = 0f, deckMaxV = 0f;
             bool hasDeckBounds = TryGetComponentColliderProjectionRange(deck, right, out deckMinU, out deckMaxU)
@@ -1585,6 +1617,71 @@ namespace VoxelEngine.Building
 
             deckHost = deck;
             return true;
+        }
+
+        private bool TryGetTieredWallDeckSnapPose(RaycastHit wallHit, BlockItem held,
+            out Vector3 pos, out Quaternion rot,
+            out VoxelEngine.Building.Tiered.PlacedTieredBlock deckHost)
+        {
+            pos = default;
+            rot = default;
+            deckHost = null;
+            if (held == null || held.placedPrefab == null || wallHit.collider == null)
+                return false;
+
+            var wall = wallHit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+            if (wall == null || wall.definition == null || !IsWallSnapFamily(wall.definition.family))
+                return false;
+
+            var profile = GetStaticPlacementPrefabProfile(held);
+            // Specialty placement owns its own wall contracts (ports, belts, roads,
+            // portals and turbine sockets must never be pulled by a furniture snap).
+            if (profile.usesDedicatedSnap || profile.isPortalPiece
+                || held.placedPrefab.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>() != null)
+                return false;
+
+            Vector3 up = wall.transform.up;
+            if (up.sqrMagnitude < 0.0001f) up = GravityProvider.GetUp(wallHit.point);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+            if (Mathf.Abs(Vector3.Dot(wallHit.normal.normalized, up)) > 0.55f)
+                return false; // only a vertical wall face can lead to its supporting deck
+
+            Vector3 outward = Vector3.ProjectOnPlane(wallHit.normal, up);
+            if (outward.sqrMagnitude < 0.0001f) return false;
+            outward.Normalize();
+
+            // Start just beyond the actual collider face so the downward support ray
+            // lands on the room/foundation side rather than travelling through the wall.
+            // The incoming hit is already on the wall collider's outward face; a
+            // short step clears contact without pushing the probe far from the wall.
+            Vector3 probeOrigin = wallHit.point + outward * 0.12f + up * 0.08f;
+            int hitCount = Physics.RaycastNonAlloc(new Ray(probeOrigin, -up), s_wallDeckSupportProbe,
+                10f, ~0, QueryTriggerInteraction.Ignore);
+
+            bool foundSupport = false;
+            float bestDistance = float.PositiveInfinity;
+            RaycastHit deckHit = default;
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit candidateHit = s_wallDeckSupportProbe[i];
+                s_wallDeckSupportProbe[i] = default;
+                if (candidateHit.collider == null || Vector3.Dot(candidateHit.normal, up) < 0.55f)
+                    continue;
+
+                var candidateDeck = candidateHit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                if (candidateDeck == null || candidateDeck.definition == null
+                    || !IsDeckFamily(candidateDeck.definition.family))
+                    continue;
+
+                if (candidateHit.distance >= bestDistance) continue;
+                bestDistance = candidateHit.distance;
+                deckHit = candidateHit;
+                foundSupport = true;
+            }
+
+            if (!foundSupport) return false;
+            return TryGetDeckSnapPose(deckHit, held, out pos, out rot, out deckHost);
         }
 
         private static float ClampFootprintToDeck(float desiredRoot, float deckMin, float deckMax,
