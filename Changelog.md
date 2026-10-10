@@ -1,9 +1,44 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.7.0-dev`
+**Current Version:** `17.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.8.0-dev] Sharpen Jump Response and Auto-Fit Held Viewmodels
+
+**Type:** MINOR — save-compatible player-control and viewmodel quality update. No world/save schema changed.
+
+**GitHub title:** `[17.8.0-dev] Sharpen jump response and auto-fit held viewmodels`
+
+#### Changed
+- Jump targets 1.65 m, with a 0.20 s coyote window and 0.22 s input buffer. Launch speed is matched to 1.25× gravity while Jump is held, preserving the configured height; releasing while rising applies 2× gravity for a shorter, snappier hop. Slide-jumps and hold-to-bunny-hop remain supported.
+- Player components still carrying the previous jump defaults are upgraded in memory; non-default inspector tuning is preserved.
+
+#### Added
+- Assigned `ItemDefinition.viewmodelPrefab` assets now auto-shrink uniformly when their visible rendered bounds exceed the per-item target (0.75 m by default). Procedural viewmodels are unchanged.
+- Added per-item **Auto Size Viewmodel** and maximum-dimension fields beside the prefab reference. Leave auto-size enabled for a consistent first-person fit; disable it or raise the target for an intentionally larger custom model. Source prefabs are never modified.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.8.0-dev`, MINOR over `17.7.1-dev`. No world/save schema changed; keybind migration remains at v23.
+- No Voxel Engine Setup content action is needed; existing item assets use the new auto-size defaults at runtime.
+- Unity compilation and in-game jump/viewmodel checks have not been run in this workspace.
+
+### [17.7.1-dev] Restore Ground Grip Without Losing Slide Momentum
+
+**Type:** PATCH — player handling polish. No world/save schema or input migration change.
+
+**GitHub title:** `[17.7.1-dev] Restore ground grip without losing slide momentum`
+
+#### Changed
+- Ordinary non-ice ground now removes sideways drift while steering and restores stronger no-input friction. Walking and running feel planted without erasing momentum aligned with the requested direction.
+- Ice retains its separate low-friction, low-steering response. Slide and air movement keep their momentum-focused handling; radial-up movement, road bonuses, and moving-deck/magnetic-boot carry stay in place.
+- Player components carrying the previous `17.7.0-dev` ground-friction default are upgraded in memory; other non-default inspector tuning and prefab assets are not rewritten.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.7.1-dev`, PATCH over `17.7.0-dev`. No world/save schema changed; keybind migration remains at v23.
+- No Voxel Engine Setup content action or prefab change is required.
+- Unity compilation and play-mode movement checks have not been run in this workspace.
 
 ### [17.7.0-dev] Add Momentum Movement, Bunny-Hops, and Rebindable Slide
 

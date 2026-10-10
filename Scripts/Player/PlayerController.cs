@@ -45,8 +45,10 @@ namespace VoxelEngine.Player
         public float airAcceleration = 6.5f;
         [Tooltip("Air input can build speed up to this multiple of the current wish speed; faster carried momentum is preserved.")]
         public float airSpeedCapMultiplier = 2f;
-        [Tooltip("Ground friction applied with no movement input. Lower values preserve more momentum.")]
-        public float groundFriction = 4.5f;
+        [Tooltip("Ground friction applied with no movement input. Ice uses its separate low-friction value.")]
+        public float groundFriction = 10f;
+        [Tooltip("Ground traction (m/s²) that removes sideways drift while steering on non-ice surfaces.")]
+        public float groundTraction = 48f;
 
         [Header("Ice Movement")]
         [Tooltip("Ground friction used when standing on Ice voxels. Lower values keep momentum and create a slippery glide.")]
@@ -107,12 +109,17 @@ namespace VoxelEngine.Player
         private readonly RaycastHit[] _carryProbeHits = new RaycastHit[16];
 
         [Header("Jump / Gravity")]
-        public float jumpHeight = 1.55f;
+        [Tooltip("Maximum jump height while Jump is held.")]
+        public float jumpHeight = 1.65f;
         public float gravity = -22f;
+        [Tooltip("Gravity multiplier while rising with Jump held. The launch impulse is matched to preserve jumpHeight.")]
+        public float jumpHoldGravityMultiplier = 1.25f;
+        [Tooltip("Gravity multiplier while rising after Jump is released; higher values create a quick short-hop cut.")]
+        public float jumpReleaseGravityMultiplier = 2f;
         [Tooltip("Lets the player initiate a jump for a short window after walking off a ledge.")]
-        public float coyoteTime = 0.16f;
+        public float coyoteTime = 0.20f;
         [Tooltip("A jump press is remembered briefly before the player lands.")]
-        public float jumpBufferTime = 0.16f;
+        public float jumpBufferTime = 0.22f;
         [Tooltip("Holding Jump automatically triggers the next jump on landing for bunny-hops.")]
         public bool autoBunnyHop = true;
 
@@ -174,6 +181,7 @@ namespace VoxelEngine.Player
         private float  _lastAirDownSpeed;
         private float  _lastGroundedTime;
         private float  _jumpBufferTimer;
+        private bool   _variableJumpActive;
         private bool   _crouched;
         private bool   _sliding;
         private bool   _sprinting;
@@ -349,9 +357,12 @@ namespace VoxelEngine.Player
             if (Mathf.Approximately(sprintMultiplier, 1.6f)) sprintMultiplier = 1.85f;
             if (Mathf.Approximately(groundAcceleration, 18f)) groundAcceleration = 12f;
             if (Mathf.Approximately(airAcceleration, 4f)) airAcceleration = 6.5f;
-            if (Mathf.Approximately(groundFriction, 10f)) groundFriction = 4.5f;
-            if (Mathf.Approximately(jumpHeight, 1.4f)) jumpHeight = 1.55f;
-            if (Mathf.Approximately(coyoteTime, 0.12f)) coyoteTime = 0.16f;
+            if (Mathf.Approximately(groundFriction, 4.5f)) groundFriction = 10f; // 17.7.0-dev default
+            if (Mathf.Approximately(jumpHeight, 1.4f) || Mathf.Approximately(jumpHeight, 1.55f))
+                jumpHeight = 1.65f;
+            if (Mathf.Approximately(coyoteTime, 0.12f) || Mathf.Approximately(coyoteTime, 0.16f))
+                coyoteTime = 0.20f;
+            if (Mathf.Approximately(jumpBufferTime, 0.16f)) jumpBufferTime = 0.22f;
             if (Mathf.Approximately(slideBoost, 4f)) slideBoost = 5f;
             if (Mathf.Approximately(slideFriction, 1.6f)) slideFriction = 0.7f;
             if (Mathf.Approximately(slideEndSpeed, 3f)) slideEndSpeed = 2.5f;
@@ -400,6 +411,7 @@ namespace VoxelEngine.Player
                 _velocity = Vector3.zero;
                 _sliding = false;
                 _jumpBufferTimer = 0f;
+                _variableJumpActive = false;
                 return;
             }
             bool softUiOpen = VoxelEngine.UI.UIState.IsBlocking;
@@ -561,6 +573,7 @@ namespace VoxelEngine.Player
             // refresh coyote time until a later descent/landing.
             if (_grounded && VerticalSpeed(up) > 0.05f)
                 _grounded = false;
+            if (_grounded) _variableJumpActive = false;
 
             float downSpeed = Mathf.Max(0f, -VerticalSpeed(up));
             if (!_grounded) _lastAirDownSpeed = Mathf.Max(_lastAirDownSpeed, downSpeed);
@@ -665,12 +678,29 @@ namespace VoxelEngine.Player
                     }
                     else
                     {
-                        float accel = groundAcceleration;
-                        if (_onIce) accel *= iceAccelerationMultiplier;
                         float maxGroundSpeed = Mathf.Max(
                             horiz.magnitude,
                             targetSpeed * Mathf.Max(1f, groundSpeedCapMultiplier));
-                        horiz = AccelerateAlongWish(horiz, wishDir, targetSpeed, accel, dt);
+                        if (_onIce)
+                        {
+                            // Ice deliberately keeps the low-grip, momentum-first response.
+                            float iceAcceleration = groundAcceleration * iceAccelerationMultiplier;
+                            horiz = AccelerateAlongWish(horiz, wishDir, targetSpeed, iceAcceleration, dt);
+                        }
+                        else
+                        {
+                            // On ordinary ground, keep speed along the requested direction
+                            // but quickly scrub sideways drift for a planted, responsive feel.
+                            float alongSpeed = Vector3.Dot(horiz, wishDir);
+                            Vector3 lateral = horiz - wishDir * alongSpeed;
+                            lateral = Vector3.MoveTowards(
+                                lateral, Vector3.zero, Mathf.Max(0f, groundTraction) * dt);
+                            Vector3 alongVelocity = wishDir * alongSpeed;
+                            alongVelocity = AccelerateAlongWish(
+                                alongVelocity, wishDir, targetSpeed, groundAcceleration, dt);
+                            horiz = alongVelocity + lateral;
+                        }
+
                         if (horiz.sqrMagnitude > maxGroundSpeed * maxGroundSpeed)
                             horiz = horiz.normalized * maxGroundSpeed;
                     }
@@ -704,10 +734,13 @@ namespace VoxelEngine.Player
             bool jumpAllowed = canCoyote && (!_crouched || _sliding);
             if (jumpRequested && jumpAllowed)
             {
-                float gravMag = GravVec.magnitude;
-                _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * Mathf.Sqrt(2f * gravMag * jumpHeight);
+                float heldGravityMultiplier = Mathf.Max(1f, jumpHoldGravityMultiplier);
+                float launchGravity = GravVec.magnitude * heldGravityMultiplier;
+                _velocity = Vector3.ProjectOnPlane(_velocity, up)
+                    + up * Mathf.Sqrt(2f * launchGravity * Mathf.Max(0f, jumpHeight));
                 _lastGroundedTime = -999f; // consume coyote
                 _jumpBufferTimer = 0f;
+                _variableJumpActive = true;
 
                 // Slide-jump keeps all tangent momentum, ends the slide, and restores
                 // standing height so the airborne capsule does not stay crouched.
@@ -795,9 +828,20 @@ namespace VoxelEngine.Player
             {
                 // Radial gravity: apply along `up`; small downward stick when grounded.
                 if (_grounded && VerticalSpeed(up) < 0f)
+                {
                     _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * (-2f);
+                }
                 else
-                    _velocity += GravVec * dt;
+                {
+                    Vector3 gravityThisFrame = GravVec;
+                    if (_variableJumpActive && VerticalSpeed(up) > 0f)
+                    {
+                        float heldGravity = Mathf.Max(1f, jumpHoldGravityMultiplier);
+                        float releasedGravity = Mathf.Max(heldGravity, jumpReleaseGravityMultiplier);
+                        gravityThisFrame *= jumpHeld ? heldGravity : releasedGravity;
+                    }
+                    _velocity += gravityThisFrame * dt;
+                }
             }
 
             // Probe slightly ahead before the horizontal move. This gives the

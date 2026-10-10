@@ -4,7 +4,7 @@
 // Lives as a child of the camera; bottom-right offset; swings on tool hit.
 //
 // Auto-generates a primitive mesh per item type if no custom viewmodel prefab exists.
-// You can later add a per-item field "viewmodelPrefab" on ItemDefinition to override.
+// Assigned ItemDefinition prefabs can be uniformly auto-sized per item for first-person view.
 
 using System.Collections;
 using UnityEngine;
@@ -191,6 +191,8 @@ namespace VoxelEngine.Player
             _viewModel.transform.SetParent(_swingPivot, false);
             _viewModel.transform.localPosition = new Vector3(0f, 0.12f, 0f);
             _viewModel.transform.localRotation = Quaternion.identity;
+            if (item.viewmodelPrefab != null && item.autoSizeViewmodel)
+                AutoSizeAssignedPrefab(_viewModel, item.viewmodelMaxDimension);
 
             // Muzzle offset (muzzle flash / tracers) — gun barrel tips.
             if (item is VoxelEngine.Combat.WeaponItem mw && mw.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged)
@@ -208,6 +210,47 @@ namespace VoxelEngine.Player
             // Turn off any colliders inside the viewmodel.
             foreach (var c in _viewModel.GetComponentsInChildren<Collider>(true))
                 c.enabled = false;
+        }
+
+        /// <summary>Uniformly shrinks an assigned first-person prefab when its visible
+        /// render bounds would exceed the per-item viewmodel target size.</summary>
+        private static void AutoSizeAssignedPrefab(GameObject viewModel, float maxDimension)
+        {
+            if (viewModel == null) return;
+            Renderer[] renderers = viewModel.GetComponentsInChildren<Renderer>(true);
+            Bounds renderedBounds = default;
+            bool foundBounds = false;
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy)
+                    continue;
+                if (renderer is ParticleSystemRenderer || renderer is TrailRenderer || renderer is LineRenderer)
+                    continue;
+
+                if (!foundBounds)
+                {
+                    renderedBounds = renderer.bounds;
+                    foundBounds = true;
+                }
+                else
+                {
+                    renderedBounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            if (!foundBounds || float.IsNaN(maxDimension) || float.IsInfinity(maxDimension)) return;
+            float largestDimension = Mathf.Max(
+                renderedBounds.size.x, Mathf.Max(renderedBounds.size.y, renderedBounds.size.z));
+            float targetDimension = Mathf.Max(0.1f, maxDimension);
+            if (float.IsNaN(largestDimension) || float.IsInfinity(largestDimension)
+                || largestDimension <= targetDimension || largestDimension <= 0.0001f)
+                return;
+
+            // Only shrink oversized assets: deliberately authored small viewmodels
+            // keep their scale, and unchecking Auto Size preserves any large model.
+            float fitScale = targetDimension / largestDimension;
+            viewModel.transform.localScale *= fitScale;
         }
 
         // Called by ToolFeedback after a successful hit.

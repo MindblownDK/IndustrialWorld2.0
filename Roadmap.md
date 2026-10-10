@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.7.0-dev`
-**Roadmap Version:** `17.7.0-dev`
+**Current Version:** `17.8.0-dev`
+**Roadmap Version:** `17.8.0-dev`
 **Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.8.0-dev - Sharper Jump and Fitted Viewmodels
+- Jump buffering, coyote time, matched launch gravity, and release-to-short-hop improve response
+- Assigned handheld prefabs fit a renderer-bounds limit by default, with a per-item opt-out
+- No save schema or Voxel Engine Setup content change
+
+### 17.7.1-dev - Restore Ground Grip
+- Non-ice ground scrubs sideways drift toward steering input and restores stronger no-input friction
+- Ice keeps its low-grip movement; slide and air steering retain their momentum-focused handling
+- No save schema, keybind migration, or Voxel Engine Setup content changes
+
 ### 17.7.0-dev - High-Momentum Player Movement
 - Ground acceleration and air strafing carry tangent momentum; sprint speed and slide boost are raised
 - Buffered/coyote jumps enable hold-to-bunny-hop and momentum-preserving slide-jumps
@@ -43,16 +53,6 @@
 - Assembler tiers, higher conveyors, LED strips, and Grinder recipes now use staged research; starter swords are authored through Setup
 - Machines and chests deck-snap; dropped items use local gravity and contact pickup; orbital/grid jitter is damped
 - Research, inspection, held-item HUD, and game branding are refreshed; copper links are audited without deleting assets
-
-### 17.4.3-dev - Science Recipe List Compiles
-- The science-pack station check no longer uses an unassigned pattern variable
-- Pack I, II, and III still use hand, Crafting Bench, and Assembler
-- No setup step and no save change
-
-### 17.4.2-dev - Science Packs, Craft Key, Deck Snap, Flight
-- One craftable science recipe per tier; lab and backpack costs match the pack by item id
-- Inventory C toggles crafting; machines and chests sit on foundation and floor decks
-- Flight is a jetpack, not a research unlock; a saved Flight rank no longer grants it
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -121,6 +121,14 @@
 **Rules that bind:** C remains Crouch, Left Shift remains Sprint, and Slide is a separate held action (Left Alt by default). Movement operates on the local radial-up tangent plane; ice, road bonuses, and moving-deck/magnetic-boot carry remain in the existing controller path.
 
 **Status:** implemented in `Scripts/Player/PlayerController.cs` and `Scripts/Settings/GameSettings.cs`; `Scripts/UI/SettingsUI.cs` enumerates the new action automatically, and no Voxel Engine Setup content action is needed.
+
+### Held Viewmodel Sizing (17.8.0-dev)
+
+~~Assigned handheld prefabs auto-fit to a rendered-bounds limit with a per-item opt-out.~~ *(17.8.0-dev)*
+
+**Rule:** auto-size uniformly shrinks an assigned prefab only when its visible rendered bounds exceed the item’s target size; auto-size defaults on, and larger or specially framed assets can opt out or raise the target.
+
+**Status:** implemented in `Scripts/Items/ItemDefinition.cs` and `Scripts/Player/HeldToolView.cs`; no Voxel Engine Setup content action is needed.
 
 ### Real Crusaders - Player Model & Readable Loadout (milestone 6 design)
 

@@ -49,6 +49,11 @@ namespace VoxelEngine.Items
         [Header("Visuals")]
         [Tooltip("Optional 3D prefab to show when this item is held in hand (viewmodel).")]
         public GameObject viewmodelPrefab;
+        [Tooltip("Uniformly shrink this assigned prefab when its rendered bounds exceed the viewmodel size below. Disable for intentionally oversized models.")]
+        public bool autoSizeViewmodel = true;
+        [Min(0.1f)]
+        [Tooltip("Maximum size, in view-space metres, of the prefab's largest rendered dimension when auto-sizing is enabled.")]
+        public float viewmodelMaxDimension = 0.75f;
 
         /// <summary>Tools and blocks override this to be unique-per-instance (no stacking).</summary>
         public virtual bool IsStackable => maxStack > 1;
