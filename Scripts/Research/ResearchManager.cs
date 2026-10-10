@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Research/ResearchManager.cs
 //
 // Handles research completion, recipe unlocking, and player upgrades.
-// Follows IndustrialWorld guidelines: modular, clean, and complete.
+// Follows IndustrialCrusaders guidelines: modular, clean, and complete.
 
 using System;
 using System.Collections.Generic;

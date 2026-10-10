@@ -5,7 +5,7 @@
 //   WaterProbeSystem.GetWavesHeights(positions, outWaterHeights)
 //
 // Mirrors the URP "WaterSim.GetWavesHeights" API the design calls for, but is
-// driven by IndustrialWorld's own voxel FluidManager (waterLevel bytes in the
+// driven by IndustrialCrusaders' own voxel FluidManager (waterLevel bytes in the
 // chunk grid) so it works with the existing ocean simulation — no Unity Water
 // package dependency.
 //

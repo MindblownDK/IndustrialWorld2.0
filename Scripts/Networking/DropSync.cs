@@ -116,7 +116,7 @@ namespace VoxelEngine.Networking
             IsApplyingRemote = true;
             try
             {
-                var drop = DroppedItem.Spawn(stack, pos, toss);
+                var drop = DroppedItem.SpawnReplicated(stack, pos, toss);
                 if (drop == null) return;   // this machine's world-drop budget is full
                 drop.NetId = id;
                 drop.NetOwned = false;

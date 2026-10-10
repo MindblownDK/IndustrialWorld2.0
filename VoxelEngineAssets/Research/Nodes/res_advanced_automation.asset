@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_advanced_automation
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_advanced_automation
+  displayName: Advanced Automation
+  description: Scale the factory with higher assembler and express conveyor technology.
+  iconTint: {r: 0.3, g: 0.62, b: 0.94, a: 1}
+  category: 0
+  subCategory: 2
+  tier: 5
+  column: 0
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: 02edfc617068a5046be9b9f0b171b171, type: 2}
+  - {fileID: 11400000, guid: 72d8bd865e3b56e43a76ee48a826f4f4, type: 2}
+  requiresOrbitalLab: 0
+  requiresRelic: 0
+  researchSeconds: 120
+  cost:
+  - pack: {fileID: 11400000, guid: 080d81aee84fd5b4486b15264d31da24, type: 2}
+    count: 25
+  - pack: {fileID: 11400000, guid: 8c4bb8c69288cbe4bb74ab787695d922, type: 2}
+    count: 15
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 11e5afc6987e7f34da6b678e51737e37, type: 2}
+  - {fileID: 11400000, guid: 3068cf9e9e56a56439dd79ef1d88f09e, type: 2}
+  - {fileID: 11400000, guid: d590c96c2857e60498e4f1beaef10799, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

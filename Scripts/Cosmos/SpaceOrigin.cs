@@ -567,6 +567,16 @@ namespace VoxelEngine.Cosmos
                     ReportInvalidBodyOnce(kv.Key);
                     continue;
                 }
+                Vector3 current = body.transform.position;
+                float errorSquared = (scenePos - current).sqrMagnitude;
+                // The active frame body defines AnchorKm from its current scene pose.
+                // Float conversion of the absolute kilometre coordinate can leave a few
+                // millimetres of round-off; rewriting that pose every fixed tick feeds
+                // pointless transform/physics dirtiness into the grounded planet.
+                // Keep a centimetre dead-band for the frame body and avoid exact no-op
+                // writes for every other celestial body.
+                if (body == FrameBody && errorSquared < 0.0001f) continue;
+                if (errorSquared < 1e-8f) continue;
                 body.transform.position = scenePos;
             }
         }
@@ -623,9 +633,13 @@ namespace VoxelEngine.Cosmos
                 // parented under it. Without this, the universe slid him the full
                 // warp distance away from the deck he was standing on.
                 if (keepRoot != null && IsRiderOf(root, keepRoot)) continue;
-                root.position += delta;
+                // A Rigidbody owns its physics pose. Translate it once through
+                // Rigidbody.position instead of writing Transform.position and then
+                // Rigidbody.position (which can apply the delta twice when transform
+                // auto-sync is enabled). Non-physics roots move through their Transform.
                 var rb = root.GetComponent<Rigidbody>();
                 if (rb != null) rb.position += delta;
+                else root.position += delta;
             }
 
             Physics.SyncTransforms();

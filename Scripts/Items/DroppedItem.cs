@@ -16,6 +16,13 @@ namespace VoxelEngine.Items
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly MaterialPropertyBlock Properties = new();
+        private static readonly Collider[] SpawnOverlapProbe = new Collider[32];
+        private const float SpawnLift = 0.33f;
+        private const float SpawnBoxHalfExtent = 0.26f;
+        private const float SpawnClearanceStep = 0.10f;
+        private const int SpawnClearanceAttempts = 8;
+        private const float SpawnEscapeStep = 0.50f;
+        private const int SpawnEscapeAttempts = 24;
 
         public ItemStack stack;
         public float lifetime = 300f;
@@ -27,10 +34,10 @@ namespace VoxelEngine.Items
         private int _registeredItemCount;
 
         private float _spawnTime;
-        // Longer pickup grace so a player who drops an item can SEE it before
-        // walking forward and instantly re-picking it (the previous 0.8s was
-        // shorter than the typical post-drop step).
-        private float _pickupDelay = 1.5f;
+        // Brief physics-frame grace prevents the same drop from re-entering an
+        // inventory before its owner-exit guard is applied, while still allowing
+        // contact pickup to feel immediate.
+        private float _pickupDelay = 0.12f;
         private float _bobPhase;
         private Rigidbody _rb;
         private bool _settled;
@@ -53,8 +60,16 @@ namespace VoxelEngine.Items
         internal bool IsSettled => _settled;
 
         public static DroppedItem Spawn(ItemStack stack, Vector3 position, Vector3 tossDir)
+            => SpawnInternal(stack, position, tossDir, applySpawnLift: true);
+
+        /// <summary>Network replicas receive the owner's already-resolved spawn pose.
+        /// They still get penetration clearance, but do not apply the local toss offset twice.</summary>
+        internal static DroppedItem SpawnReplicated(ItemStack stack, Vector3 position, Vector3 tossDir)
+            => SpawnInternal(stack, position, tossDir, applySpawnLift: false);
+
+        private static DroppedItem SpawnInternal(ItemStack stack, Vector3 position, Vector3 tossDir, bool applySpawnLift)
         {
-            if (stack == null || stack.IsEmpty) return null;
+            if (stack == null || stack.IsEmpty || stack.item == null) return null;
 
             int requestedCount = stack.count;
             int capacity = AvailablePhysicalCapacity;
@@ -82,10 +97,13 @@ namespace VoxelEngine.Items
             // Configure the complete reused entity while inactive. Activating it only
             // after its stack, timer, owner, and physics are reset prevents an old
             // pooled Update/trigger lifecycle from treating it as expired.
-            // Bigger drop cube (0.5m vs 0.35m) so it's clearly visible at typical
-            // player viewing distances. Also lift the spawn just above the toss
-            // position so it never embeds in the floor / player capsule.
-            go.transform.position = position + Vector3.up * 0.25f;
+            // Bigger drop cube (0.5m vs 0.35m) so it remains visible at normal
+            // viewing distances. Spawn in local gravity-up, then move it clear of
+            // any static collider if a caller supplied a point inside the ground.
+            Vector3 up = GravityProvider.GetUp(position);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+            go.transform.position = ResolveSpawnPosition(position, up, applySpawnLift);
             go.transform.localScale = Vector3.one * 0.5f;
             go.layer = 0;
 
@@ -115,7 +133,8 @@ namespace VoxelEngine.Items
             rb.angularDamping = NormalAngularDamping;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.isKinematic = false;
-            rb.linearVelocity = tossDir.normalized * 2.5f + Vector3.up * 3f;
+            rb.useGravity = false; // radial/flat gravity is applied from GravityProvider in FixedUpdate
+            rb.linearVelocity = ResolveTossDirection(tossDir, up) * 2.5f + up * 3f;
             rb.angularVelocity = Vector3.zero;
 
             var trigger = go.GetComponent<SphereCollider>();
@@ -140,8 +159,76 @@ namespace VoxelEngine.Items
             // which then re-tags the entity with the sender's wire id.
             VoxelEngine.Networking.DropSync.AnnounceSpawned(di, tossDir);
 
-            Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {position}");
+            Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {go.transform.position}");
             return di;
+        }
+
+        private static Vector3 ResolveSpawnPosition(Vector3 origin, Vector3 up, bool applySpawnLift)
+        {
+            Vector3 candidate = origin + (applySpawnLift ? up * SpawnLift : Vector3.zero);
+            Vector3 halfExtents = Vector3.one * SpawnBoxHalfExtent;
+
+            // Preserve the precise local drop point where possible, but first make a
+            // fine-grained escape from floor seams and slight terrain penetration.
+            for (int attempt = 0; attempt <= SpawnClearanceAttempts; attempt++)
+            {
+                if (IsSpawnPositionClear(candidate, halfExtents)) return candidate;
+                candidate += up * SpawnClearanceStep;
+            }
+
+            // Several overflow and machine-recovery callers provide a machine/root
+            // position, not a surface point. Continue upward in coarse steps rather
+            // than returning a cube embedded inside a tall collider or underground.
+            for (int attempt = 0; attempt < SpawnEscapeAttempts; attempt++)
+            {
+                candidate += up * SpawnEscapeStep;
+                if (IsSpawnPositionClear(candidate, halfExtents)) return candidate;
+            }
+
+            Debug.LogWarning("[DroppedItem] Could not find a clear spawn point within "
+                + $"{SpawnLift + (SpawnClearanceAttempts + 1) * SpawnClearanceStep + SpawnEscapeAttempts * SpawnEscapeStep:0.0} m of the requested pose; keeping the final local-up fallback.");
+            return candidate;
+        }
+
+        private static bool IsSpawnPositionClear(Vector3 candidate, Vector3 halfExtents)
+        {
+            int count = Physics.OverlapBoxNonAlloc(candidate, halfExtents, SpawnOverlapProbe,
+                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+            bool blocked = false;
+            for (int i = 0; i < count; i++)
+            {
+                var collider = SpawnOverlapProbe[i];
+                SpawnOverlapProbe[i] = null;
+                if (IsStaticSpawnBlocker(collider)) blocked = true;
+            }
+
+            // The non-allocating buffer is normally plenty; preserve correctness if a
+            // dense machine pile fills it and a blocking collider landed past it.
+            if (!blocked && count >= SpawnOverlapProbe.Length)
+            {
+                foreach (var collider in Physics.OverlapBox(candidate, halfExtents,
+                             Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (IsStaticSpawnBlocker(collider)) return false;
+                }
+            }
+            return !blocked;
+        }
+
+        private static bool IsStaticSpawnBlocker(Collider collider)
+        {
+            if (collider == null || collider.isTrigger) return false;
+            var body = collider.attachedRigidbody;
+            return body == null || body.isKinematic;
+        }
+
+        private static Vector3 ResolveTossDirection(Vector3 requested, Vector3 localUp)
+        {
+            if (requested.sqrMagnitude < 0.0001f) return localUp;
+            Vector3 direction = requested.normalized;
+            if (Vector3.Dot(direction, Vector3.up) > 0.995f) return localUp;
+            if (Vector3.Dot(direction, Vector3.down) > 0.995f) return -localUp;
+            return direction;
         }
 
         public static int MaximumPhysicalItemCount
@@ -183,6 +270,19 @@ namespace VoxelEngine.Items
             _ownerLeftPickupRange = owner == null;
         }
 
+        private void FixedUpdate()
+        {
+            if (_rb == null) _rb = GetComponent<Rigidbody>();
+            if (_rb == null || _settled || _rb.isKinematic) return;
+
+            // Unity's built-in gravity is world-down. Dropped items instead use the
+            // same radial or flat field as the player, and naturally float in deep space.
+            if (_rb.useGravity) _rb.useGravity = false;
+            Vector3 gravity = GravityProvider.GetGravity(transform.position);
+            if (gravity.sqrMagnitude > 0.000001f)
+                _rb.AddForce(gravity, ForceMode.Acceleration);
+        }
+
         private void Update()
         {
             if (Time.time - _spawnTime > lifetime) { Despawn(); return; }
@@ -202,6 +302,9 @@ namespace VoxelEngine.Items
                 _settled = true;
                 _rb.linearDamping = NormalLinearDamping;
                 _rb.angularDamping = NormalAngularDamping;
+                _rb.linearVelocity = Vector3.zero;
+                _rb.angularVelocity = Vector3.zero;
+                _rb.useGravity = false;
                 _rb.isKinematic = true;
                 // Converge the rest position everywhere - remote copies simulate
                 // their own toss physics and may have drifted a little (14.11.0).
@@ -210,15 +313,22 @@ namespace VoxelEngine.Items
 
             if (_settled)
             {
+                Vector3 up = GravityProvider.GetUp(transform.position);
+                if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+                up.Normalize();
                 float bob = Mathf.Sin(Time.time * 2.5f + _bobPhase) * 0.06f;
-                transform.position += Vector3.up * bob * Time.deltaTime;
-                transform.Rotate(Vector3.up, 50f * Time.deltaTime, Space.World);
+                transform.position += up * bob * Time.deltaTime;
+                transform.rotation = Quaternion.AngleAxis(50f * Time.deltaTime, up) * transform.rotation;
             }
         }
 
-        private void OnTriggerStay(Collider other)
+        private void OnTriggerEnter(Collider other) => TryCollectOnContact(other);
+
+        private void OnTriggerStay(Collider other) => TryCollectOnContact(other);
+
+        private void TryCollectOnContact(Collider other)
         {
-            if (Time.time - _spawnTime < _pickupDelay) return;
+            if (other == null || Time.time - _spawnTime < _pickupDelay) return;
             if (stack == null || stack.IsEmpty) return;
 
             var belt = other.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>();
@@ -259,7 +369,7 @@ namespace VoxelEngine.Items
 
         public bool TryPickup(Inventory inv)
         {
-            if (inv == null || stack == null || stack.IsEmpty) return false;
+            if (inv == null || inv.container == null || stack == null || stack.IsEmpty) return false;
             var leftover = inv.container.Insert(stack.Clone());
             if (leftover == null || leftover.count <= 0)
             {
@@ -311,6 +421,9 @@ namespace VoxelEngine.Items
             {
                 _rb.linearDamping = NormalLinearDamping;
                 _rb.angularDamping = NormalAngularDamping;
+                _rb.linearVelocity = Vector3.zero;
+                _rb.angularVelocity = Vector3.zero;
+                _rb.useGravity = false;
                 _rb.isKinematic = true;
             }
         }

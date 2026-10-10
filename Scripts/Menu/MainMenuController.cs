@@ -324,7 +324,7 @@ namespace VoxelEngine.Menu
             logoIco.style.marginBottom    = 6;
             brand.Add(logoIco);
 
-            var gameTitle = new Label("INDUSTRIAL WORLD");
+            var gameTitle = new Label("INDUSTRIAL CRUSADERS");
             gameTitle.style.color                   = new StyleColor(T.TextPrimary);
             gameTitle.style.fontSize                = 24;
             gameTitle.style.unityFontStyleAndWeight = FontStyle.Bold;

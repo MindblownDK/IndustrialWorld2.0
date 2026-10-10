@@ -2,6 +2,7 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
+using Array = System.Array;
 using UnityEditor;
 using UnityEngine;
 using VoxelEngine.Items;
@@ -288,6 +289,7 @@ namespace VoxelEngine.EditorTools
             AddSetupGroup(parent, ref number, "Maintenance & Repair",
                 "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
                 Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
+                Setup("Apply 17.5.0 progression gates and starter swords (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
                 Setup("Consolidate duplicate ore items", () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80()),
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
@@ -2729,6 +2731,29 @@ namespace VoxelEngine.EditorTools
             var recWireAuLV  = FindRecipe("Recipe_Wire_Au_LV");
             var recWireGrLV  = FindRecipe("Recipe_Wire_Gr_LV");
 
+            T[] MergeReferences<T>(T[] existing, IEnumerable<T> additions, out bool changed) where T : UnityEngine.Object
+            {
+                var merged = existing != null ? new List<T>(existing) : new List<T>();
+                changed = existing == null;
+                if (additions != null)
+                {
+                    foreach (var addition in additions)
+                    {
+                        if (addition == null || merged.Contains(addition)) continue;
+                        merged.Add(addition);
+                        changed = true;
+                    }
+                }
+                return changed ? merged.ToArray() : existing;
+            }
+
+            void AddTreeNodeOnce(VoxelEngine.Research.ResearchTree target, VoxelEngine.Research.ResearchNode node)
+            {
+                if (target == null || node == null) return;
+                if (target.nodes == null) target.nodes = new List<VoxelEngine.Research.ResearchNode>();
+                if (!target.nodes.Contains(node)) target.nodes.Add(node);
+            }
+
             // Lock recipes that will require research. (Players who don't unlock these
             // can still play, but with reduced options.)
             void Lock(VoxelEngine.Crafting.RecipeDefinition r) { if (r != null) { r.unlockedByDefault = false; EditorUtility.SetDirty(r); } }
@@ -2746,20 +2771,48 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Research.ResearchNode[] prereqs = null)
             {
                 string path = $"{nodesFolder}/{id}.asset";
-                var n = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(path); if (n == null) { n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();  }
-                n.nodeId      = id;
-                n.displayName = display;
-                n.description = desc;
-                n.tier = tier; n.column = col;
-                n.researchSeconds = seconds;
-                n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
-                for (int i = 0; i < cost.Length; i++)
-                    n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
-                n.unlocksRecipes = unlocks ?? new VoxelEngine.Crafting.RecipeDefinition[0];
-                n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                var n = mainAsset as VoxelEngine.Research.ResearchNode;
+                bool created = false;
+                if (n == null)
+                {
+                    if (mainAsset != null)
+                    {
+                        Debug.LogError($"[VoxelEngineSetupWindow] Preserved '{path}' because it is not a ResearchNode.");
+                        return null;
+                    }
+                    n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    created = true;
+                }
 
-                if (!AssetDatabase.Contains(n)) AssetDatabase.CreateAsset(n, path);
-                else EditorUtility.SetDirty(n);
+                if (created)
+                {
+                    n.nodeId = id;
+                    n.displayName = display;
+                    n.description = desc;
+                    n.tier = tier;
+                    n.column = col;
+                    n.researchSeconds = seconds;
+                    n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
+                    for (int i = 0; i < cost.Length; i++)
+                        n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                    n.unlocksRecipes = unlocks ?? Array.Empty<VoxelEngine.Crafting.RecipeDefinition>();
+                    n.prerequisites = prereqs ?? Array.Empty<VoxelEngine.Research.ResearchNode>();
+                    n.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    n.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                    AssetDatabase.CreateAsset(n, path);
+                }
+                else
+                {
+                    bool changed = false;
+                    if (string.IsNullOrWhiteSpace(n.nodeId)) { n.nodeId = id; changed = true; }
+                    if (string.IsNullOrWhiteSpace(n.displayName)) { n.displayName = display; changed = true; }
+                    if (string.IsNullOrWhiteSpace(n.description)) { n.description = desc; changed = true; }
+                    n.unlocksRecipes = MergeReferences(n.unlocksRecipes, unlocks, out bool unlocksChanged);
+                    n.prerequisites = MergeReferences(n.prerequisites, prereqs, out bool prereqsChanged);
+                    changed |= unlocksChanged || prereqsChanged;
+                    if (changed) EditorUtility.SetDirty(n);
+                }
 
                 return n;
             }
@@ -2813,12 +2866,12 @@ namespace VoxelEngine.EditorTools
                 hvUnlocks.ToArray(),
                 new[] { nElectricity });
 
-            tree.nodes.Add(nStoneWorking);
-            tree.nodes.Add(nSmelting);
-            tree.nodes.Add(nElectricity);
-            tree.nodes.Add(nAdvManufacturing);
-            tree.nodes.Add(nSteelAlloy);
-            tree.nodes.Add(nHighVoltage);
+            AddTreeNodeOnce(tree, nStoneWorking);
+            AddTreeNodeOnce(tree, nSmelting);
+            AddTreeNodeOnce(tree, nElectricity);
+            AddTreeNodeOnce(tree, nAdvManufacturing);
+            AddTreeNodeOnce(tree, nSteelAlloy);
+            AddTreeNodeOnce(tree, nHighVoltage);
 
             // ===== PLAYER UPGRADES =====
             // All player upgrades are instant (researchSeconds=0) and paid from inventory.
@@ -2829,25 +2882,74 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Research.PlayerUpgradeKind kind, float perRank, int maxRanks)
             {
                 string path = $"{nodesFolder}/{id}.asset";
-                var n = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(path); if (n == null) { n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();  }
-                n.nodeId = id;
-                n.displayName = display;
-                n.description = desc;
-                n.category = VoxelEngine.Research.ResearchCategory.PlayerUpgrades;
-                n.tier = tier; n.column = col;
-                n.researchSeconds = 0f;
-                n.upgradeKind = kind;
-                n.upgradePerRankAmount = perRank;
-                n.maxRanks = maxRanks;
-                n.costScalesWithRank = (maxRanks > 1);
-                n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
-                for (int i = 0; i < cost.Length; i++)
-                    n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                var n = mainAsset as VoxelEngine.Research.ResearchNode;
+                bool created = false;
+                if (n == null)
+                {
+                    if (mainAsset != null)
+                    {
+                        Debug.LogError($"[VoxelEngineSetupWindow] Preserved '{path}' because it is not a ResearchNode.");
+                        return null;
+                    }
+                    n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    created = true;
+                }
 
-                if (!AssetDatabase.Contains(n)) AssetDatabase.CreateAsset(n, path);
-                else EditorUtility.SetDirty(n);
+                if (created)
+                {
+                    n.nodeId = id;
+                    n.displayName = display;
+                    n.description = desc;
+                    n.category = VoxelEngine.Research.ResearchCategory.PlayerUpgrades;
+                    n.tier = tier;
+                    n.column = col;
+                    n.researchSeconds = 0f;
+                    n.upgradeKind = kind;
+                    n.upgradePerRankAmount = perRank;
+                    n.maxRanks = maxRanks;
+                    n.costScalesWithRank = maxRanks > 1;
+                    n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
+                    for (int i = 0; i < cost.Length; i++)
+                        n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                    n.unlocksRecipes = Array.Empty<VoxelEngine.Crafting.RecipeDefinition>();
+                    n.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>();
+                    AssetDatabase.CreateAsset(n, path);
+                }
+                else
+                {
+                    bool changed = false;
+                    if (string.IsNullOrWhiteSpace(n.nodeId)) { n.nodeId = id; changed = true; }
+                    if (string.IsNullOrWhiteSpace(n.displayName)) { n.displayName = display; changed = true; }
+                    if (string.IsNullOrWhiteSpace(n.description)) { n.description = desc; changed = true; }
+                    if (n.category != VoxelEngine.Research.ResearchCategory.PlayerUpgrades)
+                    {
+                        n.category = VoxelEngine.Research.ResearchCategory.PlayerUpgrades;
+                        changed = true;
+                    }
+                    if (n.upgradeKind == VoxelEngine.Research.PlayerUpgradeKind.None)
+                    {
+                        n.upgradeKind = kind;
+                        changed = true;
+                    }
+                    if (n.upgradePerRankAmount == 0f && perRank != 0f)
+                    {
+                        n.upgradePerRankAmount = perRank;
+                        changed = true;
+                    }
+                    if (n.cost == null || n.cost.Length == 0)
+                    {
+                        n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
+                        for (int i = 0; i < cost.Length; i++)
+                            n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                        changed = true;
+                    }
+                    if (n.unlocksRecipes == null) { n.unlocksRecipes = Array.Empty<VoxelEngine.Crafting.RecipeDefinition>(); changed = true; }
+                    if (n.prerequisites == null) { n.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>(); changed = true; }
+                    if (changed) EditorUtility.SetDirty(n);
+                }
 
-                tree.nodes.Add(n);
+                AddTreeNodeOnce(tree, n);
                 return n;
             }
 
@@ -2875,27 +2977,54 @@ namespace VoxelEngine.EditorTools
                 2, 0, new[] { (sciT1, 5), (sciT2, 3) },
                 VoxelEngine.Research.PlayerUpgradeKind.BonusSprintMultiplier, 0.25f, 10);
 
-            // Flight is a jetpack, not a research unlock. Drop any older Flight node
-            // from the tree this rebuild writes. The asset is left on disk.
-            tree.nodes.RemoveAll(node => node != null
-                && (node.upgradeKind == VoxelEngine.Research.PlayerUpgradeKind.UnlockFlight
-                    || node.nodeId == "up_flight"));
-
             string treePath = $"{researchFolder}/ResearchTree.asset";
+            var authoredTree = tree;
             var existingTree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>(treePath);
             if (existingTree != null)
             {
-                // Sync the existing tree instead of replacing it
-                existingTree.nodes = tree.nodes;
+                // Merge authored nodes into the existing tree. Keep every unrelated
+                // node and merge only missing recipe/prerequisite links on matching IDs.
+                if (existingTree.nodes == null) existingTree.nodes = new List<VoxelEngine.Research.ResearchNode>();
+                bool treeChanged = false;
+                foreach (var authoredNode in authoredTree.nodes)
+                {
+                    if (authoredNode == null) continue;
+                    VoxelEngine.Research.ResearchNode activeNode = null;
+                    foreach (var candidate in existingTree.nodes)
+                    {
+                        if (candidate == null || !string.Equals(candidate.nodeId, authoredNode.nodeId, System.StringComparison.OrdinalIgnoreCase)) continue;
+                        activeNode = candidate;
+                        break;
+                    }
+
+                    if (activeNode == null)
+                    {
+                        existingTree.nodes.Add(authoredNode);
+                        treeChanged = true;
+                        continue;
+                    }
+
+                    activeNode.unlocksRecipes = MergeReferences(activeNode.unlocksRecipes, authoredNode.unlocksRecipes, out bool unlocksChanged);
+                    activeNode.prerequisites = MergeReferences(activeNode.prerequisites, authoredNode.prerequisites, out bool prereqsChanged);
+                    if (unlocksChanged || prereqsChanged)
+                    {
+                        EditorUtility.SetDirty(activeNode);
+                        treeChanged = true;
+                    }
+                }
+                if (treeChanged) EditorUtility.SetDirty(existingTree);
+                Object.DestroyImmediate(authoredTree);
                 tree = existingTree;
             }
             else
             {
-                AssetDatabase.CreateAsset(tree, treePath);
+                AssetDatabase.CreateAsset(authoredTree, treePath);
+                tree = authoredTree;
             }
             EditorUtility.SetDirty(tree);
 
-            ScienceRecipeRepair.Repair(out _, out _);
+            // Do not run ScienceRecipeRepair here: that legacy repair deletes duplicate
+            // recipe assets. Science recipes are authored above; only safe links are merged.
             EditorUtility.SetDirty(recipeRegistry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -8336,13 +8465,60 @@ root =>
             VoxelEngine.Crafting.RecipeDefinition AddRec(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{name}.asset";
-                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
-                r.displayName = display; r.outputItem = output; r.outputCount = 1;
-                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
-                var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
-                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
-                r.inputs = valid.ToArray();
-                EditorUtility.SetDirty(r);
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                var r = mainAsset as VoxelEngine.Crafting.RecipeDefinition;
+                bool created = false;
+                if (r == null)
+                {
+                    if (mainAsset != null)
+                    {
+                        Debug.LogError($"[VoxelEngineSetupWindow] Preserved '{path}' because it is not a RecipeDefinition.");
+                        return null;
+                    }
+                    if (output == null) return null;
+                    r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>();
+                    AssetDatabase.CreateAsset(r, path);
+                    created = true;
+                }
+
+                bool changed = false;
+                if (created)
+                {
+                    r.displayName = display;
+                    r.outputItem = output;
+                    r.outputCount = 1;
+                    r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+                    r.craftSeconds = 4f;
+                    r.unlockedByDefault = false;
+                    var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                    foreach (var (item, count) in inputs)
+                        if (item != null && count > 0) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+                    r.inputs = valid.ToArray();
+                    changed = true;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(r.displayName)) { r.displayName = display; changed = true; }
+                    if (r.outputItem == null && output != null) { r.outputItem = output; changed = true; }
+                    if (r.outputCount <= 0) { r.outputCount = 1; changed = true; }
+                    if (r.inputs == null || r.inputs.Length == 0)
+                    {
+                        var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                        foreach (var (item, count) in inputs)
+                            if (item != null && count > 0) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+                        if (valid.Count > 0) { r.inputs = valid.ToArray(); changed = true; }
+                    }
+                    // Every recipe in this node requires research; keep that gate even
+                    // when repairing an older asset that was authored as a default unlock.
+                    if (r.unlockedByDefault) { r.unlockedByDefault = false; changed = true; }
+                }
+
+                if (r.outputItem != null && r.outputItem != output)
+                {
+                    Debug.LogWarning($"[VoxelEngineSetupWindow] Preserved '{r.name}' output because it already references another item.");
+                    return null;
+                }
+                if (changed) EditorUtility.SetDirty(r);
                 if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
                 return r;
             }
@@ -8356,22 +8532,70 @@ root =>
             if (tree != null)
             {
                 var nElec = FindNodeByName(tree, "res_electricity");
-                VoxelEngine.Research.ResearchNode nLighting;
+                var nLighting = FindNodeByName(tree, "res_floodlighting");
+                bool lightingNodeCreated = false;
+                if (nLighting == null)
                 {
                     string path = $"{ASSET_ROOT}/Research/Nodes/res_floodlighting.asset";
-                    nLighting = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(path);
-                    nLighting.nodeId = "res_floodlighting";
-                    nLighting.displayName = "Advanced Lighting";
-                    nLighting.description = "High-intensity and decorative lighting for industrial sites and ships.";
-                    nLighting.category = VoxelEngine.Research.ResearchCategory.Environment;
-                    nLighting.subCategory = VoxelEngine.Research.ResearchSubCategory.Production;
-                    nLighting.tier = 2; nLighting.column = 8;
-                    nLighting.iconTint = new Color(1f, 1f, 0.8f);
-                    nLighting.researchSeconds = 40f;
-                    nLighting.cost = new[] { new VoxelEngine.Research.ResearchNode.ScienceCost { pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT1.asset"), count = 10 },
-                                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT2.asset"), count = 5 } };
-                    nLighting.unlocksRecipes = new[] { recStat, recGrid, recLed, recRgb };
-                    nLighting.prerequisites = nElec != null ? new[] { nElec } : null;
+                    var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                    nLighting = mainAsset as VoxelEngine.Research.ResearchNode;
+                    if (nLighting == null && mainAsset == null)
+                    {
+                        nLighting = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                        AssetDatabase.CreateAsset(nLighting, path);
+                        lightingNodeCreated = true;
+                    }
+                    else if (nLighting == null)
+                    {
+                        Debug.LogError($"[VoxelEngineSetupWindow] Preserved '{path}' because it is not a ResearchNode.");
+                    }
+                }
+
+                if (nLighting != null)
+                {
+                    if (lightingNodeCreated)
+                    {
+                        nLighting.nodeId = "res_floodlighting";
+                        nLighting.displayName = "Advanced Lighting";
+                        nLighting.description = "High-intensity and decorative lighting for industrial sites and ships.";
+                        nLighting.category = VoxelEngine.Research.ResearchCategory.Environment;
+                        nLighting.subCategory = VoxelEngine.Research.ResearchSubCategory.Production;
+                        nLighting.tier = 2;
+                        nLighting.column = 8;
+                        nLighting.iconTint = new Color(1f, 1f, 0.8f);
+                        nLighting.researchSeconds = 40f;
+                        nLighting.cost = new[]
+                        {
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT1.asset"), count = 10 },
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT2.asset"), count = 5 }
+                        };
+                        nLighting.unlocksRecipes = Array.Empty<VoxelEngine.Crafting.RecipeDefinition>();
+                        nLighting.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>();
+                        nLighting.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                        nLighting.maxRanks = 1;
+                    }
+                    else
+                    {
+                        if (string.IsNullOrWhiteSpace(nLighting.nodeId)) nLighting.nodeId = "res_floodlighting";
+                        if (string.IsNullOrWhiteSpace(nLighting.displayName)) nLighting.displayName = "Advanced Lighting";
+                        if (string.IsNullOrWhiteSpace(nLighting.description)) nLighting.description = "High-intensity and decorative lighting for industrial sites and ships.";
+                        if (nLighting.unlocksRecipes == null) nLighting.unlocksRecipes = Array.Empty<VoxelEngine.Crafting.RecipeDefinition>();
+                        if (nLighting.prerequisites == null) nLighting.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>();
+                    }
+
+                    // LED strips have a dedicated later node. Keep other lighting unlocks
+                    // on this node and remove only the one migrated recipe reference.
+                    var lightingUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>(nLighting.unlocksRecipes);
+                    if (recLed != null) lightingUnlocks.RemoveAll(recipe => recipe == recLed);
+                    foreach (var recipe in new[] { recStat, recGrid, recRgb })
+                        if (recipe != null && !lightingUnlocks.Contains(recipe)) lightingUnlocks.Add(recipe);
+                    nLighting.unlocksRecipes = lightingUnlocks.ToArray();
+                    if (nElec != null)
+                    {
+                        var prerequisites = new List<VoxelEngine.Research.ResearchNode>(nLighting.prerequisites);
+                        if (!prerequisites.Contains(nElec)) prerequisites.Add(nElec);
+                        nLighting.prerequisites = prerequisites.ToArray();
+                    }
                     EditorUtility.SetDirty(nLighting);
                     if (!tree.nodes.Contains(nLighting)) tree.nodes.Add(nLighting);
                 }
@@ -8447,11 +8671,11 @@ root =>
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
 
-            if (registry == null || ironPlate == null || steelPlate == null || copperWire == null || circuit == null || ironGear == null || ironIngot == null || copperIngot == null)
+            if (registry == null || ironPlate == null || steelPlate == null || copperWire == null || circuit == null || ironGear == null || ironIngot == null || copperIngot == null || sciT2 == null || sciT3 == null)
             {
                 EditorUtility.DisplayDialog(
                     "Voxel Engine — Step 17",
-                    "Step 17 needs the base crafting, power, research, and industrial content first.\n\nRun base crafting, power, research and industrial content, then run Factory Foundations again.",
+                    "Step 17 needs base crafting, power, research packs II and III, and industrial content first.\n\nRun base crafting, power, and research content, then run Factory Foundations again.",
                     "OK");
                 return;
             }
@@ -10082,15 +10306,138 @@ root =>
             // ── Research ──
             if (tree != null)
             {
+                if (tree.nodes == null)
+                {
+                    tree.nodes = new List<VoxelEngine.Research.ResearchNode>();
+                    repairedLinkCount++;
+                }
+                var stagedFactoryUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>
+                {
+                    recConveyorFast, recConveyorExpress, recSplitterMk2, recSplitterMk3,
+                    recAssemblerMk1, recAssemblerMk2, recAssemblerMk3, recCrusher,
+                    recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip,
+                    FindRecipeByName("Recipe_LEDStrip"), FindRecipeByName("Recipe_GrinderTool")
+                };
+                stagedFactoryUnlocks.RemoveAll(recipe => recipe == null);
+                var baseFactoryRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                foreach (var recipe in factoryRecipes)
+                    if (recipe != null && !stagedFactoryUnlocks.Contains(recipe)) AddRecipeUnique(baseFactoryRecipes, recipe);
+
                 var nElectricity = FindNodeByName(tree, "res_electricity");
                 var nAdvancedManufacturing = FindNodeByName(tree, "res_adv_manufacturing");
                 var factoryPrerequisites = nAdvancedManufacturing != null
                     ? new[] { nAdvancedManufacturing }
                     : (nElectricity != null ? new[] { nElectricity } : new VoxelEngine.Research.ResearchNode[0]);
 
+                VoxelEngine.Research.ResearchNode EnsureFactoryProgressNode(
+                    string id, string display, string description, VoxelEngine.Research.ResearchSubCategory subCategory,
+                    int tier, Color tint, float seconds, int tier2Cost, int tier3Cost,
+                    VoxelEngine.Research.ResearchNode[] prerequisites)
+                {
+                    var node = FindNodeByName(tree, id);
+                    bool created = false;
+                    if (node == null)
+                    {
+                        string path = $"{NODES}/{id}.asset";
+                        created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                        node = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(path);
+                    }
+                    if (node == null) return null;
+
+                    if (created)
+                    {
+                        node.nodeId = id;
+                        node.displayName = display;
+                        node.description = description;
+                        node.category = VoxelEngine.Research.ResearchCategory.Environment;
+                        node.subCategory = subCategory;
+                        node.tier = tier;
+                        node.column = 0;
+                        node.iconTint = tint;
+                        node.researchSeconds = seconds;
+                        node.cost = new[]
+                        {
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = tier2Cost },
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = tier3Cost }
+                        };
+                        node.unlocksRecipes = Array.Empty<VoxelEngine.Crafting.RecipeDefinition>();
+                        node.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>();
+                        node.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                        node.maxRanks = 1;
+                    }
+                    else
+                    {
+                        if (string.IsNullOrWhiteSpace(node.nodeId)) node.nodeId = id;
+                        if (string.IsNullOrWhiteSpace(node.displayName)) node.displayName = display;
+                        if (string.IsNullOrWhiteSpace(node.description)) node.description = description;
+                        if (node.unlocksRecipes == null) node.unlocksRecipes = Array.Empty<VoxelEngine.Crafting.RecipeDefinition>();
+                        if (node.prerequisites == null) node.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>();
+                    }
+
+                    node.prerequisites = MergeUniqueArray(node.prerequisites, prerequisites);
+                    if (!tree.nodes.Contains(node))
+                    {
+                        tree.nodes.Add(node);
+                        repairedLinkCount++;
+                    }
+                    EditorUtility.SetDirty(node);
+                    return node;
+                }
+
+                void MoveFactoryUnlocks(VoxelEngine.Research.ResearchNode target,
+                    IEnumerable<VoxelEngine.Crafting.RecipeDefinition> recipes)
+                {
+                    if (target == null || recipes == null) return;
+                    var moving = new HashSet<VoxelEngine.Crafting.RecipeDefinition>();
+                    foreach (var recipe in recipes) if (recipe != null) moving.Add(recipe);
+                    if (moving.Count == 0) return;
+
+                    foreach (var node in tree.nodes)
+                    {
+                        if (node == null || node == target || node.unlocksRecipes == null) continue;
+                        var kept = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                        bool removed = false;
+                        foreach (var recipe in node.unlocksRecipes)
+                        {
+                            if (recipe != null && moving.Contains(recipe))
+                            {
+                                removed = true;
+                                repairedLinkCount++;
+                                continue;
+                            }
+                            kept.Add(recipe);
+                        }
+                        if (!removed) continue;
+                        node.unlocksRecipes = kept.ToArray();
+                        EditorUtility.SetDirty(node);
+                    }
+
+                    foreach (var recipe in moving)
+                    {
+                        if (recipe.unlockedByDefault)
+                        {
+                            recipe.unlockedByDefault = false;
+                            EditorUtility.SetDirty(recipe);
+                            repairedLinkCount++;
+                        }
+                        if (!registry.recipes.Contains(recipe))
+                        {
+                            registry.recipes.Add(recipe);
+                            repairedLinkCount++;
+                        }
+                    }
+                    target.unlocksRecipes = MergeUniqueArray(target.unlocksRecipes, moving);
+                    EditorUtility.SetDirty(target);
+                }
+
                 string factoryNodePath = $"{NODES}/res_factory_logistics.asset";
-                bool factoryNodeCreated = AssetDatabase.LoadMainAssetAtPath(factoryNodePath) == null;
-                var nFactory = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(factoryNodePath);
+                var nFactory = FindNodeByName(tree, "res_factory_logistics");
+                bool factoryNodeCreated = false;
+                if (nFactory == null)
+                {
+                    factoryNodeCreated = AssetDatabase.LoadMainAssetAtPath(factoryNodePath) == null;
+                    nFactory = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(factoryNodePath);
+                }
                 if (nFactory != null)
                 {
                     if (factoryNodeCreated)
@@ -10127,7 +10474,7 @@ root =>
                         }
                         nFactory.unlocksRecipes = keptUnlocks.ToArray();
                     }
-                    nFactory.unlocksRecipes = MergeUniqueArray(nFactory.unlocksRecipes, factoryRecipes);
+                    nFactory.unlocksRecipes = MergeUniqueArray(nFactory.unlocksRecipes, baseFactoryRecipes);
                     EditorUtility.SetDirty(nFactory);
                     if (!tree.nodes.Contains(nFactory))
                     {
@@ -10137,8 +10484,13 @@ root =>
                 }
 
                 string hvNodePath = $"{NODES}/res_hv_transmission.asset";
-                bool hvNodeCreated = AssetDatabase.LoadMainAssetAtPath(hvNodePath) == null;
-                var nHV = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(hvNodePath);
+                var nHV = FindNodeByName(tree, "res_hv_transmission");
+                bool hvNodeCreated = false;
+                if (nHV == null)
+                {
+                    hvNodeCreated = AssetDatabase.LoadMainAssetAtPath(hvNodePath) == null;
+                    nHV = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(hvNodePath);
+                }
                 if (nHV != null)
                 {
                     if (hvNodeCreated)
@@ -10168,6 +10520,56 @@ root =>
                         tree.nodes.Add(nHV);
                         repairedLinkCount++;
                     }
+                }
+
+                if (nFactory != null)
+                {
+                    var nSteelAlloy = FindNodeByName(tree, "res_steel_alloy");
+                    var nFactoryAutomation = EnsureFactoryProgressNode(
+                        "res_factory_automation", "Factory Automation",
+                        "Automate production with the first powered assembler tier and faster material handling.",
+                        VoxelEngine.Research.ResearchSubCategory.Logistics, 4,
+                        new Color(0.18f, 0.72f, 0.88f), 90f, 15, 5, new[] { nFactory });
+                    var nAdvancedAutomation = EnsureFactoryProgressNode(
+                        "res_advanced_automation", "Advanced Automation",
+                        "Scale the factory with higher assembler and express conveyor technology.",
+                        VoxelEngine.Research.ResearchSubCategory.Production, 5,
+                        new Color(0.30f, 0.62f, 0.94f), 120f, 25, 15,
+                        new[] { nFactoryAutomation, nSteelAlloy });
+                    var nPrecisionAssembly = EnsureFactoryProgressNode(
+                        "res_precision_assembly", "Precision Assembly",
+                        "Unlock the highest conventional assembler tier for complex industrial production.",
+                        VoxelEngine.Research.ResearchSubCategory.Production, 6,
+                        new Color(0.48f, 0.68f, 0.98f), 160f, 35, 25,
+                        new[] { nAdvancedAutomation, nSteelAlloy });
+                    var nLighting = EnsureFactoryProgressNode(
+                        "res_led_lighting", "Industrial Lighting",
+                        "Develop efficient segmented LED lighting for factories and grid structures.",
+                        VoxelEngine.Research.ResearchSubCategory.Power, 4,
+                        new Color(0.22f, 0.78f, 0.88f), 70f, 12, 5,
+                        new[] { nFactory, nElectricity });
+                    var nGrinder = EnsureFactoryProgressNode(
+                        "res_grid_reclamation", "Grid Reclamation",
+                        "Recover placed ship and vehicle components with a purpose-built grinder tool.",
+                        VoxelEngine.Research.ResearchSubCategory.Production, 4,
+                        new Color(0.92f, 0.57f, 0.19f), 80f, 12, 6,
+                        new[] { nFactory, nAdvancedManufacturing, nSteelAlloy });
+
+                    MoveFactoryUnlocks(nFactoryAutomation, new[]
+                    {
+                        recAssemblerMk1, recConveyorFast, recSplitterMk2, recCrusher
+                    });
+                    MoveFactoryUnlocks(nAdvancedAutomation, new[]
+                    {
+                        recAssemblerMk2, recConveyorExpress, recSplitterMk3
+                    });
+                    MoveFactoryUnlocks(nPrecisionAssembly, new[] { recAssemblerMk3 });
+                    MoveFactoryUnlocks(nLighting, new[]
+                    {
+                        recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip,
+                        FindRecipeByName("Recipe_LEDStrip")
+                    });
+                    MoveFactoryUnlocks(nGrinder, new[] { FindRecipeByName("Recipe_GrinderTool") });
                 }
 
                 EditorUtility.SetDirty(tree);

@@ -1,8 +1,8 @@
-# 🏭 IndustrialWorld — Factory-Forward Development Roadmap
+# 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.4.3-dev`
-**Roadmap Version:** `17.4.3-dev`
+**Current Version:** `17.5.0-dev`
+**Roadmap Version:** `17.5.0-dev`
 **Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.5.0-dev - IndustrialCrusaders Progression and World Polish
+- Assembler tiers, higher conveyors, LED strips, and Grinder recipes now use staged research; starter swords are authored through Setup
+- Machines and chests deck-snap; dropped items use local gravity and contact pickup; orbital/grid jitter is damped
+- Research, inspection, held-item HUD, and game branding are refreshed; copper links are audited without deleting assets
+
 ### 17.4.3-dev - Science Recipe List Compiles
 - The science-pack station check no longer uses an unassigned pattern variable
 - Pack I, II, and III still use hand, Crafting Bench, and Assembler
@@ -48,11 +53,6 @@
 - Create World, Edit World, Server Administration, and `server_config.json` can turn offline death off
 - Missing or legacy world files stay on; off spends no cryobed oxygen and does not charge the gap later
 - The pollution-scent check is a Voxel Engine Setup action, not a Tools menu item
-
-### 17.3.0-dev - Approach Ambushes and Exposed Logistics Raids
-- Stressed pollution places one Ghoul from a pack off the approach; a lone scout does not split, and bad footing falls back to the machine
-- That ambusher waits, then releases to the existing source chase if the player arrives, the hold ends, or the source stops
-- Recruits from the same band bite exposed static belts and pipes on the way in, using the existing industrial bite
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

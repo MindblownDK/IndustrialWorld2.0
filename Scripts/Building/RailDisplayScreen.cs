@@ -60,7 +60,7 @@ namespace VoxelEngine.Building
         public ScreenSource source = ScreenSource.TrainSpeed;
 
         [Tooltip("Shown when the source is Custom Text. Split onto rows at line breaks.")]
-        public string customText = "INDUSTRIAL WORLD";
+        public string customText = "INDUSTRIAL CRUSADERS";
 
         [Tooltip("Split-flap rows. Departure boards author four, small screens two.")]
         [Range(1, 4)] public int rows = 4;

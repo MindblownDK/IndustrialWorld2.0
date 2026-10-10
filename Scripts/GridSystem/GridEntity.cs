@@ -1918,6 +1918,7 @@ namespace VoxelEngine.GridSystem
         // (landing gear locked or low velocity near surface) and not piloted, we
         // gently slerp its up toward planet up.
         private float _alignTimer;
+        private bool _alignmentSupportCached;
         /// <summary>True when something that is NOT this grid (terrain, another
         /// structure) sits within a short probe below the hull's centre of mass.</summary>
         private bool HasSupportBelow()
@@ -1971,29 +1972,45 @@ namespace VoxelEngine.GridSystem
                 vertSpeed = Mathf.Abs(Vector3.Dot(_rb.linearVelocity, grav.normalized));
 
             bool nearGround = vertSpeed < 0.5f && _rb.linearVelocity.magnitude < 1.5f;
-            if (!anyLocked && !anyGrounded && !nearGround) return;
+            if (!anyLocked && !anyGrounded)
+            {
+                if (!nearGround)
+                {
+                    _alignTimer = 0f;
+                    _alignmentSupportCached = false;
+                    return;
+                }
 
-            // Throttle alignment to 4 Hz to avoid fighting physics
-            _alignTimer += Time.fixedDeltaTime;
-            if (_alignTimer < 0.25f) return;
-            _alignTimer = 0f;
-
-            // 14.64.1 — "at rest" is NOT "on the ground": a severed hull piece
-            // floating dead-still in orbit passed the near-rest test and was slerped
-            // toward planet-up forever (the "cut block slowly rotates in zero-g"
-            // report). Without locked gear or grounded wheels, demand real support
-            // below the hull before aligning.
-            if (!anyLocked && !anyGrounded && !HasSupportBelow()) return;
+                // Support detection is the expensive part, so keep the 4 Hz probe;
+                // apply the orientation correction every physics step. This removes
+                // the visible quarter-second rotation pulses without making a quiet
+                // free-floating hull follow the planet's up vector.
+                _alignTimer += Time.fixedDeltaTime;
+                if (_alignTimer >= 0.25f)
+                {
+                    _alignTimer = 0f;
+                    _alignmentSupportCached = HasSupportBelow();
+                }
+                if (!_alignmentSupportCached) return;
+            }
+            else
+            {
+                _alignTimer = 0f;
+                _alignmentSupportCached = true;
+            }
 
             Vector3 planetUp = GravityProvider.GetUp(transform.position);
             if (planetUp.sqrMagnitude < 0.0001f) return;
+            planetUp.Normalize();
 
             Vector3 currentUp = transform.up;
             float angle = Vector3.Angle(currentUp, planetUp);
             if (angle < 0.5f) return; // already aligned
             if (angle > 45f) return; // too far, don't snap (likely in flight)
 
-            // Slerp toward surface-aligned rotation
+            // Slerp toward surface-aligned rotation. Scale the legacy 8%-per-0.25s
+            // correction to fixedDeltaTime so the total damping is unchanged while
+            // grounded grids no longer receive a periodic visible rotation step.
             Vector3 currentForward = transform.forward;
             Vector3 desiredForward = Vector3.ProjectOnPlane(currentForward, planetUp);
             if (desiredForward.sqrMagnitude < 0.001f)
@@ -2003,13 +2020,13 @@ namespace VoxelEngine.GridSystem
             desiredForward.Normalize();
 
             Quaternion desiredRot = Quaternion.LookRotation(desiredForward, planetUp);
-            // Gentle slerp, preserve position
-            Quaternion newRot = Quaternion.Slerp(transform.rotation, desiredRot, 0.08f);
-            _rb.MoveRotation(newRot);
+            float dtScale = Mathf.Max(0f, Time.fixedDeltaTime / 0.25f);
+            float correction = 1f - Mathf.Pow(1f - 0.08f, dtScale);
+            _rb.MoveRotation(Quaternion.Slerp(_rb.rotation, desiredRot, correction));
 
-            // Damp angular velocity that would tip it over
+            // Damp angular velocity at the same time-normalized rate.
             if (_rb.angularVelocity.magnitude > 0.1f)
-                _rb.angularVelocity *= 0.85f;
+                _rb.angularVelocity *= Mathf.Pow(0.85f, dtScale);
         }
 
         // ── Wheels ─────────────────────────────────────────────────

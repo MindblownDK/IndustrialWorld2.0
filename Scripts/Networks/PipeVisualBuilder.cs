@@ -154,7 +154,7 @@ namespace VoxelEngine.Networks
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void AssemblyLoadProbe()
         {
-            Debug.Log("[IndustrialWorld] ✓ VoxelEngine assembly v5 loaded — PipeVisualBuilder is ready.");
+            Debug.Log("[IndustrialCrusaders] VoxelEngine assembly v5 loaded — PipeVisualBuilder is ready.");
         }
 
         // ── Internals ───────────────────────────────────────────
@@ -241,7 +241,7 @@ namespace VoxelEngine.Networks
             if (!_builderLoggedOnce)
             {
                 _builderLoggedOnce = true;
-                Debug.Log($"[IndustrialWorld] PipeVisualBuilder v4 loaded — style={style}, isGlass={isGlass}, shellTint={shellTint}");
+                Debug.Log($"[IndustrialCrusaders] PipeVisualBuilder v4 loaded — style={style}, isGlass={isGlass}, shellTint={shellTint}");
             }
             // An immediate placement may already have built this pipe. Force one
             // post-Awake rebuild anyway because style/tint assignment can happen after

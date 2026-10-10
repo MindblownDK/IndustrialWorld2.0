@@ -14,7 +14,7 @@ namespace VoxelEngine.UI
     {
         private const float ShowSeconds = 2.15f;
         private const float FadeSeconds = 0.38f;
-        private const int LayoutRevision = 4;
+        private const int LayoutRevision = 5;
 
         private static VisualElement _root;
         private static VisualElement _card;
@@ -24,6 +24,7 @@ namespace VoxelEngine.UI
         private static ItemDefinition _lastItem;
         private static bool _observed;
         private static float _shownAt = -999f;
+        private static float _nextDuplicateSweep;
         private static int _mountedRevision;
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -114,8 +115,17 @@ namespace VoxelEngine.UI
                 "HotbarItemReadout",
                 "HotbarItemNameReadout",
                 "HeldItemNameHud",
+                "HeldItemName",
+                "HeldItemNameLabel",
+                "HeldItemNameText",
                 "HeldItemReadout",
-                "HeldItemLcdBezel"
+                "HeldItemLcdBezel",
+                "HotbarNameText",
+                "HotbarItemNameText",
+                "HotbarItemLabel",
+                "SelectedItemName",
+                "CurrentItemName",
+                "ActiveItemName"
             };
             for (int i = 0; i < staleNames.Length; i++)
             {
@@ -139,24 +149,20 @@ namespace VoxelEngine.UI
             var stack = inventory.ActiveStack;
             ItemDefinition item = stack != null && !stack.IsEmpty ? stack.item : null;
 
-            if (!_observed)
+            bool changed = !_observed || index != _lastIndex || item != _lastItem;
+            if (changed)
             {
                 _observed = true;
                 _lastIndex = index;
                 _lastItem = item;
-                if (item != null) RemoveLegacyItemIdLabels(item);
-            }
-            else if (index != _lastIndex || item != _lastItem)
-            {
-                _lastIndex = index;
-                _lastItem = item;
                 if (item != null)
                 {
-                    _name.text = item.displayName;
+                    _name.text = item.displayName ?? string.Empty;
                     RemoveLegacyItemIdLabels(item);
                     _shownAt = Time.unscaledTime;
                     _card.style.display = DisplayStyle.Flex;
                     _card.style.opacity = 0f;
+                    ScheduleDuplicateLabelSweep(_name.text);
                 }
                 else
                 {
@@ -165,6 +171,11 @@ namespace VoxelEngine.UI
             }
 
             if (_card.style.display == DisplayStyle.None) return;
+            if (Time.unscaledTime >= _nextDuplicateSweep)
+            {
+                _nextDuplicateSweep = Time.unscaledTime + 0.25f;
+                RemoveLegacyItemIdLabels(_lastItem);
+            }
             float age = Time.unscaledTime - _shownAt;
             if (age >= ShowSeconds)
             {
@@ -192,17 +203,50 @@ namespace VoxelEngine.UI
             while (documentRoot.parent != null) documentRoot = documentRoot.parent;
             string itemId = item.itemId ?? string.Empty;
             string assetName = item.name ?? string.Empty;
+            string displayName = item.displayName ?? string.Empty;
             var labels = new System.Collections.Generic.List<Label>();
             documentRoot.Query<Label>().ForEach(label => labels.Add(label));
             foreach (var label in labels)
             {
                 if (label == null || label == _name) continue;
-                string text = label.text ?? string.Empty;
+                string text = label.text?.Trim() ?? string.Empty;
                 bool rawId = (!string.IsNullOrEmpty(itemId) && text.Equals(itemId, System.StringComparison.OrdinalIgnoreCase))
                     || (!string.IsNullOrEmpty(assetName) && text.Equals(assetName, System.StringComparison.OrdinalIgnoreCase))
                     || (!string.IsNullOrEmpty(itemId) && text.Equals(itemId + "_item", System.StringComparison.OrdinalIgnoreCase));
-                if (rawId) label.RemoveFromHierarchy();
+                bool duplicateName = !string.IsNullOrEmpty(displayName)
+                    && text.Equals(displayName, System.StringComparison.OrdinalIgnoreCase)
+                    && OverlapsNameReadout(label);
+                if (rawId || duplicateName) label.RemoveFromHierarchy();
             }
+        }
+
+        private static bool OverlapsNameReadout(Label candidate)
+        {
+            if (_name == null || candidate == null || _name.panel == null || candidate.panel != _name.panel)
+                return false;
+            Rect target = _name.worldBound;
+            Rect other = candidate.worldBound;
+            if (target.width <= 0f || target.height <= 0f || other.width <= 0f || other.height <= 0f)
+                return false;
+
+            float overlapWidth = Mathf.Max(0f, Mathf.Min(target.xMax, other.xMax) - Mathf.Max(target.xMin, other.xMin));
+            float overlapHeight = Mathf.Max(0f, Mathf.Min(target.yMax, other.yMax) - Mathf.Max(target.yMin, other.yMin));
+            float overlapArea = overlapWidth * overlapHeight;
+            float smallerArea = Mathf.Min(target.width * target.height, other.width * other.height);
+            return smallerArea > 0f && overlapArea / smallerArea >= 0.45f;
+        }
+
+        private static void ScheduleDuplicateLabelSweep(string expectedText)
+        {
+            if (_root == null) return;
+            var root = _root;
+            void Sweep()
+            {
+                if (_root != root || _name == null || _name.text != expectedText || _lastItem == null) return;
+                RemoveLegacyItemIdLabels(_lastItem);
+            }
+            root.schedule.Execute(Sweep).StartingIn(1);
+            root.schedule.Execute(Sweep).StartingIn(100);
         }
 
         private static void Hide()

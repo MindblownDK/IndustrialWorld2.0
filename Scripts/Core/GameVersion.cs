@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Core/GameVersion.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║                IndustrialWorld — VERSION CONSTANTS                ║
+// ║             IndustrialCrusaders — VERSION CONSTANTS               ║
 // ║                                                                  ║
 // ║  THE single source of truth for the build's version. Read from   ║
 // ║  any system (console banner, main-menu footer, save files…) so   ║
@@ -38,8 +38,8 @@ namespace VoxelEngine.Core
     {
         // ── Bump these when you ship ──────────────────────────────────────
         public const int    Major = 17;
-        public const int    Minor = 4;
-        public const int    Patch = 3;
+        public const int    Minor = 5;
+        public const int    Patch = 0;
 
         /// <summary>
         /// Channel suffix appended after a hyphen. Use "" for a stable release,
@@ -72,7 +72,7 @@ namespace VoxelEngine.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void LogVersion()
         {
-            Debug.Log($"[IndustrialWorld] ✓ Game version {Display} — assembly loaded successfully.");
+            Debug.Log($"[IndustrialCrusaders] Game version {Display} — assembly loaded successfully.");
         }
     }
 }

@@ -1,9 +1,34 @@
-# IndustrialWorld — Changelog
+# IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.4.3-dev`
+**Current Version:** `17.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.5.0-dev] Stage Factory Progression and Polish World Interaction
+
+**Type:** MINOR — save-compatible progression, UI, placement, physics, and branding improvements. No save schema changed.
+
+**GitHub title:** `[17.5.0-dev] Stage factory progression and polish world interaction`
+
+#### Added and changed
+- Added a wooden sword recipe available from the start and a stone sword recipe unlocked alongside Stone Working. New swords and progression assets are authored non-destructively through Voxel Engine Setup.
+- Staged Assembler Mk.1, Mk.2, and Mk.3, fast/express conveyor tiers, higher splitter tiers, LED strips, and Grinder recipes behind separate research nodes. Existing costs, times, item stats, and populated ingredient arrays are preserved.
+- Machines and chests now snap to the top plane and footprint lattice of foundations and floor decks even when optional world-grid snapping is disabled. The exact deck collider is accepted as support during ghost validation.
+- Reworked the Research window into a readable dependency map with branching prerequisite connectors, sequence columns, research status, filters, search, pan/zoom, and cost previews.
+- Removed overlapping held-item name labels, normalized inspection titles to `Tree` and `Rocks`, and changed the main-menu/game branding to `IndustrialCrusaders`.
+- Dropped items now clear nearby static geometry at spawn, use radial/flat world gravity, settle naturally under that field, and attempt pickup on trigger entry as well as continued contact. Replicas use the owner's resolved spawn pose without applying the toss offset twice.
+- Reduced planetary pose churn during floating-origin updates and made grounded-grid alignment continuous instead of visibly stepping at 4 Hz.
+
+#### Copper investigation
+- The current serialized asset graph does not reproduce the reported copper mismatch: `Mat_Copper` drops the canonical `Item_CopperOre`, `Smelt_Copper` consumes that asset and outputs `Item_CopperIngot`, and the placed Furnace item references the prefab that contains the copper recipe. The historical `Items/Item_Copper.asset` duplicate is absent from the current `HEAD` tree.
+- Added a non-destructive Setup audit/repair for missing or known-retired copper links and the Furnace recipe assignment. Populated unknown links are preserved for manual review; no smelting quantities, timings, or recipe balance values are rewritten. The destructive ore-consolidation action was not run.
+- The Research Lab's existing Assembler station tier and its Crafting Bench recipe were left unchanged; the apparent higher-Assembler cycle was not treated as a confirmed defect.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.5.0-dev`, MINOR over `17.4.3-dev`. Saves and runtime data schemas are unchanged; progression assets are updated by the Setup Wizard.
+- The new `Apply 17.5.0 progression gates and starter swords (non-destructive)` Setup entry expects the existing research tree, recipe registry, science packs, and factory progression node; it creates missing feature assets and repairs links without deleting content.
+- Unity compilation, Setup execution, and in-game acceptance tests have not been run in this workspace.
 
 ### [17.4.3-dev] Compile the Science Pack Recipe List
 

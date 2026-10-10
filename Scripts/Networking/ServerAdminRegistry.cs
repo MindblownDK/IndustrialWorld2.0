@@ -409,7 +409,7 @@ namespace VoxelEngine.Networking
                 {
                     if (!DedicatedServer.IsActive) return "Only a dedicated server has a server name.";
                     DedicatedServer.Config.serverName =
-                        string.IsNullOrWhiteSpace(value) ? "Industrial World Server" : value.Trim();
+                        string.IsNullOrWhiteSpace(value) ? "IndustrialCrusaders Server" : value.Trim();
                     DedicatedServer.SaveConfig();
                     Version++;
                     return null;

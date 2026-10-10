@@ -40,34 +40,35 @@ namespace VoxelEngine.Research
         public Inventory inventoryRef;
 
         // ── Palette ─────────────────────────────────────────────────────
-        private static readonly Color BG_OVERLAY       = new(0.02f, 0.025f, 0.04f, 0.88f);
-        private static readonly Color PANEL_BG         = new(0.08f, 0.09f, 0.12f, 0.98f);
-        private static readonly Color CANVAS_BG        = new(0.045f, 0.05f, 0.07f, 1.00f);
-        private static readonly Color CARD_BG          = new(0.13f, 0.15f, 0.19f, 1.00f);
-        private static readonly Color CARD_HOVER       = new(0.18f, 0.21f, 0.26f, 1.00f);
-        private static readonly Color CARD_READY       = new(0.16f, 0.22f, 0.28f, 1.00f);
-        private static readonly Color CARD_ACTIVE      = new(0.13f, 0.30f, 0.55f, 1.00f);
-        private static readonly Color CARD_DONE        = new(0.10f, 0.35f, 0.18f, 1.00f);
-        private static readonly Color CARD_LOCKED      = new(0.08f, 0.09f, 0.12f, 1.00f);
-        private static readonly Color BORDER_DEFAULT   = new(0.22f, 0.25f, 0.30f, 1.00f);
-        private static readonly Color BORDER_SELECT    = new(0.95f, 0.78f, 0.20f, 1.00f);
-        private static readonly Color BORDER_DONE      = new(0.40f, 0.85f, 0.50f, 1.00f);
-        private static readonly Color BORDER_ACTIVE    = new(0.40f, 0.75f, 1.00f, 1.00f);
-        private static readonly Color ACCENT_BLUE      = new(0.20f, 0.55f, 0.95f);
-        private static readonly Color ACCENT_AMBER     = new(0.95f, 0.65f, 0.20f);
-        private static readonly Color ACCENT_GREEN     = new(0.35f, 0.80f, 0.45f);
-        private static readonly Color LINE_BASE        = new(0.30f, 0.34f, 0.40f, 0.60f);
-        private static readonly Color LINE_READY       = new(0.50f, 0.85f, 1.00f, 0.80f);
-        private static readonly Color LINE_DONE        = new(0.40f, 0.85f, 0.50f, 1.00f);
-        private static readonly Color GLOW_READY       = new(0.20f, 0.55f, 0.95f, 0.15f);
-        private static Color TextPrimary  => new(0.92f, 0.94f, 0.97f);
-        private static Color TextMuted    => new(0.40f, 0.44f, 0.52f);
+        private static readonly Color BG_OVERLAY       = new(0.015f, 0.025f, 0.045f, 0.90f);
+        private static readonly Color PANEL_BG         = new(0.045f, 0.065f, 0.09f, 0.99f);
+        private static readonly Color CANVAS_BG        = new(0.025f, 0.045f, 0.065f, 1.00f);
+        private static readonly Color CARD_BG          = new(0.075f, 0.105f, 0.135f, 1.00f);
+        private static readonly Color CARD_HOVER       = new(0.105f, 0.15f, 0.19f, 1.00f);
+        private static readonly Color CARD_READY       = new(0.075f, 0.17f, 0.21f, 1.00f);
+        private static readonly Color CARD_ACTIVE      = new(0.065f, 0.20f, 0.28f, 1.00f);
+        private static readonly Color CARD_DONE        = new(0.065f, 0.17f, 0.12f, 1.00f);
+        private static readonly Color CARD_LOCKED      = new(0.055f, 0.075f, 0.10f, 1.00f);
+        private static readonly Color BORDER_DEFAULT   = new(0.16f, 0.23f, 0.28f, 1.00f);
+        private static readonly Color BORDER_SELECT    = new(1.00f, 0.70f, 0.22f, 1.00f);
+        private static readonly Color BORDER_DONE      = new(0.30f, 0.82f, 0.57f, 1.00f);
+        private static readonly Color BORDER_ACTIVE    = new(0.25f, 0.82f, 0.95f, 1.00f);
+        private static readonly Color ACCENT_BLUE      = new(0.15f, 0.76f, 0.91f);
+        private static readonly Color ACCENT_AMBER     = new(1.00f, 0.66f, 0.22f);
+        private static readonly Color ACCENT_GREEN     = new(0.32f, 0.86f, 0.58f);
+        private static readonly Color LINE_BASE        = new(0.23f, 0.34f, 0.39f, 0.72f);
+        private static readonly Color LINE_READY       = new(0.18f, 0.84f, 0.98f, 0.90f);
+        private static readonly Color LINE_DONE        = new(0.30f, 0.82f, 0.57f, 1.00f);
+        private static readonly Color GLOW_READY       = new(0.10f, 0.72f, 0.90f, 0.16f);
+        private static Color TextPrimary  => new(0.94f, 0.97f, 0.99f);
+        private static Color TextMuted    => new(0.58f, 0.68f, 0.73f);
 
         // ── State ───────────────────────────────────────────────────────
         private UIDocument    _doc;
         private VisualElement _root;
         private VisualElement _panel;
         private VisualElement _canvas;          // the zoomable/pannable tree surface
+        private VisualElement _gridLayer;        // subtle technical graph paper behind the tree
         private VisualElement _connectors;      // draws bezier prereq lines
         private VisualElement _detailsPanel;
         private ScrollView    _canvasScroll;    // the scroll container
@@ -92,11 +93,12 @@ namespace VoxelEngine.Research
         private const float ZOOM_STEP = 0.12f;
 
         // Node geometry
-        private const float NODE_W = 190f;
-        private const float NODE_H = 110f;
-        private const float NODE_GAP_Y = 14f;
-        private const float TIER_GAP_X = 80f;
-        private const float TREE_PAD = 40f;
+        private const float NODE_W = 220f;
+        private const float NODE_H = 132f;
+        private const float NODE_GAP_Y = 22f;
+        private const float TIER_GAP_X = 128f;
+        private const float TREE_PAD = 48f;
+        private const float GRID_STEP = 48f;
 
         private readonly Dictionary<ResearchNode, Rect> _nodeRects = new();
 
@@ -172,7 +174,7 @@ namespace VoxelEngine.Research
             _root.style.backgroundColor = new StyleColor(Color.clear);
             _nodeRects.Clear();
             _detailsPanel = _progressFill = _progressLabel = null;
-            _canvas = _connectors = _canvasScroll = null;
+            _canvas = _gridLayer = _connectors = _canvasScroll = null;
         }
 
         private void AnimateOpen()
@@ -245,12 +247,12 @@ namespace VoxelEngine.Research
             // Title
             var accent = new VisualElement();
             accent.style.width = 4; accent.style.height = 24;
-            accent.style.backgroundColor = new StyleColor(ACCENT_AMBER);
+            accent.style.backgroundColor = new StyleColor(ACCENT_BLUE);
             accent.style.marginRight = 10;
             SetRadius(accent, 2);
             header.Add(accent);
 
-            var title = new Label("TECH TREE");
+            var title = new Label("RESEARCH NETWORK");
             title.style.color = TextPrimary;
             title.style.fontSize = 18;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -322,7 +324,7 @@ namespace VoxelEngine.Research
             var searchWrap = new VisualElement();
             searchWrap.style.flexDirection = FlexDirection.Row;
             searchWrap.style.alignItems = Align.Center;
-            var searchIcon = new Label("🔍");
+            var searchIcon = new Label("⌕");
             searchIcon.style.fontSize = 12; searchIcon.style.marginRight = 4;
             searchIcon.style.color = TextMuted;
             searchWrap.Add(searchIcon);
@@ -353,12 +355,12 @@ namespace VoxelEngine.Research
         private void BuildTabsColumn(VisualElement parent)
         {
             var col = new VisualElement();
-            col.style.width = 130;
+            col.style.width = 150;
             col.style.marginRight = 8;
             col.style.flexShrink = 0;
             parent.Add(col);
 
-            var hint = new Label("FILTER");
+            var hint = new Label("BRANCH FILTER");
             hint.style.color = TextMuted;
             hint.style.fontSize = 9;
             hint.style.letterSpacing = 2.5f;
@@ -403,8 +405,35 @@ namespace VoxelEngine.Research
             col.style.flexShrink = 1;
             col.style.minWidth = 0;
             col.style.backgroundColor = new StyleColor(CANVAS_BG);
+            col.style.borderTopWidth = col.style.borderBottomWidth =
+            col.style.borderLeftWidth = col.style.borderRightWidth = 1;
+            var canvasBorder = new StyleColor(new Color(0.12f, 0.25f, 0.31f, 0.95f));
+            col.style.borderTopColor = col.style.borderBottomColor =
+            col.style.borderLeftColor = col.style.borderRightColor = canvasBorder;
             SetRadius(col, 6);
             parent.Add(col);
+
+            var mapHeader = new VisualElement();
+            mapHeader.style.height = 28;
+            mapHeader.style.flexDirection = FlexDirection.Row;
+            mapHeader.style.alignItems = Align.Center;
+            mapHeader.style.paddingLeft = 10;
+            mapHeader.style.paddingRight = 10;
+            mapHeader.style.borderBottomWidth = 1;
+            mapHeader.style.borderBottomColor = new StyleColor(new Color(0.14f, 0.25f, 0.30f));
+            col.Add(mapHeader);
+            var mapTitle = new Label("DEPENDENCY MAP");
+            mapTitle.style.color = new Color(0.70f, 0.88f, 0.92f);
+            mapTitle.style.fontSize = 9;
+            mapTitle.style.letterSpacing = 2f;
+            mapTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            mapHeader.Add(mapTitle);
+            var mapHint = new Label("  PREREQUISITES  →  RESEARCH PATH");
+            mapHint.style.color = TextMuted;
+            mapHint.style.fontSize = 9;
+            mapHint.style.flexGrow = 1;
+            mapHint.style.unityTextAlign = TextAnchor.MiddleRight;
+            mapHeader.Add(mapHint);
 
             _canvasScroll = new ScrollView(ScrollViewMode.VerticalAndHorizontal);
             VoxelEngine.UI.UITheme.StyleScroller(_canvasScroll);
@@ -420,6 +449,14 @@ namespace VoxelEngine.Research
             _canvas.style.paddingLeft = TREE_PAD;
             _canvas.style.paddingRight = TREE_PAD;
             _canvasScroll.Add(_canvas);
+
+            _gridLayer = new VisualElement();
+            _gridLayer.style.position = Position.Absolute;
+            _gridLayer.style.left = 0; _gridLayer.style.top = 0;
+            _gridLayer.style.right = 0; _gridLayer.style.bottom = 0;
+            _gridLayer.pickingMode = PickingMode.Ignore;
+            _gridLayer.generateVisualContent += DrawResearchGrid;
+            _canvas.Add(_gridLayer);
 
             // Connectors layer
             _connectors = new VisualElement();
@@ -469,7 +506,7 @@ namespace VoxelEngine.Research
             // Remove cards (keep connector)
             for (int i = _canvas.childCount - 1; i >= 0; i--)
             {
-                if (_canvas[i] == _connectors) continue;
+                if (_canvas[i] == _connectors || _canvas[i] == _gridLayer) continue;
                 _canvas.RemoveAt(i);
             }
             _nodeRects.Clear();
@@ -504,67 +541,134 @@ namespace VoxelEngine.Research
                 empty.style.fontSize = 13;
                 _canvas.Add(empty);
                 _canvas.style.width = 400; _canvas.style.height = 200;
+                _gridLayer?.MarkDirtyRepaint();
                 _connectors.MarkDirtyRepaint();
                 return;
             }
 
-            // Group by tier
-            var byTier = new SortedDictionary<int, List<ResearchNode>>();
-            int maxTier = 0;
-            foreach (var n in nodes)
+            // Lay the map out by dependency depth, not merely by authored tier. Nodes
+            // sharing prerequisites naturally branch into sibling paths, while merge
+            // points are centered over their incoming research lines.
+            var visibleNodes = new HashSet<ResearchNode>(nodes);
+            var depthByNode = new Dictionary<ResearchNode, int>();
+            var resolving = new HashSet<ResearchNode>();
+            int ResolveDepth(ResearchNode node)
             {
-                int t = Mathf.Clamp(n.tier, 1, 10);
-                if (!byTier.TryGetValue(t, out var list)) byTier[t] = list = new List<ResearchNode>();
-                list.Add(n);
-                if (t > maxTier) maxTier = t;
+                if (depthByNode.TryGetValue(node, out int knownDepth)) return knownDepth;
+                if (!resolving.Add(node)) return Mathf.Clamp(node.tier - 1, 0, 20);
+
+                int depth = 0;
+                if (node.prerequisites != null)
+                {
+                    foreach (var prerequisite in node.prerequisites)
+                    {
+                        if (prerequisite == null || !visibleNodes.Contains(prerequisite)) continue;
+                        depth = Mathf.Max(depth, ResolveDepth(prerequisite) + 1);
+                    }
+                }
+
+                resolving.Remove(node);
+                depth = Mathf.Clamp(depth, 0, 20);
+                depthByNode[node] = depth;
+                return depth;
             }
 
-            float xCursor = 0f;
-            float maxH = 28f;
-
-            foreach (var kv in byTier)
+            var byDepth = new SortedDictionary<int, List<ResearchNode>>();
+            int maxDepth = 0;
+            foreach (var node in nodes)
             {
-                kv.Value.Sort((a, b) => a.column.CompareTo(b.column));
+                int depth = ResolveDepth(node);
+                if (!byDepth.TryGetValue(depth, out var list))
+                    byDepth[depth] = list = new List<ResearchNode>();
+                list.Add(node);
+                maxDepth = Mathf.Max(maxDepth, depth);
+            }
 
-                // Tier header label
-                var tierLbl = new Label("TIER " + kv.Key);
-                tierLbl.style.position = Position.Absolute;
-                tierLbl.style.left = xCursor + (NODE_W * 0.5f) - 22;
-                tierLbl.style.top = 0;
-                tierLbl.style.color = TextMuted;
-                tierLbl.style.fontSize = 10;
-                tierLbl.style.letterSpacing = 2.5f;
-                tierLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-                _canvas.Add(tierLbl);
+            var rowCenterByNode = new Dictionary<ResearchNode, float>();
+            float maxBottom = 48f;
+            foreach (var layer in byDepth)
+            {
+                float ParentCenter(ResearchNode node)
+                {
+                    if (node.prerequisites == null) return -1f;
+                    float total = 0f;
+                    int count = 0;
+                    foreach (var prerequisite in node.prerequisites)
+                    {
+                        if (prerequisite == null || !rowCenterByNode.TryGetValue(prerequisite, out float center)) continue;
+                        total += center;
+                        count++;
+                    }
+                    return count > 0 ? total / count : -1f;
+                }
 
-                // Add a subtle vertical guide line below the tier header
+                layer.Value.Sort((a, b) =>
+                {
+                    float parentA = ParentCenter(a);
+                    float parentB = ParentCenter(b);
+                    int compare = parentA.CompareTo(parentB);
+                    if (compare != 0) return compare;
+                    compare = a.subCategory.CompareTo(b.subCategory);
+                    if (compare != 0) return compare;
+                    compare = a.column.CompareTo(b.column);
+                    if (compare != 0) return compare;
+                    compare = a.tier.CompareTo(b.tier);
+                    if (compare != 0) return compare;
+                    return string.Compare(a.nodeId, b.nodeId, System.StringComparison.OrdinalIgnoreCase);
+                });
+
+                float x = layer.Key * (NODE_W + TIER_GAP_X);
+                float y = 44f;
+                float columnBottom = y + layer.Value.Count * (NODE_H + NODE_GAP_Y);
+
+                var stageLabel = new Label($"SEQUENCE {layer.Key + 1:00}");
+                stageLabel.style.position = Position.Absolute;
+                stageLabel.style.left = x;
+                stageLabel.style.top = 5;
+                stageLabel.style.color = new Color(0.55f, 0.82f, 0.88f);
+                stageLabel.style.fontSize = 10;
+                stageLabel.style.letterSpacing = 2f;
+                stageLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                stageLabel.pickingMode = PickingMode.Ignore;
+                _canvas.Add(stageLabel);
+
+                var stageCount = new Label($"{layer.Value.Count:00} NODES");
+                stageCount.style.position = Position.Absolute;
+                stageCount.style.left = x;
+                stageCount.style.top = 20;
+                stageCount.style.color = TextMuted;
+                stageCount.style.fontSize = 9;
+                stageCount.style.letterSpacing = 1f;
+                stageCount.pickingMode = PickingMode.Ignore;
+                _canvas.Add(stageCount);
+
                 var guide = new VisualElement();
                 guide.style.position = Position.Absolute;
-                guide.style.left = xCursor + NODE_W * 0.5f - 1;
-                guide.style.top = 22;
-                guide.style.width = 2;
-                guide.style.height = 8;
-                guide.style.backgroundColor = new StyleColor(new Color(0.25f, 0.28f, 0.32f, 0.30f));
-                SetRadius(guide, 1);
+                guide.style.left = x + NODE_W + TIER_GAP_X * 0.5f;
+                guide.style.top = 38;
+                guide.style.width = 1;
+                guide.style.height = Mathf.Max(16f, columnBottom - 40f);
+                guide.style.backgroundColor = new StyleColor(new Color(0.18f, 0.56f, 0.62f, 0.16f));
+                guide.pickingMode = PickingMode.Ignore;
                 _canvas.Add(guide);
 
-                float yCursor = 32f;
-                foreach (var n in kv.Value)
+                foreach (var node in layer.Value)
                 {
-                    var card = BuildNodeCard(n);
+                    var card = BuildNodeCard(node);
                     card.style.position = Position.Absolute;
-                    card.style.left = xCursor;
-                    card.style.top = yCursor;
+                    card.style.left = x;
+                    card.style.top = y;
                     _canvas.Add(card);
-                    _nodeRects[n] = new Rect(xCursor, yCursor, NODE_W, NODE_H);
-                    yCursor += NODE_H + NODE_GAP_Y;
+                    _nodeRects[node] = new Rect(x, y, NODE_W, NODE_H);
+                    rowCenterByNode[node] = y + NODE_H * 0.5f;
+                    y += NODE_H + NODE_GAP_Y;
                 }
-                if (yCursor > maxH) maxH = yCursor;
-                xCursor += NODE_W + TIER_GAP_X;
+                maxBottom = Mathf.Max(maxBottom, y);
             }
 
-            _canvas.style.width = Mathf.Max(xCursor + 40, 600);
-            _canvas.style.height = Mathf.Max(maxH + 40, 300);
+            float canvasWidth = (maxDepth + 1) * NODE_W + maxDepth * TIER_GAP_X + TREE_PAD * 2f;
+            _canvas.style.width = Mathf.Max(canvasWidth, 640f);
+            _canvas.style.height = Mathf.Max(maxBottom + TREE_PAD, 320f);
 
             // Animate glow on cards that became ready
             foreach (var n in nodes)
@@ -575,8 +679,54 @@ namespace VoxelEngine.Research
                 }
             }
 
+            _gridLayer?.MarkDirtyRepaint();
             _connectors.MarkDirtyRepaint();
             UpdateEraLabel();
+        }
+
+        private void DrawResearchGrid(MeshGenerationContext mgc)
+        {
+            if (_gridLayer == null || _canvas == null) return;
+            var painter = mgc.painter2D;
+            Rect rect = _gridLayer.contentRect;
+            float width = Mathf.Max(rect.width, _canvas.resolvedStyle.width);
+            float height = Mathf.Max(rect.height, _canvas.resolvedStyle.height);
+            if (width <= 0f || height <= 0f) return;
+
+            painter.lineWidth = 1f;
+            painter.strokeColor = new Color(0.18f, 0.36f, 0.41f, 0.22f);
+            for (float x = 0f; x <= width; x += GRID_STEP)
+            {
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(x, 0f));
+                painter.LineTo(new Vector2(x, height));
+                painter.Stroke();
+            }
+            for (float y = 0f; y <= height; y += GRID_STEP)
+            {
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(0f, y));
+                painter.LineTo(new Vector2(width, y));
+                painter.Stroke();
+            }
+
+            painter.lineWidth = 1.25f;
+            painter.strokeColor = new Color(0.12f, 0.42f, 0.48f, 0.18f);
+            float majorStep = GRID_STEP * 4f;
+            for (float x = 0f; x <= width; x += majorStep)
+            {
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(x, 0f));
+                painter.LineTo(new Vector2(x, height));
+                painter.Stroke();
+            }
+            for (float y = 0f; y <= height; y += majorStep)
+            {
+                painter.BeginPath();
+                painter.MoveTo(new Vector2(0f, y));
+                painter.LineTo(new Vector2(width, y));
+                painter.Stroke();
+            }
         }
 
         // ── Connector Lines ─────────────────────────────────────────────
@@ -681,14 +831,14 @@ namespace VoxelEngine.Research
             card.style.width = NODE_W;
             card.style.height = NODE_H;
             card.style.paddingTop = 8; card.style.paddingBottom = 8;
-            card.style.paddingLeft = 10; card.style.paddingRight = 10;
+            card.style.paddingLeft = 11; card.style.paddingRight = 11;
             card.style.backgroundColor = new StyleColor(bg);
             card.style.borderTopWidth = card.style.borderBottomWidth =
-            card.style.borderLeftWidth = card.style.borderRightWidth = 2;
+            card.style.borderLeftWidth = card.style.borderRightWidth = 1.5f;
             var sc = new StyleColor(borderC);
             card.style.borderTopColor = card.style.borderBottomColor =
             card.style.borderLeftColor = card.style.borderRightColor = sc;
-            SetRadius(card, 6);
+            SetRadius(card, 8);
 
             // Glow overlay for ready-but-not-started nodes (breathing effect)
             if (ready && !maxed && !active)
@@ -722,20 +872,38 @@ namespace VoxelEngine.Research
             card.Add(topRow);
 
             var iconSwatch = new VisualElement();
-            iconSwatch.style.width = 24; iconSwatch.style.height = 24;
+            iconSwatch.style.width = 28; iconSwatch.style.height = 28;
+            iconSwatch.style.flexShrink = 0;
             iconSwatch.style.backgroundColor = new StyleColor(n.iconTint);
-            iconSwatch.style.marginRight = 6;
-            SetRadius(iconSwatch, 4);
+            iconSwatch.style.marginRight = 8;
+            iconSwatch.style.alignItems = Align.Center;
+            iconSwatch.style.justifyContent = Justify.Center;
+            SetRadius(iconSwatch, 5);
+            var tierMark = new Label($"T{Mathf.Clamp(n.tier, 1, 99):00}");
+            tierMark.style.color = new Color(0.015f, 0.035f, 0.045f);
+            tierMark.style.fontSize = 8;
+            tierMark.style.unityFontStyleAndWeight = FontStyle.Bold;
+            iconSwatch.Add(tierMark);
             topRow.Add(iconSwatch);
 
             var name = new Label(n.displayName);
-            name.style.color = (maxed || active) ? TextPrimary : (ready ? new Color(0.85f, 0.88f, 0.92f) : TextMuted);
-            name.style.fontSize = 12;
+            name.style.color = (maxed || active) ? TextPrimary : (ready ? new Color(0.88f, 0.95f, 0.97f) : TextMuted);
+            name.style.fontSize = 13;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             name.style.whiteSpace = WhiteSpace.Normal;
             name.style.flexGrow = 1;
+            name.style.maxHeight = 34;
             name.pickingMode = PickingMode.Ignore;
             topRow.Add(name);
+
+            var branchTag = new Label($"{n.subCategory.ToString().ToUpperInvariant()}   /   TIER {Mathf.Clamp(n.tier, 1, 10):00}");
+            branchTag.style.color = TextMuted;
+            branchTag.style.fontSize = 8;
+            branchTag.style.letterSpacing = 1f;
+            branchTag.style.marginBottom = 4;
+            branchTag.style.marginLeft = 36;
+            branchTag.pickingMode = PickingMode.Ignore;
+            card.Add(branchTag);
 
             // Cost row (compact)
             if (n.cost != null && n.cost.Length > 0)
@@ -757,11 +925,11 @@ namespace VoxelEngine.Research
             // Status line
             string statusLine;
             Color statusCol = TextMuted;
-            if (n.IsRepeatable) { statusLine = $"Rank {rank}/{n.maxRanks}"; statusCol = rank > 0 ? ACCENT_AMBER : TextMuted; }
-            else if (maxed) { statusLine = "✓ Done"; statusCol = ACCENT_GREEN; }
-            else if (active) { statusLine = "● Researching"; statusCol = new Color(0.5f, 0.8f, 1.0f); }
-            else if (ready) { statusLine = "Available"; statusCol = TextPrimary; }
-            else { statusLine = "🔒 Locked"; statusCol = TextMuted; }
+            if (n.IsRepeatable) { statusLine = $"RANK {rank}/{n.maxRanks}"; statusCol = rank > 0 ? ACCENT_AMBER : TextMuted; }
+            else if (maxed) { statusLine = "COMPLETE"; statusCol = ACCENT_GREEN; }
+            else if (active) { statusLine = "RESEARCH IN PROGRESS"; statusCol = new Color(0.52f, 0.88f, 0.97f); }
+            else if (ready) { statusLine = "READY TO RESEARCH"; statusCol = TextPrimary; }
+            else { statusLine = "LOCKED · PREREQUISITE REQUIRED"; statusCol = TextMuted; }
 
             var st = new Label(statusLine);
             st.style.color = statusCol;

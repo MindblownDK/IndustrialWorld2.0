@@ -51,6 +51,7 @@ namespace VoxelEngine.Building
         private GridPrecisionLatticePreview _precisionLattice;
         private StaticSurfaceLatticePreview _staticSurfaceLattice;
         private PlacedBlock _surfaceAttachmentHost;
+        private VoxelEngine.Building.Tiered.PlacedTieredBlock _deckSnapHost;
         private StaticSurfaceLatticePose _surfaceLatticePose;
         private readonly System.Collections.Generic.List<Vector3> _pipeGhostLinks = new(1);
         private VoxelEngine.Networks.PipeVisualBuilder _pipeGhostVisual;
@@ -1358,6 +1359,7 @@ namespace VoxelEngine.Building
         private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
         {
             _surfaceAttachmentHost = null;
+            _deckSnapHost = null;
             _surfaceLatticePose = default;
 
             if (TryGetStaticPipeSnapPose(hit, block, out pos, out rot))
@@ -1383,7 +1385,7 @@ namespace VoxelEngine.Building
             if (TryGetFactorySnapPose(hit, block, out pos, out rot))
                 return;
 
-            if (TryGetDeckSnapPose(hit, block, out pos, out rot))
+            if (TryGetDeckSnapPose(hit, block, out pos, out rot, out _deckSnapHost))
                 return;
 
             if (block != null && block.placedPrefab != null &&
@@ -1408,11 +1410,16 @@ namespace VoxelEngine.Building
         /// floating above the slab. The held collider's bottom rests on the deck
         /// top, and the footprint snaps to that piece's local lattice.
         /// </summary>
-        private bool TryGetDeckSnapPose(RaycastHit hit, BlockItem held, out Vector3 pos, out Quaternion rot)
+        private bool TryGetDeckSnapPose(RaycastHit hit, BlockItem held, out Vector3 pos, out Quaternion rot,
+            out VoxelEngine.Building.Tiered.PlacedTieredBlock deckHost)
         {
             pos = default;
             rot = default;
-            if (!gridSnap || held == null || held.placedPrefab == null || hit.collider == null)
+            deckHost = null;
+            // Deck support is a semantic snap, not the optional free-world grid.
+            // Keep machines and containers flush even while the player has toggled
+            // general grid snapping off.
+            if (held == null || held.placedPrefab == null || hit.collider == null)
                 return false;
             if (GetStaticPlacementPrefabProfile(held).usesDedicatedSnap) return false;
 
@@ -1459,6 +1466,7 @@ namespace VoxelEngine.Building
 
             Vector3 planar = origin + right * snapU + forward * snapV;
             pos = planar - up * Vector3.Dot(planar, up) + up * (deckTop + lift + 0.001f);
+            deckHost = deck;
             return true;
         }
 
@@ -2569,8 +2577,14 @@ namespace VoxelEngine.Building
             // distance check: blocks spawning between the player's feet used to launch
             // them upwards. Player pivot ≈ feet, capsule ≈ 1.9 m tall.
             Vector3 feet = transform.position;
-            bool insideColumn = new Vector2(feet.x - pos.x, feet.z - pos.z).magnitude < 0.65f;
-            bool withinHeight = pos.y > feet.y - 0.4f && pos.y < feet.y + 2.05f;
+            Vector3 surfaceUp = GravityProvider.GetUp(pos);
+            if (surfaceUp.sqrMagnitude < 0.0001f) surfaceUp = Vector3.up;
+            surfaceUp.Normalize();
+            Vector3 relativeToPlayer = pos - feet;
+            Vector3 planarOffset = Vector3.ProjectOnPlane(relativeToPlayer, surfaceUp);
+            float playerHeightOffset = Vector3.Dot(relativeToPlayer, surfaceUp);
+            bool insideColumn = planarOffset.sqrMagnitude < 0.65f * 0.65f;
+            bool withinHeight = playerHeightOffset > -0.4f && playerHeightOffset < 2.05f;
             if (insideColumn && withinHeight) return false;
 
             // Only actual conduits use the tight placement volume/terrain exception.
@@ -2649,7 +2663,8 @@ namespace VoxelEngine.Building
             }
 
             return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay,
-                block, placementProfile != null && placementProfile.isSurfaceAttachment ? _surfaceAttachmentHost : null);
+                block, placementProfile != null && placementProfile.isSurfaceAttachment ? _surfaceAttachmentHost : null,
+                _deckSnapHost);
         }
 
         /// <summary>Allocation-free portal volume guard for the every-frame ghost verdict.
@@ -2679,27 +2694,33 @@ namespace VoxelEngine.Building
         /// <summary>Preserves the old structural placement verdict while avoiding an
         /// allocating OverlapBox every ghost frame under normal collider density.</summary>
         private static bool IsPlacementProbeClear(Vector3 center, Vector3 halfExtents,
-            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost)
+            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
+            VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost)
         {
             int count = Physics.OverlapBoxNonAlloc(center, halfExtents, s_placementOverlapProbe,
                 Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
             for (int i = 0; i < count; i++)
                 if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay,
-                        block, surfaceAttachmentHost))
+                        block, surfaceAttachmentHost, deckSnapHost))
                     return false;
             if (count < s_placementOverlapProbe.Length) return true;
 
             foreach (var collider in Physics.OverlapBox(center, halfExtents, Quaternion.identity))
                 if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay,
-                        block, surfaceAttachmentHost))
+                        block, surfaceAttachmentHost, deckSnapHost))
                     return false;
             return true;
         }
 
         private static bool IsPlacementProbeColliderAllowed(Collider collider,
-            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost)
+            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
+            VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost)
         {
             if (collider == null || collider.isTrigger) return true;
+            var tiered = collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+            // A deck-snapped machine intentionally rests on the exact tiered host
+            // whose top plane supplied its pose. Other tiered structures remain blockers.
+            if (tiered != null && tiered == deckSnapHost) return true;
             var placed = collider.GetComponentInParent<PlacedBlock>();
             // A mounted utility piece intentionally touches only the face it was
             // snapped to. The support-plane pose guarantees it sits outside that

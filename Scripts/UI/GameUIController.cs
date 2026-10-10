@@ -4444,7 +4444,7 @@ namespace VoxelEngine.UI
             if (!_coalGenBuildLogged)
             {
                 _coalGenBuildLogged = true;
-                Debug.Log("[IndustrialWorld] CoalGenerator UI v3 loaded (toggle pill + fuel bar + centred status).");
+                Debug.Log("[IndustrialCrusaders] CoalGenerator UI v3 loaded (toggle pill + fuel bar + centred status).");
             }
             f.EnsureContainers();
             var panel = MakePanel();
@@ -5672,19 +5672,21 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
         private void GetDropPose(out Vector3 spawnPos, out Vector3 tossDir)
         {
-            // Spawn the drop a short distance in front of the player at chest
-            // height. Using a fixed offset relative to the player root (not the
-            // camera) avoids Camera.main/null and near-clip culling failures.
+            // Spawn in front of the player at local-gravity chest height. Using a fixed
+            // root-relative pose (rather than Camera.main) also works in radial worlds.
             if (inventory != null)
             {
                 var root = inventory.transform;
+                Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(root.position);
+                if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+                up.Normalize();
                 tossDir = root.forward;
-                spawnPos = root.position + Vector3.up * 1.0f + root.forward * 1.0f;
+                spawnPos = root.position + up * 1.0f + root.forward * 1.0f;
             }
             else
             {
                 spawnPos = Vector3.up * 2f;
-                tossDir  = Vector3.forward;
+                tossDir = Vector3.forward;
             }
         }
 

@@ -347,6 +347,19 @@ namespace VoxelEngine.UI
             return string.IsNullOrWhiteSpace(raw) ? "Ruin" : raw;
         }
 
+        private static bool IsSceneryRock(Transform source)
+        {
+            for (Transform cursor = source; cursor != null; cursor = cursor.parent)
+            {
+                string name = cursor.name.Replace("(Clone)", string.Empty)
+                    .Replace('_', ' ').Replace('-', ' ').Trim();
+                if (name.IndexOf("rock", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("boulder", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
         private static bool TryResolve(RaycastHit hit, out TargetInfo info)
         {
             info = default;
@@ -355,13 +368,9 @@ namespace VoxelEngine.UI
             var tree = hit.collider.GetComponentInParent<VoxelEngine.Trees.Tree>();
             if (tree != null)
             {
-                string treeName = hit.collider.name.Replace("(Clone)", string.Empty).Trim();
-                if (treeName.StartsWith("Tree_", System.StringComparison.OrdinalIgnoreCase))
-                    treeName = treeName.Substring(5) + " Tree";
-                else if (string.IsNullOrEmpty(treeName) || treeName == "__scatter")
-                    treeName = "Tree";
-
-                info.title = treeName.ToUpperInvariant();
+                // Runtime scatter meshes keep their source asset names (for example
+                // "summer01"). Inspection is a gameplay label, not an asset browser.
+                info.title = "Tree";
                 info.detail = "VEGETATION · HARVESTABLE";
                 info.status = "Harvestable with Axe or Hands for Wood Logs";
                 info.showHealth = tree.maxHp > 0;
@@ -627,6 +636,14 @@ namespace VoxelEngine.UI
                     : astMat.ToString();
                 info.detail = "ASTEROID";
                 info.status = $"{asteroid.Remaining01 * 100f:0}% remaining · {hit.distance:0.0} m";
+                return true;
+            }
+
+            if (IsSceneryRock(hit.collider.transform))
+            {
+                info.title = "Rocks";
+                info.detail = "SCENERY";
+                info.status = $"Distance: {hit.distance:0.0} m";
                 return true;
             }
 

@@ -35,7 +35,7 @@ namespace VoxelEngine.Networking
     public class ServerConfig
     {
         [Tooltip("Shown in logs; purely cosmetic.")]
-        public string serverName = "Industrial World Server";
+        public string serverName = "IndustrialCrusaders Server";
 
         [Tooltip("Save folder to host. Created on first boot when missing.")]
         public string worldName = "DedicatedWorld";

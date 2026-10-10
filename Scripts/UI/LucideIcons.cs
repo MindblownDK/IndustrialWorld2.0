@@ -2,7 +2,7 @@
 //
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║          LUCIDE ICON FONT — codepoint constants                ║
-// ║   Subset of the Lucide icon font used across IndustrialWorld.  ║
+// ║     Lucide icons used across IndustrialCrusaders.               ║
 // ║   Full font lives at Resources/Fonts/Lucide.ttf                ║
 // ║   Source: https://lucide.dev/icons/                            ║
 // ╚══════════════════════════════════════════════════════════════════╝
