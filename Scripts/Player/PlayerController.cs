@@ -496,7 +496,7 @@ namespace VoxelEngine.Player
                     if (jets.anyPack && !string.IsNullOrEmpty(jets.offlineReason))
                         detail = jets.offlineReason; // e.g. "No atmosphere — engine can't ignite here"
                     else
-                        detail = equippedNow ? "Jetpack equipped, but flight remains locked" : "Research flight or equip a jetpack in one of the two slots.";
+                        detail = equippedNow ? "Jetpack equipped, but it cannot fly here" : "Equip a fueled jetpack in one of the two slots.";
                     VoxelEngine.UI.BuildFeedbackHud.Show("Flight Locked", detail, null, Color.yellow);
                     Debug.Log("[Player] Flight is locked. " + detail);
                 }
@@ -973,7 +973,7 @@ namespace VoxelEngine.Player
             // fueled pack remains (no atmosphere / dry tanks) and no research-only
             // flight permission remains.
             var jets = equipment != null ? equipment.GetJetpackSummary() : PlayerEquipment.JetpackSummary.Empty;
-            // No equipment component at all (dev/research flight) keeps free boost; with
+            // No equipment component at all (dev flight) keeps free boost; with
             // equipment, boost only engages when the drive pack reports afterburner fuel.
             bool boosting = (equipment == null || jets.canBoost)
                             && !uiLocked && GameSettings.IsHeld(InputAction.Sprint);
@@ -991,7 +991,7 @@ namespace VoxelEngine.Player
                     CutJetpackFlight("Out of fuel — fill Portable H₂ Tanks / Batteries / Cells");
                     return;
                 }
-                // If research flight is unlocked, allow unfueled flight without boost.
+                // Fuel ran out. Boost stops. Flight itself already ended above unless a grant remains.
                 if (!fueled) boosting = false;
             }
 

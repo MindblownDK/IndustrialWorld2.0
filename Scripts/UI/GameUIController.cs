@@ -544,6 +544,11 @@ namespace VoxelEngine.UI
                 UIState.PauseConsumedFrame = Time.frameCount;
                 _justClosedThisFrame = true;
             }
+            else if (!typing && weAreOpen && CraftKeyPressed())
+            {
+                CraftingScreen.Visible = !CraftingScreen.Visible;
+                Refresh();
+            }
             // Reset per-frame close guard each frame.
             else
             {
@@ -6818,6 +6823,16 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             var stack = hovered.container.GetSlot(hovered.index);
             if (stack == null || stack.IsEmpty) return;
             DropItemFromSlot(hovered.container, hovered.index);
+        }
+
+        /// <summary>
+        /// Inventory-only craft key. C stays Down and Crouch in the bind list;
+        /// movement already ignores those while the inventory is blocking.
+        /// </summary>
+        private static bool CraftKeyPressed()
+        {
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            return keyboard != null && keyboard.cKey.wasPressedThisFrame;
         }
 
         private void CheckHotbarKey(InputAction act, int slotIdx)

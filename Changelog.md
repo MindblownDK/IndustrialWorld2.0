@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.4.1-dev`
+**Current Version:** `17.4.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.4.3-dev] Compile the Science Pack Recipe List
+
+**Type:** PATCH — compile fix only. No save, recipe, or behaviour change beyond 17.4.2-dev.
+
+**GitHub title:** `[17.4.3-dev] Compile the science pack recipe list`
+
+#### Fixed
+- The science-pack station check no longer uses a pattern variable Unity treats as unassigned. `Crafter.cs` CS0165 is gone. Pack I still crafts in hand, Pack II at a Crafting Bench, and Pack III at an Assembler.
+
+#### Compatibility and validation
+- PATCH over 17.4.2-dev. Old saves load. No setup step.
+- Unity has not been recompiled in this workspace.
+
+### [17.4.2-dev] Fix Science Packs, Craft Key, Deck Snap, and Flight
+
+**Type:** PATCH — save-compatible fixes. No voxel format, prefab schema, or keybind-version change.
+
+**GitHub title:** `[17.4.2-dev] Fix science packs, craft key, deck snap, and flight`
+
+#### Fixed
+- Science pack crafting matches the ingredient by item id, so a second Science Pack asset with the same id no longer looks like a missing ingredient. The inventory list keeps one recipe per tier: Pack I in hand, Pack II at a Crafting Bench, Pack III at an Assembler. Research lab and backpack research pay the same way, without changing the authored counts.
+- C, while the inventory is open and no text field is focused, opens and closes the crafting panel. The existing crafting toggle shows C. Down and Crouch are unchanged, and C is not a new bind.
+- A machine or chest aimed at the top of a Foundation, Floor, Floor Hatch, or Station Floor sits on that deck. Yaw stays in 90 degree steps on the deck, and the footprint snaps on the deck axes. Pipes, roads, belts, chutes, funnels, and power snaps are unchanged.
+- Flight is no longer a research unlock. The Flight node is hidden, a saved Flight rank does not grant flight, and the denied line no longer says to research flight. Jetpack recipes stay.
+
+#### Compatibility and validation
+- PATCH over 17.4.1-dev. Old saves load. Science pack items and jetpack recipes are not removed.
+- Voxel Engine Setup, Core & Project Bootstrap, **Repair science pack recipes** keeps one `Recipe_ScienceT*` per tier under `Assets/VoxelEngineAssets/Recipes`, deletes the `Research/Recipes` copies, and rewires same-tier research costs onto the canonical pack. **Build research tree, science packs and research lab** does the same and drops Flight from the tree. Neither action adds a Tools menu item.
+- Unity compilation and an in-game check have not been run in this workspace.
 
 ### [17.4.1-dev] Remove Build Tokens from Crafting
 

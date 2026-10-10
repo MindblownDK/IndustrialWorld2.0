@@ -142,6 +142,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build the main-menu scene", BuildMainMenuScene),
                 Setup("Build base crafting, tools, stations and blocks", BuildBaseCraftingContent),
                 Setup("Build research tree, science packs and research lab", BuildResearchContent),
+                Setup("Repair science pack recipes", () => ScienceRecipeRepair.Run()),
                 Setup("Anchor runtime shaders for standalone builds", () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103()),
                 Setup("Wire multiplayer bootstrap in the active game scene", () => VoxelEngine.EditorTools.NetworkSetup.RunStep105()));
 
@@ -2625,7 +2626,12 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Items.ScienceItem MakeScience(string assetName, string display, Color tint, int tier, string desc)
             {
                 string path = $"{itemsFolder}/{assetName}.asset";
-                var sci = ScriptableObject.CreateInstance<VoxelEngine.Items.ScienceItem>();
+                var sci = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>(path);
+                if (sci == null)
+                {
+                    sci = ScriptableObject.CreateInstance<VoxelEngine.Items.ScienceItem>();
+                    AssetDatabase.CreateAsset(sci, path);
+                }
                 sci.itemId      = assetName.ToLower();
                 sci.displayName = display;
                 sci.description = desc;
@@ -2635,7 +2641,7 @@ namespace VoxelEngine.EditorTools
                 sci.category    = "Science";
                 sci.subcategory = VoxelEngine.Items.ResourceCategory.Misc;
                 sci.tier        = tier;
-                AssetDatabase.CreateAsset(sci, path);
+                EditorUtility.SetDirty(sci);
                 return sci;
             }
             var sciT1 = MakeScience("Item_ScienceT1", "Science Pack I",   new Color(0.85f, 0.30f, 0.30f), 1,
@@ -2869,12 +2875,11 @@ namespace VoxelEngine.EditorTools
                 2, 0, new[] { (sciT1, 5), (sciT2, 3) },
                 VoxelEngine.Research.PlayerUpgradeKind.BonusSprintMultiplier, 0.25f, 10);
 
-            // Tier 3 — Flight. Single-rank, ultra-expensive, requires a special artifact (TODO: artifact item).
-            MakePlayerNode("up_flight","Flight",
-                "Unlocks permanent flight (toggle with F or via Settings). " +
-                "Requires a Mysterious Artifact (not yet implemented) plus a stack of Tier-3 science.",
-                3, 0, new[] { (sciT3, 50) },
-                VoxelEngine.Research.PlayerUpgradeKind.UnlockFlight, 1f, 1);
+            // Flight is a jetpack, not a research unlock. Drop any older Flight node
+            // from the tree this rebuild writes. The asset is left on disk.
+            tree.nodes.RemoveAll(node => node != null
+                && (node.upgradeKind == VoxelEngine.Research.PlayerUpgradeKind.UnlockFlight
+                    || node.nodeId == "up_flight"));
 
             string treePath = $"{researchFolder}/ResearchTree.asset";
             var existingTree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>(treePath);
@@ -2890,6 +2895,7 @@ namespace VoxelEngine.EditorTools
             }
             EditorUtility.SetDirty(tree);
 
+            ScienceRecipeRepair.Repair(out _, out _);
             EditorUtility.SetDirty(recipeRegistry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();

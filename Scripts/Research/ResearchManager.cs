@@ -133,7 +133,7 @@ namespace VoxelEngine.Research
             {
                 if (c.pack == null || c.count <= 0) continue;
                 int need = GetEffectiveCount(node, c.count);
-                if (inventory.CountOf(c.pack) < need) return false;
+                if (CountScience(inventory, c.pack) < need) return false;
             }
 
             // Consume
@@ -141,7 +141,7 @@ namespace VoxelEngine.Research
             {
                 if (c.pack == null || c.count <= 0) continue;
                 int need = GetEffectiveCount(node, c.count);
-                inventory.Remove(c.pack, need);
+                RemoveScience(inventory, c.pack, need);
             }
 
             CompleteResearch(node);
@@ -167,6 +167,20 @@ namespace VoxelEngine.Research
         // ============================================================
         //                           QUERIES
         // ============================================================
+        private static int CountScience(ItemContainer inventory, ItemDefinition pack)
+        {
+            if (inventory == null || pack == null) return 0;
+            if (string.IsNullOrEmpty(pack.itemId)) return inventory.CountOf(pack);
+            return inventory.CountOfId(pack.itemId);
+        }
+
+        private static void RemoveScience(ItemContainer inventory, ItemDefinition pack, int count)
+        {
+            if (inventory == null || pack == null || count <= 0) return;
+            if (string.IsNullOrEmpty(pack.itemId)) inventory.Remove(pack, count);
+            else inventory.RemoveId(pack.itemId, count);
+        }
+
         public int GetRank(ResearchNode node)
         {
             if (node == null) return 0;

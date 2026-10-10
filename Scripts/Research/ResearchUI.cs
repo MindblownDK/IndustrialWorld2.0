@@ -483,6 +483,8 @@ namespace VoxelEngine.Research
             foreach (var n in tree.nodes)
             {
                 if (n == null) continue;
+                // Flight is a jetpack, not a research unlock.
+                if (n.upgradeKind == PlayerUpgradeKind.UnlockFlight || n.nodeId == "up_flight") continue;
                 if (_activeSub.HasValue && n.subCategory != _activeSub.Value) continue;
                 if (!string.IsNullOrEmpty(_searchQuery))
                 {

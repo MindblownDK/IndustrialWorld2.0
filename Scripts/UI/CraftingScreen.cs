@@ -112,7 +112,7 @@ namespace VoxelEngine.UI
             label.pickingMode = PickingMode.Ignore;
             button.Add(label);
 
-            var state = new Label(open ? "ON" : "OPEN");
+            var state = new Label(open ? "ON" : "C");
             state.style.fontSize = 7;
             state.style.letterSpacing = 0.55f;
             state.style.unityFontStyleAndWeight = FontStyle.Bold;

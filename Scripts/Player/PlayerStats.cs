@@ -292,7 +292,7 @@ namespace VoxelEngine.Player
                         case PlayerUpgradeKind.BonusDamage:           dmg += n.upgradePerRankAmount * rank; break;
                         case PlayerUpgradeKind.BonusMaxStamina:       st += n.upgradePerRankAmount * rank; break;
                         case PlayerUpgradeKind.BonusSprintMultiplier: spr += n.upgradePerRankAmount * rank; break;
-                        case PlayerUpgradeKind.UnlockFlight:          flight = true; break;
+                        case PlayerUpgradeKind.UnlockFlight:          break;
                     }
                 }
             }

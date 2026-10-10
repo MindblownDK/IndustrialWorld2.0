@@ -1383,6 +1383,9 @@ namespace VoxelEngine.Building
             if (TryGetFactorySnapPose(hit, block, out pos, out rot))
                 return;
 
+            if (TryGetDeckSnapPose(hit, block, out pos, out rot))
+                return;
+
             if (block != null && block.placedPrefab != null &&
                 VoxelEngine.Power.Wind.WindTurbineController.TryGetSnapPoint(block.placedPrefab, hit, out pos, out rot))
                 return;
@@ -1397,6 +1400,91 @@ namespace VoxelEngine.Building
             pos = ComputePlacementPosition(hit, block);
             rot = GravityProvider.GetSurfaceRotation(pos) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
             ApplyPortalSurfaceSupport(hit, block, rot, ref pos);
+        }
+
+        /// <summary>
+        /// Machines and chests sit on a foundation or floor deck. The world 1 m
+        /// grid does not match a 3.75 m module, so the old fallback left them
+        /// floating above the slab. The held collider's bottom rests on the deck
+        /// top, and the footprint snaps to that piece's local lattice.
+        /// </summary>
+        private bool TryGetDeckSnapPose(RaycastHit hit, BlockItem held, out Vector3 pos, out Quaternion rot)
+        {
+            pos = default;
+            rot = default;
+            if (!gridSnap || held == null || held.placedPrefab == null || hit.collider == null)
+                return false;
+            if (GetStaticPlacementPrefabProfile(held).usesDedicatedSnap) return false;
+
+            var deck = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+            if (deck == null || deck.definition == null || !IsDeckFamily(deck.definition.family))
+                return false;
+
+            Vector3 up = deck.transform.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+            if (Vector3.Dot(hit.normal, up) < 0.55f) return false;
+
+            Vector3 deckForward = Vector3.ProjectOnPlane(deck.transform.forward, up);
+            if (deckForward.sqrMagnitude < 0.0001f) deckForward = Vector3.ProjectOnPlane(deck.transform.right, up);
+            if (deckForward.sqrMagnitude < 0.0001f) return false;
+            deckForward.Normalize();
+            rot = Quaternion.LookRotation(deckForward, up) * Quaternion.Euler(0f, _rotSteps.y * 90f, 0f);
+
+            if (!TryGetComponentColliderProjectionRange(deck, up, out _, out float deckTop))
+                deckTop = Vector3.Dot(hit.point, up);
+
+            var profile = GetStaticPlacementPrefabProfile(held);
+            float lift = gridSize * 0.5f;
+            if (TryGetPrefabColliderProjectionRange(held.placedPrefab, profile.colliders, rot, up, out float heldMin, out _))
+                lift = -heldMin;
+
+            Vector3 right = Vector3.Cross(up, deckForward).normalized;
+            Vector3 forward = Vector3.Cross(right, up).normalized;
+
+            float spacing = Mathf.Max(0.25f, gridSize);
+            Vector3 origin = deck.transform.position;
+            float hitU = Vector3.Dot(hit.point - origin, right);
+            float hitV = Vector3.Dot(hit.point - origin, forward);
+            float snapU = Mathf.Round(hitU / spacing) * spacing;
+            float snapV = Mathf.Round(hitV / spacing) * spacing;
+            if (TryGetComponentColliderProjectionRange(deck, right, out float minU, out float maxU)
+                && TryGetComponentColliderProjectionRange(deck, forward, out float minV, out float maxV))
+            {
+                float originU = Vector3.Dot(origin, right);
+                float originV = Vector3.Dot(origin, forward);
+                snapU = Mathf.Clamp(originU + snapU, minU, maxU) - originU;
+                snapV = Mathf.Clamp(originV + snapV, minV, maxV) - originV;
+            }
+
+            Vector3 planar = origin + right * snapU + forward * snapV;
+            pos = planar - up * Vector3.Dot(planar, up) + up * (deckTop + lift + 0.001f);
+            return true;
+        }
+
+        private static bool IsDeckFamily(VoxelEngine.Building.Tiered.BuildFamily family)
+        {
+            return family == VoxelEngine.Building.Tiered.BuildFamily.Foundation
+                || family == VoxelEngine.Building.Tiered.BuildFamily.Floor
+                || family == VoxelEngine.Building.Tiered.BuildFamily.FloorHatch
+                || family == VoxelEngine.Building.Tiered.BuildFamily.StationFloor;
+        }
+
+        private bool TryGetComponentColliderProjectionRange(Component host, Vector3 normal, out float min, out float max)
+        {
+            min = float.PositiveInfinity;
+            max = float.NegativeInfinity;
+            bool any = false;
+            if (host == null) return false;
+            _staticSnapColliders.Clear();
+            host.GetComponentsInChildren<Collider>(true, _staticSnapColliders);
+            for (int i = 0; i < _staticSnapColliders.Count; i++)
+            {
+                var collider = _staticSnapColliders[i];
+                if (collider == null || !collider.enabled || collider.isTrigger) continue;
+                EncapsulateWorldColliderProjection(collider, normal, ref any, ref min, ref max);
+            }
+            return any;
         }
 
         /// <summary>

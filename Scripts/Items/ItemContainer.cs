@@ -235,6 +235,41 @@ namespace VoxelEngine.Items
             return n;
         }
 
+        /// <summary>Counts every stack with the same item id, including a duplicate asset.</summary>
+        public int CountOfId(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return 0;
+            EnsureValid();
+            int n = 0;
+            foreach (var s in _slots)
+            {
+                if (s.IsEmpty || s.item == null) continue;
+                if (string.Equals(s.item.itemId, itemId, System.StringComparison.OrdinalIgnoreCase))
+                    n += s.count;
+            }
+            return n;
+        }
+
+        /// <summary>Removes stacks with the same item id, including a duplicate asset.</summary>
+        public int RemoveId(string itemId, int count)
+        {
+            if (string.IsNullOrEmpty(itemId) || count <= 0) return 0;
+            EnsureValid();
+            int removed = 0;
+            for (int i = 0; i < _slots.Count && removed < count; i++)
+            {
+                var s = _slots[i];
+                if (s.IsEmpty || s.item == null) continue;
+                if (!string.Equals(s.item.itemId, itemId, System.StringComparison.OrdinalIgnoreCase)) continue;
+                int take = Mathf.Min(s.count, count - removed);
+                s.count -= take;
+                removed += take;
+                if (s.count <= 0) _slots[i] = new ItemStack();
+            }
+            if (removed > 0) OnChanged?.Invoke();
+            return removed;
+        }
+
         public bool HasSpace(ItemDefinition item, int count)
         {
             EnsureValid();

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Storage;
 
 namespace VoxelEngine.Crafting
 {
@@ -13,10 +14,11 @@ namespace VoxelEngine.Crafting
         public static bool HasIngredients(IItemContainer source, RecipeDefinition recipe)
         {
             if (recipe == null || recipe.inputs == null) return false;
+            bool matchId = OutputsSciencePack(recipe);
             foreach (var ing in recipe.inputs)
             {
                 if (ing.item == null || ing.count <= 0) continue;
-                if (source.CountOf(ing.item) < ing.count) return false;
+                if (CountCraftIngredient(source, ing.item, matchId) < ing.count) return false;
             }
             return true;
         }
@@ -42,8 +44,9 @@ namespace VoxelEngine.Crafting
             }
 
             // Consume ingredients up-front (refunded if canceled while in the queue).
+            bool matchId = OutputsSciencePack(recipe);
             foreach (var ing in recipe.inputs)
-                source.Remove(ing.item, ing.count);
+                RemoveCraftIngredient(source, ing.item, ing.count, matchId);
 
             // If a queue is provided AND the recipe has a craft time, queue it instead of inserting immediately.
             if (queue != null && recipe.craftSeconds > 0f)
@@ -102,7 +105,7 @@ namespace VoxelEngine.Crafting
 
         public static List<RecipeDefinition> AvailableRecipes(RecipeRegistry registry, StationTier maxStation)
         {
-            return CollectAvailableRecipes(registry, recipe => (int)recipe.requiredStation <= (int)maxStation);
+            return CollectAvailableRecipes(registry, recipe => (int)recipe.requiredStation <= (int)maxStation, scienceCap: maxStation);
         }
 
         /// <summary>
@@ -136,15 +139,23 @@ namespace VoxelEngine.Crafting
             return string.Equals(recipe.outputItem.itemId, "block_armorupgradestation", System.StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Science packs are research currency, never a research reward.</summary>
+        public static bool OutputsSciencePack(RecipeDefinition recipe)
+        {
+            return recipe != null && recipe.outputItem is ScienceItem;
+        }
+
         private static List<RecipeDefinition> CollectAvailableRecipes(
             RecipeRegistry registry,
             System.Func<RecipeDefinition, bool> stationFilter,
-            bool ignoreResearchLock = false)
+            bool ignoreResearchLock = false,
+            StationTier? scienceCap = null)
         {
             var list = new List<RecipeDefinition>();
             if (registry == null || stationFilter == null) return list;
 
             var researchManager = VoxelEngine.Research.ResearchManager.Instance;
+            var bestScience = new Dictionary<int, RecipeDefinition>();
             foreach (var recipe in registry.recipes)
             {
                 if (recipe == null || recipe.outputItem == null) continue;
@@ -152,9 +163,15 @@ namespace VoxelEngine.Crafting
                 // Never surface hollow placeholders. They cannot be crafted safely
                 // and should not leak raw asset names into player-facing UIs.
                 if (recipe.inputs == null || recipe.inputs.Length == 0) continue;
-                if (!stationFilter(recipe)) continue;
+                var sciPack = recipe.outputItem as ScienceItem;
+                bool science = sciPack != null;
+                if (science && scienceCap.HasValue)
+                {
+                    if ((int)ScienceStation(sciPack) > (int)scienceCap.Value) continue;
+                }
+                else if (!stationFilter(recipe)) continue;
 
-                if (!ignoreResearchLock)
+                if (!science && !ignoreResearchLock)
                 {
                     if (researchManager != null)
                     {
@@ -166,9 +183,63 @@ namespace VoxelEngine.Crafting
                     }
                 }
 
+                if (science)
+                {
+                    int tier = ((ScienceItem)recipe.outputItem).tier;
+                    if (!bestScience.TryGetValue(tier, out var current) || ScienceRecipeScore(recipe) > ScienceRecipeScore(current))
+                        bestScience[tier] = recipe;
+                    continue;
+                }
+
                 list.Add(recipe);
             }
+            foreach (var pair in bestScience)
+                list.Add(pair.Value);
             return list;
+        }
+
+        private static StationTier ScienceStation(ScienceItem pack)
+        {
+            if (pack == null || pack.tier <= 1) return StationTier.None;
+            if (pack.tier == 2) return StationTier.CraftingBench;
+            return StationTier.Assembler;
+        }
+
+        private static int ScienceRecipeScore(RecipeDefinition recipe)
+        {
+            int score = 0;
+            if (recipe.unlockedByDefault) score += 10;
+            if (recipe.inputs != null)
+            {
+                foreach (var input in recipe.inputs)
+                    if (input.item != null && input.count > 0) score += 5;
+            }
+            if (recipe.outputItem != null && !string.IsNullOrEmpty(recipe.outputItem.itemId)
+                && recipe.outputItem.itemId.StartsWith("item_sciencet", System.StringComparison.OrdinalIgnoreCase))
+                score += 3;
+            return score;
+        }
+
+        private static int CountCraftIngredient(IItemContainer source, ItemDefinition item, bool matchId)
+        {
+            if (source == null || item == null) return 0;
+            if (!matchId || string.IsNullOrEmpty(item.itemId)) return source.CountOf(item);
+            if (source is ItemContainer box) return box.CountOfId(item.itemId);
+            if (source is NetworkItemSource net) return net.CountOfId(item.itemId);
+            return source.CountOf(item);
+        }
+
+        private static void RemoveCraftIngredient(IItemContainer source, ItemDefinition item, int count, bool matchId)
+        {
+            if (source == null || item == null || count <= 0) return;
+            if (!matchId || string.IsNullOrEmpty(item.itemId))
+            {
+                source.Remove(item, count);
+                return;
+            }
+            if (source is ItemContainer box) box.RemoveId(item.itemId, count);
+            else if (source is NetworkItemSource net) net.RemoveId(item.itemId, count);
+            else source.Remove(item, count);
         }
     }
 }

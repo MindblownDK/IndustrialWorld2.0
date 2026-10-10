@@ -58,6 +58,24 @@ namespace VoxelEngine.Storage
                  + (_rack?.NetworkCount(item.itemId) ?? 0);
         }
 
+        public int CountOfId(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return 0;
+            return (_inventory?.CountOfId(itemId) ?? 0)
+                 + (_rack?.NetworkCount(itemId) ?? 0);
+        }
+
+        public int RemoveId(string itemId, int count)
+        {
+            if (string.IsNullOrEmpty(itemId) || count <= 0) return 0;
+            int remaining = count;
+            if (_inventory != null && remaining > 0)
+                remaining -= _inventory.RemoveId(itemId, remaining);
+            if (_rack != null && remaining > 0 && _rack.IsOnline)
+                remaining -= _rack.NetworkExtract(itemId, remaining);
+            return count - remaining;
+        }
+
         /// <summary>Consume from inventory first, then from the network.</summary>
         public int Remove(ItemDefinition item, int count)
         {

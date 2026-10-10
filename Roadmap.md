@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.4.1-dev`
-**Roadmap Version:** `17.4.1-dev`
-**Date:** 2026-10-09
+**Current Version:** `17.4.3-dev`
+**Roadmap Version:** `17.4.3-dev`
+**Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.4.3-dev - Science Recipe List Compiles
+- The science-pack station check no longer uses an unassigned pattern variable
+- Pack I, II, and III still use hand, Crafting Bench, and Assembler
+- No setup step and no save change
+
+### 17.4.2-dev - Science Packs, Craft Key, Deck Snap, Flight
+- One craftable science recipe per tier; lab and backpack costs match the pack by item id
+- Inventory C toggles crafting; machines and chests sit on foundation and floor decks
+- Flight is a jetpack, not a research unlock; a saved Flight rank no longer grants it
+
 ### 17.4.1-dev - Build Tokens Leave Crafting
 - Building families are chosen on the hammer wheel; token recipes are no longer craftable
 - The hammer recipe stays; a token already in an inventory can still be held
@@ -43,16 +53,6 @@
 - Stressed pollution places one Ghoul from a pack off the approach; a lone scout does not split, and bad footing falls back to the machine
 - That ambusher waits, then releases to the existing source chase if the player arrives, the hold ends, or the source stops
 - Recruits from the same band bite exposed static belts and pipes on the way in, using the existing industrial bite
-
-### 17.2.0-dev - Industrial Scent Packs and Source Direction
-- Active static sources recruit a pressure-scaled Ghoul pack inside a radius that scales the authored attraction distance
-- A live source keeps those recruits leashed; stopping the source ends recruitment and releases the leash without deleting them
-- Logistics Map contributor rows show a surface bearing and distance; residual cells still claim no emission history
-
-### 17.1.9-dev - Repair Registered Production Recipes
-- Setup repair restores empty factory and assembler recipe inputs from existing authored ingredient tuples
-- Validator follows `RecipeRegistry` membership and reports malformed orphan assets as inactive info
-- Thomas's Unity scan reports 0 errors/warnings across 239 crafting, 4 smelting, and 8 machine recipes
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

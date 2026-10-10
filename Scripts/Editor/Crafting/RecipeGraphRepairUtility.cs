@@ -239,9 +239,6 @@ namespace VoxelEngine.EditorTools
             Repair("Recipes/Recipe_Bed.asset", PathItem("Blocks/Block_Bed.asset") ?? Item("Bed"), 1, (plank, 6), (woodLog, 2));
             Repair("Recipes/Recipe_WaterBucket.asset", PathItem("Items/Tool_WaterBucket.asset") ?? Item("Liquid Canister"), 1, (iron, 3)); // internal id kept — the item is the 9.16.0 Liquid Canister
 
-            Repair("Research/Recipes/Recipe_ScienceT1.asset", science1, 1, (woodLog, 1), (stone, 1));
-            Repair("Research/Recipes/Recipe_ScienceT2.asset", science2, 1, (iron, 1), (copper, 1));
-            Repair("Research/Recipes/Recipe_ScienceT3.asset", science3, 1, (steel, 1), (copper, 2));
             Repair("Recipes/Recipe_ScienceT1.asset", science1, 1, (woodLog, 1), (stone, 1));
             Repair("Recipes/Recipe_ScienceT2.asset", science2, 1, (iron, 1), (copper, 1));
             Repair("Recipes/Recipe_ScienceT3.asset", science3, 1, (steel, 1), (copper, 2));

@@ -45,13 +45,17 @@ namespace VoxelEngine.Research
             foreach (var c in n.cost)
             {
                 if (c.pack == null || c.count <= 0) continue;
-                if (scienceInput.CountOf(c.pack) < c.count) return false;
+                int have = string.IsNullOrEmpty(c.pack.itemId)
+                    ? scienceInput.CountOf(c.pack)
+                    : scienceInput.CountOfId(c.pack.itemId);
+                if (have < c.count) return false;
             }
             // Now actually remove.
             foreach (var c in n.cost)
             {
                 if (c.pack == null || c.count <= 0) continue;
-                scienceInput.Remove(c.pack, c.count);
+                if (string.IsNullOrEmpty(c.pack.itemId)) scienceInput.Remove(c.pack, c.count);
+                else scienceInput.RemoveId(c.pack.itemId, c.count);
             }
             return true;
         }
