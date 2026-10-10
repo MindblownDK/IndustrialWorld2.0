@@ -71,12 +71,13 @@ namespace VoxelEngine.EditorTools
             recipe.outputItem = item;
             recipe.outputCount = 1;
             recipe.requiredStation = VoxelEngine.Crafting.StationTier.CraftingBench;
-            recipe.craftSeconds = 0f;
             recipe.unlockedByDefault = true;
             var inputs = new List<VoxelEngine.Crafting.RecipeIngredient>();
             if (ironIngot != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = ironIngot, count = 6 });
             if (copperIngot != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = copperIngot, count = 4 });
             recipe.inputs = inputs.ToArray();
+            if (recipe.craftSeconds <= 0f)
+                recipe.craftSeconds = VoxelEngine.Crafting.CraftTimeDefaults.Suggest(recipe);
             EditorUtility.SetDirty(recipe);
 
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>(RegistryPath);

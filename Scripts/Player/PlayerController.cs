@@ -2,9 +2,10 @@
 //
 // Smooth FPS character controller with:
 //   • WASD + mouse look (sensitivity / FOV / invertY from GameSettings)
-//   • Sprint, Jump, hold-to-Crouch
-//   • momentum-based SLIDE: pressing crouch while sprinting on the ground
-//     gives an instant boost + low-friction slide that decays back to walk speed.
+//   • Responsive momentum movement, air steering, buffered jumps and bunny-hops
+//   • Separate rebindable Slide and hold-to-Crouch actions
+//   • Momentum-based SLIDE: sprinting into Slide adds a low-friction burst while
+//     preserving carry; release Slide to end it (or jump straight out of the slide).
 //   • Optional FLY mode (toggleable via GameSettings.FlyMode or the ToggleFly key).
 //
 // Uses CharacterController for collision so it works on the voxel terrain meshes.
@@ -31,17 +32,21 @@ namespace VoxelEngine.Player
 
         [Header("Movement")]
         [Tooltip("Horizontal walk speed (m/s).")]
-        public float walkSpeed = 5.5f;
-        [Tooltip("Multiplier applied to walk speed while Sprint is held.")]
-        public float sprintMultiplier = 1.6f;
+        public float walkSpeed = 6.0f;
+        [Tooltip("Multiplier applied to walk speed while Sprint is held. Research bonuses remain additive.")]
+        public float sprintMultiplier = 1.85f;
         [Tooltip("Multiplier while crouched (and not sliding).")]
         public float crouchMultiplier = 0.45f;
-        [Tooltip("How quickly horizontal velocity catches up to the input direction. Higher = snappier.")]
-        public float groundAcceleration = 18f;
-        [Tooltip("Acceleration while airborne (keep low for realistic feel).")]
-        public float airAcceleration = 4f;
-        [Tooltip("Friction applied to horizontal velocity on the ground when no input. Per second.")]
-        public float groundFriction = 10f;
+        [Tooltip("Directional ground-acceleration coefficient. Input adds velocity along its wish direction instead of replacing carried momentum.")]
+        public float groundAcceleration = 12f;
+        [Tooltip("Ground input can build speed up to this multiple of the current wish speed; faster carried momentum is preserved.")]
+        public float groundSpeedCapMultiplier = 1.35f;
+        [Tooltip("Directional air-acceleration coefficient. Higher values give stronger air-strafing without erasing momentum.")]
+        public float airAcceleration = 6.5f;
+        [Tooltip("Air input can build speed up to this multiple of the current wish speed; faster carried momentum is preserved.")]
+        public float airSpeedCapMultiplier = 2f;
+        [Tooltip("Ground friction applied with no movement input. Lower values preserve more momentum.")]
+        public float groundFriction = 4.5f;
 
         [Header("Ice Movement")]
         [Tooltip("Ground friction used when standing on Ice voxels. Lower values keep momentum and create a slippery glide.")]
@@ -102,10 +107,14 @@ namespace VoxelEngine.Player
         private readonly RaycastHit[] _carryProbeHits = new RaycastHit[16];
 
         [Header("Jump / Gravity")]
-        public float jumpHeight = 1.4f;
+        public float jumpHeight = 1.55f;
         public float gravity = -22f;
         [Tooltip("Lets the player initiate a jump for a short window after walking off a ledge.")]
-        public float coyoteTime = 0.12f;
+        public float coyoteTime = 0.16f;
+        [Tooltip("A jump press is remembered briefly before the player lands.")]
+        public float jumpBufferTime = 0.16f;
+        [Tooltip("Holding Jump automatically triggers the next jump on landing for bunny-hops.")]
+        public bool autoBunnyHop = true;
 
         [Header("Fall Damage")]
         [Tooltip("Downward impact speed along local gravity before fall damage starts.")]
@@ -120,14 +129,18 @@ namespace VoxelEngine.Player
         public float standHeight = 1.85f;
         [Tooltip("Crouched height of the controller (camera lowers proportionally).")]
         public float crouchHeight = 1.20f;
-        [Tooltip("Initial slide boost added to current speed.")]
-        public float slideBoost = 4.0f;
-        [Tooltip("Friction during a slide (lower than walk friction for that 'glide' feel).")]
-        public float slideFriction = 1.6f;
+        [Tooltip("Initial slide boost added along the current momentum, limited by slideSpeedCap.")]
+        public float slideBoost = 5.0f;
+        [Tooltip("Friction during a slide. Lower values keep the glide alive longer.")]
+        public float slideFriction = 0.7f;
         [Tooltip("If horizontal speed drops below this during a slide, the slide ends.")]
-        public float slideEndSpeed = 3.0f;
-        [Tooltip("Minimum horizontal speed required to *start* a slide (keeps slides for sprint-only).")]
-        public float slideMinSpeed = 6.0f;
+        public float slideEndSpeed = 2.5f;
+        [Tooltip("Minimum horizontal speed required to start a slide while sprinting.")]
+        public float slideMinSpeed = 6.5f;
+        [Tooltip("Maximum horizontal speed gained by a slide start. Higher momentum is never clamped down.")]
+        public float slideSpeedCap = 18f;
+        [Tooltip("Maximum slide-direction steering, in degrees per second.")]
+        public float slideSteerRate = 180f;
 
         [Header("Fly Mode")]
         public float flySpeed = 14f;
@@ -160,6 +173,7 @@ namespace VoxelEngine.Player
         private Vector3 _lastRoadSamplePosition;
         private float  _lastAirDownSpeed;
         private float  _lastGroundedTime;
+        private float  _jumpBufferTimer;
         private bool   _crouched;
         private bool   _sliding;
         private bool   _sprinting;
@@ -260,6 +274,8 @@ namespace VoxelEngine.Player
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
+            UpgradeSerializedLocomotionDefaults();
+            _lastGroundedTime = -999f;
             // Prefab ticked in the inspector turns the cheat on once; Settings is then
             // the source of truth so the Testing toggle actually sticks.
             if (infiniteHealth) VoxelEngine.Settings.GameSettings.InfiniteHealth = true;
@@ -325,6 +341,23 @@ namespace VoxelEngine.Player
             GameSettings.OnChanged += ApplyFov;
         }
 
+        /// <summary>Unity keeps serialized public field values when script defaults change.
+        /// Upgrade only the untouched previous defaults so tuned player prefabs stay intact.</summary>
+        private void UpgradeSerializedLocomotionDefaults()
+        {
+            if (Mathf.Approximately(walkSpeed, 5.5f)) walkSpeed = 6.0f;
+            if (Mathf.Approximately(sprintMultiplier, 1.6f)) sprintMultiplier = 1.85f;
+            if (Mathf.Approximately(groundAcceleration, 18f)) groundAcceleration = 12f;
+            if (Mathf.Approximately(airAcceleration, 4f)) airAcceleration = 6.5f;
+            if (Mathf.Approximately(groundFriction, 10f)) groundFriction = 4.5f;
+            if (Mathf.Approximately(jumpHeight, 1.4f)) jumpHeight = 1.55f;
+            if (Mathf.Approximately(coyoteTime, 0.12f)) coyoteTime = 0.16f;
+            if (Mathf.Approximately(slideBoost, 4f)) slideBoost = 5f;
+            if (Mathf.Approximately(slideFriction, 1.6f)) slideFriction = 0.7f;
+            if (Mathf.Approximately(slideEndSpeed, 3f)) slideEndSpeed = 2.5f;
+            if (Mathf.Approximately(slideMinSpeed, 6f)) slideMinSpeed = 6.5f;
+        }
+
         private void OnDestroy() => GameSettings.OnChanged -= ApplyFov;
 
         private void Start()
@@ -366,6 +399,7 @@ namespace VoxelEngine.Player
             {
                 _velocity = Vector3.zero;
                 _sliding = false;
+                _jumpBufferTimer = 0f;
                 return;
             }
             bool softUiOpen = VoxelEngine.UI.UIState.IsBlocking;
@@ -522,6 +556,12 @@ namespace VoxelEngine.Player
             else
                 _grounded = _cc.isGrounded;
 
+            // A near-foot ray can still see the surface during the first takeoff
+            // frames. Upward velocity means the jump has left the ground; do not
+            // refresh coyote time until a later descent/landing.
+            if (_grounded && VerticalSpeed(up) > 0.05f)
+                _grounded = false;
+
             float downSpeed = Mathf.Max(0f, -VerticalSpeed(up));
             if (!_grounded) _lastAirDownSpeed = Mathf.Max(_lastAirDownSpeed, downSpeed);
             if (_grounded && !_wasGrounded)
@@ -545,21 +585,29 @@ namespace VoxelEngine.Player
             wishDir = Vector3.ProjectOnPlane(wishDir, up);
             if (wishDir.sqrMagnitude > 0.001f) wishDir = wishDir.normalized;
 
-            // -- crouch / slide state machine --
+            // -- independent crouch / slide controls --
             bool uiLocked = VoxelEngine.UI.UIState.IsBlocking || VoxelEngine.UI.UIState.TextInputActive;
             bool crouchHeld = !uiLocked && GameSettings.IsHeld(InputAction.Crouch);
             bool sprintHeld = !uiLocked && GameSettings.IsHeld(InputAction.Sprint);
-            UpdateCrouchSlide(crouchHeld, sprintHeld);
+            bool slideHeld = !uiLocked && GameSettings.IsHeld(InputAction.Slide);
+            bool slidePressed = !uiLocked && GameSettings.WasPressed(InputAction.Slide);
+            bool jumpPressed = !uiLocked && GameSettings.WasPressed(InputAction.Jump);
+            bool jumpHeld = !uiLocked && GameSettings.IsHeld(InputAction.Jump);
+            UpdateCrouchSlide(slidePressed, slideHeld, crouchHeld, sprintHeld, up, dt);
 
             // -- target horizontal speed --
             float speedMul = 1f;
             if (_sliding)            speedMul = 1f;                     // velocity decay handles it
             else if (_crouched)      speedMul = crouchMultiplier;
-            // Use research-modified sprint multiplier if PlayerStats is available.
-            float effSprint = PlayerStats.Instance != null ? PlayerStats.Instance.SprintMultiplier : sprintMultiplier;
+            // Keep research sprint bonuses additive while applying the faster locomotion baseline.
+            var playerStats = PlayerStats.Instance;
+            float effSprint = playerStats != null
+                ? Mathf.Min(5f, playerStats.SprintMultiplier
+                    + Mathf.Max(0f, sprintMultiplier - playerStats.baseSprintMultiplier))
+                : sprintMultiplier;
             // Stamina removed — sprint is always available when held.
             bool canSprint = sprintHeld;
-            _sprinting = canSprint && wish.y > 0.1f;
+            _sprinting = canSprint && wish.y > 0.1f && !_sliding;
             if (canSprint && wish.y > 0.1f)
                 speedMul = effSprint;
 
@@ -573,19 +621,32 @@ namespace VoxelEngine.Player
 
             if (_sliding)
             {
-                // Apply slide friction -> exponential decay toward 0.
-                float activeSlideFriction = _onIce ? slideFriction * iceSlideFrictionMultiplier : slideFriction;
-                horiz = Vector3.Lerp(horiz, Vector3.zero, 1f - Mathf.Exp(-activeSlideFriction * dt));
+                // Slide steering rotates the existing tangent velocity instead of
+                // replacing it, so the slide keeps its speed and its radial-up frame.
+                float slideSpeed = horiz.magnitude;
+                if (slideSpeed > 0.001f && wishDir.sqrMagnitude > 0.001f)
+                {
+                    float maxTurn = Mathf.Max(0f, slideSteerRate) * Mathf.Deg2Rad * dt;
+                    Vector3 slideDirection = Vector3.RotateTowards(
+                        horiz / slideSpeed, wishDir, maxTurn, 0f);
+                    horiz = slideDirection * slideSpeed;
+                }
 
-                // End slide if speed too low or crouch released.
-                if (horiz.magnitude < slideEndSpeed || !crouchHeld) _sliding = false;
+                float activeSlideFriction = _onIce
+                    ? slideFriction * iceSlideFrictionMultiplier
+                    : slideFriction;
+                horiz *= Mathf.Exp(-Mathf.Max(0f, activeSlideFriction) * dt);
+
+                // Slide is a held action, separate from Crouch. Releasing it or
+                // running out of momentum ends the state without deleting velocity.
+                if (!slideHeld || horiz.magnitude < slideEndSpeed)
+                {
+                    _sliding = false;
+                    _crouched = crouchHeld;
+                }
             }
             else
             {
-                Vector3 wishVel = wishDir * targetSpeed;
-                float accel = _grounded ? groundAcceleration : airAcceleration;
-                if (_grounded && _onIce) accel *= iceAccelerationMultiplier;
-
                 // 14.64.1 — WEIGHTLESS ON FOOT: no meaningful gravity, no boots on a
                 // hull, no ground — there is nothing to push against, so walking
                 // input must not steer you through open space. You coast (Newtonian)
@@ -593,41 +654,73 @@ namespace VoxelEngine.Player
                 bool weightlessDrift = !_grounded
                     && GravVec.magnitude < 0.5f
                     && (_boots == null || !_boots.Engaged);
-                if (weightlessDrift)
+                if (!weightlessDrift && _grounded)
                 {
-                    // keep coasting — no input authority, no air friction
+                    if (wishDir.sqrMagnitude < 0.01f)
+                    {
+                        // No-input friction is exponential and frame-rate independent.
+                        float activeFriction = _onIce ? iceGroundFriction : groundFriction;
+                        horiz *= Mathf.Exp(-Mathf.Max(0f, activeFriction) * dt);
+                        if (horiz.sqrMagnitude < 0.0004f) horiz = Vector3.zero;
+                    }
+                    else
+                    {
+                        float accel = groundAcceleration;
+                        if (_onIce) accel *= iceAccelerationMultiplier;
+                        float maxGroundSpeed = Mathf.Max(
+                            horiz.magnitude,
+                            targetSpeed * Mathf.Max(1f, groundSpeedCapMultiplier));
+                        horiz = AccelerateAlongWish(horiz, wishDir, targetSpeed, accel, dt);
+                        if (horiz.sqrMagnitude > maxGroundSpeed * maxGroundSpeed)
+                            horiz = horiz.normalized * maxGroundSpeed;
+                    }
                 }
-                else if (_grounded && wishDir.sqrMagnitude < 0.01f)
+                else if (!weightlessDrift && wishDir.sqrMagnitude > 0.001f)
                 {
-                    // Apply ground friction: glide toward 0 horizontal velocity.
-                    float activeFriction = _onIce ? iceGroundFriction : groundFriction;
-                    horiz = Vector3.Lerp(horiz, Vector3.zero, 1f - Mathf.Exp(-activeFriction * dt));
-                }
-                else
-                {
-                    horiz = Vector3.Lerp(horiz, wishVel, 1f - Mathf.Exp(-accel * dt));
+                    // Air steering adds only the missing component along the input.
+                    // It never lerps away inherited/slide momentum, and the cap only
+                    // limits speed newly built by air input (not existing carry).
+                    float maxAirSpeed = Mathf.Max(
+                        horiz.magnitude,
+                        targetSpeed * Mathf.Max(1f, airSpeedCapMultiplier));
+                    horiz = AccelerateAlongWish(horiz, wishDir, targetSpeed, airAcceleration, dt);
+                    if (horiz.sqrMagnitude > maxAirSpeed * maxAirSpeed)
+                        horiz = horiz.normalized * maxAirSpeed;
                 }
             }
 
             // Write horizontal back, preserving the vertical (along-up) component.
             _velocity = horiz + Vector3.Project(_velocity, up);
 
-            // -- jump (allowed while sliding, while preserving slide momentum) --
-            // Plain crouch with no slide = no jump (you'd just bonk your head).
+            // -- buffered jump / bunny-hop (allowed while sliding) --
+            // A press slightly before landing is buffered; holding Jump opts into
+            // automatic bunny-hops. Plain crouch still blocks a standing jump.
+            if (jumpPressed)
+                _jumpBufferTimer = Mathf.Max(0f, jumpBufferTime);
+            else
+                _jumpBufferTimer = Mathf.Max(0f, _jumpBufferTimer - dt);
+
+            bool jumpRequested = jumpPressed || _jumpBufferTimer > 0f || (autoBunnyHop && jumpHeld);
             bool jumpAllowed = canCoyote && (!_crouched || _sliding);
-            if (GameSettings.WasPressed(InputAction.Jump) && jumpAllowed)
+            if (jumpRequested && jumpAllowed)
             {
                 float gravMag = GravVec.magnitude;
                 _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * Mathf.Sqrt(2f * gravMag * jumpHeight);
                 _lastGroundedTime = -999f; // consume coyote
+                _jumpBufferTimer = 0f;
 
-                // Slide-jump: keep horizontal momentum, end the slide. Pop up to standing height
-                // so we don't keep our crouched collider mid-air (looks weird).
+                // Slide-jump keeps all tangent momentum, ends the slide, and restores
+                // standing height so the airborne capsule does not stay crouched.
                 if (_sliding)
                 {
                     _sliding  = false;
                     _crouched = false;
                 }
+            }
+            else if (_crouched && !_sliding)
+            {
+                // Do not queue a crouch-blocked press and fire it after standing up.
+                _jumpBufferTimer = 0f;
             }
 
             // -- voxel water swim (voxel-style) --
@@ -659,8 +752,8 @@ namespace VoxelEngine.Player
                     : transform.right;
 
                 Vector3 radialUp = GravityProvider.IsRadial ? UpVec : Vector3.up;
-                bool wantsUp = GameSettings.IsHeld(InputAction.Jump);
-                bool wantsDown = GameSettings.IsHeld(InputAction.Crouch);
+                bool wantsUp = jumpHeld;
+                bool wantsDown = crouchHeld;
                 Vector3 swimDir = (camFwd * wish.y + camRight * wish.x);
                 if (wantsUp)   swimDir += radialUp;
                 if (wantsDown) swimDir -= radialUp;
@@ -692,7 +785,7 @@ namespace VoxelEngine.Player
 
                 // Jump-out: when the player presses Jump and is at/near the
                 // surface AND moving up, give a small boost so they pop out.
-                if (GameSettings.WasPressed(InputAction.Jump) && depth < 0.5f && vertSpd > 0)
+                if (jumpPressed && depth < 0.5f && vertSpd > 0)
                 {
                     _velocity -= radialUp * vertSpd;
                     _velocity += radialUp * Mathf.Sqrt(-2f * gravity * 0.55f);
@@ -894,24 +987,46 @@ namespace VoxelEngine.Player
                 new Color(0.95f, 0.25f, 0.18f));
         }
 
-        private void UpdateCrouchSlide(bool crouchHeld, bool sprintHeld)
+        private void UpdateCrouchSlide(bool slidePressed, bool slideHeld, bool crouchHeld,
+            bool sprintHeld, Vector3 up, float dt)
         {
-            // Initiate slide on the rising edge of crouch while sprinting on ground above slideMinSpeed.
-            Vector3 horiz = new Vector3(_velocity.x, 0, _velocity.z);
-            bool canStartSlide = crouchHeld && !_crouched && sprintHeld && _grounded
-                                  && horiz.magnitude >= slideMinSpeed;
+            Vector3 horiz = Vector3.ProjectOnPlane(_velocity, up);
+            bool canStartSlide = slidePressed && slideHeld && !_sliding && sprintHeld && _grounded
+                && horiz.magnitude >= Mathf.Max(0f, slideMinSpeed);
             if (canStartSlide)
             {
                 _sliding = true;
-                Vector3 dir = horiz.normalized;
-                _velocity.x = (horiz + dir * slideBoost).x;
-                _velocity.z = (horiz + dir * slideBoost).z;
+                Vector3 direction = horiz.normalized;
+                float boost = Mathf.Min(
+                    Mathf.Max(0f, slideBoost),
+                    Mathf.Max(0f, slideSpeedCap - horiz.magnitude));
+                horiz += direction * boost;
+                _velocity = horiz + Vector3.Project(_velocity, up);
             }
 
-            _crouched = crouchHeld;
+            // Crouch and Slide are independent: C changes the stance, while the
+            // held Slide action only crouches as a consequence of an active slide.
+            _crouched = crouchHeld || _sliding;
             float targetH = _crouched ? crouchHeight : standHeight;
-            _cc.height = Mathf.MoveTowards(_cc.height, targetH, 6f * Time.deltaTime);
+            _cc.height = Mathf.MoveTowards(_cc.height, targetH, 9f * dt);
             _cc.center = new Vector3(0, _cc.height * 0.5f, 0);
+        }
+
+        /// <summary>Adds velocity only along the requested tangent direction. Existing
+        /// sideways or faster momentum is retained for deliberate air-strafe chaining.</summary>
+        private static Vector3 AccelerateAlongWish(Vector3 velocity, Vector3 wishDirection,
+            float wishSpeed, float acceleration, float dt)
+        {
+            if (wishDirection.sqrMagnitude < 0.0001f || wishSpeed <= 0f || acceleration <= 0f || dt <= 0f)
+                return velocity;
+
+            wishDirection.Normalize();
+            float currentSpeed = Vector3.Dot(velocity, wishDirection);
+            float addSpeed = wishSpeed - currentSpeed;
+            if (addSpeed <= 0f) return velocity;
+
+            float accelerationSpeed = Mathf.Min(addSpeed, acceleration * wishSpeed * dt);
+            return velocity + wishDirection * accelerationSpeed;
         }
 
         // ============================================================
@@ -1111,7 +1226,9 @@ namespace VoxelEngine.Player
         private void UpdateCameraHeight()
         {
             float target = (_crouched || _sliding) ? crouchEyeHeight : standEyeHeight;
-            _smoothedEyeHeight = Mathf.MoveTowards(_smoothedEyeHeight, target, 4f * Time.deltaTime);
+            float transitionSpeed = _sliding ? 12f : 6f;
+            _smoothedEyeHeight = Mathf.MoveTowards(
+                _smoothedEyeHeight, target, transitionSpeed * Time.deltaTime);
             cameraPivot.localPosition = new Vector3(0, _smoothedEyeHeight, 0);
         }
 
@@ -1337,9 +1454,10 @@ namespace VoxelEngine.Player
             if (_cc == null) return false;
             // Start the ray slightly above the capsule base (along up) to avoid self-collision.
             Vector3 origin = transform.position + up * 0.05f;
-            float halfHeight = _cc.height * 0.5f;
-            // A little extra so we register ground even when floating a hair above it.
-            float checkDist = halfHeight + 0.25f;
+            // Keep this a foot-contact probe, not a capsule-height search: a long
+            // radial ray reports the player grounded throughout a jump and can
+            // re-arm coyote time before the actual landing.
+            float checkDist = Mathf.Max(0.30f, terrainFootClearance + 0.22f);
             return Physics.Raycast(origin, -up, checkDist);
         }
     }

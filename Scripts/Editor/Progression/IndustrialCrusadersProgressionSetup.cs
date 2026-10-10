@@ -190,7 +190,7 @@ namespace VoxelEngine.EditorTools
                     MoveRecipeNames(tree, lightingNode, new[]
                     {
                         "Recipe_LEDStripFactory", "Recipe_GLEDStrip", "Recipe_LargeGridLEDStrip", "Recipe_LEDStrip"
-                    }, registry, counts);
+                    }, registry, counts, "Recipe_LEDStrip");
                 }
                 if (grinderNode != null)
                 {
@@ -526,9 +526,9 @@ namespace VoxelEngine.EditorTools
                 recipe.outputItem = output;
                 recipe.outputCount = 1;
                 recipe.requiredStation = station;
-                recipe.craftSeconds = 0f;
                 recipe.unlockedByDefault = unlockedByDefault;
                 recipe.inputs = BuildInputs(ingredients, counts);
+                recipe.craftSeconds = CraftTimeDefaults.Suggest(recipe);
                 changed = true;
             }
             else
@@ -630,16 +630,21 @@ namespace VoxelEngine.EditorTools
         }
 
         private static void MoveRecipeNames(ResearchTree tree, ResearchNode target,
-            string[] assetNames, RecipeRegistry registry, RepairCounts counts)
+            string[] assetNames, RecipeRegistry registry, RepairCounts counts,
+            params string[] optionalAssetNames)
         {
+            var optionalNames = new HashSet<string>(optionalAssetNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
             var recipes = new List<RecipeDefinition>();
             foreach (string assetName in assetNames)
             {
                 var recipe = FindRecipe(assetName);
                 if (recipe == null)
                 {
-                    counts.warnings++;
-                    Debug.LogWarning($"[IndustrialCrusadersProgressionSetup] Recipe '{assetName}' was not found; its content was not changed.");
+                    if (!optionalNames.Contains(assetName))
+                    {
+                        counts.warnings++;
+                        Debug.LogWarning($"[IndustrialCrusadersProgressionSetup] Recipe '{assetName}' was not found; its content was not changed.");
+                    }
                     continue;
                 }
                 if (registry != null && !registry.recipes.Contains(recipe))

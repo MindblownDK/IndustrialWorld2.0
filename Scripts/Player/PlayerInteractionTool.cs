@@ -118,6 +118,53 @@ namespace VoxelEngine.Player
             return true;
         }
 
+        private bool TryConsumeHeldFood(ItemStack stack)
+        {
+            if (stack == null || stack.IsEmpty || stack.item is not VoxelEngine.Farming.FoodItem food)
+                return false;
+
+            var stats = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerStats>() : null;
+            if (stats == null) stats = GetComponentInParent<VoxelEngine.Player.PlayerStats>();
+            if (stats == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Food", "Player stats are unavailable.", food.icon, Color.yellow);
+                return true;
+            }
+
+            float hungerGain = Mathf.Min(NonNegativeFinite(food.hungerRestore),
+                Mathf.Max(0f, stats.MaxHunger - stats.Hunger));
+            float healthGain = Mathf.Min(NonNegativeFinite(food.healthRestore),
+                Mathf.Max(0f, stats.MaxHealth - stats.Health));
+            if (hungerGain <= 0.001f && healthGain <= 0.001f)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Not hungry", "You are already satisfied; the food was not consumed.",
+                    food.icon, new Color(0.85f, 0.60f, 0.15f));
+                return true;
+            }
+
+            if (inventory == null || inventory.container == null || inventory.container.Remove(food, 1) < 1)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Food", "Could not remove the food from your inventory.",
+                    food.icon, Color.yellow);
+                return true;
+            }
+
+            if (hungerGain > 0f) stats.Feed(hungerGain);
+            if (healthGain > 0f) stats.Heal(healthGain);
+
+            var restored = new System.Collections.Generic.List<string>(2);
+            if (hungerGain > 0.001f) restored.Add($"+{hungerGain:0.#} hunger");
+            if (healthGain > 0.001f) restored.Add($"+{healthGain:0.#} HP");
+            VoxelEngine.UI.BuildFeedbackHud.Show($"Ate {food.displayName}", string.Join(" · ", restored),
+                food.icon, new Color(0.85f, 0.60f, 0.15f));
+            return true;
+        }
+
+        private static float NonNegativeFinite(float value)
+        {
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Max(0f, value);
+        }
+
         private void Update()
         {
             // Shield blocking (14.37.0) resolves FIRST, before any early-out:
@@ -168,6 +215,10 @@ namespace VoxelEngine.Player
             // ── RAIL LAYER — same reasoning as the paver: the plan lives between two clicks,
             //    so it needs a tick that runs before any button early-out below.
             if (TryTickRailLayer(hit, hasHit, mineDown, buildDown, ReadScrollY())) return;
+
+            // Food use is self-targeted: consume on RMB before any raycast-dependent
+            // branch so aiming into open air does not suppress eating.
+            if (buildDown && TryConsumeHeldFood(inventory.ActiveStack)) return;
 
             // ── INTERACTION HUD (Context Prompts) ──
             if (hasHit && !VoxelEngine.UI.UIState.IsBlocking)
@@ -903,24 +954,9 @@ namespace VoxelEngine.Player
                     return;
                 }
 
-                // Eat food if holding a FoodItem.
-                var eatStack = inventory.ActiveStack;
-                if (!eatStack.IsEmpty && eatStack.item is VoxelEngine.Farming.FoodItem food)
-                {
-                    var stats = inventory.GetComponent<VoxelEngine.Player.PlayerStats>();
-                    if (stats != null)
-                    {
-                        stats.Feed(food.hungerRestore);
-                        stats.Heal(food.healthRestore);
-                        if (food.staminaRestore > 0) stats.RegenStamina(food.staminaRestore / stats.staminaRegen);
-                        inventory.container.Remove(food, 1);
-                        VoxelEngine.UI.BuildFeedbackHud.Show($"Ate {food.displayName}", $"+{food.hungerRestore:0} hunger", food.icon, new Color(0.85f, 0.60f, 0.15f));
-                    }
-                    return;
-                }
-
                 // Blueprint data core — RMB to restore blueprint and unlock recipe (4.9.0)
-                if (!eatStack.IsEmpty && eatStack.item is VoxelEngine.Items.BlueprintDataCoreItem bpCore)
+                var blueprintStack = inventory.ActiveStack;
+                if (!blueprintStack.IsEmpty && blueprintStack.item is VoxelEngine.Items.BlueprintDataCoreItem bpCore)
                 {
                     if (bpCore.TryUnlock())
                     {

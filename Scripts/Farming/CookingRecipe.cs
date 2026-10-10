@@ -26,7 +26,7 @@ namespace VoxelEngine.Farming
         public CookingRecipe()
         {
             requiredStation = Crafting.StationTier.Furnace;
-            craftSeconds = 0f; // instant at furnace — use smelting recipes for timed cooking
+            craftSeconds = Crafting.CraftTimeDefaults.Suggest(Crafting.StationTier.Furnace);
         }
     }
 }

@@ -201,7 +201,6 @@ namespace IndustrialWorld.EditorTools
                 module.Recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
                 module.Recipe.displayName = module.Label;
                 module.Recipe.requiredStation = StationTier.Assembler;
-                module.Recipe.craftSeconds = 0f;
                 module.Recipe.outputCount = 1;
                 module.Recipe.unlockedByDefault = false;
                 AssetDatabase.CreateAsset(module.Recipe, module.RecipePath);
@@ -220,6 +219,8 @@ namespace IndustrialWorld.EditorTools
                     module.Recipe.inputs[i] = repaired;
                 }
             }
+            if (module.Recipe.craftSeconds <= 0f && module.Recipe.requiredStation != StationTier.None)
+                module.Recipe.craftSeconds = CraftTimeDefaults.Suggest(module.Recipe);
             EditorUtility.SetDirty(module.Item);
             EditorUtility.SetDirty(module.Recipe);
         }

@@ -1,9 +1,45 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.5.0-dev`
+**Current Version:** `17.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.7.0-dev] Add Momentum Movement, Bunny-Hops, and Rebindable Slide
+
+**Type:** MINOR — save-compatible player locomotion and input update. No world or save schema changed.
+
+**GitHub title:** `[17.7.0-dev] Add momentum-driven movement, bunny-hop, and rebindable slide`
+
+#### Added and changed
+- Ground movement now accelerates along the requested tangent direction instead of replacing velocity. Sprint is faster, braking is less abrupt, and existing high momentum is kept while new input-built speed is capped.
+- Air strafing adds momentum along the wish direction without cancelling carried speed. Jump presses buffer across a short landing window, coyote time is more generous, and holding Jump enables automatic bunny-hops. Slide-jumps retain tangent velocity.
+- Added a separate held `Slide` action, defaulting to Left Alt and automatically listed in Settings - Keybinds. While sprinting above the entry speed, it adds a capped boost along current momentum, steers through the slide, and ends on release or low speed. Left Shift remains Sprint; C remains Crouch (and the existing fly/swim descent control).
+- Movement and slide velocity stay projected onto local radial up. Existing ice friction/steering, asphalt-road speed bonuses, and magnetic-boot/moving-deck carry remain in the same controller path. The radial foot probe is now contact-sized so a jump arc does not falsely re-arm grounded/coyote state.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.7.0-dev`, MINOR over `17.6.0-dev`. No world/save schema changed. Settings migration v23 supplies LeftAlt for the new Slide action and retains the existing Crouch and other non-empty custom keybinds.
+- Player components still carrying the previous default tuning are upgraded in memory; non-default inspector tuning and prefab assets are not rewritten. No prefab, item, recipe, research, or Voxel Engine Setup content pass is required.
+- Unity compilation and play-mode movement checks have not been run in this workspace.
+
+### [17.6.0-dev] Restore Edible Food, Gate Power and Time Workstation Crafts
+
+**Type:** MINOR — save-compatible gameplay, progression, and recipe-timing improvements. No save schema changed.
+
+**GitHub title:** `[17.6.0-dev] Restore edible food, gate power, and time workstation crafts`
+
+#### Fixed and changed
+- Power Setup now authors research-gated power recipes as locked by default, so rebuilding power content cannot reopen the Coal Generator before Electricity research. The repair moves every matching generator recipe link to the existing Electricity node.
+- Smelting research costs Science Pack I only. The repair keeps the existing Pack I quantity where present and removes higher-tier science costs.
+- Food consumption now runs before hit-dependent interaction branches, so RMB eating works while aiming into open air. Hunger and health restore only up to their limits, and full players do not waste food.
+- Added an edible Steak item and a timed Raw Meat-to-Steak Furnace recipe. Setup creates missing food/recipe assets, repairs empty links, registers the recipe on the existing Furnace prefab, and adds both items to the persistence catalog.
+- Setup initializes station- and ingredient-based durations for workstation recipes whose time is zero or invalid. Existing positive times are preserved; inventory recipes remain instant. New recipes authored by the central Setup helpers receive the same defaults.
+- The absent `Recipe_LEDStrip` is treated as optional by the progression repair: it no longer produces a missing-recipe warning, while an existing LED-strip recipe is still staged.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.6.0-dev`, MINOR over `17.5.0-dev`. No save schema changed; existing progression and content assets are updated by the non-destructive Setup repair.
+- The new `Apply 17.6.0 food, progression and craft-time repairs (non-destructive)` Setup entry is under `Tools > Voxel Engine > Voxel Engine Setup > Maintenance & Repair`. It creates only missing food assets, repairs missing links, and preserves populated recipe links, positive craft times, and the Smelting Pack I quantity.
+- Unity compilation, Setup execution, and in-game acceptance tests have not been run in this workspace.
 
 ### [17.5.0-dev] Stage Factory Progression and Polish World Interaction
 

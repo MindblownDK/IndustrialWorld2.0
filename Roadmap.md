@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.5.0-dev`
-**Roadmap Version:** `17.5.0-dev`
+**Current Version:** `17.7.0-dev`
+**Roadmap Version:** `17.7.0-dev`
 **Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.7.0-dev - High-Momentum Player Movement
+- Ground acceleration and air strafing carry tangent momentum; sprint speed and slide boost are raised
+- Buffered/coyote jumps enable hold-to-bunny-hop and momentum-preserving slide-jumps
+- Slide is a separate rebindable hold action; C stays crouch and radial/ice/road/deck support remains
+
+### 17.6.0-dev - Food, Progression and Timed Workstation Crafting
+- Coal Generator stays behind Electricity; Smelting uses Pack I only; absent optional LED recipe stays silent
+- RMB food use works in open air; Raw Meat cooks into edible Steak through Setup
+- Zero-time workstation recipes receive tier/ingredient defaults while authored positive durations remain unchanged
+
 ### 17.5.0-dev - IndustrialCrusaders Progression and World Polish
 - Assembler tiers, higher conveyors, LED strips, and Grinder recipes now use staged research; starter swords are authored through Setup
 - Machines and chests deck-snap; dropped items use local gravity and contact pickup; orbital/grid jitter is damped
@@ -43,16 +53,6 @@
 - One craftable science recipe per tier; lab and backpack costs match the pack by item id
 - Inventory C toggles crafting; machines and chests sit on foundation and floor decks
 - Flight is a jetpack, not a research unlock; a saved Flight rank no longer grants it
-
-### 17.4.1-dev - Build Tokens Leave Crafting
-- Building families are chosen on the hammer wheel; token recipes are no longer craftable
-- The hammer recipe stays; a token already in an inventory can still be held
-- Setup removes the old token recipe assets without deleting token items
-
-### 17.4.0-dev - Offline Death Switch
-- Create World, Edit World, Server Administration, and `server_config.json` can turn offline death off
-- Missing or legacy world files stay on; off spends no cryobed oxygen and does not charge the gap later
-- The pollution-scent check is a Voxel Engine Setup action, not a Tools menu item
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,6 +82,7 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Advanced traversal (deferred 17.7.0-dev):** wallrunning, wall-jumps, and mantling are outside the momentum-and-slide pass.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
 - **Pollution history and higher threat tiers** (deferred 17.3.0; earlier slices 14.70.0 / 14.73.0 / 17.2.0): live bearings, capped packs, approach ambushes and exposed static logistics raids shipped. Residual-load history, organized waves, elites and siege creatures remain open.
 - **Auto-craft queue EDITS are host-echo, not intent-RPC** (accepted 14.43.0, narrowed 14.58.0): the simulation itself is host-only since 14.58.0, but a guest's queue/bank edit still applies locally and replicates through the seam - an edit landing in the same instant as a host convergence pass can be overwritten and needs re-doing. Cosmetic-rare; full intent conversion only if live play ever surfaces it.
@@ -112,6 +113,14 @@
 - **Statics are single-player debt:** static gameplay state (not pure helpers) will need a per-instance or server-owned home; avoid adding new static gameplay state.
 - **Physics queries used for gameplay** (base probes, eave contact, overlap audits) must be runnable on the server - keep them in plain simulation code, never inside camera/UI/input paths.
 - **Separate input from simulation:** read input in player code, apply results through the authority entry point.
+
+### On-Foot Movement & Slide (17.7.0-dev)
+
+~~Momentum-driven ground and air steering, buffered bunny-hops, and a separate rebindable Slide action.~~ *(17.7.0-dev)*
+
+**Rules that bind:** C remains Crouch, Left Shift remains Sprint, and Slide is a separate held action (Left Alt by default). Movement operates on the local radial-up tangent plane; ice, road bonuses, and moving-deck/magnetic-boot carry remain in the existing controller path.
+
+**Status:** implemented in `Scripts/Player/PlayerController.cs` and `Scripts/Settings/GameSettings.cs`; `Scripts/UI/SettingsUI.cs` enumerates the new action automatically, and no Voxel Engine Setup content action is needed.
 
 ### Real Crusaders - Player Model & Readable Loadout (milestone 6 design)
 

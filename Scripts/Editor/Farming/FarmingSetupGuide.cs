@@ -220,11 +220,11 @@ namespace VoxelEngine.Farming
             recipe.outputItem = output;
             recipe.outputCount = outputCount;
             recipe.requiredStation = station;
-            recipe.craftSeconds = 0f; // instant at station
             recipe.unlockedByDefault = true;
             recipe.inputs = new RecipeIngredient[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
                 recipe.inputs[i] = new RecipeIngredient { item = inputs[i].item, count = inputs[i].count };
+            recipe.craftSeconds = CraftTimeDefaults.Suggest(station, recipe.inputs);
             AssetDatabase.CreateAsset(recipe, $"{folder}/{fileName}.asset");
         }
     }

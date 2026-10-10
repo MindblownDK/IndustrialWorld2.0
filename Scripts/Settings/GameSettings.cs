@@ -18,7 +18,7 @@ namespace VoxelEngine.Settings
     public enum InputAction
     {
         Forward, Back, Left, Right, Up, Down,
-        Sprint, Crouch, Jump,
+        Sprint, Crouch, Slide, Jump,
         Mine, Build, Pause, ToggleFly,
         RollLeft, RollRight,   // 6DOF flight roll (Q / E) — grid systems style
         Inventory, Interact, BuildToggleGrid, BuildRotate, Research, BuildWheel, DropItem,
@@ -81,7 +81,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 22;   // v22: Dampeners action added (14.62.0)
+        private const int    CURRENT_VERSION = 23;   // v23: independent Slide action added
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -278,6 +278,7 @@ namespace VoxelEngine.Settings
             InputAction.Down            => "C",
             InputAction.Sprint          => "LeftShift",
             InputAction.Crouch          => "C",
+            InputAction.Slide           => "LeftAlt",
             InputAction.Jump            => "Space",
             InputAction.Mine            => "Mouse0",
             InputAction.Build           => "Mouse1",
@@ -391,6 +392,8 @@ namespace VoxelEngine.Settings
                     : wasOpen ? VoiceTalkMode.OpenMic : VoiceTalkMode.PushToTalk));
             }
 
+            // v23: the generic pass above gives the new Slide action LeftAlt when
+            // no valid binding exists; existing Crouch and non-empty custom binds stay.
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);

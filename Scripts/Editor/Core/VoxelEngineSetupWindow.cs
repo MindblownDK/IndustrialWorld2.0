@@ -26,11 +26,24 @@ namespace VoxelEngine.EditorTools
             string path = $"{folder}/{assetName}.asset";
             var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
             r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
-            r.requiredStation = station; r.craftSeconds = 0f; r.unlockedByDefault = unlockedByDefault;
+            r.requiredStation = station; r.unlockedByDefault = unlockedByDefault;
             var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
-            foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
-            r.inputs = valid.ToArray();
-            if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+            if (inputs != null)
+                foreach (var (item, n) in inputs)
+                    if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+            var recipeInputs = valid.ToArray();
+            if (r.craftSeconds <= 0f && station != VoxelEngine.Crafting.StationTier.None)
+                r.craftSeconds = VoxelEngine.Crafting.CraftTimeDefaults.Suggest(station, recipeInputs);
+            r.inputs = recipeInputs;
+            if (registry != null)
+            {
+                if (registry.recipes == null) registry.recipes = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
+                if (!registry.recipes.Contains(r))
+                {
+                    registry.recipes.Add(r);
+                    UnityEditor.EditorUtility.SetDirty(registry);
+                }
+            }
             UnityEditor.EditorUtility.SetDirty(r);
             return r;
         }
@@ -290,6 +303,7 @@ namespace VoxelEngine.EditorTools
                 "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
                 Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
                 Setup("Apply 17.5.0 progression gates and starter swords (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
+                Setup("Apply 17.6.0 food, progression and craft-time repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersSurvivalSetup.Run()),
                 Setup("Consolidate duplicate ore items", () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80()),
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
@@ -1458,19 +1472,14 @@ namespace VoxelEngine.EditorTools
             var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
 
             r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
-            // Set a default craft time based on station tier; users can override later via the inspector.
-            float defaultSeconds = station switch
-            {
-                VoxelEngine.Crafting.StationTier.None          => 0f,
-                VoxelEngine.Crafting.StationTier.CraftingBench => 2f,
-                VoxelEngine.Crafting.StationTier.Furnace       => 0f,
-                VoxelEngine.Crafting.StationTier.Assembler     => 4f,
-                _ => 0f
-            };
-            r.requiredStation = station; r.craftSeconds = defaultSeconds; r.unlockedByDefault = true;
-            r.inputs = new VoxelEngine.Crafting.RecipeIngredient[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-                r.inputs[i] = new VoxelEngine.Crafting.RecipeIngredient { item = inputs[i].item, count = inputs[i].count };
+            r.requiredStation = station; r.unlockedByDefault = true;
+            var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (inputs != null)
+                foreach (var (item, count) in inputs)
+                    if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+            r.inputs = valid.ToArray();
+            if (r.craftSeconds <= 0f && station != VoxelEngine.Crafting.StationTier.None)
+                r.craftSeconds = VoxelEngine.Crafting.CraftTimeDefaults.Suggest(station, r.inputs);
 
             return r;
         }
@@ -2581,18 +2590,18 @@ namespace VoxelEngine.EditorTools
 
             if (registrySO != null)
             {
-                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Copper", "Copper Energy Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 1));
-                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Iron", "Iron Energy Pipe", blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4));
-                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Gold", "Gold Energy Pipe", blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2));
-                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Super", "Superconductor Energy Pipe", blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)steelIngot, 4), ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Copper", "Copper Energy Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 1));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Iron", "Iron Energy Pipe", blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Gold", "Gold Energy Pipe", blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Super", "Superconductor Energy Pipe", blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelIngot, 4), ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2));
 
-                AddRecipe(registrySO, recipesFolder, "Recipe_Generator", "Coal Generator", blockGen, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)stone, 4));
-                AddRecipe(registrySO, recipesFolder, "Recipe_Battery", "Battery", blockBat, 1, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)copperIngot, 4), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)lithium, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_Generator", "Coal Generator", blockGen, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)stone, 4));
+                AddRecipe(registrySO, recipesFolder, "Recipe_Battery", "Battery", blockBat, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)copperIngot, 4), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)lithium, 2));
                 AddRecipe(registrySO, recipesFolder, "Recipe_Light", "Power Light", blockLight, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
 
                 AddRecipe(registrySO, recipesFolder, "Recipe_Wire_Cu_LV", "Copper LV Wire", lvWireCu, 5, VoxelEngine.Crafting.StationTier.None, true, ((VoxelEngine.Items.ItemDefinition)copperWire, 1));
-                AddRecipe(registrySO, recipesFolder, "Recipe_Wire_Au_LV", "Gold LV Wire", lvWireAu, 5, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperWire, 2));
-                AddRecipe(registrySO, recipesFolder, "Recipe_Wire_Gr_LV", "Graphite LV Wire", lvWireGr, 5, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)graphite != null ? graphite : coal, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_Wire_Au_LV", "Gold LV Wire", lvWireAu, 5, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperWire, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_Wire_Gr_LV", "Graphite LV Wire", lvWireGr, 5, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)graphite != null ? graphite : coal, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 2));
             }
 
         }
@@ -2829,7 +2838,7 @@ namespace VoxelEngine.EditorTools
             // Tier 2 - smelting / iron
             var nSmelting = MakeNode("res_smelting", "Smelting",
                 "Refining ores into ingots opens metal-tier tools and machines.",
-                2, 0, 40f, new[] { (sciT1, 10), (sciT2, 5) },
+                2, 0, 40f, new[] { (sciT1, 10) },
                 new[] { recPickIron },
                 new[] { nStoneWorking });
 
@@ -15792,9 +15801,9 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                     recipe.outputItem = output;
                     recipe.outputCount = 1;
                     recipe.requiredStation = requiredStation;
-                    recipe.craftSeconds = 0f;
                     recipe.unlockedByDefault = false;
                     recipe.inputs = MakeIngredients(defaultInputs);
+                    recipe.craftSeconds = VoxelEngine.Crafting.CraftTimeDefaults.Suggest(recipe);
                 }
                 else
                 {
