@@ -70,6 +70,7 @@ namespace VoxelEngine.UI
         private bool _pollutionTelemetryExpanded;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
+        private CraftQueue _inventoryCraftQueue;
         // Non-null only while a Crafting Bench or Assembler is open through the inventory crafting surface.
         private CraftingStation _inventoryCraftStation;
         private VoxelEngine.Power.CoalGeneratorFuel _openCoalGen;
@@ -281,6 +282,21 @@ namespace VoxelEngine.UI
             if (Instance == this) Instance = null;
         }
 
+        // Lazily attach a runtime-only queue to the player's Inventory GameObject.
+        // The same queue serves station-less timed recipes (including Science Pack I)
+        // and preserves progress when the crafting panel is closed.
+        private CraftQueue GetInventoryCraftQueue()
+        {
+            if (inventory == null) return null;
+            if (_inventoryCraftQueue == null || _inventoryCraftQueue.gameObject != inventory.gameObject)
+            {
+                _inventoryCraftQueue = inventory.GetComponent<CraftQueue>();
+                if (_inventoryCraftQueue == null)
+                    _inventoryCraftQueue = inventory.gameObject.AddComponent<CraftQueue>();
+            }
+            return _inventoryCraftQueue;
+        }
+
         // Live-updating references to furnace UI elements (set by BuildRightFurnace / BuildRightElectricFurnace).
         // We poke these from Update() so the flame pulses + bars tick without rebuilding the panel.
         private VisualElement _liveFlame;
@@ -423,7 +439,8 @@ namespace VoxelEngine.UI
             // 4 Hz refresh while ANY craft queue near the player has work — drives recipe-row progress bars.
             if (_inventoryOpen && inventory != null)
             {
-                bool anyWork = (_activeQueue != null && _activeQueue.HasWork);
+                bool anyWork = (_activeQueue != null && _activeQueue.HasWork)
+                    || (_inventoryCraftQueue != null && _inventoryCraftQueue.HasWork);
                 if (!anyWork)
                 {
                     var nearest = FindNearestQueueForTier(Crafting.StationTier.CraftingBench, inventory.transform.position);
@@ -3651,8 +3668,11 @@ namespace VoxelEngine.UI
                     if (_inventoryCraftStation != null && _activeQueue != null)
                         return _activeQueue;
                     if (r != null && r.requiredStation != Crafting.StationTier.None)
-                        return FindNearestQueueForTier(r.requiredStation, inventory.transform.position);
-                    return null;
+                    {
+                        var stationQueue = FindNearestQueueForTier(r.requiredStation, inventory.transform.position);
+                        if (stationQueue != null) return stationQueue;
+                    }
+                    return GetInventoryCraftQueue();
                 },
                 refresh: Refresh,
                 setSearchFocus: v => _searchHasFocus = v,
@@ -4789,7 +4809,10 @@ namespace VoxelEngine.UI
 
                     float pct = e.recipe.craftSeconds > 0 ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
                     float remain = Mathf.Max(0, e.recipe.craftSeconds - e.progressSeconds);
-                    var time = new Label($"{remain:0.0}s");
+                    string status = e.refundPending ? "Refund pending"
+                        : e.IsWaitingForSpace ? "Make room"
+                        : $"{remain:0.0}s";
+                    var time = new Label(status);
                     time.style.color = new StyleColor(new Color(0.78f, 0.82f, 0.9f));
                     time.style.fontSize = 11; time.style.marginRight = 6;
                     row.Add(time);
@@ -4799,6 +4822,7 @@ namespace VoxelEngine.UI
 
                     int idx = i;
                     var cancel = new Button(() => { _activeQueue.Cancel(idx); Refresh(); }) { text = "X" };
+                    cancel.SetEnabled(e.CanCancel);
                     cancel.style.minWidth = 24; cancel.style.minHeight = 22;
                     cancel.style.marginLeft = 6;
                     cancel.style.color = Color.white;

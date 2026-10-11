@@ -27,6 +27,9 @@ namespace VoxelEngine.Building
 
         private bool _explicitOwner;
 
+        /// <summary>Feet position used by the linked respawn target.</summary>
+        public Vector3 SpawnPoint => transform.position + Vector3.up * 1.2f;
+
         private void Awake()
         {
             // Fresh LOCAL placement: capture the placer right now, before the
@@ -73,8 +76,9 @@ namespace VoxelEngine.Building
             }
 
             // World coords of this bed; player spawns slightly above to drop in.
-            session.bedSpawnPoint   = transform.position + Vector3.up * 1.2f;
-            session.hasBedSpawn     = true;
+            session.bedSpawnPoint = SpawnPoint;
+            session.hasBedSpawn = true;
+            session.bedSpawnIsOrdinaryBed = true;
             // 14.60.6 - cosmic record via the ONE central writer (body-relative
             // when a body is near): every link path must refresh it, or a stale
             // record from an earlier link hijacks the next death respawn.
@@ -92,9 +96,10 @@ namespace VoxelEngine.Building
             var session = Menu.WorldSession.Instance;
             if (session != null && session.hasBedSpawn)
             {
-                if (Vector3.Distance(session.bedSpawnPoint, transform.position + Vector3.up * 1.2f) < 0.5f)
+                if (Vector3.Distance(session.bedSpawnPoint, SpawnPoint) < 0.5f)
                 {
                     session.hasBedSpawn = false;
+                    session.bedSpawnIsOrdinaryBed = false;
                     session.SaveSpawnSidecar();
                     Debug.Log("[Bed] Player's bed was destroyed — falling back to world spawn.");
                 }

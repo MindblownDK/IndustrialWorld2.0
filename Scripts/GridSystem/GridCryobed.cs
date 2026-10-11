@@ -110,6 +110,7 @@ namespace VoxelEngine.GridSystem
             claimedByLocalPlayer = true;
             session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
+            session.bedSpawnIsOrdinaryBed = false;
             // 14.60.6 - refresh the cosmic record: without this, the record from a
             // PREVIOUS link (possibly another planet) stayed in the sidecar and the
             // death screen teleported respawns toward that stale point.

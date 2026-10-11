@@ -129,9 +129,9 @@ namespace VoxelEngine.Player
 
         [Header("Fall Damage")]
         [Tooltip("Downward impact speed along local gravity before fall damage starts.")]
-        public float fallDamageStartSpeed = 11f;
+        public float fallDamageStartSpeed = 16f;
         [Tooltip("Downward impact speed that is roughly lethal at 100 HP.")]
-        public float fallDamageLethalSpeed = 28f;
+        public float fallDamageLethalSpeed = 40f;
         [Tooltip("Damage curve exponent. Higher values make small falls gentler and big falls harsher.")]
         public float fallDamageExponent = 1.35f;
 

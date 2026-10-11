@@ -26,6 +26,7 @@ using VoxelEngine.Crafting;
 using VoxelEngine.Items;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Networking;
+using VoxelEngine.Research;
 
 namespace VoxelEngine.Persistence
 {
@@ -41,6 +42,11 @@ namespace VoxelEngine.Persistence
         private readonly HashSet<string> _missingSavedItemWarnings = new();
 
         private bool _loaded;
+        private List<ResearchRankEntry> _researchRankCache = new List<ResearchRankEntry>();
+
+        /// <summary>True once this world's additive research-rank field has been
+        /// loaded (or the world is new/remote and has no local ranks to apply).</summary>
+        public bool ResearchRanksReady { get; private set; }
 
         /// <summary>14.65.2 - true once the saved orbital clock has been applied (or
         /// there was nothing to apply). PlayerSpawner and the grid pose correction
@@ -105,6 +111,7 @@ namespace VoxelEngine.Persistence
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session != null && session.IsRemoteJoin)
             {
+                CacheLoadedResearchRanks(null);
                 Debug.Log("[WorldStatePersistence] Remote join - world state comes from the host, skipping LoadAll.");
                 return;
             }
@@ -195,6 +202,49 @@ namespace VoxelEngine.Persistence
             if (string.IsNullOrEmpty(itemId)) return null;
             if (_itemById.Count == 0) BuildItemCache();
             return _itemById.TryGetValue(itemId, out var item) ? item : null;
+        }
+
+        /// <summary>Copies the currently loaded research ranks into the manager's
+        /// runtime dictionary. False means the world save has not settled yet.</summary>
+        public bool TryCopyResearchRanks(Dictionary<string, int> destination)
+        {
+            if (destination == null || !ResearchRanksReady) return false;
+            destination.Clear();
+            if (_researchRankCache != null)
+            {
+                foreach (var entry in _researchRankCache)
+                {
+                    if (entry == null || string.IsNullOrWhiteSpace(entry.nodeId) || entry.rank <= 0) continue;
+                    if (!destination.TryGetValue(entry.nodeId, out int current) || entry.rank > current)
+                        destination[entry.nodeId] = entry.rank;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>Stores research changes in the additive world-save field and
+        /// writes the world immediately when its load has completed.</summary>
+        public void SaveResearchRanks(Dictionary<string, int> ranks)
+        {
+            if (ranks == null || Networking.NetworkSession.Mode == Networking.SessionMode.Client) return;
+            var copy = new List<ResearchRankEntry>(ranks.Count);
+            foreach (var pair in ranks)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value <= 0) continue;
+                copy.Add(new ResearchRankEntry(pair.Key, pair.Value));
+            }
+            _researchRankCache = copy;
+            ResearchRanksReady = true;
+            if (_loaded && !_loadFailed) SaveAll();
+        }
+
+        private void CacheLoadedResearchRanks(List<ResearchRankEntry> ranks)
+        {
+            _researchRankCache = ranks != null
+                ? new List<ResearchRankEntry>(ranks)
+                : new List<ResearchRankEntry>();
+            ResearchRanksReady = true;
+            ResearchManager.Instance?.LoadSavedRanksFromPersistence();
         }
 
         /// <summary>Runtime block-item lookup by stable id (block sync, 14.9.0).
@@ -382,6 +432,9 @@ namespace VoxelEngine.Persistence
             {
                 var save = new SaveData();
                 save.schemaVersion = CurrentSchemaVersion;
+                save.researchRanks = _researchRankCache != null
+                    ? new List<ResearchRankEntry>(_researchRankCache)
+                    : new List<ResearchRankEntry>();
                 if (!SavePlayer(save))
                 {
                     // 14.45.0 (milestone 12): a dedicated server HAS no local
@@ -597,6 +650,7 @@ namespace VoxelEngine.Persistence
             {
                 result.hasBedSpawn = true;
                 result.bedSpawnPos = spawnSession.bedSpawnPoint;
+                result.bedSpawnIsOrdinaryBed = spawnSession.bedSpawnIsOrdinaryBed;
             }
 
             // 9.57.1-dev: the scene origin is re-anchored as the world runs (orbits, rebases,
@@ -669,6 +723,7 @@ namespace VoxelEngine.Persistence
                 {
                     session.hasBedSpawn = record.hasBedSpawn;
                     session.bedSpawnPoint = record.hasBedSpawn ? record.bedSpawnPos : Vector3.zero;
+                    session.bedSpawnIsOrdinaryBed = record.hasBedSpawn && record.bedSpawnIsOrdinaryBed;
                 }
 
                 return TryResolveSavedPlayerPosition(record, out restoredPosition, out _);
@@ -2048,7 +2103,13 @@ namespace VoxelEngine.Persistence
             VoxelEngine.Networking.TeamBannerRegistry.Load();
 
             string path = WorldStatePath();
-            if (!File.Exists(path)) { _loaded = true; CosmicClockSettled = true; return; }
+            if (!File.Exists(path))
+            {
+                CacheLoadedResearchRanks(null);
+                _loaded = true;
+                CosmicClockSettled = true;
+                return;
+            }
 
             try
             {
@@ -2076,6 +2137,7 @@ namespace VoxelEngine.Persistence
                     // Distinguish "no world yet" from "world exists but cannot be read".
                     // Only the second case must block autosave.
                     _loadFailed = true;
+                    CacheLoadedResearchRanks(null);
                     _loaded = true;
                     CosmicClockSettled = true;
                     Debug.LogError("[WorldState] Could not read the save. Autosave is DISABLED " +
@@ -2085,6 +2147,7 @@ namespace VoxelEngine.Persistence
                 }
 
                 MigrateSave(save);
+                CacheLoadedResearchRanks(save.researchRanks);
 
                 // 14.45.0 (milestone 12): remember the local-player block as
                 // it was READ. A dedicated server has no local player to
@@ -2121,6 +2184,7 @@ namespace VoxelEngine.Persistence
                 // A partial restore is still a failure: half a world written back over a
                 // whole one loses the rest. Block autosave rather than risk it.
                 _loadFailed = true;
+                CacheLoadedResearchRanks(null);
                 Debug.LogError("[WorldState] Load failed: " + ex.Message +
                                " - autosave DISABLED for this session to protect the file.");
             }
@@ -5023,6 +5087,9 @@ namespace VoxelEngine.Persistence
             // they were at the END of the session — the drift that turned a planet-side
             // logout into a spawn in open space. Legacy saves read 0 and stay at t = 0.
             public double cosmicSimulationSeconds;
+            // 17.13.0-dev additive research ranks. Legacy world saves omit this
+            // field and therefore continue to load as an empty progression map.
+            public List<ResearchRankEntry> researchRanks = new();
             public List<SavedPlacedBlock>  placedBlocks  = new();
             public List<SavedPlacedTiered> placedTiered = new();
             public List<SavedQuarry>       quarries     = new();
@@ -5350,6 +5417,9 @@ namespace VoxelEngine.Persistence
             // and change nothing.
             public bool hasBedSpawn;
             public Vector3 bedSpawnPos;
+            // Additive linked-spawn kind. Legacy records default to false so
+            // cryobed-specific wake paths keep their prior behavior.
+            public bool bedSpawnIsOrdinaryBed;
         }
         [Serializable] private class SavedPlacedBlock
         {

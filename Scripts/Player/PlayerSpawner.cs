@@ -93,6 +93,7 @@ namespace VoxelEngine.Player
                             if (session != null)
                             {
                                 session.hasBedSpawn = false;
+                                session.bedSpawnIsOrdinaryBed = false;
                                 session.SaveSpawnSidecar();
                             }
                             // Clear offline file so we don't re-apply death on next load
@@ -241,6 +242,7 @@ namespace VoxelEngine.Player
             Vector3 target;
             bool isFreshWorld = false;
             bool bedCosmic = false;
+            bool ordinaryBedSpawn = false;
             double3 bedKm = default;
 
             if (hasSavedPos)
@@ -274,8 +276,10 @@ namespace VoxelEngine.Player
                         Debug.LogWarning("[PlayerSpawner] Bed spawn invalid (in space / inside planet) — using a fresh surface point instead.");
                         target = safeBed;
                         session.hasBedSpawn = false;   // don't loop back to the poisoned bed
+                        session.bedSpawnIsOrdinaryBed = false;
                     }
                 }
+                ordinaryBedSpawn = session.hasBedSpawn && session.bedSpawnIsOrdinaryBed;
             }
             else
             {
@@ -411,6 +415,27 @@ namespace VoxelEngine.Player
                 }
             }
 
+            if (!hasSavedPos && session != null && session.hasBedSpawn)
+            {
+                if (TryFindOrdinaryBedAt(target, out var liveOrdinaryBed))
+                {
+                    ordinaryBedSpawn = true;
+                    target = liveOrdinaryBed.SpawnPoint;
+                    if (!session.bedSpawnIsOrdinaryBed)
+                    {
+                        session.bedSpawnIsOrdinaryBed = true;
+                        session.SaveSpawnSidecar();
+                    }
+                }
+            }
+            if (ordinaryBedSpawn)
+            {
+                // An ordinary bed's saved point is already above its own floor.
+                // Keep it in the room; a top-down terrain ray finds the house roof.
+                SetPosition(target);
+                Debug.Log("[PlayerSpawner] Ordinary bed spawn: preserving the linked interior position at " + target);
+            }
+
             // For flat fresh worlds, find the actual top-of-ground position.
             // We intentionally compute the ground target BEFORE snapping but DEFER saving
             // worldSpawn until AFTER the final raycast snap, so worldSpawnPoint always
@@ -425,8 +450,8 @@ namespace VoxelEngine.Player
 
             // A saved position is authoritative: it can be on terrain, in atmosphere,
             // or in space. Ground snapping it would destroy valid sky/orbit logout state.
-            bool snapped = hasSavedPos;
-            if (!hasSavedPos)
+            bool snapped = hasSavedPos || ordinaryBedSpawn;
+            if (!hasSavedPos && !ordinaryBedSpawn)
             {
                 // Snap a fresh/bed spawn to actual ground via raycast — keep retrying until we get a real hit,
                 // because the mesh collider may take a frame or two to activate after the chunk
@@ -469,13 +494,14 @@ namespace VoxelEngine.Player
             // pass at the exact release pose. This prevents the CharacterController
             // from enabling while its feet are still intersecting a late-updated mesh.
             yield return null;
-            SetPosition(LiftSavedPositionOutOfGround(transform.position));
+            if (!ordinaryBedSpawn)
+                SetPosition(LiftSavedPositionOutOfGround(transform.position));
             yield return null;
 
             // A save, bed, or fresh-world target must never release the player into
             // a water volume. When the selected column is wet, relocate while the
             // controller remains disabled and chunks continue streaming.
-            if (!savedInSpace)
+            if (!savedInSpace && !ordinaryBedSpawn)
                 yield return EnsureDrySpawn(transform.position);
 
             // For any fresh-world first spawn (flat OR sphere), persist the FINAL grounded
@@ -510,7 +536,7 @@ namespace VoxelEngine.Player
             // above the planet") is pulled down to the surface below. Genuine deep-space
             // saves (no gravity frame) are untouched.
             var frameBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            if (frameBody != null && transform.parent == null)   // seated/grid players are exempt
+            if (!ordinaryBedSpawn && frameBody != null && transform.parent == null)   // ordinary beds keep their saved in-room position; seated/grid players are exempt
             {
                 float altitude = Vector3.Distance(transform.position, frameBody.transform.position)
                                  - frameBody.SurfaceRadius;
@@ -590,6 +616,22 @@ namespace VoxelEngine.Player
                 if (candidate == null || !candidate.claimedByLocalPlayer) continue;
                 if (bed == null) bed = candidate;
                 if (candidate.IsAvailableForRespawn) { bed = candidate; break; }
+            }
+            return bed != null;
+        }
+
+        private static bool TryFindOrdinaryBedAt(Vector3 spawnPoint, out VoxelEngine.Building.Bed bed)
+        {
+            bed = null;
+            const float MatchDistanceSqr = 2.5f;
+            float bestSqr = MatchDistanceSqr;
+            foreach (var candidate in Object.FindObjectsByType<VoxelEngine.Building.Bed>(FindObjectsInactive.Exclude))
+            {
+                if (candidate == null || !candidate.isActiveAndEnabled) continue;
+                float distanceSqr = (candidate.SpawnPoint - spawnPoint).sqrMagnitude;
+                if (distanceSqr > bestSqr) continue;
+                bestSqr = distanceSqr;
+                bed = candidate;
             }
             return bed != null;
         }
@@ -679,11 +721,13 @@ namespace VoxelEngine.Player
             if (session != null && session.hasBedSpawn && !BedOnActiveWorld(session) &&
                 TryResolveBedCosmicKm(session, out var cosmicBedKm))
             {
-                RespawnAtCosmic(cosmicBedKm.x, cosmicBedKm.y, cosmicBedKm.z);
+                RespawnAtCosmic(cosmicBedKm.x, cosmicBedKm.y, cosmicBedKm.z,
+                    ordinaryBedSpawn: session.bedSpawnIsOrdinaryBed);
                 return;
             }
 
             Vector3 dest;
+            bool ordinaryBedRespawn = false;
             if (session != null)
             {
                 // Prefer the explicit linked bed spawn; otherwise the world spawn is
@@ -694,6 +738,7 @@ namespace VoxelEngine.Player
                 if (session.hasBedSpawn)
                 {
                     dest = session.bedSpawnPoint;
+                    ordinaryBedRespawn = session.bedSpawnIsOrdinaryBed;
                     // Same-world bed with a live body-relative record: re-derive the
                     // scene point from the planet's CURRENT placement (survives any
                     // origin re-anchor since the link was made).
@@ -752,13 +797,25 @@ namespace VoxelEngine.Player
                         Debug.LogError("[PlayerSpawner] Could not heal the world spawn (no usable body) — dest=" + dest);
                     }
                 }
+                // Legacy spawn sidecars have no type bit. A live Bed at this exact
+                // point safely identifies the old ordinary-bed case without changing
+                // the dedicated cryobed wake path.
+                if (session.hasBedSpawn && !ordinaryBedRespawn && BedOnActiveWorld(session)
+                    && TryFindOrdinaryBedAt(dest, out _))
+                {
+                    ordinaryBedRespawn = true;
+                    session.bedSpawnIsOrdinaryBed = true;
+                    session.SaveSpawnSidecar();
+                }
                 Debug.Log($"[PlayerSpawner] Respawn → dest={dest} anchor='{session.worldSpawnBodyName}' bed={session.hasBedSpawn}");
             }
             else
             {
                 dest = new Vector3(0, 250, 0);
             }
-            StartCoroutine(RespawnRoutine(dest, allowSpaceDestination: session != null && session.hasBedSpawn));
+            StartCoroutine(RespawnRoutine(dest,
+                allowSpaceDestination: session != null && session.hasBedSpawn,
+                ordinaryBedSpawn: ordinaryBedRespawn));
         }
 
         /// <summary>
@@ -813,20 +870,22 @@ namespace VoxelEngine.Player
             return true;
         }
 
-        public void RespawnAt(Vector3 destination)
+        public void RespawnAt(Vector3 destination, bool ordinaryBedSpawn = false)
         {
             // Explicit destinations (beds, cryobeds, stations) may be in space by design.
-            StartCoroutine(RespawnRoutine(destination, allowSpaceDestination: true));
+            StartCoroutine(RespawnRoutine(destination, allowSpaceDestination: true,
+                ordinaryBedSpawn: ordinaryBedSpawn));
         }
 
         /// <summary>Respawn at a frame-independent cosmic point (14.60.5): the
         /// origin is re-anchored onto the point FIRST, which picks the right
         /// planet frame and re-targets streaming, then the normal landing runs.
         /// This is the path the death screen uses for cross-planet beds.</summary>
-        public void RespawnAtCosmic(double xKm, double yKm, double zKm)
+        public void RespawnAtCosmic(double xKm, double yKm, double zKm, bool ordinaryBedSpawn = false)
         {
             StartCoroutine(RespawnRoutine(Vector3.zero, allowSpaceDestination: true,
-                cosmic: true, destKm: new double3(xKm, yKm, zKm)));
+                cosmic: true, destKm: new double3(xKm, yKm, zKm),
+                ordinaryBedSpawn: ordinaryBedSpawn));
         }
 
         /// <summary>True when the linked bed's recorded body IS the currently
@@ -873,7 +932,8 @@ namespace VoxelEngine.Player
         }
 
         private IEnumerator RespawnRoutine(Vector3 dest, bool allowSpaceDestination = false,
-                                           bool cosmic = false, double3 destKm = default)
+                                           bool cosmic = false, double3 destKm = default,
+                                           bool ordinaryBedSpawn = false)
         {
             ReadyForPlayerControl = false;
             DisableController();
@@ -900,6 +960,7 @@ namespace VoxelEngine.Player
             {
                 Debug.LogWarning("[PlayerSpawner] Respawn destination is inside a planet — respawning on a fresh surface point instead: " + dest);
                 dest = safeDest;
+                ordinaryBedSpawn = false;
             }
 
             // Respawn frame preparation: pin the scene frame to the destination's dominant
@@ -921,30 +982,56 @@ namespace VoxelEngine.Player
             SetPosition(dest + parkUp * 12f);
             Debug.Log($"[PlayerSpawner] Respawn parked at {transform.position} (dest {dest}), waiting for chunks…");
             yield return WaitForChunkAt(VoxelCoordOf(dest), 8f);
-            SetPosition(SnapToGround(dest));
-            yield return null;
-            yield return null;
-            SetPosition(SnapToGround(transform.position));
-            yield return EnsureDrySpawn(transform.position);
+            if (TryFindOrdinaryBedAt(dest, out var liveBed))
+            {
+                ordinaryBedSpawn = true;
+                dest = liveBed.SpawnPoint;
+                var session = Menu.WorldSession.Instance;
+                if (session != null && session.hasBedSpawn
+                    && (session.bedSpawnPoint - dest).sqrMagnitude < 6.25f
+                    && !session.bedSpawnIsOrdinaryBed)
+                {
+                    session.bedSpawnIsOrdinaryBed = true;
+                    session.SaveSpawnSidecar();
+                }
+            }
+            if (ordinaryBedSpawn)
+            {
+                // The Bed component stores a valid feet point inside the room. Do not
+                // snap downward: the first hit can be the roof, not the house floor.
+                SetPosition(dest);
+                Debug.Log("[PlayerSpawner] Respawn at ordinary bed; skipping roof-seeking ground snap at " + dest);
+            }
+            else
+            {
+                SetPosition(SnapToGround(dest));
+                yield return null;
+                yield return null;
+                SetPosition(SnapToGround(transform.position));
+                yield return EnsureDrySpawn(transform.position);
+            }
 
             // Collider assurance (9.5.4 — "went through the ground on respawn"): hold the
             // handover until REAL ground collision exists under the player (mesh collider
             // baking lags mesh visuals by a few frames under streaming load).
-            float colliderWait = 6f;
-            while (colliderWait > 0f)
+            if (!ordinaryBedSpawn)
             {
-                Vector3 upNow = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
-                    ? VoxelEngine.Cosmos.GravityProvider.ActiveBody.UpAt(transform.position)
-                    : Vector3.up;
-                if (Physics.Raycast(transform.position + upNow * 40f, -upNow, out var groundHit,
-                                    400f, ~0, QueryTriggerInteraction.Ignore) &&
-                    groundHit.collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() == null)
+                float colliderWait = 6f;
+                while (colliderWait > 0f)
                 {
-                    SetPosition(groundHit.point + upNow * SpawnGroundClearance);
-                    break;
+                    Vector3 upNow = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+                        ? VoxelEngine.Cosmos.GravityProvider.ActiveBody.UpAt(transform.position)
+                        : Vector3.up;
+                    if (Physics.Raycast(transform.position + upNow * 40f, -upNow, out var groundHit,
+                                        400f, ~0, QueryTriggerInteraction.Ignore) &&
+                        groundHit.collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() == null)
+                    {
+                        SetPosition(groundHit.point + upNow * SpawnGroundClearance);
+                        break;
+                    }
+                    colliderWait -= 0.25f;
+                    yield return new WaitForSeconds(0.25f);
                 }
-                colliderWait -= 0.25f;
-                yield return new WaitForSeconds(0.25f);
             }
 
             // Final clamp (9.5.2): if everything above still left us floating in open

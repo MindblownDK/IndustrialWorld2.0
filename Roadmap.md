@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.12.0-dev`
-**Roadmap Version:** `17.12.0-dev`
+**Current Version:** `17.13.0-dev`
+**Roadmap Version:** `17.13.0-dev`
 **Date:** 2026-10-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.13.0-dev - Fix Interior Placement, Research and Respawns
+- Tiered-deck BlockItem placement validates authored collider footprints; BuildHammer snapping and dedicated placement paths remain unchanged
+- Tier 1 Science Pack I is timed at 5 seconds; inventory crafting queues it, and `Recipe_Furnace` is gated by instant inventory Smelting research
+- Ordinary-bed kind and research ranks persist; fall damage and Steak healing use the requested balance; Unity acceptance remains pending
+
 ### 17.12.0-dev - Add Shared Interior Placement Lattice
 - Ordinary stationary BlockItems use a fixed 1 m lattice from the shared world/body construction frame across tiered deck pieces
 - A visible deck overlay matches those world/body-aligned placement coordinates
@@ -48,11 +53,6 @@
 - Bench/Assembler interactions show inventory, station-filtered recipes, and general crafting; repair preserves custom prefabs
 - Station visual bounds, footprint-clamped deck/wall snaps, invalid ghost previews, 2 mm clearance, reliable melee sweeps, and distant hostile sleep; BuildHammer remains unchanged
 - Monitor refresh auto, live view-distance/theme updates, stable admin scroll, dev-only Infinite Health, and four item icons
-
-### 17.8.0-dev - Sharper Jump and Fitted Viewmodels
-- Jump buffering, coyote time, matched launch gravity, and release-to-short-hop improve response
-- Assigned handheld prefabs fit a renderer-bounds limit by default, with a per-item opt-out
-- No save schema or Voxel Engine Setup content change
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -83,11 +83,12 @@
 
 ### Open Scope (named with the version that deferred it)
 - **Replacement station source art (17.9.0-dev):** runtime placement anchors enabled renderers and reports missing geometry; a replacement prefab with no enabled Renderer still needs its intended model assigned and play-mode verified.
-- **Static deck/wall placement (17.12.0-dev):** ordinary stationary BlockItems use the visible shared 1 m construction-frame lattice; foundation-edge, corner, wall-contact, and station-floor play-mode acceptance is pending. BuildHammer snapping remains untouched.
-- **Station and transfer runtime acceptance (17.12.0-dev):** Bench/Assembler inventory-only panel ownership, clicked-tier recipe filtering, clicked-station queue retention, multi-panel Shift-drag, and release/cancel behavior remain unverified in Unity.
+- **Static deck/wall placement (17.13.0-dev):** ordinary stationary BlockItems use the visible shared 1 m construction-frame lattice and collider-footprint placement validation; foundation-edge, corner, wall-contact, Crafting Bench/Assembler preview, and station-floor acceptance is pending. BuildHammer snapping remains untouched.
+- **Station and transfer runtime acceptance (17.13.0-dev):** Bench/Assembler inventory-only panel ownership, clicked-tier recipe filtering, clicked-station queue retention, five-second inventory crafting, multi-panel Shift-drag, and release/cancel behavior remain unverified in Unity.
+- **Research, survival, and respawn runtime acceptance (17.13.0-dev):** saved-rank reload, inventory Smelting and Furnace unlock, 16/40 m/s fall damage, 20 HP Steak healing, ordinary-bed initial/death respawn, and cryobed preservation remain unverified in Unity.
 - **17.9 runtime acceptance (17.10.0-dev):** melee reliability, distant-hostile sleep, refresh-rate FPS cap, live settings updates, admin scroll retention, and release-player Infinite Health exclusion still need Unity build/play validation.
-- **Full-project missing-icon audit (17.12.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
-- **Setup 79 duplicate IDs (17.12.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.
+- **Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
+- **Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.
 - **Water Pump recipe report (17.10.0-dev):** source setup authors separate Water Pump and Marine Water Pump outputs/recipes; neither was removed. Confirm whether the reported repeated UI row persists after Setup before treating it as an accidental duplicate.
 - **Advanced traversal (deferred 17.7.0-dev):** wallrunning, wall-jumps, and mantling are outside the momentum-and-slide pass.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.

@@ -32,6 +32,7 @@ namespace VoxelEngine.EditorTools
             public int linksRepaired;
             public int recipesGated;
             public int unlockLinksMoved;
+            public int researchTimesRepaired;
             public int warnings;
             public string copperAudit = "Not checked";
         }
@@ -48,7 +49,7 @@ namespace VoxelEngine.EditorTools
             var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(RecipeRegistryPath);
             if (tree == null || registry == null)
             {
-                EditorUtility.DisplayDialog("IndustrialCrusaders Progression",
+                EditorUtility.DisplayDialog("17.13.0-dev Progression Repairs",
                     "The research tree or recipe registry is missing. Run the base crafting, research, and factory content entries in Tools > Voxel Engine > Voxel Engine Setup first. No assets were changed.",
                     "OK");
                 return;
@@ -76,7 +77,7 @@ namespace VoxelEngine.EditorTools
 
             if (plank == null || stone == null)
             {
-                EditorUtility.DisplayDialog("IndustrialCrusaders Progression",
+                EditorUtility.DisplayDialog("17.13.0-dev Progression Repairs",
                     "Wooden Plank or Stone is missing. Run Core & Project Bootstrap > Build base crafting first. No progression assets were changed.",
                     "OK");
                 return;
@@ -114,6 +115,9 @@ namespace VoxelEngine.EditorTools
                 0f, new[] { scienceT1 }, new[] { 5 }, counts);
             if (stoneWorking != null && stoneSwordRecipe != null)
                 MoveUnlocksToNode(tree, stoneWorking, new[] { stoneSwordRecipe }, counts);
+
+            var smelting = FindNode(tree, "res_smelting");
+            EnsureFurnaceSmeltingGate(tree, registry, smelting, counts);
 
             var factoryLogistics = FindNode(tree, "res_factory_logistics");
             var advancedManufacturing = FindNode(tree, "res_adv_manufacturing");
@@ -237,19 +241,59 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            EditorUtility.DisplayDialog("IndustrialCrusaders Progression",
+            EditorUtility.DisplayDialog("17.13.0-dev Progression Repairs",
                 "Progression repair complete.\n\n" +
                 "Copper chain: " + counts.copperAudit + "\n" +
                 "Wooden Sword: available from the start.\n" +
                 "Stone Sword: " + (stoneSwordRecipe == null ? "recipe not created (see warnings)" : stoneWorking != null ? "linked to Stone Working" : "left available because Stone Working was unavailable") + "\n" +
+                "Furnace: locked until Smelting research; Smelting is paid from inventory and completes instantly.\n" +
                 "Assembler Mk.1–3, fast/express conveyors, LED strips, and Grinder: gated behind staged research.\n\n" +
                 $"Created assets: {counts.assetsCreated}\n" +
                 $"Repaired links: {counts.linksRepaired}\n" +
                 $"Recipes gated: {counts.recipesGated}\n" +
                 $"Unlock links moved: {counts.unlockLinksMoved}\n" +
+                $"Smelting research durations repaired: {counts.researchTimesRepaired}\n" +
                 $"Warnings: {counts.warnings}\n\n" +
-                "Existing item stats, costs, timings, and populated recipe ingredients were preserved.",
+                "Existing item stats, costs, other timings, and populated recipe ingredients were preserved.",
                 "OK");
+        }
+
+        private static void EnsureFurnaceSmeltingGate(ResearchTree tree, RecipeRegistry registry,
+            ResearchNode smelting, RepairCounts counts)
+        {
+            RecipeDefinition furnaceRecipe = FindRecipe("Recipe_Furnace");
+            if (furnaceRecipe == null)
+            {
+                counts.warnings++;
+                Debug.LogWarning("[IndustrialCrusadersProgressionSetup] Recipe_Furnace was not found. Run Build base crafting and research content first; no Furnace recipe was invented or locked.");
+                return;
+            }
+            if (tree == null || smelting == null)
+            {
+                counts.warnings++;
+                Debug.LogWarning("[IndustrialCrusadersProgressionSetup] The existing res_smelting node was not found. Recipe_Furnace remains available rather than becoming an inaccessible recipe.");
+                return;
+            }
+
+            if (registry != null && !registry.recipes.Contains(furnaceRecipe))
+            {
+                registry.recipes.Add(furnaceRecipe);
+                EditorUtility.SetDirty(registry);
+                counts.linksRepaired++;
+            }
+            if (furnaceRecipe.unlockedByDefault)
+            {
+                furnaceRecipe.unlockedByDefault = false;
+                EditorUtility.SetDirty(furnaceRecipe);
+                counts.recipesGated++;
+            }
+            if (!Mathf.Approximately(smelting.researchSeconds, 0f))
+            {
+                smelting.researchSeconds = 0f;
+                EditorUtility.SetDirty(smelting);
+                counts.researchTimesRepaired++;
+            }
+            MoveUnlocksToNode(tree, smelting, new[] { furnaceRecipe }, counts);
         }
 
         private static void RepairCopperSmeltingLinks(RepairCounts counts)

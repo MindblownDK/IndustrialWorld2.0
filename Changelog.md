@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.12.0-dev`
+**Current Version:** `17.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.13.0-dev] Fix Interior Placement, Research and Respawns
+
+**Type:** MINOR — save-compatible placement, crafting, research, survival-balance, and respawn repairs. The research-rank save field is additive; legacy saves remain readable.
+
+**GitHub title:** `[17.13.0-dev] Fix interior placement, research and respawns`
+
+#### Changed
+- Ordinary stationary `BlockItem` placement on tiered decks now validates the prefab's measured collider footprint with a small support-contact inset; adjacent coplanar floor panels count as the same support surface. Crafting Bench and Assembler previews no longer use a small root-centred test volume; BuildHammer structural snapping, tiered building pieces, and dedicated placement systems are unchanged.
+- Tier 1 Science Pack I takes 5 seconds per pack. Inventory crafting queues timed crafts on the player's runtime queue, so it cannot silently complete them instantly when no station queue is selected. Completed outputs and cancellation refunds remain queued if inventory capacity is temporarily insufficient; completed crafts cannot be canceled for a free refund. Queue entries remain live-session state and are not persisted across reloads. Setup repairs preserve intentional zero-time workstation recipes and only replace invalid durations.
+- Smelting remains an instant inventory-paid research node. The non-destructive progression repair gates only `Recipe_Furnace` behind `res_smelting`; it preserves existing costs and unrelated cost entries, and leaves ambiguous or duplicate-ID Tier 1 assets for manual review.
+- Research ranks are stored in an additive `world_state.json` field, restored and clamped to each node's current rank limit. The save schema version remains unchanged; old saves default to no recorded ranks.
+- Fall damage starts at 16 m/s and reaches full-health damage at 40 m/s; Steak restores 20 HP. The Setup Wizard repair updates existing player prefabs without replacing unrelated prefab content.
+- Ordinary-bed type is carried through spawn sidecars and player records. Initial and death respawns preserve the linked in-room spawn position instead of applying terrain-only roof-seeking rays; cryobed behavior remains distinct.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.13.0-dev`, MINOR over `17.12.0-dev`. The added save fields are optional and backward-compatible.
+- Source review only. Unity compilation, Setup execution, and Play Mode have not been run in this workspace; no C# compiler is available. The active Git branch could not be confirmed because `.git` metadata is absent.
 
 ### [17.12.0-dev] Add Shared Interior Placement Lattice
 

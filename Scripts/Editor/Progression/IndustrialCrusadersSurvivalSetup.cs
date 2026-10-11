@@ -7,13 +7,15 @@ using UnityEngine;
 using VoxelEngine.Crafting;
 using VoxelEngine.Farming;
 using VoxelEngine.Items;
+using VoxelEngine.Player;
 using VoxelEngine.Research;
 
 namespace VoxelEngine.EditorTools
 {
     /// <summary>
-    /// Non-destructive Setup Wizard repairs for Power progression, science costs,
-    /// edible livestock meat, and workstation recipe durations.
+    /// Non-destructive Setup Wizard repairs for Power progression, research costs,
+    /// science-pack timing, edible livestock meat, fall-damage settings, and
+    /// workstation recipe durations.
     /// </summary>
     public static class IndustrialCrusadersSurvivalSetup
     {
@@ -31,7 +33,10 @@ namespace VoxelEngine.EditorTools
             public int linksRepaired;
             public int recipesGated;
             public int researchCostsRepaired;
-            public int recipeTimesInitialized;
+            public int invalidRecipeTimesRepaired;
+            public int steakHealingRepaired;
+            public int sciencePackTimesRepaired;
+            public int fallDamageComponentsRepaired;
             public int warnings;
         }
 
@@ -62,7 +67,9 @@ namespace VoxelEngine.EditorTools
             EnsureGeneratorPowerGate(tree, registry, report);
             EnsureSmeltingPackICost(tree, report);
             EnsureSteakCookingContent(report);
-            InitializeMissingWorkstationTimes(registry, report);
+            EnsureTier1SciencePackTime(report);
+            RepairPlayerFallDamageSettings(report);
+            RepairInvalidWorkstationTimes(registry, report);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -72,10 +79,13 @@ namespace VoxelEngine.EditorTools
                 $"Links repaired: {report.linksRepaired}\n" +
                 $"Recipes gated behind Electricity: {report.recipesGated}\n" +
                 $"Smelting research costs repaired: {report.researchCostsRepaired}\n" +
-                $"Workstation recipe times initialized: {report.recipeTimesInitialized}\n" +
+                $"Invalid workstation recipe times repaired: {report.invalidRecipeTimesRepaired}\n" +
+                $"Steak healing set to 20 HP: {report.steakHealingRepaired}\n" +
+                $"Tier 1 Science Pack craft times set to 5 seconds: {report.sciencePackTimesRepaired}\n" +
+                $"Player fall-damage prefabs repaired (16 / 40 m/s): {report.fallDamageComponentsRepaired}\n" +
                 $"Warnings: {report.warnings}\n\n" +
                 (report.warnings > 0 ? "See the Console for items that need review." : "No warnings.");
-            EditorUtility.DisplayDialog("17.6.0 Survival and Progression Repairs", summary, "OK");
+            EditorUtility.DisplayDialog("17.13.0-dev Survival and Progression Repairs", summary, "OK");
             Debug.Log("[IndustrialCrusadersSurvivalSetup] " + summary.Replace("\n", " | "));
         }
 
@@ -194,7 +204,7 @@ namespace VoxelEngine.EditorTools
         private static void EnsureSmeltingPackICost(ResearchTree tree, SetupReport report)
         {
             ResearchNode smelting = FindResearchNode(tree, "res_smelting");
-            ScienceItem scienceT1 = FindAssetByName<ScienceItem>("Item_ScienceT1");
+            ScienceItem scienceT1 = AssetDatabase.LoadAssetAtPath<ScienceItem>($"{AssetRoot}/Items/Item_ScienceT1.asset");
             if (smelting == null)
             {
                 Warn(report, "The existing 'res_smelting' research node was not found; its cost was not changed.");
@@ -212,29 +222,71 @@ namespace VoxelEngine.EditorTools
                 report.linksRepaired++;
             }
 
+            var existingCosts = smelting.cost ?? Array.Empty<ResearchNode.ScienceCost>();
             int packICount = 0;
-            if (smelting.cost != null)
+            bool hasDifferentTierOnePack = false;
+            bool hasCanonicalPackI = false;
+            bool hasExplicitZeroPackICost = false;
+            int canonicalPackICostEntries = 0;
+            foreach (var cost in existingCosts)
             {
-                foreach (var cost in smelting.cost)
+                if (cost.pack == null || cost.pack.tier != 1) continue;
+                // A same-ID but different asset may be one of the Setup 79 duplicates.
+                // Leave that reference untouched for Thomas's manual cleanup.
+                if (cost.pack != scienceT1)
                 {
-                    if (cost.pack != null && cost.pack.tier == 1 && cost.count > 0)
-                        packICount = packICount > int.MaxValue - cost.count
-                            ? int.MaxValue
-                            : packICount + cost.count;
+                    if (cost.count > 0) hasDifferentTierOnePack = true;
+                    continue;
+                }
+                if (cost.count == 0)
+                {
+                    hasExplicitZeroPackICost = true;
+                    continue;
+                }
+                if (cost.count < 0) continue;
+                hasCanonicalPackI = true;
+                canonicalPackICostEntries++;
+                packICount = packICount > int.MaxValue - cost.count
+                    ? int.MaxValue
+                    : packICount + cost.count;
+            }
+
+            // Do not silently replace a deliberately authored, distinct Tier 1 currency.
+            // It needs Thomas's review rather than an automated balance decision.
+            if (hasDifferentTierOnePack)
+            {
+                Warn(report, "Smelting contains a Tier 1 science asset other than the exact Item_ScienceT1 asset (possibly a duplicate ID); its existing cost array was left unchanged.");
+                return;
+            }
+            if (!hasCanonicalPackI && hasExplicitZeroPackICost)
+            {
+                Warn(report, "Smelting has an explicit zero-count Pack I cost; its existing cost array was left unchanged.");
+                return;
+            }
+
+            if (!hasCanonicalPackI) packICount = 10;
+            bool alreadyCorrect = false;
+            if (hasCanonicalPackI && canonicalPackICostEntries == 1)
+            {
+                foreach (var cost in existingCosts)
+                {
+                    if (cost.pack != scienceT1 || cost.count != packICount) continue;
+                    alreadyCorrect = true;
+                    break;
                 }
             }
-            if (packICount <= 0) packICount = 10;
-
-            bool alreadyCorrect = smelting.cost != null
-                && smelting.cost.Length == 1
-                && smelting.cost[0].pack == scienceT1
-                && smelting.cost[0].count == packICount;
             if (alreadyCorrect) return;
 
-            smelting.cost = new[]
+            // Keep every other cost entry, including higher-tier science and any
+            // special currencies. Only consolidate/repair the Pack I reference.
+            var repairedCosts = new List<ResearchNode.ScienceCost>(existingCosts.Length + 1);
+            foreach (var cost in existingCosts)
             {
-                new ResearchNode.ScienceCost { pack = scienceT1, count = packICount }
-            };
+                bool packIEntry = cost.pack == scienceT1 && cost.pack.tier == 1;
+                if (!packIEntry) repairedCosts.Add(cost);
+            }
+            repairedCosts.Add(new ResearchNode.ScienceCost { pack = scienceT1, count = packICount });
+            smelting.cost = repairedCosts.ToArray();
             EditorUtility.SetDirty(smelting);
             report.researchCostsRepaired++;
         }
@@ -271,6 +323,69 @@ namespace VoxelEngine.EditorTools
                 if (asset != null) return asset;
             }
             return null;
+        }
+
+        private static void EnsureTier1SciencePackTime(SetupReport report)
+        {
+            RecipeDefinition recipe = FindAssetByName<RecipeDefinition>("Recipe_ScienceT1");
+            if (recipe == null)
+            {
+                Warn(report, "Recipe_ScienceT1 was not found. Build the base research content first; no recipe was created or rewritten.");
+                return;
+            }
+            if (Mathf.Approximately(recipe.craftSeconds, 5f)) return;
+            recipe.craftSeconds = 5f;
+            EditorUtility.SetDirty(recipe);
+            report.sciencePackTimesRepaired++;
+        }
+
+        private static void RepairPlayerFallDamageSettings(SetupReport report)
+        {
+            string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab");
+            int playerControllersFound = 0;
+            foreach (string guid in prefabGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                GameObject root = null;
+                try
+                {
+                    root = PrefabUtility.LoadPrefabContents(path);
+                    if (root == null) continue;
+                    bool changed = false;
+                    foreach (var controller in root.GetComponentsInChildren<PlayerController>(true))
+                    {
+                        if (controller == null) continue;
+                        playerControllersFound++;
+                        bool componentChanged = false;
+                        if (!Mathf.Approximately(controller.fallDamageStartSpeed, 16f))
+                        {
+                            controller.fallDamageStartSpeed = 16f;
+                            componentChanged = true;
+                        }
+                        if (!Mathf.Approximately(controller.fallDamageLethalSpeed, 40f))
+                        {
+                            controller.fallDamageLethalSpeed = 40f;
+                            componentChanged = true;
+                        }
+                        if (!componentChanged) continue;
+                        EditorUtility.SetDirty(controller);
+                        changed = true;
+                        report.fallDamageComponentsRepaired++;
+                    }
+                    if (changed) PrefabUtility.SaveAsPrefabAsset(root, path);
+                }
+                catch (Exception exception)
+                {
+                    Warn(report, $"Could not repair player fall-damage settings in '{path}': {exception.Message}");
+                }
+                finally
+                {
+                    if (root != null) PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
+
+            if (playerControllersFound == 0)
+                Warn(report, "No PlayerController prefab was found. The script defaults are 16 / 40 m/s; check any scene-only player object or custom prefab manually.");
         }
 
         private static void EnsureSteakCookingContent(SetupReport report)
@@ -334,13 +449,13 @@ namespace VoxelEngine.EditorTools
             {
                 steak.itemId = "food_steak";
                 steak.displayName = "Steak";
-                steak.description = "Cooked livestock meat. Restores hunger and a little health.";
+                steak.description = "Cooked livestock meat. Restores hunger and health.";
                 steak.iconTint = new Color(0.58f, 0.24f, 0.17f);
                 steak.maxStack = 64;
                 steak.massPerUnit = 0.5f;
                 steak.category = "Food";
                 steak.hungerRestore = 35f;
-                steak.healthRestore = 6f;
+                steak.healthRestore = 20f;
                 steak.staminaRestore = 0f;
             }
             else
@@ -349,7 +464,12 @@ namespace VoxelEngine.EditorTools
                 if (string.IsNullOrWhiteSpace(steak.displayName)) { steak.displayName = "Steak"; changed = true; }
                 if (string.IsNullOrWhiteSpace(steak.description))
                 {
-                    steak.description = "Cooked livestock meat. Restores hunger and a little health.";
+                    steak.description = "Cooked livestock meat. Restores hunger and health.";
+                    changed = true;
+                }
+                else if (steak.description == "Cooked livestock meat. Restores hunger and a little health.")
+                {
+                    steak.description = "Cooked livestock meat. Restores hunger and health.";
                     changed = true;
                 }
                 if (string.IsNullOrWhiteSpace(steak.category) || steak.category == "Misc")
@@ -364,14 +484,19 @@ namespace VoxelEngine.EditorTools
                     steak.hungerRestore = 35f;
                     changed = true;
                 }
-                if (float.IsNaN(steak.healthRestore) || float.IsInfinity(steak.healthRestore) || steak.healthRestore < 0f)
+                if (!Mathf.Approximately(steak.healthRestore, 20f))
                 {
-                    steak.healthRestore = 0f;
+                    steak.healthRestore = 20f;
                     changed = true;
+                    report.steakHealingRepaired++;
                 }
             }
 
-            if (changed) EditorUtility.SetDirty(steak);
+            if (changed)
+            {
+                EditorUtility.SetDirty(steak);
+                if (created) report.steakHealingRepaired++;
+            }
             return steak;
         }
 
@@ -451,7 +576,7 @@ namespace VoxelEngine.EditorTools
                 if (recipe.output == null) { recipe.output = steak; changed = true; }
                 if (recipe.inputCount <= 0) { recipe.inputCount = 1; changed = true; }
                 if (recipe.outputCount <= 0) { recipe.outputCount = 1; changed = true; }
-                if (recipe.smeltSeconds <= 0f || float.IsNaN(recipe.smeltSeconds) || float.IsInfinity(recipe.smeltSeconds))
+                if (recipe.smeltSeconds < 0f || float.IsNaN(recipe.smeltSeconds) || float.IsInfinity(recipe.smeltSeconds))
                 {
                     recipe.smeltSeconds = 8f;
                     changed = true;
@@ -509,7 +634,7 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        private static void InitializeMissingWorkstationTimes(RecipeRegistry registry, SetupReport report)
+        private static void RepairInvalidWorkstationTimes(RecipeRegistry registry, SetupReport report)
         {
             var recipes = new HashSet<RecipeDefinition>();
             if (registry != null && registry.recipes != null)
@@ -523,14 +648,18 @@ namespace VoxelEngine.EditorTools
             foreach (var recipe in recipes)
             {
                 if (recipe.requiredStation == StationTier.None) continue;
-                if (!float.IsNaN(recipe.craftSeconds) && !float.IsInfinity(recipe.craftSeconds) && recipe.craftSeconds > 0f)
+                // Zero is a valid, intentionally instant recipe time. Repair only
+                // values that cannot represent a usable duration; do not guess that
+                // a tuned zero means "missing" and silently make it take longer.
+                if (!float.IsNaN(recipe.craftSeconds) && !float.IsInfinity(recipe.craftSeconds)
+                    && recipe.craftSeconds >= 0f)
                     continue;
 
                 float suggested = CraftTimeDefaults.Suggest(recipe);
                 if (suggested <= 0f) continue;
                 recipe.craftSeconds = suggested;
                 EditorUtility.SetDirty(recipe);
-                report.recipeTimesInitialized++;
+                report.invalidRecipeTimesRepaired++;
             }
         }
 

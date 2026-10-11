@@ -522,7 +522,7 @@ namespace VoxelEngine.Player
             OnStatsChanged?.Invoke();
         }
 
-        public void RespawnAt(Vector3 position)
+        public void RespawnAt(Vector3 position, bool ordinaryBedSpawn = false)
         {
             IsDead = false;
             Health  = MaxHealth;
@@ -533,7 +533,7 @@ namespace VoxelEngine.Player
             Oxygen = MaxOxygen;
 
             var spawner = GetComponent<PlayerSpawner>();
-            if (spawner != null) spawner.RespawnAt(position);
+            if (spawner != null) spawner.RespawnAt(position, ordinaryBedSpawn);
             else transform.position = position;
             OnStatsChanged?.Invoke();
         }
@@ -541,7 +541,7 @@ namespace VoxelEngine.Player
         /// <summary>Revive + respawn at a frame-independent cosmic point (14.60.5):
         /// same stat restore as RespawnAt, but the destination is cosmic km - the
         /// death screen's path for beds on other planets.</summary>
-        public void RespawnAtCosmic(double xKm, double yKm, double zKm)
+        public void RespawnAtCosmic(double xKm, double yKm, double zKm, bool ordinaryBedSpawn = false)
         {
             IsDead = false;
             Health  = MaxHealth;
@@ -552,7 +552,7 @@ namespace VoxelEngine.Player
             Oxygen = MaxOxygen;
 
             var spawner = GetComponent<PlayerSpawner>();
-            if (spawner != null) spawner.RespawnAtCosmic(xKm, yKm, zKm);
+            if (spawner != null) spawner.RespawnAtCosmic(xKm, yKm, zKm, ordinaryBedSpawn);
             OnStatsChanged?.Invoke();
         }
 

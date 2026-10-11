@@ -3306,6 +3306,7 @@ namespace VoxelEngine.GridSystem.UI
                 if (session != null && session.hasBedSpawn && (session.bedSpawnPoint - cryo.SpawnPoint).sqrMagnitude < 1.5f)
                 {
                     session.hasBedSpawn = false;
+                    session.bedSpawnIsOrdinaryBed = false;
                     session.SaveSpawnSidecar();
                 }
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();

@@ -3209,9 +3209,57 @@ namespace VoxelEngine.Building
                 }
             }
 
-            return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay,
-                block, placementProfile != null && placementProfile.isSurfaceAttachment ? _surfaceAttachmentHost : null,
-                _deckSnapHost);
+            var surfaceAttachmentHost = placementProfile != null && placementProfile.isSurfaceAttachment
+                ? _surfaceAttachmentHost : null;
+            if (placementProfile != null && placementProfile.usesInteriorLattice
+                && TryGetInteriorLatticeProbe(pos, rot, block, placementProfile,
+                    out Vector3 probeCenter, out Vector3 probeHalfExtents))
+            {
+                // Validate the prefab's authored collider footprint, not a small box
+                // around its root. The root-centred probe can test a volume unrelated
+                // to the station's actual collision geometry and tint a clear floor
+                // placement red. A 1 cm inset treats support contact as contact while
+                // retaining the real solid-volume rejection.
+                return IsPlacementProbeClear(probeCenter, probeHalfExtents, rot,
+                    isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
+                    allowAdjacentCoplanarDecks: true);
+            }
+
+            return IsPlacementProbeClear(pos, Vector3.one * checkSize, Quaternion.identity,
+                isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
+                allowAdjacentCoplanarDecks: false);
+        }
+
+        private static bool TryGetInteriorLatticeProbe(Vector3 rootPosition, Quaternion rootRotation,
+            BlockItem block, StaticPlacementPrefabProfile profile, out Vector3 center, out Vector3 halfExtents)
+        {
+            center = rootPosition;
+            halfExtents = Vector3.zero;
+            if (block == null || block.placedPrefab == null || profile == null || profile.colliders == null)
+                return false;
+
+            Vector3 axisX = rootRotation * Vector3.right;
+            Vector3 axisY = rootRotation * Vector3.up;
+            Vector3 axisZ = rootRotation * Vector3.forward;
+            if (!TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders,
+                    rootRotation, axisX, out float minX, out float maxX)
+                || !TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders,
+                    rootRotation, axisY, out float minY, out float maxY)
+                || !TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders,
+                    rootRotation, axisZ, out float minZ, out float maxZ))
+                return false;
+
+            float midX = (minX + maxX) * 0.5f;
+            float midY = (minY + maxY) * 0.5f;
+            float midZ = (minZ + maxZ) * 0.5f;
+            center = rootPosition + axisX * midX + axisY * midY + axisZ * midZ;
+
+            const float contactInset = 0.01f;
+            halfExtents = new Vector3(
+                Mathf.Max(0.001f, (maxX - minX) * 0.5f - contactInset),
+                Mathf.Max(0.001f, (maxY - minY) * 0.5f - contactInset),
+                Mathf.Max(0.001f, (maxZ - minZ) * 0.5f - contactInset));
+            return true;
         }
 
         /// <summary>Allocation-free portal volume guard for the every-frame ghost verdict.
@@ -3240,34 +3288,37 @@ namespace VoxelEngine.Building
 
         /// <summary>Preserves the old structural placement verdict while avoiding an
         /// allocating OverlapBox every ghost frame under normal collider density.</summary>
-        private static bool IsPlacementProbeClear(Vector3 center, Vector3 halfExtents,
+        private bool IsPlacementProbeClear(Vector3 center, Vector3 halfExtents, Quaternion orientation,
             bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
-            VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost)
+            VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost, bool allowAdjacentCoplanarDecks)
         {
             int count = Physics.OverlapBoxNonAlloc(center, halfExtents, s_placementOverlapProbe,
-                Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
+                orientation, ~0, QueryTriggerInteraction.UseGlobal);
             for (int i = 0; i < count; i++)
                 if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay,
-                        block, surfaceAttachmentHost, deckSnapHost))
+                        block, surfaceAttachmentHost, deckSnapHost, allowAdjacentCoplanarDecks))
                     return false;
             if (count < s_placementOverlapProbe.Length) return true;
 
-            foreach (var collider in Physics.OverlapBox(center, halfExtents, Quaternion.identity))
+            foreach (var collider in Physics.OverlapBox(center, halfExtents, orientation,
+                         ~0, QueryTriggerInteraction.UseGlobal))
                 if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay,
-                        block, surfaceAttachmentHost, deckSnapHost))
+                        block, surfaceAttachmentHost, deckSnapHost, allowAdjacentCoplanarDecks))
                     return false;
             return true;
         }
 
-        private static bool IsPlacementProbeColliderAllowed(Collider collider,
+        private bool IsPlacementProbeColliderAllowed(Collider collider,
             bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
-            VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost)
+            VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost, bool allowAdjacentCoplanarDecks)
         {
             if (collider == null || collider.isTrigger) return true;
             var tiered = collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
-            // A deck-snapped machine intentionally rests on the exact tiered host
-            // whose top plane supplied its pose. Other tiered structures remain blockers.
-            if (tiered != null && tiered == deckSnapHost) return true;
+            // A deck-snapped item may span several flush floor pieces. Their coplanar
+            // deck volumes are one support surface, not obstacles; higher/angled decks
+            // and all tiered walls or other structural families remain blockers.
+            if (tiered != null && IsSupportingDeckContact(tiered, deckSnapHost, allowAdjacentCoplanarDecks))
+                return true;
             var placed = collider.GetComponentInParent<PlacedBlock>();
             // A mounted utility piece intentionally touches only the face it was
             // snapped to. The support-plane pose guarantees it sits outside that
@@ -3281,6 +3332,35 @@ namespace VoxelEngine.Building
             if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)
                 return false;
             return collider.attachedRigidbody != null;
+        }
+
+        private bool IsSupportingDeckContact(
+            VoxelEngine.Building.Tiered.PlacedTieredBlock candidate,
+            VoxelEngine.Building.Tiered.PlacedTieredBlock support,
+            bool allowAdjacentCoplanarDecks)
+        {
+            if (candidate == null || support == null) return false;
+            if (candidate == support) return true;
+            if (!allowAdjacentCoplanarDecks || candidate.definition == null || support.definition == null
+                || !IsDeckFamily(candidate.definition.family) || !IsDeckFamily(support.definition.family))
+                return false;
+
+            Vector3 supportUp = support.transform.up;
+            if (supportUp.sqrMagnitude < 0.0001f) supportUp = Vector3.up;
+            supportUp.Normalize();
+            Vector3 candidateUp = candidate.transform.up;
+            if (candidateUp.sqrMagnitude < 0.0001f) return false;
+            candidateUp.Normalize();
+            if (Vector3.Dot(candidateUp, supportUp) < 0.98f) return false;
+
+            if (!TryGetComponentColliderProjectionRange(candidate, supportUp, out _, out float candidateTop)
+                || !TryGetComponentColliderProjectionRange(support, supportUp, out _, out float supportTop))
+                return false;
+
+            // Only floor pieces on the same plane are one support surface. Allow a
+            // centimetre of authored/physics rounding in either direction, but keep
+            // materially higher or lower neighboring decks as collision blockers.
+            return Mathf.Abs(candidateTop - supportTop) <= 0.01f;
         }
 
         private static bool IsThinConduitPlacement(BlockItem block)

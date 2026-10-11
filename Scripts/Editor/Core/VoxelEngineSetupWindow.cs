@@ -302,8 +302,8 @@ namespace VoxelEngine.EditorTools
             AddSetupGroup(parent, ref number, "Maintenance & Repair",
                 "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
                 Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
-                Setup("Apply 17.5.0 progression gates and starter swords (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
-                Setup("Apply 17.6.0 food, progression and craft-time repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersSurvivalSetup.Run()),
+                Setup("Apply 17.13.0-dev progression and Furnace/Smelting repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
+                Setup("Apply 17.13.0-dev survival and crafting-balance repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersSurvivalSetup.Run()),
                 Setup("Consolidate duplicate ore items", () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80()),
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
@@ -2720,6 +2720,11 @@ namespace VoxelEngine.EditorTools
             }
             // Science pack recipes (always unlocked).
             var recSci1 = AddRecipe("Recipe_ScienceT1", "Science Pack I", sciT1, 1, VoxelEngine.Crafting.StationTier.None, true, ((VoxelEngine.Items.ItemDefinition)woodLog, 1), ((VoxelEngine.Items.ItemDefinition)stone, 1));
+            if (recSci1 != null)
+            {
+                recSci1.craftSeconds = 5f;
+                EditorUtility.SetDirty(recSci1);
+            }
             var recSci2 = AddRecipe("Recipe_ScienceT2", "Science Pack II", sciT2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
             var recSci3 = AddRecipe("Recipe_ScienceT3", "Science Pack III", sciT3, 1, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)steelIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
             var recLab  = AddRecipe("Recipe_ResearchLab", "Research Lab", blockLab, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)plank, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
@@ -2775,6 +2780,49 @@ namespace VoxelEngine.EditorTools
                 if (target == null || node == null) return;
                 if (target.nodes == null) target.nodes = new List<VoxelEngine.Research.ResearchNode>();
                 if (!target.nodes.Contains(node)) target.nodes.Add(node);
+            }
+
+            void MoveRecipeUnlockToNode(VoxelEngine.Research.ResearchTree targetTree,
+                string targetNodeId, VoxelEngine.Crafting.RecipeDefinition recipe)
+            {
+                if (targetTree == null || targetTree.nodes == null || recipe == null) return;
+                VoxelEngine.Research.ResearchNode targetNode = null;
+                foreach (var candidate in targetTree.nodes)
+                {
+                    if (candidate == null || !string.Equals(candidate.nodeId, targetNodeId,
+                            System.StringComparison.OrdinalIgnoreCase)) continue;
+                    targetNode = candidate;
+                    break;
+                }
+                if (targetNode == null) return;
+
+                bool treeChanged = false;
+                foreach (var node in targetTree.nodes)
+                {
+                    if (node == null || node == targetNode || node.unlocksRecipes == null) continue;
+                    var kept = new List<VoxelEngine.Crafting.RecipeDefinition>(node.unlocksRecipes.Length);
+                    bool changed = false;
+                    foreach (var linkedRecipe in node.unlocksRecipes)
+                    {
+                        if (linkedRecipe == recipe) { changed = true; continue; }
+                        kept.Add(linkedRecipe);
+                    }
+                    if (!changed) continue;
+                    node.unlocksRecipes = kept.ToArray();
+                    EditorUtility.SetDirty(node);
+                    treeChanged = true;
+                }
+
+                var unlocks = new List<VoxelEngine.Crafting.RecipeDefinition>(
+                    targetNode.unlocksRecipes ?? Array.Empty<VoxelEngine.Crafting.RecipeDefinition>());
+                if (!unlocks.Contains(recipe))
+                {
+                    unlocks.Add(recipe);
+                    targetNode.unlocksRecipes = unlocks.ToArray();
+                    EditorUtility.SetDirty(targetNode);
+                    treeChanged = true;
+                }
+                if (treeChanged) EditorUtility.SetDirty(targetTree);
             }
 
             // Lock recipes that will require research. (Players who don't unlock these
@@ -2844,16 +2892,17 @@ namespace VoxelEngine.EditorTools
 
             // Tier 1 - basic survival
             var nStoneWorking = MakeNode("res_stone_working", "Stone Working",
-                "Learn to shape stone tools. Unlocks the Stone Pickaxe and the Solid Fuel Furnace. " +
+                "Learn to shape stone tools. Unlocks the Stone Pickaxe. " +
                 "Tier 1: can be researched instantly from the menu (no Lab required).",
                 1, 0, 0f, new[] { (sciT1, 5) },
-                new[] { recPickStone, recFurnace });
+                new[] { recPickStone });
 
-            // Tier 2 - smelting / iron
+            // Tier 2 - smelting / iron. This is an instant inventory research gate;
+            // the science-pack cost and Stone Working prerequisite still apply.
             var nSmelting = MakeNode("res_smelting", "Smelting",
-                "Refining ores into ingots opens metal-tier tools and machines.",
-                2, 0, 40f, new[] { (sciT1, 10) },
-                new[] { recPickIron },
+                "Unlocks the Iron Pickaxe and Solid Fuel Furnace after Stone Working. Research from your inventory.",
+                2, 0, 0f, new[] { (sciT1, 10) },
+                new[] { recPickIron, recFurnace },
                 new[] { nStoneWorking });
 
             var nElectricity = MakeNode("res_electricity", "Electricity",
@@ -3043,6 +3092,39 @@ namespace VoxelEngine.EditorTools
             {
                 AssetDatabase.CreateAsset(authoredTree, treePath);
                 tree = authoredTree;
+            }
+
+            // Make this targeted migration idempotent for projects whose existing
+            // ResearchTree predates the Furnace gate. Keep the recipe locked by default
+            // and link it only from Smelting, never from Stone Working or another node.
+            MoveRecipeUnlockToNode(tree, "res_smelting", recFurnace);
+            if (tree != null && tree.nodes != null)
+            {
+                foreach (var activeNode in tree.nodes)
+                {
+                    if (activeNode == null) continue;
+                    if (string.Equals(activeNode.nodeId, "res_smelting", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!Mathf.Approximately(activeNode.researchSeconds, 0f))
+                        {
+                            activeNode.researchSeconds = 0f;
+                            EditorUtility.SetDirty(activeNode);
+                        }
+                        const string oldSmeltingDescription = "Refining ores into ingots opens metal-tier tools and machines.";
+                        if (activeNode.description == oldSmeltingDescription)
+                        {
+                            activeNode.description = "Unlocks the Iron Pickaxe and Solid Fuel Furnace after Stone Working. Research from your inventory.";
+                            EditorUtility.SetDirty(activeNode);
+                        }
+                    }
+                    else if (string.Equals(activeNode.nodeId, "res_stone_working", System.StringComparison.OrdinalIgnoreCase)
+                        && activeNode.description != null
+                        && activeNode.description.Contains("Solid Fuel Furnace"))
+                    {
+                        activeNode.description = "Learn to shape stone tools. Unlocks the Stone Pickaxe. Tier 1: can be researched instantly from the menu (no Lab required).";
+                        EditorUtility.SetDirty(activeNode);
+                    }
+                }
             }
             EditorUtility.SetDirty(tree);
 

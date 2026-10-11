@@ -38,6 +38,9 @@ namespace VoxelEngine.Crafting
         {
             if (OutputsBuildToken(recipe)) return false;
             if (!HasIngredients(source, recipe)) return false;
+            // A timed recipe must never silently fall back to an instant craft.
+            // Inventory callers supply their own queue just like station callers.
+            if (recipe.craftSeconds > 0f && (queue == null || destination == null)) return false;
             if (destination is ItemContainer ic)
             {
                 if (!ic.HasSpace(recipe.outputItem, recipe.outputCount)) return false;
@@ -48,12 +51,9 @@ namespace VoxelEngine.Crafting
             foreach (var ing in recipe.inputs)
                 RemoveCraftIngredient(source, ing.item, ing.count, matchId);
 
-            // If a queue is provided AND the recipe has a craft time, queue it instead of inserting immediately.
-            if (queue != null && recipe.craftSeconds > 0f)
-            {
-                queue.Enqueue(recipe, destination);
-                return true;
-            }
+            // Timed crafts always enter their station or inventory queue.
+            if (recipe.craftSeconds > 0f)
+                return queue.Enqueue(recipe, destination);
 
             // Otherwise: instant craft.
             destination.Insert(new ItemStack(recipe.outputItem, recipe.outputCount));

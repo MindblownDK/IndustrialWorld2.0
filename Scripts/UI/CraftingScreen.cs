@@ -783,7 +783,18 @@ namespace VoxelEngine.UI
                     bar.style.width = 58; bar.style.marginRight = 6;
                     qrow.Add(bar);
 
+                    string status = e.refundPending ? "Refund"
+                        : e.IsWaitingForSpace ? "Make room"
+                        : $"{Mathf.Max(0f, e.recipe.craftSeconds - e.progressSeconds):0.0}s";
+                    var qstatus = new Label(status);
+                    qstatus.style.color = new StyleColor(T.TextSecondary);
+                    qstatus.style.fontSize = 9;
+                    qstatus.style.minWidth = 50;
+                    qstatus.style.marginRight = 4;
+                    qrow.Add(qstatus);
+
                     var cancel = new Button(() => { queue.Cancel(idx); refresh?.Invoke(); }) { text = "\u2715" };
+                    cancel.SetEnabled(e.CanCancel);
                     cancel.style.width = 22; cancel.style.height = 22;
                     cancel.style.fontSize = 11;
                     LcdHudTheme.ApplyCommandButton(cancel, UITheme.AccentRed);

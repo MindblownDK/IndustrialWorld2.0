@@ -358,7 +358,12 @@ namespace VoxelEngine.UI
             if (_gridBed != null) _gridBed.claimedByLocalPlayer = false;
             if (_staticBed != null) _staticBed.claimedByLocalPlayer = false;
             var session = VoxelEngine.Menu.WorldSession.Instance;
-            if (session != null && IsActiveSpawn()) { session.hasBedSpawn = false; session.SaveSpawnSidecar(); }
+            if (session != null && IsActiveSpawn())
+            {
+                session.hasBedSpawn = false;
+                session.bedSpawnIsOrdinaryBed = false;
+                session.SaveSpawnSidecar();
+            }
             BuildFeedbackHud.Show("Cryobed", "Ownership removed", null, T.AccentAmber);
         }
         private static void SetName(string value)

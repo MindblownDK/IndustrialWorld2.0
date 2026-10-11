@@ -77,6 +77,9 @@ namespace VoxelEngine.Menu
         public bool    worldSpawnInitialized = false;
         public Vector3 bedSpawnPoint = Vector3.zero;
         public bool    hasBedSpawn = false;
+        /// <summary>True only for an ordinary Bed (not a static or grid cryobed).
+        /// Lets spawn placement avoid roof-seeking terrain rays in enclosed homes.</summary>
+        public bool    bedSpawnIsOrdinaryBed = false;
         // 14.60.4 - the bed's frame-independent truth. The scene Vector3 above is
         // only valid in the reference frame where the bed was linked; a bed on
         // another planet respawned players into empty space. Doubles, in km.
@@ -428,6 +431,7 @@ namespace VoxelEngine.Menu
                 {
                     worldSpawn = worldSpawnPoint, worldInit = worldSpawnInitialized,
                     bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn,
+                    bedOrdinary = bedSpawnIsOrdinaryBed,
                     spawnBody  = worldSpawnBodyName, spawnLocal = worldSpawnLocalPos,
                     bedCosmicX = bedSpawnCosmicX, bedCosmicY = bedSpawnCosmicY,
                     bedCosmicZ = bedSpawnCosmicZ, bedHasCosmic = bedSpawnHasCosmic,
@@ -449,6 +453,7 @@ namespace VoxelEngine.Menu
                 worldSpawnInitialized = data.worldInit;
                 bedSpawnPoint         = data.bedSpawn;
                 hasBedSpawn           = data.hasBed;
+                bedSpawnIsOrdinaryBed = data.hasBed && data.bedOrdinary;
                 bedSpawnCosmicX       = data.bedCosmicX;
                 bedSpawnCosmicY       = data.bedCosmicY;
                 bedSpawnCosmicZ       = data.bedCosmicZ;
@@ -467,6 +472,7 @@ namespace VoxelEngine.Menu
             public bool    worldInit;
             public Vector3 bedSpawn;
             public bool    hasBed;
+            public bool    bedOrdinary;
             public double  bedCosmicX, bedCosmicY, bedCosmicZ;
             public bool    bedHasCosmic;
             public string  bedBodyName;

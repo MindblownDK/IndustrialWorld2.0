@@ -11,6 +11,20 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.Research
 {
+    [Serializable]
+    public sealed class ResearchRankEntry
+    {
+        public string nodeId;
+        public int rank;
+
+        public ResearchRankEntry() { }
+        public ResearchRankEntry(string nodeId, int rank)
+        {
+            this.nodeId = nodeId;
+            this.rank = rank;
+        }
+    }
+
     public class ResearchManager : MonoBehaviour
     {
         public static ResearchManager Instance { get; private set; }
@@ -27,6 +41,7 @@ namespace VoxelEngine.Research
 
         // Persistent data: nodeId -> current rank achieved
         private Dictionary<string, int> _nodeRanks = new Dictionary<string, int>();
+        private bool _rankLoadPending;
 
         public event Action OnChanged;
 
@@ -38,8 +53,15 @@ namespace VoxelEngine.Research
                 return;
             }
             Instance = this;
-            LoadFromDisk();
+            _rankLoadPending = !LoadFromDisk();
             VoxelEngine.Exploration.BlueprintUnlockManager.EnsureInstance();
+        }
+
+        private void Update()
+        {
+            // WorldStatePersistence loads from Start(), after every Awake(). Retry
+            // once it has finished so scene execution order cannot erase saved ranks.
+            if (_rankLoadPending && LoadFromDisk()) _rankLoadPending = false;
         }
 
         private void OnDestroy()
@@ -297,6 +319,7 @@ namespace VoxelEngine.Research
 
             Debug.Log("[Research] Debug reset cleared " + changed + " node rank(s).");
             OnChanged?.Invoke();
+            SaveToDisk();
             return changed;
         }
 
@@ -328,6 +351,7 @@ namespace VoxelEngine.Research
             Debug.Log("[Research] Debug unlock set " + changed + " node(s) to "
                 + (maxRanks ? "max rank." : "rank 1."));
             OnChanged?.Invoke();
+            SaveToDisk();
             return changed;
         }
 
@@ -368,16 +392,40 @@ namespace VoxelEngine.Research
         // ============================================================
         public void SaveToDisk()
         {
-            // Placeholder: Integration with VoxelEngine.Persistence.WorldStatePersistence should go here.
-            // For now, we'll just log. In a real environment, we'd serialize _nodeRanks to JSON/Binary.
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            if (persistence != null)
+                persistence.SaveResearchRanks(_nodeRanks);
+            else
+                Debug.LogWarning("[Research] WorldStatePersistence is not available; rank changes remain in memory until a save manager is present.");
             Debug.Log("[Research] Progress saved.");
         }
 
-        private void LoadFromDisk()
+        /// <summary>Called by WorldStatePersistence after it has read this world's
+        /// additive research-rank list. Returns false until the world sidecar is ready.</summary>
+        public bool LoadSavedRanksFromPersistence()
         {
-            // Placeholder: Load from persistence system.
-            _nodeRanks.Clear();
-            Debug.Log("[Research] Progress loaded.");
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            if (persistence == null || !persistence.TryCopyResearchRanks(_nodeRanks)) return false;
+
+            if (tree != null && tree.nodes != null)
+            {
+                foreach (var node in tree.nodes)
+                {
+                    if (node == null || string.IsNullOrEmpty(node.nodeId)) continue;
+                    if (!_nodeRanks.TryGetValue(node.nodeId, out int rank)) continue;
+                    int maxRank = Mathf.Max(1, node.maxRanks);
+                    if (rank > maxRank) _nodeRanks[node.nodeId] = maxRank;
+                }
+            }
+            _rankLoadPending = false;
+            OnChanged?.Invoke();
+            Debug.Log("[Research] Progress loaded (" + _nodeRanks.Count + " researched node(s)).");
+            return true;
+        }
+
+        private bool LoadFromDisk()
+        {
+            return LoadSavedRanksFromPersistence();
         }
     }
 }

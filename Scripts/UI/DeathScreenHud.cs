@@ -33,6 +33,9 @@ namespace VoxelEngine.UI
             /// <summary>14.60.5 - frame-independent bed: route through the cosmic
             /// respawn (re-anchors origin + streaming) instead of the scene point.</summary>
             public bool isCosmic;
+            /// <summary>Ordinary beds in enclosed buildings must bypass terrain-only
+            /// down-rays; static and grid cryobeds keep their own wake behavior.</summary>
+            public bool isOrdinaryBedSpawn;
             public double cosmicXKm, cosmicYKm, cosmicZKm;
         }
 
@@ -186,10 +189,11 @@ namespace VoxelEngine.UI
             }
             if (choice.isCosmic)
             {
-                player.RespawnAtCosmic(choice.cosmicXKm, choice.cosmicYKm, choice.cosmicZKm);
+                player.RespawnAtCosmic(choice.cosmicXKm, choice.cosmicYKm, choice.cosmicZKm,
+                    choice.isOrdinaryBedSpawn);
                 return;
             }
-            player.RespawnAt(choice.position);
+            player.RespawnAt(choice.position, choice.isOrdinaryBedSpawn);
         }
 
         private static List<RespawnChoice> GatherRespawnChoices()
@@ -234,6 +238,7 @@ namespace VoxelEngine.UI
             if (session != null && session.hasBedSpawn && bedIsLocalWorld && !LinkedSpawnStillExists(session.bedSpawnPoint))
             {
                 session.hasBedSpawn = false;
+                session.bedSpawnIsOrdinaryBed = false;
                 session.SaveSpawnSidecar();
                 Debug.Log("[DeathScreen] Linked spawn structure no longer exists — cleared.");
             }
@@ -241,6 +246,12 @@ namespace VoxelEngine.UI
             if (session != null && session.hasBedSpawn
                 && (!bedIsLocalWorld || !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint)))
             {
+                if (!session.bedSpawnIsOrdinaryBed && bedIsLocalWorld
+                    && IsOrdinaryBedAt(session.bedSpawnPoint))
+                {
+                    session.bedSpawnIsOrdinaryBed = true;
+                    session.SaveSpawnSidecar();
+                }
                 // 14.60.6 - SELF-HEAL: the structure scan just verified the scene
                 // point, so a missing/rotted cosmic record (pre-body-relative links,
                 // cryobed links that never wrote one) is refreshed from it here -
@@ -274,6 +285,7 @@ namespace VoxelEngine.UI
                         position = session.bedSpawnPoint,
                         accent = new Color(0.30f, 0.95f, 0.62f),
                         isCosmic = cosmicBed,
+                        isOrdinaryBedSpawn = session.bedSpawnIsOrdinaryBed,
                         cosmicXKm = bedKm.x, cosmicYKm = bedKm.y, cosmicZKm = bedKm.z
                     });
                 }
@@ -286,13 +298,14 @@ namespace VoxelEngine.UI
                 // Beds are personal (14.38.0): only the owner and the owner's
                 // team respawn here. Unowned legacy beds welcome anyone.
                 if (!bed.UsableBy(me)) continue;
-                Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
+                Vector3 pos = bed.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
                     title = string.IsNullOrWhiteSpace(bed.displayName) ? "Bed" : bed.displayName,
                     detail = "Bed · " + FormatPosition(pos),
                     position = pos,
-                    accent = new Color(0.95f, 0.72f, 0.25f)
+                    accent = new Color(0.95f, 0.72f, 0.25f),
+                    isOrdinaryBedSpawn = true
                 });
             }
 
@@ -330,13 +343,22 @@ namespace VoxelEngine.UI
         /// position, so the death screen shows "My Awesome Bunker" instead of generic
         /// "Linked Spawn". Falls back to "Linked Spawn" if nothing matches.
         /// </summary>
+        private static bool IsOrdinaryBedAt(Vector3 linkedPos)
+        {
+            const float toleranceSqr = 2.5f;
+            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude))
+                if (bed != null && (bed.SpawnPoint - linkedPos).sqrMagnitude < toleranceSqr)
+                    return true;
+            return false;
+        }
+
         private static string ResolveLinkedSpawnName(Vector3 linkedPos)
         {
             const float tolSq = 2.5f; // slightly larger tolerance for floating point
             foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude))
             {
                 if (bed == null) continue;
-                Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
+                Vector3 pos = bed.SpawnPoint;
                 if ((pos - linkedPos).sqrMagnitude < tolSq)
                     return string.IsNullOrWhiteSpace(bed.displayName) ? "Bed" : bed.displayName;
             }
