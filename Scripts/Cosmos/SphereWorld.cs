@@ -290,6 +290,7 @@ namespace VoxelEngine.Cosmos
                 _ores[i] = oreArr[i];
                 if (oreArr[i].material == MaterialId.CrudeOil) crudeOilLayers++;
             }
+            LogOreProfile(body, oreArr);
             if (body.settings != null && body.settings.CanGenerateFiniteCrudeOilSeeps)
             {
                 string infiniteStatus = body.settings.CanGenerateInfiniteJackPumpNodes
@@ -379,6 +380,19 @@ namespace VoxelEngine.Cosmos
                 mountainScale     = prm.mountainScale,
                 isAsteroidBelt    = prm.isAsteroidBelt,
             };
+        }
+
+        private static void LogOreProfile(CelestialBody forBody, OreLayer[] layers)
+        {
+            if (forBody == null) return;
+            if (layers == null || layers.Length == 0)
+            {
+                Debug.LogWarning($"[SphereWorld] No ore/deposit layers resolved for '{forBody.DisplayName}'. Check its PlanetTemplate BodySettings ore lists.");
+                return;
+            }
+            var names = new string[layers.Length];
+            for (int i = 0; i < layers.Length; i++) names[i] = layers[i].material.ToString();
+            Debug.Log($"[SphereWorld] Loaded {layers.Length} ore/deposit layer(s) for '{forBody.DisplayName}': {string.Join(", ", names)}.");
         }
 
         /// <summary>One-line store state for the streaming logs (status + how much is stored).</summary>
@@ -523,6 +537,7 @@ namespace VoxelEngine.Cosmos
                 var oreArr = body.BuildOreLayers();
                 _ores = new NativeArray<OreLayer>(oreArr.Length, Allocator.Persistent);
                 for (int i = 0; i < oreArr.Length; i++) _ores[i] = oreArr[i];
+                LogOreProfile(body, oreArr);
 
                 if (_biomes.IsCreated) _biomes.Dispose();
                 var biomeArr = body.BuildBiomeData(_biomeRegistry != null ? _biomeRegistry : biomeRegistry);

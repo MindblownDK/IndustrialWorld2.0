@@ -38,8 +38,8 @@ namespace VoxelEngine.Player
         private const float ContactRange = 1.15f;   // chest-to-chest distance for a body hit
         private const float SpawnGraceSeconds = 3f;
 
-        private const float WorldMinSpeed = 11f;   // m/s into a wall before it hurts (same start as fall damage)
-        private const float WorldLethalSpeed = 30f;
+        private const float WorldMinSpeed = 30f;   // m/s closing speed into static scenery before wall-impact damage starts
+        private const float WorldLethalSpeed = 60f; // upper-speed scale for the world-impact curve
 
         private PlayerController _player;
         private float _liveAt;
@@ -79,7 +79,7 @@ namespace VoxelEngine.Player
                 if (Vector3.Angle(hit.normal, up) < 50f) return; // landing, not a crash
 
                 float into = Vector3.Dot(_player.Velocity, -hit.normal);
-                if (into < WorldMinSpeed) return;
+                if (into <= WorldMinSpeed) return;
                 _worldCooldownUntil = Time.time + 1f;
 
                 Hurt(into, WorldMinSpeed, WorldLethalSpeed, 0.85f,

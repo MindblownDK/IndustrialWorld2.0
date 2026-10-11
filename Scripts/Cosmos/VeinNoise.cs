@@ -50,7 +50,14 @@ namespace VoxelEngine.Cosmos
         public static float DepositRichness(in float3 p, float cellSize, float threshold, float abundance, uint seed)
         {
             // Coarse presence gate — large cells decide whether ANY pocket exists regionally.
-            float presence = noise.snoise(p * (1f / (cellSize * 6f)) + seed * 0.137f) * 0.5f + 0.5f;
+            // Planet seeds are random positive 32-bit integers. Adding seed * 0.137 directly
+            // to simplex coordinates can put them hundreds of millions of units from zero;
+            // float precision then erases the much smaller position changes, making a deposit
+            // gate constant across an entire planet (often suppressing every ore but Iron).
+            // A bounded, independently hashed offset keeps each material's field distinct
+            // while preserving useful spatial precision at planetary coordinates.
+            float3 seedOffset = SeedOffset(seed);
+            float presence = noise.snoise(p * (1f / (cellSize * 6f)) + seedOffset) * 0.5f + 0.5f;
             if (presence < threshold) return 0f;
 
             // Cellular falloff inside the pocket.
@@ -58,6 +65,21 @@ namespace VoxelEngine.Cosmos
             // d is in cell units; pockets are the inner core of each cell.
             float core = math.saturate(1f - d * 1.15f);
             return math.saturate(core * abundance);
+        }
+
+        private static float3 SeedOffset(uint seed) => new float3(
+            UnitHash(seed ^ 0xA511E9B3u),
+            UnitHash(seed ^ 0x63D83595u),
+            UnitHash(seed ^ 0xB5297A4Du)) * 4096f;
+
+        private static float UnitHash(uint value)
+        {
+            value ^= value >> 16;
+            value *= 0x7feb352du;
+            value ^= value >> 15;
+            value *= 0x846ca68bu;
+            value ^= value >> 16;
+            return (value & 0x00FFFFFFu) * (1f / 16777216f);
         }
 
         // Deterministic per-cell jitter in [0.1, 0.9] so feature points stay inside their cell.

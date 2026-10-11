@@ -22,6 +22,8 @@ namespace VoxelEngine.EditorTools
         private const string ResearchRoot = AssetRoot + "/Research";
         private const string NodeFolder = ResearchRoot + "/Nodes";
         private const string RecipeFolder = AssetRoot + "/Recipes";
+        private const string FurnaceRecipePath = RecipeFolder + "/Recipe_Furnace.asset";
+        private const string SmeltingNodePath = NodeFolder + "/res_smelting.asset";
         private const string CombatItemFolder = AssetRoot + "/Combat/Items";
         private const string ResearchTreePath = ResearchRoot + "/ResearchTree.asset";
         private const string RecipeRegistryPath = AssetRoot + "/RecipeRegistry.asset";
@@ -35,6 +37,63 @@ namespace VoxelEngine.EditorTools
             public int researchTimesRepaired;
             public int warnings;
             public string copperAudit = "Not checked";
+        }
+
+        /// <summary>
+        /// Focused non-destructive repair for the canonical Recipe_Furnace unlock.
+        /// Use this when an old ResearchTree contains a stale recipe link; it does not
+        /// rerun the wider progression authoring pass or change Smelting's duration/costs.
+        /// </summary>
+        public static void RepairFurnaceSmeltingUnlockOnly()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorUtility.DisplayDialog("Smelting / Furnace Repair", "Exit Play Mode before running Setup.", "OK");
+                return;
+            }
+
+            var tree = AssetDatabase.LoadAssetAtPath<ResearchTree>(ResearchTreePath);
+            var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(RecipeRegistryPath);
+            var smelting = FindNode(tree, "res_smelting")
+                ?? AssetDatabase.LoadAssetAtPath<ResearchNode>(SmeltingNodePath);
+            if (tree == null || registry == null || smelting == null)
+            {
+                Debug.LogWarning("[IndustrialCrusadersProgressionSetup] Furnace unlock repair skipped: the ResearchTree, RecipeRegistry, or canonical res_smelting node is missing. No content was overwritten.");
+                EditorUtility.DisplayDialog("Smelting / Furnace Repair",
+                    "Repair skipped. Ensure ResearchTree.asset, RecipeRegistry.asset, and Research/Nodes/res_smelting.asset exist, then retry. No content was overwritten.", "OK");
+                return;
+            }
+
+            var counts = new RepairCounts();
+            if (tree.nodes == null)
+            {
+                tree.nodes = new List<ResearchNode>();
+                EditorUtility.SetDirty(tree);
+            }
+            if (!tree.nodes.Contains(smelting))
+            {
+                tree.nodes.Add(smelting);
+                EditorUtility.SetDirty(tree);
+                counts.linksRepaired++;
+            }
+            if (registry.recipes == null)
+            {
+                registry.recipes = new List<RecipeDefinition>();
+                EditorUtility.SetDirty(registry);
+            }
+
+            EnsureFurnaceSmeltingGate(tree, registry, smelting, counts, normalizeResearchDuration: false);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            string summary =
+                $"Tree/registry asset links repaired: {counts.linksRepaired}\n" +
+                $"Furnace unlock links repaired: {counts.unlockLinksMoved}\n" +
+                $"Recipe gates repaired: {counts.recipesGated}\n" +
+                $"Warnings: {counts.warnings}\n\n" +
+                "The canonical Furnace recipe, existing research costs, and Smelting duration were preserved.";
+            EditorUtility.DisplayDialog("17.15.0-dev Smelting / Furnace Repair", summary, "OK");
+            Debug.Log("[IndustrialCrusadersProgressionSetup] " + summary.Replace("\n", " | "));
         }
 
         public static void Run()
@@ -259,9 +318,12 @@ namespace VoxelEngine.EditorTools
         }
 
         private static void EnsureFurnaceSmeltingGate(ResearchTree tree, RecipeRegistry registry,
-            ResearchNode smelting, RepairCounts counts)
+            ResearchNode smelting, RepairCounts counts, bool normalizeResearchDuration = true)
         {
-            RecipeDefinition furnaceRecipe = FindRecipe("Recipe_Furnace");
+            // Resolve the intended canonical asset by path. A project may contain an
+            // older same-name duplicate; a broad AssetDatabase name search can silently
+            // link Smelting to the wrong RecipeDefinition.
+            RecipeDefinition furnaceRecipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(FurnaceRecipePath);
             if (furnaceRecipe == null)
             {
                 counts.warnings++;
@@ -287,7 +349,7 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(furnaceRecipe);
                 counts.recipesGated++;
             }
-            if (!Mathf.Approximately(smelting.researchSeconds, 0f))
+            if (normalizeResearchDuration && !Mathf.Approximately(smelting.researchSeconds, 0f))
             {
                 smelting.researchSeconds = 0f;
                 EditorUtility.SetDirty(smelting);

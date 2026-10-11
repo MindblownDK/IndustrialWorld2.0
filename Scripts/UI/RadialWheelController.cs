@@ -40,8 +40,10 @@ namespace VoxelEngine.UI
         public Action<List<RadialOption>> BuildOptions;
         /// <summary>A wedge was confirmed. Return false to refuse and keep the dial open.</summary>
         public Func<int, bool> ConfirmOption;
-        /// <summary>The centre was confirmed. Optional — the default is a silent cancel.</summary>
+        /// <summary>The centre was confirmed with left click. Optional — the default is a silent cancel.</summary>
         public Action ConfirmCentre;
+        /// <summary>The centre was confirmed with right click. Optional; other radial wheels remain unchanged.</summary>
+        public Action ConfirmCentreRight;
         /// <summary>Tab or the scroll wheel was used while open. Optional.</summary>
         public Action SwapGroup;
         /// <summary>Resolves the root the dial is parented to. Called lazily until it returns non-null.</summary>
@@ -148,6 +150,17 @@ namespace VoxelEngine.UI
 
         private void HandleClick()
         {
+            if (RightMousePressed())
+            {
+                // Right click is deliberately centre-only. Existing radial menus
+                // that do not bind ConfirmCentreRight keep their old left-click behavior.
+                if (Hovered < 0 && ConfirmCentreRight != null)
+                {
+                    ConfirmCentreRight.Invoke();
+                    Close(false);
+                }
+                return;
+            }
             if (!LeftMousePressed()) return;
             if (Hovered >= 0) { Close(true); return; }
             ConfirmCentre?.Invoke();
@@ -268,7 +281,9 @@ namespace VoxelEngine.UI
             _view.IdleTitleColor = IdleTitleColor;
             _view.IdleIcon = IdleIcon;
             _view.HintLine = IsPinned
-                ? "PINNED  ·  LEFT CLICK TO CONFIRM  ·  ESC TO CLOSE"
+                ? (ConfirmCentreRight != null
+                    ? "PINNED  ·  LEFT CLICK TO CONFIRM  ·  RIGHT CLICK CENTRE FOR ALTERNATE  ·  ESC TO CLOSE"
+                    : "PINNED  ·  LEFT CLICK TO CONFIRM  ·  ESC TO CLOSE")
                 : $"HOLD {GameSettings.GetKey(_openAction)}  ·  FLICK  ·  RELEASE";
             _view.SwapHint = SwapHint;
         }
@@ -301,6 +316,16 @@ namespace VoxelEngine.UI
             return mouse != null && mouse.leftButton.wasPressedThisFrame;
 #else
             return Input.GetMouseButtonDown(0);
+#endif
+        }
+
+        private static bool RightMousePressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            return mouse != null && mouse.rightButton.wasPressedThisFrame;
+#else
+            return Input.GetMouseButtonDown(1);
 #endif
         }
 

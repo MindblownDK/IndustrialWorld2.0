@@ -53,9 +53,20 @@ namespace VoxelEngine.UI
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (uiRoot == null) return;
-            if (_uiRoot == uiRoot && _card != null && _card.parent == uiRoot) return;
+            bool cardComplete = _card != null && _title != null && _detail != null
+                && _status != null && _healthRow != null && _healthFill != null && _healthLabel != null;
+            if (_uiRoot == uiRoot && cardComplete && _card.parent == uiRoot) return;
             _uiRoot = uiRoot;
-            if (_card != null) _card.RemoveFromHierarchy();
+            if (_card != null && _card.parent != null) _card.RemoveFromHierarchy();
+            _card = null;
+            _title = null;
+            _detail = null;
+            _status = null;
+            _healthRow = null;
+            _healthFill = null;
+            _healthLabel = null;
+            _hoveredItem = null;
+            _nextProbe = 0f;
 
             // 9.16.0 field round — a remount builds a FRESH card at opacity 0. If the
             // static _visible flag survives from the old card (world reload, UI layer
@@ -215,17 +226,14 @@ namespace VoxelEngine.UI
 
         public static void Tick()
         {
-            if (_card == null) return;
-            // 9.16.0 field round — self-heal an orphaned card (its UI root was rebuilt
-            // and the card detached). Re-attach to the last known live root and let the
-            // normal probe cycle fade it back in.
-            if (_card.parent == null && _uiRoot != null && _uiRoot.panel != null)
-            {
-                _uiRoot.Add(_card);
-                _visible = false;
-                _lastSignature = null;
-            }
-            if (_card.parent == null) return;
+            // Rebuild if Unity replaced the UIDocument root or a partial UI refresh
+            // detached one of the HUD's child elements. The controller supplies its
+            // current HUD layer before ticking; this also keeps reloads self-healing.
+            if (_uiRoot != null && _uiRoot.panel != null
+                && (_card == null || _card.parent != _uiRoot || _title == null
+                    || _detail == null || _status == null || _healthFill == null))
+                EnsureMounted(_uiRoot);
+            if (_card == null || _card.parent == null) return;
             // 14.64.0 — closing a UI OVER a hovered item never fires PointerLeave,
             // so the hover stuck and the card showed that item forever. With no
             // blocking UI open nothing can be hovered: drop the sticky hover.
@@ -253,7 +261,7 @@ namespace VoxelEngine.UI
             if (Time.unscaledTime < _nextProbe) return;
             _nextProbe = Time.unscaledTime + ProbeInterval;
 
-            var camera = Camera.main;
+            var camera = ResolveInspectionCamera();
             if (camera == null)
             {
                 Hide();
@@ -273,13 +281,37 @@ namespace VoxelEngine.UI
             Show(info);
         }
 
+        private static Camera ResolveInspectionCamera()
+        {
+            var main = Camera.main;
+            if (main != null && main.isActiveAndEnabled && main.gameObject.activeInHierarchy) return main;
+
+            var player = Object.FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+            if (player == null) return null;
+
+            var interaction = player.GetComponentInChildren<VoxelEngine.Player.PlayerInteractionTool>(true);
+            if (interaction != null && interaction.shootCamera != null
+                && interaction.shootCamera.isActiveAndEnabled
+                && interaction.shootCamera.gameObject.activeInHierarchy)
+                return interaction.shootCamera;
+
+            var cameras = player.GetComponentsInChildren<Camera>(true);
+            foreach (var candidate in cameras)
+                if (candidate != null && candidate.isActiveAndEnabled && candidate.gameObject.activeInHierarchy)
+                    return candidate;
+            return null;
+        }
+
         /// <summary>Walks every hit along the ray (closest first), skipping player
         /// children and known transient rigs, and resolves the FIRST informative one.</summary>
         private static bool TryResolveAlongRay(Ray ray, out TargetInfo info)
         {
             var hits = Physics.RaycastAll(ray, ProbeDistance, ~0, QueryTriggerInteraction.Ignore);
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            var localPlayer = Camera.main != null ? Camera.main.GetComponentInParent<VoxelEngine.Player.PlayerController>() : Object.FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+            var camera = ResolveInspectionCamera();
+            var localPlayer = camera != null
+                ? camera.GetComponentInParent<VoxelEngine.Player.PlayerController>()
+                : Object.FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
             Transform playerRoot = localPlayer != null ? localPlayer.transform : null;
 
             for (int i = 0; i < hits.Length; i++)
@@ -769,6 +801,8 @@ namespace VoxelEngine.UI
 
         private static void Show(TargetInfo info)
         {
+            if (_card == null || _title == null || _detail == null || _status == null
+                || _healthRow == null || _healthFill == null || _healthLabel == null) return;
             string signature = $"{info.title}|{info.detail}|{info.status}|{info.healthText}";
             if (signature != _lastSignature)
             {

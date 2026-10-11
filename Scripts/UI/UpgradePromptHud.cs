@@ -8,6 +8,7 @@
 
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.Building;
 using VoxelEngine.Building.Tiered;
 using VoxelEngine.Items;
 using T = VoxelEngine.UI.UITheme;
@@ -19,6 +20,8 @@ namespace VoxelEngine.UI
         // ── State ──────────────────────────────────────────────────────
         private static VisualElement _root, _panel, _card;
         private static Label         _title, _body;
+        private static Component     _lastRepairTarget;
+        private static float         _nextRepairRefresh;
 
         // ── Mount ──────────────────────────────────────────────────────
         public static void EnsureMounted(VisualElement uiRoot)
@@ -79,11 +82,29 @@ namespace VoxelEngine.UI
         }
 
         // ── Tick ───────────────────────────────────────────────────────
-        public static void Tick(PlacedTieredBlock target, Inventory inv, bool holdingHammer)
+        public static void Tick(PlacedTieredBlock target, PlacedBlock blockTarget,
+            Inventory inv, bool holdingHammer, bool upgradeMode, bool repairMode)
         {
             if (_panel == null) return;
+            if (!repairMode)
+            {
+                _lastRepairTarget = null;
+                _nextRepairRefresh = 0f;
+            }
 
-            if (target == null || target.definition == null || !holdingHammer)
+            if (!holdingHammer || (!upgradeMode && !repairMode))
+            {
+                _panel.style.display = DisplayStyle.None;
+                return;
+            }
+
+            if (repairMode)
+            {
+                TickRepair(target, blockTarget, inv);
+                return;
+            }
+
+            if (target == null || target.definition == null)
             {
                 _panel.style.display = DisplayStyle.None;
                 return;
@@ -135,6 +156,81 @@ namespace VoxelEngine.UI
                 if (i < cost.items.Length - 1) sb.Append("     ");
             }
 
+            _body.text = sb.ToString();
+            T.Border(_card, 1, anyMissing ? T.BorderRed : T.BorderGold);
+        }
+
+        private static void TickRepair(PlacedTieredBlock tieredTarget, PlacedBlock blockTarget, Inventory inv)
+        {
+            Component currentTarget = tieredTarget != null ? (Component)tieredTarget : blockTarget;
+            if (currentTarget == _lastRepairTarget && Time.unscaledTime < _nextRepairRefresh) return;
+            _lastRepairTarget = currentTarget;
+            _nextRepairRefresh = Time.unscaledTime + 0.20f;
+
+            string targetName = tieredTarget != null && tieredTarget.definition != null
+                ? tieredTarget.definition.displayName
+                : blockTarget != null && blockTarget.Item != null
+                    ? blockTarget.Item.displayName
+                    : null;
+            if (string.IsNullOrEmpty(targetName))
+            {
+                _panel.style.display = DisplayStyle.None;
+                return;
+            }
+
+            _panel.style.display = DisplayStyle.Flex;
+            _title.text = $"{targetName}  ·  REPAIR  ·  LMB to repair";
+
+            var buildSystem = BuildSystemV2.Instance;
+            TierCost cost = null;
+            int repairAmount = 0;
+            bool repairable = false;
+            if (buildSystem != null)
+            {
+                if (tieredTarget != null)
+                    repairable = buildSystem.TryGetTieredRepairCost(tieredTarget, out cost,
+                        out repairAmount);
+                else if (blockTarget != null)
+                    repairable = buildSystem.TryGetBlockRepairCost(blockTarget, out cost, out repairAmount);
+            }
+
+            if (!repairable)
+            {
+                _body.text = "<color=#8A92A8>No damage to repair, or this target is not a repairable building piece.</color>";
+                T.Border(_card, 1, T.BorderBright);
+                return;
+            }
+
+            if (cost == null || cost.items == null || cost.items.Length == 0)
+            {
+                _body.text = $"<color=#66DD88>Free repair · restores {repairAmount} HP</color>";
+                T.Border(_card, 1, T.BorderBright);
+                return;
+            }
+
+            var sb = new System.Text.StringBuilder();
+            bool anyMissing = false;
+            int shown = 0;
+            for (int i = 0; i < cost.items.Length; i++)
+            {
+                var ingredient = cost.items[i];
+                if (ingredient.item == null || ingredient.count <= 0) continue;
+                int required = ingredient.count;
+                int have = buildSystem != null
+                    ? buildSystem.GetAvailableBuildCount(ingredient.item)
+                    : inv != null && inv.container != null ? inv.container.CountOf(ingredient.item) : 0;
+                bool enough = have >= required;
+                anyMissing |= !enough;
+                if (shown > 0) sb.Append("     ");
+                string color = enough ? "#66DD88" : "#DD5544";
+                sb.Append($"<color={color}>{have}/{required}</color>  <color=#8A92A8>{ingredient.item.displayName}</color>");
+                shown++;
+            }
+
+            if (shown == 0)
+                sb.Append("<color=#66DD88>Free repair</color>");
+            else
+                sb.Append($"  <color=#8A92A8>· restores {repairAmount} HP</color>");
             _body.text = sb.ToString();
             T.Border(_card, 1, anyMissing ? T.BorderRed : T.BorderGold);
         }

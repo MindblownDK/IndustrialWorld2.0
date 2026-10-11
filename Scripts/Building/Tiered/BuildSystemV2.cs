@@ -9,6 +9,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Building;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
@@ -1072,6 +1073,58 @@ namespace VoxelEngine.Building.Tiered
                 VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "");
         }
 
+        private static TierCost FullTierConstructionCost(TieredBlockDefinition definition, BuildTier tier)
+        {
+            var totals = new Dictionary<ItemDefinition, int>();
+            AddTierCost(totals, definition != null ? definition.placeCost : null);
+            if ((int)tier >= (int)BuildTier.Stone) AddTierCost(totals, definition.woodToStone);
+            if ((int)tier >= (int)BuildTier.Iron) AddTierCost(totals, definition.stoneToIron);
+            if ((int)tier >= (int)BuildTier.Steel) AddTierCost(totals, definition.ironToSteel);
+
+            var ingredients = new List<Ingredient>(totals.Count);
+            foreach (var pair in totals)
+                if (pair.Key != null && pair.Value > 0)
+                    ingredients.Add(new Ingredient { item = pair.Key, count = pair.Value });
+            return new TierCost { items = ingredients.ToArray() };
+        }
+
+        private static void AddTierCost(Dictionary<ItemDefinition, int> totals, TierCost cost)
+        {
+            if (totals == null || cost?.items == null) return;
+            foreach (var ingredient in cost.items)
+            {
+                if (ingredient.item == null || ingredient.count <= 0) continue;
+                totals.TryGetValue(ingredient.item, out int existing);
+                totals[ingredient.item] = existing + ingredient.count;
+            }
+        }
+
+        /// <summary>Charge the damaged fraction of original construction materials, rounded up to whole items.</summary>
+        private static TierCost ProRateRepairCost(TierCost originalCost, float damagedFraction,
+            int materialMultiplier = 1)
+        {
+            damagedFraction = Mathf.Clamp01(damagedFraction);
+            materialMultiplier = Mathf.Max(1, materialMultiplier);
+            var totals = new Dictionary<ItemDefinition, int>();
+            if (originalCost?.items != null)
+            {
+                foreach (var ingredient in originalCost.items)
+                {
+                    if (ingredient.item == null || ingredient.count <= 0) continue;
+                    int amount = Mathf.CeilToInt(ingredient.count * (float)materialMultiplier * damagedFraction);
+                    if (amount <= 0) continue;
+                    totals.TryGetValue(ingredient.item, out int existing);
+                    totals[ingredient.item] = existing + amount;
+                }
+            }
+
+            var ingredients = new List<Ingredient>(totals.Count);
+            foreach (var pair in totals)
+                if (pair.Key != null && pair.Value > 0)
+                    ingredients.Add(new Ingredient { item = pair.Key, count = pair.Value });
+            return new TierCost { items = ingredients.ToArray() };
+        }
+
         private bool CanAfford(TierCost cost, int multiplier = 1)
         {
             multiplier = Mathf.Max(1, multiplier);
@@ -1153,6 +1206,82 @@ namespace VoxelEngine.Building.Tiered
         // ============================================================
         //                   PUBLIC API for Hammer
         // ============================================================
+        public bool TryGetTieredRepairCost(PlacedTieredBlock target, out TierCost cost,
+            out int repairAmount)
+        {
+            cost = null;
+            repairAmount = 0;
+            if (target == null || target.definition == null) return false;
+
+            int maxHp = target.definition.GetStats(target.tier).hp;
+            if (maxHp <= 0 || target.hp <= 0) return false;
+            int currentHp = Mathf.Clamp(target.hp, 0, maxHp);
+            repairAmount = maxHp - currentHp;
+            if (repairAmount <= 0) return false;
+
+            float damagedFraction = repairAmount / (float)maxHp;
+            TierCost fullConstructionCost = FullTierConstructionCost(target.definition, target.tier);
+            var sizedPillar = target.GetComponent<AdjustablePillar>();
+            int materialMultiplier = sizedPillar != null
+                ? Mathf.Max(1, Mathf.CeilToInt(sizedPillar.currentHeight / ConstructionStorey))
+                : 1;
+            cost = ProRateRepairCost(fullConstructionCost, damagedFraction, materialMultiplier);
+            return true;
+        }
+
+        public bool TryGetBlockRepairCost(PlacedBlock target, out TierCost cost, out int repairAmount)
+        {
+            cost = null;
+            repairAmount = 0;
+            if (target == null || target.Item == null || target.Item.blockHealth <= 0) return false;
+            // Ship/grid blocks keep their established Welder repair path.
+            if (target.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() != null
+                || target.GetComponentInChildren<VoxelEngine.GridSystem.GridBlock>(true) != null)
+                return false;
+
+            int maxHp = target.Item.blockHealth;
+            if (target.Hp <= 0) return false;
+            int currentHp = Mathf.Clamp(target.Hp, 0, maxHp);
+            repairAmount = maxHp - currentHp;
+            if (repairAmount <= 0) return false;
+
+            cost = ProRateRepairCost(new TierCost
+            {
+                // One BlockItem is consumed to place an ordinary static block.
+                items = new[] { new Ingredient { item = target.Item, count = 1 } }
+            }, repairAmount / (float)maxHp);
+            return true;
+        }
+
+        public bool TryRepair(PlacedTieredBlock target)
+        {
+            if (!TryGetTieredRepairCost(target, out var cost, out int amount)
+                || inventory == null || inventory.container == null || !CanAfford(cost))
+                return false;
+            PayCost(cost);
+            return target.Repair(amount) > 0;
+        }
+
+        public bool TryRepair(PlacedBlock target)
+        {
+            if (!TryGetBlockRepairCost(target, out var cost, out int amount)
+                || inventory == null || inventory.container == null || !CanAfford(cost))
+                return false;
+            PayCost(cost);
+            return target.Repair(amount) > 0;
+        }
+
+        /// <summary>Inventory plus currently authorized wireless-storage stock for repair prompts.</summary>
+        public int GetAvailableBuildCount(ItemDefinition item)
+        {
+            if (item == null) return 0;
+            int have = inventory != null && inventory.container != null
+                ? inventory.container.CountOf(item) : 0;
+            var rack = BuildNetworkRack();
+            if (rack != null) have += rack.NetworkCount(item.itemId);
+            return have;
+        }
+
         public bool TryUpgrade(PlacedTieredBlock target)
         {
             if (target == null || target.definition == null) return false;

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.13.1-dev`
-**Roadmap Version:** `17.13.1-dev`
+**Current Version:** `17.15.0-dev`
+**Roadmap Version:** `17.15.0-dev`
 **Date:** 2026-10-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.15.0-dev - Fix Lab Crafting, Smelting Unlocks, and Ore Sampling
+- Research Labs provide Assembler-tier access to all science-pack recipes in nearby and opened inventory crafting
+- Smelting ranks unlock the canonical Furnace recipe, refresh active recipe filters, and have a focused non-destructive Setup repair
+- Planet ore fields use bounded seed offsets and strongest-local-deposit selection; wall-impact damage starts above 30 m/s; Unity acceptance remains pending
+
+### 17.14.0-dev - Persist Trees, Add Hammer Repair, Stabilize HUD and Crafting
+- Harvested deterministic scatter trees are recorded per persistent world/body; Hammer Repair covers tiered pieces and ordinary static BlockItems, while grid repairs remain Welder-only
+- Inventory crafting uses one FIFO queue unless a Bench/Assembler is explicitly open; quantities are per recipe and progress UI updates in place
+- Inspection HUD remounts after UI-root changes; Setup's fall-damage repair loads only player-named prefabs with a root PlayerController; Unity acceptance remains pending
+
 ### 17.13.1-dev - Restore Voxel Mining Drops
 - Runtime fallback registries resolve mineable materials to canonical item assets and report unresolved drop links
 - Setup repairs only missing dropItem links and creates missing material definitions; populated links and authored yields remain intact
@@ -43,16 +53,6 @@
 - Ordinary stationary BlockItems use a fixed 1 m lattice from the shared world/body construction frame across tiered deck pieces
 - A visible deck overlay matches those world/body-aligned placement coordinates
 - Dedicated and dynamic placement paths are excluded; BuildHammer snapping is unchanged; Unity acceptance remains pending
-
-### 17.11.0-dev - Filter Inventory Crafting by Clicked Station
-- Bench/Assembler recipe availability follows the clicked station tier; timed crafts use its queue
-- Non-station inventory crafting retains proximity and storage-network recipe rules
-- Server/storage research assignments preserved; Crafting Card and Welder icon assets added; Unity acceptance remains pending
-
-### 17.10.0-dev - Align Station Crafting, Placement, and Transfers
-- Bench/Assembler opens inventory crafting without the dedicated right-side station panel; the clicked station queue remains active
-- Placement commit shares the preview ray; tiered-wall support reuses deck footprint math; Shift-drag transfers each visited slot once
-- Ten requested alpha icons added; exact-ID repair and full read-only icon audit are available
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,11 +82,13 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Science-pack access, Smelting unlock, ore generation, and impact tuning (17.15.0-dev):** confirm placed/opened Research Labs expose all science-pack recipes through ordinary inventory crafting; completed Smelting unlocks the canonical Furnace recipe immediately and after reload; Earth generates its configured non-Iron minerals; wall impacts below 30 m/s do no damage while downward fall damage stays separate. The focused Setup repair's asset-link correctness and preservation of research costs/duration remain unverified in Unity.
 - **Replacement station source art (17.9.0-dev):** runtime placement anchors enabled renderers and reports missing geometry; a replacement prefab with no enabled Renderer still needs its intended model assigned and play-mode verified.
 - **Static deck/wall placement (17.13.0-dev):** ordinary stationary BlockItems use the visible shared 1 m construction-frame lattice and collider-footprint placement validation; foundation-edge, corner, wall-contact, Crafting Bench/Assembler preview, and station-floor acceptance is pending. BuildHammer snapping remains untouched.
 - **Station and transfer runtime acceptance (17.13.0-dev):** Bench/Assembler inventory-only panel ownership, clicked-tier recipe filtering, clicked-station queue retention, five-second inventory crafting, multi-panel Shift-drag, and release/cancel behavior remain unverified in Unity.
 - **Research, survival, and respawn runtime acceptance (17.13.0-dev):** saved-rank reload, inventory Smelting and Furnace unlock, 16/40 m/s fall damage, 20 HP Steak healing, ordinary-bed initial/death respawn, and cryobed preservation remain unverified in Unity.
 - **Voxel mining drops (17.13.1-dev):** confirm dirt, stone, and each generated ore award the intended items, including the runtime fallback and full-inventory spill cases.
+- **Tree, hammer repair, HUD, crafting, and Setup acceptance (17.14.0-dev):** confirm felled trees stay absent after reopening; wheel-centre left/right modes and proportional repair costs; target-label recovery; single-queue/per-recipe crafting and smooth progress; and that Setup leaves CargoLaunchPad unchanged while reporting a targeted player-prefab scan.
 - **17.9 runtime acceptance (17.10.0-dev):** melee reliability, distant-hostile sleep, refresh-rate FPS cap, live settings updates, admin scroll retention, and release-player Infinite Health exclusion still need Unity build/play validation.
 - **Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
 - **Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.

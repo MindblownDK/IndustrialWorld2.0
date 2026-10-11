@@ -30,6 +30,19 @@ namespace VoxelEngine.Building
             }
         }
 
+        /// <summary>Restore hit points on an ordinary placed BlockItem, clamped to its authored health.</summary>
+        public int Repair(int amount)
+        {
+            if (amount <= 0 || Item == null || Item.blockHealth <= 0 || Hp <= 0) return 0;
+            int previousHp = Hp;
+            Hp = Mathf.Min(Item.blockHealth, Hp + amount);
+            int repaired = Hp - previousHp;
+            if (repaired <= 0) return 0;
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, Damage01);
+            VoxelEngine.Networking.BlockSync.AnnounceDamaged(this);
+            return repaired;
+        }
+
         public void Damage(int amount, Inventory recipient)
         {
             Hp -= amount;

@@ -67,6 +67,26 @@ namespace VoxelEngine.UI
         private static readonly Dictionary<string, string> _selected  = new(); // RecipeDefinition.GetName()
         private static readonly Dictionary<string, int>    _amount    = new();
 
+        private sealed class QueueRowVisual
+        {
+            public CraftQueue.Entry entry;
+            public VisualElement fill;
+            public Label status;
+        }
+
+        private static string AmountKey(string panelId, RecipeDefinition recipe)
+            => panelId + "|amount|" + (recipe != null ? recipe.GetEntityId().ToString() : "none");
+
+        private static string QueueStatus(CraftQueue.Entry entry)
+        {
+            if (entry == null) return "Unavailable";
+            if (entry.refundPending) return "Refund";
+            if (entry.IsWaitingForSpace) return "Make room";
+            if (entry.recipe == null) return "Unavailable";
+            float seconds = Mathf.Max(0f, entry.recipe.craftSeconds - entry.progressSeconds);
+            return $"{Mathf.Ceil(seconds * 10f) / 10f:0.0}s";
+        }
+
         private static string GetCat(string id)  => _category.TryGetValue(id, out var v) ? v : "All";
         private static string GetSearch(string id) => _search.TryGetValue(id, out var v) ? v : "";
         private static string GetSel(string id)  => _selected.TryGetValue(id, out var v) ? v : null;
@@ -671,8 +691,9 @@ namespace VoxelEngine.UI
             bool usesQueue = recipe.craftSeconds > 0f && queue != null;
             int queueRoom = usesQueue ? Mathf.Max(0, QUEUE_CAP - alreadyQueued) : int.MaxValue;
 
-            int amount = Mathf.Clamp(GetAmt(panelId), 1, Mathf.Max(1, maxByIngredients));
-            _amount[panelId] = amount;
+            string amountKey = AmountKey(panelId, recipe);
+            int amount = Mathf.Clamp(GetAmt(amountKey), 1, Mathf.Max(1, maxByIngredients));
+            _amount[amountKey] = amount;
 
             var stepperRow = new VisualElement();
             stepperRow.style.flexDirection = FlexDirection.Row;
@@ -689,7 +710,7 @@ namespace VoxelEngine.UI
                 return b;
             }
 
-            stepperRow.Add(StepBtn("\u2212", () => { _amount[panelId] = Mathf.Max(1, amount - 1); rebuildDetail(); }));
+            stepperRow.Add(StepBtn("\u2212", () => { _amount[amountKey] = Mathf.Max(1, amount - 1); rebuildDetail(); }));
 
             var amtBox = new Label(amount.ToString());
             amtBox.style.flexGrow = 1;
@@ -703,9 +724,9 @@ namespace VoxelEngine.UI
             amtBox.pickingMode = PickingMode.Ignore;
             stepperRow.Add(amtBox);
 
-            stepperRow.Add(StepBtn("+", () => { _amount[panelId] = Mathf.Min(Mathf.Max(1, maxByIngredients), amount + 1); rebuildDetail(); }));
+            stepperRow.Add(StepBtn("+", () => { _amount[amountKey] = Mathf.Min(Mathf.Max(1, maxByIngredients), amount + 1); rebuildDetail(); }));
 
-            var maxBtn = new Button(() => { _amount[panelId] = Mathf.Max(1, maxByIngredients); rebuildDetail(); }) { text = "MAX" };
+            var maxBtn = new Button(() => { _amount[amountKey] = Mathf.Max(1, maxByIngredients); rebuildDetail(); }) { text = "MAX" };
             maxBtn.style.height = 28; maxBtn.style.marginLeft = 6;
             maxBtn.style.fontSize = 9; maxBtn.style.paddingLeft = 8; maxBtn.style.paddingRight = 8;
             maxBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -719,7 +740,7 @@ namespace VoxelEngine.UI
             Button craftBtn = null;
             craftBtn = new Button(() =>
             {
-                int n = Mathf.Min(GetAmt(panelId), queueRoom);
+                int n = Mathf.Min(GetAmt(amountKey), queueRoom);
                 int done = 0;
                 for (int i = 0; i < n; i++)
                 {
@@ -727,7 +748,7 @@ namespace VoxelEngine.UI
                     if (!Crafter.TryCraft(source, dest, recipe, q)) break;
                     done++;
                 }
-                if (done > 0) { _amount[panelId] = 1; refresh?.Invoke(); return; }
+                if (done > 0) { _amount[amountKey] = 1; refresh?.Invoke(); return; }
                 // Nothing crafted: float (in-inventory) and toast (after
                 // closing the panels) both say why.
                 string reason = queueRoom < 1 ? "Queue full"
@@ -758,10 +779,10 @@ namespace VoxelEngine.UI
                 qscroll.style.maxHeight = 150;
                 detail.Add(qscroll);
 
+                var liveRows = new List<QueueRowVisual>();
                 for (int i = 0; i < queue.entries.Count; i++)
                 {
                     var e = queue.entries[i];
-                    if (e?.recipe == null) continue;
                     int idx = i;
 
                     var qrow = new VisualElement();
@@ -769,7 +790,7 @@ namespace VoxelEngine.UI
                     qrow.style.alignItems    = Align.Center;
                     qrow.style.marginBottom  = 4;
 
-                    var qn = new Label(e.recipe.GetName());
+                    var qn = new Label(e?.recipe != null ? e.recipe.GetName() : "Unavailable recipe");
                     qn.style.color = new StyleColor(T.TextSecondary);
                     qn.style.fontSize = 10;
                     qn.style.flexGrow = 1;
@@ -778,15 +799,13 @@ namespace VoxelEngine.UI
                     qn.style.whiteSpace = WhiteSpace.NoWrap;
                     qrow.Add(qn);
 
-                    float pct = e.recipe.craftSeconds > 0 ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
-                    var (bar, _) = T.ProgressBar(pct, LcdHudTheme.Phosphor, 6, flexGrow: false);
+                    float pct = e?.recipe != null && e.recipe.craftSeconds > 0
+                        ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
+                    var (bar, fill) = T.ProgressBar(pct, LcdHudTheme.Phosphor, 6, flexGrow: false);
                     bar.style.width = 58; bar.style.marginRight = 6;
                     qrow.Add(bar);
 
-                    string status = e.refundPending ? "Refund"
-                        : e.IsWaitingForSpace ? "Make room"
-                        : $"{Mathf.Max(0f, e.recipe.craftSeconds - e.progressSeconds):0.0}s";
-                    var qstatus = new Label(status);
+                    var qstatus = new Label(QueueStatus(e));
                     qstatus.style.color = new StyleColor(T.TextSecondary);
                     qstatus.style.fontSize = 9;
                     qstatus.style.minWidth = 50;
@@ -794,14 +813,42 @@ namespace VoxelEngine.UI
                     qrow.Add(qstatus);
 
                     var cancel = new Button(() => { queue.Cancel(idx); refresh?.Invoke(); }) { text = "\u2715" };
-                    cancel.SetEnabled(e.CanCancel);
+                    cancel.SetEnabled(e != null && e.CanCancel);
                     cancel.style.width = 22; cancel.style.height = 22;
                     cancel.style.fontSize = 11;
                     LcdHudTheme.ApplyCommandButton(cancel, UITheme.AccentRed);
                     qrow.Add(cancel);
 
                     qscroll.Add(qrow);
+                    liveRows.Add(new QueueRowVisual { entry = e, fill = fill, status = qstatus });
                 }
+
+                qscroll.schedule.Execute(() =>
+                {
+                    if (qscroll.panel == null) return;
+                    if (queue.entries.Count != liveRows.Count)
+                    {
+                        refresh?.Invoke();
+                        return;
+                    }
+                    for (int i = 0; i < liveRows.Count; i++)
+                    {
+                        if (!ReferenceEquals(queue.entries[i], liveRows[i].entry))
+                        {
+                            refresh?.Invoke();
+                            return;
+                        }
+                    }
+                    foreach (var liveRow in liveRows)
+                    {
+                        if (liveRow.entry?.recipe == null) continue;
+                        float progress = liveRow.entry.recipe.craftSeconds > 0f
+                            ? Mathf.Clamp01(liveRow.entry.progressSeconds / liveRow.entry.recipe.craftSeconds)
+                            : 1f;
+                        liveRow.fill.style.width = new StyleLength(new Length(progress * 100f, LengthUnit.Percent));
+                        liveRow.status.text = QueueStatus(liveRow.entry);
+                    }
+                }).Every(50);
             }
         }
 

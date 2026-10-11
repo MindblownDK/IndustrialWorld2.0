@@ -70,6 +70,7 @@ namespace VoxelEngine.Scattering
                           ^ (chunk.coord.z * 83492791);
             var rng = new Unity.Mathematics.Random((uint)math.max(1, chunkSeed));
             var sphere = world as SphereWorld;
+            string treeStorePath = TreeHarvestPersistence.GetStorePath(world);
             bool isSphere = sphere != null;
 
             for (int x = 0; x < S; x += CandidateStride)
@@ -222,6 +223,17 @@ namespace VoxelEngine.Scattering
                         if ((isEnemy || isPassiveAnimal) && world is SphereWorld dryWorld
                             && !dryWorld.IsDryFooting(worldPos)) continue;
                         bool isTree = IsTreePrefab(entry.prefab);
+                        string treeIdentity = isTree
+                            ? TreeHarvestPersistence.MakeIdentity(localVoxel)
+                            : null;
+                        // Scatter coordinates and the body's seed define the same tree after
+                        // reload. Skip a recorded stump before instantiating its deterministic
+                        // replacement, but leave all authored scatter choices and voxel data intact.
+                        if (isTree && TreeHarvestPersistence.IsHarvested(treeStorePath, treeIdentity))
+                        {
+                            placed = true;
+                            break;
+                        }
                         // Tree roots use a generous per-tree footprint, then reservation checks add
                         // the two radii together. Oak/pine canopies therefore retain a visible gap
                         // instead of merely avoiding trunk overlap.
@@ -238,13 +250,19 @@ namespace VoxelEngine.Scattering
                         instance.transform.localScale = Vector3.one * scale;
                         if (isLivingFlora && instance.GetComponentInChildren<PollutionSensitiveFlora>(true) == null)
                             instance.AddComponent<PollutionSensitiveFlora>();
-                        if (isTree && instance.GetComponentInChildren<VoxelEngine.Trees.Tree>(true) == null)
+                        if (isTree)
                         {
-                            var t = instance.AddComponent<VoxelEngine.Trees.Tree>();
-                            t.maxHp = 80;
-                            t.hp = 80;
-                            t.minLogs = 2;
-                            t.maxLogs = 4;
+                            var tree = instance.GetComponentInChildren<VoxelEngine.Trees.Tree>(true);
+                            if (tree == null)
+                            {
+                                tree = instance.AddComponent<VoxelEngine.Trees.Tree>();
+                                tree.maxHp = 80;
+                                tree.hp = 80;
+                                tree.minLogs = 2;
+                                tree.maxLogs = 4;
+                            }
+                            tree.scatterPersistencePath = treeStorePath;
+                            tree.stableScatterIdentity = treeIdentity;
                         }
                         if (instance.GetComponentInChildren<Collider>() == null)
                         {

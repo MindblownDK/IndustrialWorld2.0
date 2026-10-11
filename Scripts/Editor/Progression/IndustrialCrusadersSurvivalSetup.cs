@@ -85,7 +85,7 @@ namespace VoxelEngine.EditorTools
                 $"Player fall-damage prefabs repaired (16 / 40 m/s): {report.fallDamageComponentsRepaired}\n" +
                 $"Warnings: {report.warnings}\n\n" +
                 (report.warnings > 0 ? "See the Console for items that need review." : "No warnings.");
-            EditorUtility.DisplayDialog("17.13.1-dev Survival and Progression Repairs", summary, "OK");
+            EditorUtility.DisplayDialog("17.14.0-dev Survival and Progression Repairs", summary, "OK");
             Debug.Log("[IndustrialCrusadersSurvivalSetup] " + summary.Replace("\n", " | "));
         }
 
@@ -341,42 +341,49 @@ namespace VoxelEngine.EditorTools
 
         private static void RepairPlayerFallDamageSettings(SetupReport report)
         {
-            string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab");
+            // Keep the scan limited to Assets prefabs whose asset name contains
+            // "Player". The former all-prefab scan loaded/saved unrelated nested
+            // prefabs (including utility/building assets) while searching for one
+            // component. Only a PlayerController on the prefab root is in scope.
+            string[] prefabGuids = AssetDatabase.FindAssets("Player t:Prefab", new[] { "Assets" });
             int playerControllersFound = 0;
             foreach (string guid in prefabGuids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrEmpty(path)
+                    || Path.GetFileNameWithoutExtension(path).IndexOf("Player", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
                 GameObject root = null;
                 try
                 {
                     root = PrefabUtility.LoadPrefabContents(path);
                     if (root == null) continue;
+                    var controller = root.GetComponent<PlayerController>();
+                    if (controller == null) continue;
+
+                    playerControllersFound++;
                     bool changed = false;
-                    foreach (var controller in root.GetComponentsInChildren<PlayerController>(true))
+                    if (!Mathf.Approximately(controller.fallDamageStartSpeed, 16f))
                     {
-                        if (controller == null) continue;
-                        playerControllersFound++;
-                        bool componentChanged = false;
-                        if (!Mathf.Approximately(controller.fallDamageStartSpeed, 16f))
-                        {
-                            controller.fallDamageStartSpeed = 16f;
-                            componentChanged = true;
-                        }
-                        if (!Mathf.Approximately(controller.fallDamageLethalSpeed, 40f))
-                        {
-                            controller.fallDamageLethalSpeed = 40f;
-                            componentChanged = true;
-                        }
-                        if (!componentChanged) continue;
-                        EditorUtility.SetDirty(controller);
+                        controller.fallDamageStartSpeed = 16f;
                         changed = true;
+                    }
+                    if (!Mathf.Approximately(controller.fallDamageLethalSpeed, 40f))
+                    {
+                        controller.fallDamageLethalSpeed = 40f;
+                        changed = true;
+                    }
+                    if (changed)
+                    {
+                        EditorUtility.SetDirty(controller);
+                        PrefabUtility.SaveAsPrefabAsset(root, path);
                         report.fallDamageComponentsRepaired++;
                     }
-                    if (changed) PrefabUtility.SaveAsPrefabAsset(root, path);
                 }
                 catch (Exception exception)
                 {
-                    Warn(report, $"Could not repair player fall-damage settings in '{path}': {exception.Message}");
+                    Warn(report, $"Could not repair fall-damage settings in player prefab '{path}': {exception.Message}");
                 }
                 finally
                 {
@@ -385,7 +392,7 @@ namespace VoxelEngine.EditorTools
             }
 
             if (playerControllersFound == 0)
-                Warn(report, "No PlayerController prefab was found. The script defaults are 16 / 40 m/s; check any scene-only player object or custom prefab manually.");
+                Warn(report, "No prefab named with 'Player' and with a root PlayerController was found under Assets. The Setup Wizard spawns its default player as a scene object, not a prefab; PlayerController script defaults are already 16 / 40 m/s. If you use a custom player prefab, name it with 'Player' (or set these two fields on its PlayerController in the Inspector), then rerun Tools > Voxel Engine > Setup Wizard (the Voxel Engine Setup tool).");
         }
 
         private static void EnsureSteakCookingContent(SetupReport report)

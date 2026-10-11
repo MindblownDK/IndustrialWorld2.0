@@ -71,7 +71,9 @@ namespace VoxelEngine.UI
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
         private CraftQueue _inventoryCraftQueue;
-        // Non-null only while a Crafting Bench or Assembler is open through the inventory crafting surface.
+        private VoxelEngine.Research.ResearchManager _boundResearchManager;
+        private bool _recipeUnlockRefreshPending;
+        // Non-null only while a Crafting Bench, Assembler, or Research Lab is open through the inventory crafting surface.
         private CraftingStation _inventoryCraftStation;
         private VoxelEngine.Power.CoalGeneratorFuel _openCoalGen;
         private VoxelEngine.Transport.Quarry _openQuarry;
@@ -269,11 +271,38 @@ namespace VoxelEngine.UI
                                  "Run Tools > Voxel Engine > Setup Wizard > Step 4 to create one, " +
                                  "then drag it into GameUI.recipeRegistry.");
 
+            BindResearchUnlockEvents();
+            Refresh();
+        }
+
+        private void BindResearchUnlockEvents()
+        {
+            var current = VoxelEngine.Research.ResearchManager.Instance;
+            if (_boundResearchManager == current) return;
+            if (_boundResearchManager != null)
+                _boundResearchManager.OnRecipeUnlocksChanged -= HandleRecipeUnlocksChanged;
+            _boundResearchManager = current;
+            if (_boundResearchManager != null)
+                _boundResearchManager.OnRecipeUnlocksChanged += HandleRecipeUnlocksChanged;
+        }
+
+        private void HandleRecipeUnlocksChanged()
+        {
+            if (!_inventoryOpen) return;
+            if (_searchHasFocus)
+            {
+                _recipeUnlockRefreshPending = true;
+                return;
+            }
+            _recipeUnlockRefreshPending = false;
             Refresh();
         }
 
         private void OnDestroy()
         {
+            if (_boundResearchManager != null)
+                _boundResearchManager.OnRecipeUnlocksChanged -= HandleRecipeUnlocksChanged;
+            _boundResearchManager = null;
             if (inventory != null)
             {
                 if (inventory.container != null) inventory.container.OnChanged -= Refresh;
@@ -333,18 +362,35 @@ namespace VoxelEngine.UI
         private float         _battSegSmooth;    // eased segment fill (0..1)
         private float         _battDockIconAccum; // throttled dock-icon refresh while charging
         private float         _furnaceTickAccum;
-        private float         _recipeRefreshAccum;
         private float         _machineRefreshAccum;
         private bool HasLivePanel()
         {
             if (_doc == null) _doc = GetComponent<UIDocument>();
             if (_doc == null) return false;
-            if (_root == null || _root != _doc.rootVisualElement) _root = _doc.rootVisualElement;
+            var currentRoot = _doc.rootVisualElement;
+            if (_root == null || _root != currentRoot)
+            {
+                _root = currentRoot;
+                if (_root != null)
+                {
+                    _root.style.flexGrow = 1;
+                    _root.style.position = Position.Absolute;
+                    _root.style.left = 0; _root.style.top = 0; _root.style.right = 0; _root.style.bottom = 0;
+                    _root.pickingMode = PickingMode.Ignore;
+                    EnsureUiLayers();
+                }
+            }
             return _root != null && _root.panel != null;
         }
 
         private void Update()
         {
+            BindResearchUnlockEvents();
+            if (_recipeUnlockRefreshPending && !_searchHasFocus)
+            {
+                _recipeUnlockRefreshPending = false;
+                if (_inventoryOpen) Refresh();
+            }
             if (!HasLivePanel()) return;
 
             // Keyboard capture state — suppress player movement/jetpack keys while typing.
@@ -375,6 +421,7 @@ namespace VoxelEngine.UI
             CryobedConfigHud.Tick();
             SecurityBlockHud.Tick();
             InteractionHud.Tick();
+            if (_hudLayer != null) WorldInspectionHud.EnsureMounted(_hudLayer);
             WorldInspectionHud.Tick();
             GridInspectorHud.Tick();
             GravityPullHud.Tick();
@@ -435,28 +482,6 @@ namespace VoxelEngine.UI
             VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
             VoxelEngine.GridSystem.UI.ShipToolHud.Tick();
             VoxelEngine.GridSystem.UI.GridControlHud.Tick();
-
-            // 4 Hz refresh while ANY craft queue near the player has work — drives recipe-row progress bars.
-            if (_inventoryOpen && inventory != null)
-            {
-                bool anyWork = (_activeQueue != null && _activeQueue.HasWork)
-                    || (_inventoryCraftQueue != null && _inventoryCraftQueue.HasWork);
-                if (!anyWork)
-                {
-                    var nearest = FindNearestQueueForTier(Crafting.StationTier.CraftingBench, inventory.transform.position);
-                    if (nearest != null && nearest.HasWork) anyWork = true;
-                    if (!anyWork)
-                    {
-                        nearest = FindNearestQueueForTier(Crafting.StationTier.Assembler, inventory.transform.position);
-                        if (nearest != null && nearest.HasWork) anyWork = true;
-                    }
-                }
-                if (anyWork)
-                {
-                    _recipeRefreshAccum += Time.unscaledDeltaTime;
-                    if (_recipeRefreshAccum >= 1.0f) { _recipeRefreshAccum = 0f; Refresh(); }
-                }
-            }
 
             // ---------- DRAG/DROP via direct mouse-button polling ----------
             UpdateDragDrop();
@@ -1186,7 +1211,8 @@ namespace VoxelEngine.UI
             if (st == null) return;
             if (!_inventoryOpen) UIState.PushBlock();
             ClearArmorUpgradeStationBinding();
-            bool inventoryCraftingOnly = st.tier == Crafting.StationTier.CraftingBench
+            bool inventoryCraftingOnly = Crafting.Crafter.IsResearchLabStation(st)
+                || st.tier == Crafting.StationTier.CraftingBench
                 || st.tier == Crafting.StationTier.Assembler;
             // Crafting Bench and Assembler use only the inventory crafting surface.
             // Other specialized stations keep their existing right-side station panel.
@@ -3663,17 +3689,13 @@ namespace VoxelEngine.UI
 
             CraftingScreen.Populate(
                 panel, recipes, source, inventory.container,
-                resolveQueue: r =>
-                {
-                    if (_inventoryCraftStation != null && _activeQueue != null)
-                        return _activeQueue;
-                    if (r != null && r.requiredStation != Crafting.StationTier.None)
-                    {
-                        var stationQueue = FindNearestQueueForTier(r.requiredStation, inventory.transform.position);
-                        if (stationQueue != null) return stationQueue;
-                    }
-                    return GetInventoryCraftQueue();
-                },
+                // Inventory crafting uses one player-owned FIFO queue. Nearby station
+                // availability still controls recipe access, but it must not silently
+                // split ordinary inventory jobs across several autonomous queues.
+                // Opening a Bench/Assembler explicitly binds this panel to that station's queue.
+                resolveQueue: r => _inventoryCraftStation != null && _activeQueue != null
+                    ? _activeQueue
+                    : GetInventoryCraftQueue(),
                 refresh: Refresh,
                 setSearchFocus: v => _searchHasFocus = v,
                 panelId: "inventory");
@@ -3681,9 +3703,9 @@ namespace VoxelEngine.UI
 
         /// <summary>
         /// Computes the recipe set + ingredient source the inventory-side crafting
-        /// screen should use. An explicitly opened Bench/Assembler scopes recipes
-        /// to that clicked tier; otherwise proximity and storage-network access
-        /// determine the normal inventory recipe ceiling.
+        /// screen should use. An explicitly opened Bench/Assembler/Research Lab scopes
+        /// recipes to that clicked station's effective tier; otherwise proximity and
+        /// storage-network access determine the normal inventory recipe ceiling.
         /// </summary>
         private (System.Collections.Generic.List<Crafting.RecipeDefinition> recipes, IItemContainer source, Crafting.StationTier maxStation) ResolveCraftContext()
         {
@@ -3691,7 +3713,8 @@ namespace VoxelEngine.UI
             //   1) An opened Storage Terminal / active wireless link can add
             //      network ingredients. With res_storage_crafting unlocked, ordinary
             //      inventory crafting also raises its recipe ceiling to Assembler;
-            //      an explicitly opened Bench/Assembler remains capped at its tier.
+            //      an explicitly opened Bench/Assembler/Research Lab remains capped
+            //      at that station's effective tier.
             //   2) Otherwise, crafting uses the inventory and respects normal
             //      station-tier rules (Crafting Bench / Furnace / Assembler).
             var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
@@ -3708,7 +3731,7 @@ namespace VoxelEngine.UI
 
             bool clickedInventoryStation = _inventoryCraftStation != null;
             var maxStation = clickedInventoryStation
-                ? _inventoryCraftStation.tier
+                ? Crafter.EffectiveStationTier(_inventoryCraftStation)
                 : Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
             if (!clickedInventoryStation && storageCraftingUnlocked && (craftRack != null || wirelessActive)
                 && (int)maxStation < (int)Crafting.StationTier.Assembler)
@@ -4780,6 +4803,16 @@ namespace VoxelEngine.UI
             root.Add(panel);
         }
 
+        private static string CraftQueueStatus(CraftQueue.Entry entry)
+        {
+            if (entry == null) return "Unavailable";
+            if (entry.refundPending) return "Refund pending";
+            if (entry.IsWaitingForSpace) return "Make room";
+            if (entry.recipe == null) return "Unavailable";
+            float remaining = Mathf.Max(0f, entry.recipe.craftSeconds - entry.progressSeconds);
+            return $"{Mathf.Ceil(remaining * 10f) / 10f:0.0}s";
+        }
+
         // ----- RIGHT (crafting bench / assembler) -----
         private void BuildRightStationCrafting(VisualElement root, CraftingStation st)
         {
@@ -4791,38 +4824,37 @@ namespace VoxelEngine.UI
             panel.Add(IndustrialTheme.HazardDivider());
             panel.Add(IndustrialTheme.Lamps(_activeQueue != null && _activeQueue.HasWork ? 2 : 1));
 
-            // Active craft queue display.
-            if (_activeQueue != null && _activeQueue.HasWork)
+            // Active craft queue display. The progress timer is updated in place so
+            // it stays smooth without rebuilding the whole panel every few frames.
+            CraftQueue stationQueue = _activeQueue;
+            if (stationQueue != null && stationQueue.HasWork)
             {
                 panel.Add(MakeSubtitle("In Progress"));
-                int i = 0;
-                foreach (var e in _activeQueue.entries)
+                for (int i = 0; i < stationQueue.entries.Count; i++)
                 {
+                    var e = stationQueue.entries[i];
+                    int idx = i;
                     var row = new VisualElement();
                     row.style.flexDirection = FlexDirection.Row;
                     row.style.alignItems = Align.Center;
                     row.style.marginBottom = 4;
 
-                    var name = new Label(e.recipe.GetName());
+                    var name = new Label(e?.recipe != null ? e.recipe.GetName() : "Unavailable recipe");
                     name.style.color = Color.white; name.style.fontSize = 12; name.style.flexGrow = 1;
                     row.Add(name);
 
-                    float pct = e.recipe.craftSeconds > 0 ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
-                    float remain = Mathf.Max(0, e.recipe.craftSeconds - e.progressSeconds);
-                    string status = e.refundPending ? "Refund pending"
-                        : e.IsWaitingForSpace ? "Make room"
-                        : $"{remain:0.0}s";
-                    var time = new Label(status);
+                    float pct = e?.recipe != null && e.recipe.craftSeconds > 0f
+                        ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
+                    var (bar, fill) = MakeProgressBarWithFill(pct, new Color(0.20f, 0.65f, 0.95f), width: 80, height: 8);
+                    row.Add(bar);
+
+                    var time = new Label(CraftQueueStatus(e));
                     time.style.color = new StyleColor(new Color(0.78f, 0.82f, 0.9f));
                     time.style.fontSize = 11; time.style.marginRight = 6;
                     row.Add(time);
 
-                    var (bar, fill) = MakeProgressBarWithFill(pct, new Color(0.20f, 0.65f, 0.95f), width: 80, height: 8);
-                    row.Add(bar);
-
-                    int idx = i;
-                    var cancel = new Button(() => { _activeQueue.Cancel(idx); Refresh(); }) { text = "X" };
-                    cancel.SetEnabled(e.CanCancel);
+                    var cancel = new Button(() => { stationQueue.Cancel(idx); Refresh(); }) { text = "X" };
+                    cancel.SetEnabled(e != null && e.CanCancel);
                     cancel.style.minWidth = 24; cancel.style.minHeight = 22;
                     cancel.style.marginLeft = 6;
                     cancel.style.color = Color.white;
@@ -4830,8 +4862,23 @@ namespace VoxelEngine.UI
                     SetBorderRadius(cancel, 4);
                     row.Add(cancel);
 
+                    row.schedule.Execute(() =>
+                    {
+                        if (row.panel == null) return;
+                        if (idx >= stationQueue.entries.Count
+                            || !ReferenceEquals(stationQueue.entries[idx], e))
+                        {
+                            Refresh();
+                            return;
+                        }
+                        if (e?.recipe == null) return;
+                        float livePct = e.recipe.craftSeconds > 0f
+                            ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
+                        fill.style.width = new StyleLength(new Length(livePct * 100f, LengthUnit.Percent));
+                        time.text = CraftQueueStatus(e);
+                    }).Every(50);
+
                     panel.Add(row);
-                    i++;
                 }
                 panel.Add(MakeDivider());
             }
@@ -5778,23 +5825,6 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         //                     RECIPE ROW
         // ============================================================
 
-        private CraftQueue FindNearestQueueForTier(Crafting.StationTier tier, Vector3 origin)
-        {
-            CraftQueue best = null;
-            float bestSqr = stationRadius * stationRadius;
-            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude);
-            foreach (var st in stations)
-            {
-                if (st.tier != tier) continue;
-                float d = (st.transform.position - origin).sqrMagnitude;
-                if (d > bestSqr) continue;
-                var q = st.GetComponent<CraftQueue>();
-                if (q == null) q = st.gameObject.AddComponent<CraftQueue>();
-                bestSqr = d;
-                best = q;
-            }
-            return best;
-        }
         private VisualElement BuildRecipeRow(RecipeDefinition recipe, IItemContainer source, IItemContainer dest)
         {
             var row = new VisualElement();
@@ -5857,9 +5887,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             row.Add(info);
 
             // --- Live progress bar for this recipe (filled if it's in any reachable queue) ---
-            CraftQueue queueForThisRecipe = _activeQueue;
-            if (queueForThisRecipe == null && recipe.requiredStation != Crafting.StationTier.None && inventory != null)
-                queueForThisRecipe = FindNearestQueueForTier(recipe.requiredStation, inventory.transform.position);
+            CraftQueue queueForThisRecipe = _activeQueue ?? GetInventoryCraftQueue();
             int sameRecipeQueued = 0;
             float headProgress01 = 0f;
             if (queueForThisRecipe != null)
@@ -5886,6 +5914,42 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             progressBox.Add(qcount);
             row.Add(progressBox);
 
+            if (queueForThisRecipe != null)
+            {
+                var progressQueue = queueForThisRecipe;
+                var queueSnapshot = new System.Collections.Generic.List<CraftQueue.Entry>(progressQueue.entries);
+                row.schedule.Execute(() =>
+                {
+                    if (row.panel == null) return;
+                    if (progressQueue.entries.Count != queueSnapshot.Count)
+                    {
+                        Refresh();
+                        return;
+                    }
+                    for (int i = 0; i < queueSnapshot.Count; i++)
+                    {
+                        if (!ReferenceEquals(progressQueue.entries[i], queueSnapshot[i]))
+                        {
+                            Refresh();
+                            return;
+                        }
+                    }
+
+                    int queuedNow = 0;
+                    float liveProgress = 0f;
+                    for (int i = 0; i < progressQueue.entries.Count; i++)
+                    {
+                        var entry = progressQueue.entries[i];
+                        if (entry?.recipe == recipe) queuedNow++;
+                    }
+                    if (progressQueue.entries.Count > 0
+                        && progressQueue.entries[0]?.recipe == recipe && recipe.craftSeconds > 0f)
+                        liveProgress = Mathf.Clamp01(progressQueue.entries[0].progressSeconds / recipe.craftSeconds);
+                    fill.style.width = new StyleLength(new Length(liveProgress * 100f, LengthUnit.Percent));
+                    qcount.text = queuedNow > 0 ? $"x{queuedNow}" : "";
+                }).Every(50);
+            }
+
             // --- Craft button ---
             bool can = Crafter.HasIngredients(source, recipe);
             bool atMaxQueue = sameRecipeQueued >= 10;
@@ -5893,9 +5957,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             btn = new Button(() => {
                 try
                 {
-                    CraftQueue qNow = _activeQueue;
-                    if (qNow == null && recipe.requiredStation != Crafting.StationTier.None && inventory != null)
-                        qNow = FindNearestQueueForTier(recipe.requiredStation, inventory.transform.position);
+                    CraftQueue qNow = _activeQueue ?? GetInventoryCraftQueue();
                     // A failed craft says why two ways: floating text at the
                     // button (visible in-inventory) and a toast (visible after
                     // closing the panels).
@@ -5933,24 +5995,37 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         {
             if (inventory == null) return;
             var stack = inventory.ActiveStack;
-            bool holdingHammer = !stack.IsEmpty && stack.item != null
-                                 && stack.item.GetType().Name == "Hammer";
-            bool upgradeMode = holdingHammer
-                && VoxelEngine.Building.Tiered.HammerBuildWheel.Instance != null
-                && VoxelEngine.Building.Tiered.HammerBuildWheel.Instance.IsUpgradeMode;
-            VoxelEngine.Building.Tiered.PlacedTieredBlock target = null;
-            if (upgradeMode)
+            bool holdingHammer = !stack.IsEmpty && stack.item is Hammer;
+            var hammerWheel = VoxelEngine.Building.Tiered.HammerBuildWheel.Instance;
+            bool upgradeMode = holdingHammer && hammerWheel != null && hammerWheel.IsUpgradeMode;
+            bool repairMode = holdingHammer && hammerWheel != null && hammerWheel.IsRepairMode;
+            VoxelEngine.Building.Tiered.PlacedTieredBlock tieredTarget = null;
+            VoxelEngine.Building.PlacedBlock blockTarget = null;
+
+            if (upgradeMode || repairMode)
             {
-                // Use the player's main camera.
                 var cam = Camera.main;
+                if (cam == null)
+                    cam = inventory.GetComponentInChildren<VoxelEngine.Player.PlayerInteractionTool>(true)?.shootCamera;
                 if (cam != null)
                 {
                     var ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-                    if (Physics.Raycast(ray, out var hit, 8f))
-                        target = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                    if (Physics.Raycast(ray, out var hit, 8f, ~0, QueryTriggerInteraction.Ignore))
+                    {
+                        tieredTarget = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                        if (repairMode && tieredTarget == null)
+                        {
+                            var candidate = hit.collider.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+                            if (candidate != null
+                                && candidate.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() == null
+                                && candidate.GetComponentInChildren<VoxelEngine.GridSystem.GridBlock>(true) == null)
+                                blockTarget = candidate;
+                        }
+                    }
                 }
             }
-            UpgradePromptHud.Tick(target, inventory, upgradeMode);
+            UpgradePromptHud.Tick(tieredTarget, blockTarget, inventory,
+                holdingHammer, upgradeMode, repairMode);
         }
 
         private void TickFurnaceLiveUI()

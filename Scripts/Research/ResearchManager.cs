@@ -44,6 +44,8 @@ namespace VoxelEngine.Research
         private bool _rankLoadPending;
 
         public event Action OnChanged;
+        /// <summary>Fires when known recipes can change, so an open crafting panel can refresh its filters.</summary>
+        public event Action OnRecipeUnlocksChanged;
 
         private void Awake()
         {
@@ -183,6 +185,9 @@ namespace VoxelEngine.Research
             ActiveHasCost = false;
 
             OnChanged?.Invoke();
+            if ((node.unlocksRecipes != null && node.unlocksRecipes.Length > 0)
+                || string.Equals(node.nodeId, "res_smelting", StringComparison.OrdinalIgnoreCase))
+                OnRecipeUnlocksChanged?.Invoke();
             SaveToDisk();
         }
 
@@ -355,10 +360,23 @@ namespace VoxelEngine.Research
             return changed;
         }
 
+        private static bool IsCanonicalFurnaceRecipe(RecipeDefinition recipe)
+        {
+            if (recipe == null) return false;
+            if (string.Equals(recipe.name, "Recipe_Furnace", StringComparison.OrdinalIgnoreCase)) return true;
+            return recipe.outputItem != null
+                && string.Equals(recipe.outputItem.itemId, "block_furnace", StringComparison.OrdinalIgnoreCase);
+        }
+
         public bool IsRecipeUnlocked(RecipeDefinition recipe)
         {
             if (recipe == null) return false;
             if (recipe.unlockedByDefault) return true;
+
+            // The canonical furnace recipe is progression-gated by Smelting. This
+            // runtime rule keeps an existing Smelting rank effective even when an
+            // older ResearchTree asset points at a stale/duplicate recipe reference.
+            if (IsCanonicalFurnaceRecipe(recipe) && IsUnlocked("res_smelting")) return true;
 
             // Blueprint unlocks (ruins) — 4.9.0
             try
@@ -419,6 +437,7 @@ namespace VoxelEngine.Research
             }
             _rankLoadPending = false;
             OnChanged?.Invoke();
+            OnRecipeUnlocksChanged?.Invoke();
             Debug.Log("[Research] Progress loaded (" + _nodeRanks.Count + " researched node(s)).");
             return true;
         }

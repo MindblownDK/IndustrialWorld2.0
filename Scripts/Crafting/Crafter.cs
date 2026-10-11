@@ -88,6 +88,24 @@ namespace VoxelEngine.Crafting
         }
 
         /// <summary>
+        /// Research Labs are an all-science-pack crafting facility regardless of a stale
+        /// or legacy serialized CraftingStation tier. Their recipes still consume inputs
+        /// from the player's source container and deliver outputs to player inventory.
+        /// </summary>
+        public static bool IsResearchLabStation(CraftingStation station)
+        {
+            return station != null
+                && (station.GetComponentInParent<VoxelEngine.Research.ResearchLab>() != null
+                    || station.GetComponentInChildren<VoxelEngine.Research.ResearchLab>(true) != null);
+        }
+
+        public static StationTier EffectiveStationTier(CraftingStation station)
+        {
+            if (station == null) return StationTier.None;
+            return IsResearchLabStation(station) ? StationTier.Assembler : station.tier;
+        }
+
+        /// <summary>
         /// Returns the highest station tier currently accessible from 'origin' within 'radius'.
         /// Always includes StationTier.None (recipes craftable bare-handed).
         /// </summary>
@@ -98,7 +116,8 @@ namespace VoxelEngine.Crafting
             foreach (var st in stations)
             {
                 if ((st.transform.position - origin).sqrMagnitude > radius * radius) continue;
-                if ((int)st.tier > (int)best) best = st.tier;
+                StationTier tier = EffectiveStationTier(st);
+                if ((int)tier > (int)best) best = tier;
             }
             return best;
         }
@@ -125,9 +144,11 @@ namespace VoxelEngine.Crafting
             if (station is VoxelEngine.Combat.ArmorStation)
                 return CollectAvailableRecipes(registry, IsArmorStationRecipe, ignoreResearchLock: true);
 
-            return station.exclusiveRecipes
+            StationTier effectiveTier = EffectiveStationTier(station);
+            bool researchLab = IsResearchLabStation(station);
+            return station.exclusiveRecipes && !researchLab
                 ? CollectAvailableRecipes(registry, recipe => recipe.requiredStation == station.tier)
-                : AvailableRecipes(registry, station.tier);
+                : AvailableRecipes(registry, effectiveTier);
         }
 
         private static bool IsArmorStationRecipe(RecipeDefinition recipe)

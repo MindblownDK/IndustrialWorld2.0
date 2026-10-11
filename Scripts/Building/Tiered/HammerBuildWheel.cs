@@ -31,6 +31,7 @@ namespace VoxelEngine.Building.Tiered
         public static HammerBuildWheel Instance { get; private set; }
         public BuildFamily? ActiveFamily { get; private set; }
         public bool IsUpgradeMode { get; private set; }
+        public bool IsRepairMode { get; private set; }
         public bool IsOpen => _wheel.IsOpen;
 
         public Inventory inventory;
@@ -147,16 +148,23 @@ namespace VoxelEngine.Building.Tiered
             _wheel.BuildOptions = FillOptions;
             _wheel.ConfirmOption = ConfirmFamily;
             _wheel.ConfirmCentre = EnterUpgradeMode;
+            _wheel.ConfirmCentreRight = EnterRepairMode;
             _wheel.SwapGroup = ToggleGroup;
-            _wheel.IdleTitle = "UPGRADE MODE";
-            _wheel.IdleDescription = "Left click to arm the hammer for tier upgrades";
+            _wheel.IdleTitle = "UPGRADE / REPAIR";
+            _wheel.IdleDescription = "Left-click centre: upgrade mode · Right-click centre: repair mode";
             _wheel.IdleTitleColor = T.AccentGold;
             _wheel.IdleIcon = MachineShapeIcons.Upgrade;
         }
 
         private void Start() => ResolveDependencies();
 
-        private void OnDisable() => _wheel.Close(false);
+        private void OnDisable()
+        {
+            _wheel.Close(false);
+            ActiveFamily = null;
+            IsUpgradeMode = false;
+            IsRepairMode = false;
+        }
 
         private void OnDestroy()
         {
@@ -177,7 +185,12 @@ namespace VoxelEngine.Building.Tiered
 
             var stack = inventory != null ? inventory.ActiveStack : null;
             bool holdingHammer = stack != null && !stack.IsEmpty && stack.item is Hammer;
-            if (!holdingHammer) ActiveFamily = null;
+            if (!holdingHammer)
+            {
+                ActiveFamily = null;
+                IsUpgradeMode = false;
+                IsRepairMode = false;
+            }
 
             // The remembered menu may be a locked group after a new save or a
             // research rollback; never show locked content.
@@ -277,6 +290,7 @@ namespace VoxelEngine.Building.Tiered
 
             ActiveFamily = family;
             IsUpgradeMode = false;
+            IsRepairMode = false;
             bool affordable = CanAffordFamily(family);
             BuildFeedbackHud.Show($"Build: {BuildFamilyInfo.DisplayName(family)}",
                 CostSummary(family), null, affordable ? T.AccentCyan : T.AccentRed);
@@ -288,9 +302,20 @@ namespace VoxelEngine.Building.Tiered
         {
             ActiveFamily = null;
             IsUpgradeMode = true;
-            BuildFeedbackHud.Show("Building Hammer", "Upgrade mode — strike a piece to raise its tier",
+            IsRepairMode = false;
+            BuildFeedbackHud.Show("Building Hammer", "Upgrade mode — left-click a tiered piece to raise its tier",
                 null, T.AccentGold);
             AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.6f, 0.94f);
+        }
+
+        private void EnterRepairMode()
+        {
+            ActiveFamily = null;
+            IsUpgradeMode = false;
+            IsRepairMode = true;
+            BuildFeedbackHud.Show("Building Hammer", "Repair mode — left-click a damaged tiered piece or static BlockItem; materials scale with damage",
+                null, T.AccentCyan);
+            AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.6f, 1.02f);
         }
 
         /// <summary>
@@ -309,6 +334,7 @@ namespace VoxelEngine.Building.Tiered
         {
             ActiveFamily = null;
             IsUpgradeMode = false;
+            IsRepairMode = false;
             _wheel.Close(false);
             BuildFeedbackHud.Show("Building Hammer", "Build mode closed", null, T.TextMuted);
         }

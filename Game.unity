@@ -419,8 +419,11 @@ MonoBehaviour:
   sprintMultiplier: 1.6
   crouchMultiplier: 0.45
   groundAcceleration: 18
+  groundSpeedCapMultiplier: 1.35
   airAcceleration: 4
+  airSpeedCapMultiplier: 2
   groundFriction: 10
+  groundTraction: 48
   iceGroundFriction: 0.85
   iceAccelerationMultiplier: 0.28
   iceSlideFrictionMultiplier: 0.35
@@ -430,7 +433,11 @@ MonoBehaviour:
   walkableGroundNormalMin: 0.18
   jumpHeight: 1.4
   gravity: -22
+  jumpHoldGravityMultiplier: 1.25
+  jumpReleaseGravityMultiplier: 2
   coyoteTime: 0.12
+  jumpBufferTime: 0.22
+  autoBunnyHop: 1
   fallDamageStartSpeed: 11
   fallDamageLethalSpeed: 28
   fallDamageExponent: 1.35
@@ -440,6 +447,8 @@ MonoBehaviour:
   slideFriction: 1.6
   slideEndSpeed: 3
   slideMinSpeed: 6
+  slideSpeedCap: 18
+  slideSteerRate: 180
   flySpeed: 14
   flySprintMultiplier: 3
   standEyeHeight: 1.65

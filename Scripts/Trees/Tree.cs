@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/Trees/Tree.cs
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Scattering;
 
 namespace VoxelEngine.Trees
 {
@@ -17,6 +18,8 @@ namespace VoxelEngine.Trees
         public ToolType preferredTool = ToolType.Axe;
 
         [HideInInspector] public int hp;
+        [HideInInspector] public string scatterPersistencePath;
+        [HideInInspector] public string stableScatterIdentity;
 
         private void Awake()
         {
@@ -40,6 +43,7 @@ namespace VoxelEngine.Trees
             hp -= dealt;
             if (hp <= 0)
             {
+                TreeHarvestPersistence.RecordHarvested(scatterPersistencePath, stableScatterIdentity);
                 int yield = Random.Range(minLogs, maxLogs + 1);
                 if (logItem != null)
                 {

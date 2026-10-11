@@ -30,6 +30,7 @@ namespace VoxelEngine.Crafting
             [NonSerialized] public List<ItemStack> pendingRefunds;
             [NonSerialized] public float capacityRetryTimer;
             [NonSerialized] public bool destinationErrorLogged;
+            [NonSerialized] public bool waitingForSpaceNotified;
 
             public bool IsWaitingForSpace => completionReached && !refundPending
                 && pendingOutput != null && !pendingOutput.IsEmpty;
@@ -39,6 +40,7 @@ namespace VoxelEngine.Crafting
         // Runtime-only queue: destination is an interface and intentionally does not participate
         // in Unity serialization. Craft state is owned by the live station/session.
         [NonSerialized] public List<Entry> entries = new();
+        /// <summary>Raised when queue structure or a discrete status changes, not for timer progress.</summary>
         public event Action OnChanged;
 
         public Entry Head => entries.Count > 0 ? entries[0] : null;
@@ -71,31 +73,18 @@ namespace VoxelEngine.Crafting
                     entries.RemoveAt(i);
                     removedRefund = true;
                 }
-                else if (Time.frameCount % 10 == 0)
-                {
-                    OnChanged?.Invoke();
-                }
             }
             if (removedRefund) OnChanged?.Invoke();
             if (entries.Count == 0) return;
 
             var head = entries[0];
             if (head.refundPending) return;
-            if (head.recipe == null)
-            {
-                if (Time.frameCount % 10 == 0) OnChanged?.Invoke();
-                return;
-            }
+            if (head.recipe == null) return;
 
             if (!head.completionReached)
             {
                 head.progressSeconds += Time.deltaTime;
-                if (head.progressSeconds < head.recipe.craftSeconds)
-                {
-                    // Only fire OnChanged occasionally so UI doesn't rebuild every frame.
-                    if (Time.frameCount % 10 == 0) OnChanged?.Invoke();
-                    return;
-                }
+                if (head.progressSeconds < head.recipe.craftSeconds) return;
 
                 head.progressSeconds = Mathf.Max(head.progressSeconds, head.recipe.craftSeconds);
                 head.completionReached = true;
@@ -114,11 +103,7 @@ namespace VoxelEngine.Crafting
             }
 
             head.capacityRetryTimer -= Time.deltaTime;
-            if (head.capacityRetryTimer > 0f)
-            {
-                if (Time.frameCount % 10 == 0) OnChanged?.Invoke();
-                return;
-            }
+            if (head.capacityRetryTimer > 0f) return;
 
             head.capacityRetryTimer = CapacityRetrySeconds;
             head.pendingOutput = TryInsertRetainingRemainder(head, head.pendingOutput);
@@ -127,8 +112,9 @@ namespace VoxelEngine.Crafting
                 entries.RemoveAt(0);
                 OnChanged?.Invoke();
             }
-            else if (Time.frameCount % 10 == 0)
+            else if (!head.waitingForSpaceNotified)
             {
+                head.waitingForSpaceNotified = true;
                 OnChanged?.Invoke();
             }
         }

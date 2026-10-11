@@ -26,6 +26,21 @@ namespace VoxelEngine.Building.Tiered
                 gameObject.AddComponent<BoxCollider>();
         }
 
+        /// <summary>Restore hit points with the tier's original maximum as the cap.</summary>
+        public int Repair(int amount)
+        {
+            if (amount <= 0 || definition == null || hp <= 0) return 0;
+            int maxHp = Mathf.Max(0, definition.GetStats(tier).hp);
+            if (maxHp <= 0) return 0;
+            int previousHp = hp;
+            hp = Mathf.Min(maxHp, hp + amount);
+            int repaired = hp - previousHp;
+            if (repaired <= 0) return 0;
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, 1f - Mathf.Clamp01(hp / (float)maxHp));
+            VoxelEngine.Networking.BuildingSync.AnnounceDamaged(definition.family, transform.position, hp);
+            return repaired;
+        }
+
         /// <summary>Apply damage from a tool. Returns true if destroyed.</summary>
         public bool Damage(int amount, int toolTier, Inventory recipient)
         {

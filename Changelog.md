@@ -1,9 +1,44 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.13.1-dev`
+**Current Version:** `17.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.15.0-dev] Fix Science-Pack Access, Smelting Unlocks, and Ore Generation
+
+**Type:** MINOR — save-compatible crafting, research, survival-impact, and procedural ore-generation fixes. No save schema changed.
+
+**GitHub title:** `[17.15.0-dev] Fix science-pack access, Smelting unlocks and ore generation`
+
+#### Fixed and changed
+- A placed Research Lab now counts as Assembler-tier for nearby and explicitly opened inventory crafting, exposing all science-pack recipes through the normal player crafting surface while retaining the player's inventory as the ingredient source.
+- Completing Smelting immediately refreshes open crafting filters. The canonical `Recipe_Furnace` is recognized as unlocked by an existing `res_smelting` rank even if an old ResearchTree points to a stale recipe reference.
+- Added a focused, non-destructive `Tools > Voxel Engine > Voxel Engine Setup` repair for the Smelting-to-Furnace link. It resolves the canonical recipe by asset path, preserves existing research costs and Smelting duration, and does not rerun unrelated progression authoring.
+- World/wall impact damage now begins only above 30 m/s. Downward fall damage remains on its separate impact-speed curve.
+- Ore-presence noise now uses a bounded hash-derived seed offset instead of adding the raw large planet seed to float coordinates; overlapping ore fields choose the strongest qualifying local deposit instead of always favoring the first authored layer. No authored Earth ore depths, scales, or thresholds were changed. SphereWorld logs resolved deposit layers per body to make missing body configuration visible.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.15.0-dev`, MINOR over `17.14.0-dev`. No save schema changed; Setup repair preserves authored research costs and unrelated progression content.
+- Static source review only. Unity compilation, Setup execution, and Play Mode remain unverified; `.git` metadata is absent, so the active branch could not be confirmed.
+
+### [17.14.0-dev] Persist Tree Felling, Add Hammer Repair, Stabilize Crafting
+
+**Type:** MINOR — persistent world behavior and player-facing repair/crafting fixes. The tree record is a seed-scoped sidecar; no existing save schema changes.
+
+**GitHub title:** `[17.14.0-dev] Persist tree felling, add hammer repair and stabilize crafting`
+
+#### Fixed and changed
+- Deterministic scatter trees now receive stable surface-voxel identities. Felling records the identity under the persistent world/body folder, and later scatter passes skip that tree without changing its biome data, RNG choices, or voxel terrain.
+- The hammer wheel's centre keeps left-click for upgrade mode and adds right-click for repair mode. Repair applies to tiered building pieces and ordinary static BlockItems; grid/ship blocks remain Welder-only. Repair restores the missing HP and charges the missing-health fraction of the item's original construction materials, rounded up to whole items; tiered costs include placement plus the upgrade steps paid to reach the current tier.
+- Ordinary inventory crafting now uses one player-owned FIFO queue, preventing nearby stations from silently splitting recipes across parallel queues. Explicitly opened Crafting Benches and Assemblers still use their clicked station queue; recipe availability and storage sourcing are unchanged. Craft amount state is now per recipe.
+- Queue progress now updates in place at 20 Hz instead of rebuilding the crafting panel on timer ticks. Queue change notifications are reserved for membership/discrete status changes.
+- WorldInspectionHud rebuilds itself when the UIDocument root or its child elements are detached, and falls back to the active player's interaction camera when `Camera.main` is unavailable.
+- The fall-damage Setup repair now loads only Assets prefabs whose names contain `Player`, and edits only a root `PlayerController`. Its warning explains the scan scope, the scene-only default player, and how to handle a custom prefab; unrelated prefabs such as CargoLaunchPad are not loaded or saved by this repair.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.14.0-dev`, MINOR over `17.13.1-dev`. The harvested-tree sidecar is additive; no existing save schema changed.
+- Static source checks only. Unity compilation, Setup execution, and Play Mode verification remain unverified; `.git` metadata is absent, so the active branch could not be confirmed.
 
 ### [17.13.1-dev] Restore Voxel Mining Drops
 

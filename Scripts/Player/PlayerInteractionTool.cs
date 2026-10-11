@@ -648,6 +648,15 @@ namespace VoxelEngine.Player
                         HandleWeld(gridBlock, welder, hit);
                         return;
                     }
+                    if (!grindStack.IsEmpty && grindStack.item is Hammer
+                        && HammerBuildWheel.Instance != null && HammerBuildWheel.Instance.IsRepairMode)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Use a Welder",
+                            "Hammer repair is for tiered building pieces and static BlockItems. Ship/grid blocks use the Welder.",
+                            null, new Color(0.20f, 0.85f, 0.75f));
+                        _nextHit = Time.time + 0.5f;
+                        return;
+                    }
                     if (!grindStack.IsEmpty && grindStack.item is VoxelEngine.GridSystem.GrinderTool grinder)
                     {
                         HandleGrind(gridBlock, grinder, hit);
@@ -1955,6 +1964,25 @@ namespace VoxelEngine.Player
         private void BreakPlaced(PlacedBlock placed, RaycastHit hit)
         {
             var stack = inventory.ActiveStack;
+            var hammerWheel = HammerBuildWheel.Instance;
+            if (!stack.IsEmpty && stack.item is Hammer && hammerWheel != null && hammerWheel.IsRepairMode)
+            {
+                if (BuildSystemV2.Instance != null && BuildSystemV2.Instance.TryRepair(placed))
+                {
+                    _feedback?.Trigger(hit.point, hit.normal, new Color(0.20f, 0.85f, 0.75f));
+                    ConsumeDurability(stack);
+                }
+                else
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Repair unavailable",
+                        "The target must be a damaged static BlockItem and you need its proportional repair materials.",
+                        null, new Color(0.95f, 0.35f, 0.30f));
+                }
+                float hammerRate = stack.item is ToolItem repairTool ? repairTool.fireRate : handFireRate;
+                _nextHit = Time.time + 1f / Mathf.Max(0.1f, hammerRate);
+                return;
+            }
+
             int damage = (int)handStrength;
             float rate = handFireRate;
             int  tier  = handTier;
@@ -1974,10 +2002,31 @@ namespace VoxelEngine.Player
         private void HitTieredBlock(PlacedTieredBlock tiered, RaycastHit hit)
         {
             var stack = inventory.ActiveStack;
-            // Hammer? -> upgrade.
             if (!stack.IsEmpty && stack.item is Hammer)
             {
-                if (BuildSystemV2.Instance != null && BuildSystemV2.Instance.TryUpgrade(tiered))
+                var wheel = HammerBuildWheel.Instance;
+                if (wheel != null && wheel.IsRepairMode)
+                {
+                    if (BuildSystemV2.Instance != null && BuildSystemV2.Instance.TryRepair(tiered))
+                    {
+                        _feedback?.Trigger(hit.point, hit.normal, new Color(0.20f, 0.85f, 0.75f));
+                        ConsumeDurability(stack);
+                    }
+                    else
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Repair unavailable",
+                            "This piece must be damaged and you need its proportional repair materials.",
+                            null, new Color(0.95f, 0.35f, 0.30f));
+                    }
+                    float repairRate = stack.item is ToolItem repairTool ? repairTool.fireRate : handFireRate;
+                    _nextHit = Time.time + 1f / Mathf.Max(0.1f, repairRate);
+                    return;
+                }
+
+                // Left-clicking the wheel centre explicitly arms upgrade mode.
+                // Preserve the previous direct-upgrade fallback if the wheel is absent.
+                if ((wheel == null || wheel.IsUpgradeMode)
+                    && BuildSystemV2.Instance != null && BuildSystemV2.Instance.TryUpgrade(tiered))
                 {
                     _feedback?.Trigger(hit.point, hit.normal, new Color(0.95f, 0.85f, 0.20f));
                     ConsumeDurability(stack);

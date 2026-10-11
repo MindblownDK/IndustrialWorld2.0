@@ -428,17 +428,19 @@ namespace VoxelEngine.Cosmos
                 // ── Ore veins ──
                 if (depth >= biome.surfaceDepth + 1)
                 {
+                    // Do not let the first authored deposit (Iron on Earth) permanently
+                    // win where two vein fields overlap. Keep the strongest local pocket;
+                    // ties remain deterministic in authored layer order.
+                    float strongestOre = 0.5f;
                     for (int i = 0; i < ores.Length; i++)
                     {
                         var ore = ores[i];
                         if (depth < ore.minDepth || depth > ore.maxDepth) continue;
                         float rich = VeinNoise.DepositRichness(
                             worldPos, 1f / ore.scale, ore.threshold, 1f, (uint)(prm.seed + i * 31));
-                        if (rich > 0.5f)
-                        {
-                            material = (byte)ore.material;
-                            break;
-                        }
+                        if (rich <= strongestOre) continue;
+                        strongestOre = rich;
+                        material = (byte)ore.material;
                     }
                 }
 
