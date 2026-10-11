@@ -1,9 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.15.1-dev`
+**Current Version:** `17.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.16.0-dev] Rebuild Recipe Registry Links Without Reauthoring
+
+**Type:** MINOR — append-only recipe registration recovery and research-link audit. No save schema changed.
+
+**GitHub title:** `[17.16.0-dev] Rebuild recipe registry links without reauthoring`
+
+#### Fixed and changed
+- Added **Link missing crafting recipes into RecipeRegistry (append-only)** to Voxel Engine Setup. It appends complete recipe assets to the canonical registry, preserving existing links and all recipe fields.
+- ResearchNode recipe references are used to disambiguate same-name assets and are never rewritten. Invalid, retired, build-token, duplicate science-pack, and ambiguous same-name candidates are reported rather than guessed or silently registered.
+- The linker reports research-gated recipes with no ResearchNode reference for review. It does not invent research assignments, change recipe costs, remove registry entries, or delete assets.
+- If the canonical registry asset is missing, Setup creates it only when no conflicting or alternate registry asset exists.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.16.0-dev`, MINOR over `17.15.1-dev`. No save schema changed.
+- Static source review only. Unity compilation, Setup execution, and Recipe Graph Validator results remain unverified; `.git` metadata is absent, so the active branch could not be confirmed.
 
 ### [17.15.1-dev] Restore Boss Components and Guard Quasar Jet Fade
 
