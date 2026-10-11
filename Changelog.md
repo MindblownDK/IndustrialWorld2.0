@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.15.0-dev`
+**Current Version:** `17.15.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.15.1-dev] Restore Boss Components and Guard Quasar Jet Fade
+
+**Type:** PATCH — editor-serialization and shader-domain warning fix. No save schema changed.
+
+**GitHub title:** `[17.15.1-dev] Restore boss components and guard Quasar Jet fade`
+
+#### Fixed and changed
+- Moved `BossEncounter` into its own same-named MonoBehaviour script and assigned it the prior script GUID. Existing boss prefab references can resolve to the component again, retaining its serialized relic, tier, multiplier, and item fields; relic enums and ledger remain in `BossRelic.cs`.
+- The QuasarJet shader clamps the length-fade base to the valid range before `pow`, avoiding the D3D11 negative-base warning if interpolated UVs extend outside 0–1.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.15.1-dev`, PATCH over `17.15.0-dev`. No save schema changed.
+- Static source and GUID checks only. Unity compilation, prefab reimport, Setup execution, and Play Mode remain unverified; `.git` metadata is absent, so the active branch could not be confirmed.
 
 ### [17.15.0-dev] Fix Science-Pack Access, Smelting Unlocks, and Ore Generation
 

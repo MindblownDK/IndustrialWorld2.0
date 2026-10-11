@@ -129,7 +129,7 @@ Shader "VoxelEngine/QuasarJet"
                 knots = smoothstep(0.2, 1.0, knots) * _KnotIntensity;
 
                 // ── Length fade: brightest near the core, fading to nothing ──
-                float lengthFade = pow(1.0 - along, 1.5);
+                float lengthFade = pow(saturate(1.0 - along), 1.5);
 
                 // ── Width expansion: jet gets wider toward the tip ──
                 float widthExpansion = lerp(0.3, 1.0, along);

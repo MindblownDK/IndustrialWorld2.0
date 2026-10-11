@@ -5995,7 +5995,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         {
             if (inventory == null) return;
             var stack = inventory.ActiveStack;
-            bool holdingHammer = !stack.IsEmpty && stack.item is Hammer;
+            bool holdingHammer = !stack.IsEmpty && stack.item is VoxelEngine.Building.Tiered.Hammer;
             var hammerWheel = VoxelEngine.Building.Tiered.HammerBuildWheel.Instance;
             bool upgradeMode = holdingHammer && hammerWheel != null && hammerWheel.IsUpgradeMode;
             bool repairMode = holdingHammer && hammerWheel != null && hammerWheel.IsRepairMode;

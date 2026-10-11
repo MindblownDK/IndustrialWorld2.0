@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.15.0-dev`
-**Roadmap Version:** `17.15.0-dev`
+**Current Version:** `17.15.1-dev`
+**Roadmap Version:** `17.15.1-dev`
 **Date:** 2026-10-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.15.1-dev - Restore Boss Scripts and Guard Shader Math
+- `BossEncounter` is a same-named MonoBehaviour script using the former component GUID, allowing boss prefab references to resolve without losing saved fields
+- QuasarJet length fade clamps its `pow` input to the valid range
+- Unity reimport and boss prefab verification remain pending
+
 ### 17.15.0-dev - Fix Lab Crafting, Smelting Unlocks, and Ore Sampling
 - Research Labs provide Assembler-tier access to all science-pack recipes in nearby and opened inventory crafting
 - Smelting ranks unlock the canonical Furnace recipe, refresh active recipe filters, and have a focused non-destructive Setup repair
@@ -48,11 +53,6 @@
 - Tiered-deck BlockItem placement validates authored collider footprints; BuildHammer snapping and dedicated placement paths remain unchanged
 - Tier 1 Science Pack I is timed at 5 seconds; inventory crafting queues it, and `Recipe_Furnace` is gated by instant inventory Smelting research
 - Ordinary-bed kind and research ranks persist; fall damage and Steak healing use the requested balance; Unity acceptance remains pending
-
-### 17.12.0-dev - Add Shared Interior Placement Lattice
-- Ordinary stationary BlockItems use a fixed 1 m lattice from the shared world/body construction frame across tiered deck pieces
-- A visible deck overlay matches those world/body-aligned placement coordinates
-- Dedicated and dynamic placement paths are excluded; BuildHammer snapping is unchanged; Unity acceptance remains pending
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,6 +82,7 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Boss prefab serialization and QuasarJet shader warning (17.15.1-dev):** confirm Unity reimports the former `BossEncounter` GUID onto the correctly named script, all four boss prefabs retain their serialized relic settings without missing-script warnings, and the D3D11 `pow` warning is gone.
 - **Science-pack access, Smelting unlock, ore generation, and impact tuning (17.15.0-dev):** confirm placed/opened Research Labs expose all science-pack recipes through ordinary inventory crafting; completed Smelting unlocks the canonical Furnace recipe immediately and after reload; Earth generates its configured non-Iron minerals; wall impacts below 30 m/s do no damage while downward fall damage stays separate. The focused Setup repair's asset-link correctness and preservation of research costs/duration remain unverified in Unity.
 - **Replacement station source art (17.9.0-dev):** runtime placement anchors enabled renderers and reports missing geometry; a replacement prefab with no enabled Renderer still needs its intended model assigned and play-mode verified.
 - **Static deck/wall placement (17.13.0-dev):** ordinary stationary BlockItems use the visible shared 1 m construction-frame lattice and collider-footprint placement validation; foundation-edge, corner, wall-contact, Crafting Bench/Assembler preview, and station-floor acceptance is pending. BuildHammer snapping remains untouched.
