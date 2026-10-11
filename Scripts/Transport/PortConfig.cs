@@ -81,6 +81,27 @@ namespace VoxelEngine.Transport
             };
         }
 
+        /// <summary>
+        /// 17.19.0-dev: the same face normal in the OWNER'S LOCAL space. The world
+        /// version above is right for snap points and matching, but indicator
+        /// transforms are children of this block - feeding them world normals made
+        /// the squares sit tilted and off-face on every block that is surface-
+        /// aligned on a spherical world (world axes != local axes there).
+        /// </summary>
+        public static Vector3 LocalFaceNormal(CubeFace face)
+        {
+            return face switch
+            {
+                CubeFace.PosX => Vector3.right,
+                CubeFace.NegX => Vector3.left,
+                CubeFace.PosY => Vector3.up,
+                CubeFace.NegY => Vector3.down,
+                CubeFace.PosZ => Vector3.forward,
+                CubeFace.NegZ => Vector3.back,
+                _ => Vector3.zero
+            };
+        }
+
         /// <summary>Get the world-space snap point for a face (surface center).</summary>
         public Vector3 FaceWorldPoint(CubeFace face)
         {
@@ -324,8 +345,20 @@ namespace VoxelEngine.Transport
         {
             var go = new GameObject($"PortIndicator_{face}");
             go.transform.SetParent(transform);
-            go.transform.localPosition = FaceNormal(face) * 0.51f;
-            go.transform.localRotation = Quaternion.LookRotation(-FaceNormal(face));
+            // 17.19.0-dev: build the indicator entirely in local space. The old
+            // code fed WORLD normals (transform.right/up/forward) into
+            // localPosition/localRotation - on an axis-aligned block that happens
+            // to match, but on a spherical world every placed block is tilted to
+            // the surface, so the squares came out rotated and floating off the
+            // face (Thomas's tilted chest ports). Local normals are exact in
+            // every orientation.
+            Vector3 localNormal = LocalFaceNormal(face);
+            go.transform.localPosition = localNormal * 0.51f;
+            // LookRotation needs a non-degenerate up hint: for the top/bottom
+            // faces the default up is parallel to the forward, so aim the quad's
+            // "up" along local forward there; side faces keep local up.
+            Vector3 upHint = Mathf.Abs(localNormal.y) > 0.5f ? Vector3.forward : Vector3.up;
+            go.transform.localRotation = Quaternion.LookRotation(-localNormal, upHint);
             go.layer = gameObject.layer;
 
             // Create the square indicator mesh

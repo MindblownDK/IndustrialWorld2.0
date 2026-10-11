@@ -183,6 +183,10 @@ namespace VoxelEngine.Weather
             if (_clouds == null) _clouds = gameObject.AddComponent<WeatherClouds>();
             _seaState = GetComponent<WeatherSeaState>();
             if (_seaState == null) _seaState = gameObject.AddComponent<WeatherSeaState>();
+            // 17.20.0-dev: subtle surface wind lines ride the same camera-follow rig
+            // (Ctrl+B toggles; created if missing, reused if the setup pre-added one).
+            if (GetComponent<VoxelEngine.FX.WindLinesVisuals>() == null)
+                gameObject.AddComponent<VoxelEngine.FX.WindLinesVisuals>();
 
             _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
         }

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.17.0-dev`
-**Roadmap Version:** `17.17.0-dev`
+**Current Version:** `17.18.0-dev`
+**Roadmap Version:** `17.18.0-dev`
 **Date:** 2026-10-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,30 +29,34 @@
 
 ## 0. Recently Done
 
-### 17.17.0-dev - Unify UI Scaling Into One Constant-Size Law
-- `UiScaleSystem` owns every panel: height-anchored `clamp(Screen.height / 1080, 0.667, 2.0)` written through ConstantPixelSize, so the layout area is 1080 design units tall on any display and aspect ratio takes no part
-- The former Shrink law (2.667x scale and a 1920x540 cropped layout area on a 49 inch 5120x1440) and the separate 1536x864 menu law are gone; screen-to-panel conversions in the bomb countdown, grid inspector worst-block tag, radial wheel fit and confirm wheel read the one law
-- Settings - Interface gains Auto / Small / Normal / Large / Custom with a live readout; Setup Step 3 authors neutral 1.00x values and a non-destructive repair re-authors every PanelSettings asset
+### 17.20.0-dev - Surface Wind Lines on Ctrl+B, Plus a Frame-Time Cleanup Pass
+- Subtle Astroneer-style streaks drift through the air just above the ground, reading the game's own `WindField` projected on the surface tangent and gated by atmosphere sampling - no air, no lines; density, rate and streak length all scale with live wind, faint at a breeze, long and fast in a storm
+- One velocity-stretched particle system on the weather follow rig (self-healed like every weather subsystem, zero wiring, zero per-frame allocations); Ctrl+B toggles with a toast, the key half rebinds in Settings - Keybinds as "Ctrl + B", the preference persists and mirrors into a Settings - Display row; plain B still opens the build wheel - the wheel ignores its open edge while Ctrl is held
+- Perf pass after "laggy and chunky": wireless power transmitters stop scanning the whole scene and allocating every frame (staggered 2 Hz scans into a reused list, per-frame delivery semantics preserved); the per-frame all-chunk collider-window sweep with native mesh queries throttles to 5 Hz inside its 0.85-chunk margin; the 3-second SphereWorld diagnostics (double chunk walk + voxel sampling + stack-trace-carrying log) and the 10-second weather heartbeat become editor/dev-only
+- A full static audit of every Update/LateUpdate/FixedUpdate body verified the streaming, meshing, scatter, pollution, spawner, hostile-sync and audio paths are already jobified, budgeted or throttled; remaining chunky candidates (mesh-upload spikes, scatter bursts, GPU readback) need a live profiler and a report of exactly when they bite
 
-### 17.16.0-dev - Link Recipe Registry and Audit Research References
-- Voxel Engine Setup appends complete, unambiguous crafting recipe assets to the canonical RecipeRegistry without changing recipe values or existing links
-- Existing ResearchNode recipe references are preserved and used to select referenced assets; retired/build-token/science duplicates and ambiguous copies are reported instead of guessed
-- Research-gated recipes with no node reference are surfaced for review; Setup does not invent research mappings; Unity acceptance remains pending
+### 17.19.0-dev - Quarry on Spheres, Flat Ports, True Pivots, Telegraphed Monsters
+- The quarry is rebuilt around the block's surface frame (local right/up/forward from the placed rotation): the area, tape, frame, drill and preview lie flat on any world, per-column ground probes follow undulation, cells resolve local-to-world-to-voxel so the pit descends radially; flat worlds behave identically and the save record is unchanged - a reloaded pit skips its empty cells and resumes at the hole floor
+- Placement ignores scatter colliders (a tree no longer vetoes a quarry or any block), the committed footprint destroys the scatter inside it, and the quarry clears its whole mining area at startup and on every range resize - cleared trees record their stumps through the existing harvest persistence, so they stay down across save/load
+- Chest port indicators are constructed in the block's local space (local face normal plus local up-hint) instead of world-space math, so the connector wedges hug their faces at every orientation; the quarry upgrade-install null crash on the success path is fixed
+- New opt-in `PlacementPivotAnchor` marker: root pivot IS the block position, no lift, no footprint re-centering - remade prefabs authored with their model bottom at local Y = 0 land exactly where the ghost shows; unmarked prefabs keep the old convention
+- New `EnemyRigAnimator`: procedural walk/run cycles, diagonal gaits, wing beats, tail waves, idle life and jaw panting for all seven hostile rigs, driven by position-delta speed so host enemies and guest replicas animate from one component; every attack now telegraphs - ghoul 0.45 s bite windup, basilisk 0.4 s bite and 0.6 s gaze flare (cone re-checked at release, plants itself while rearing), ifrit 0.5 s fireball and 0.8 s firewall charge (target locked at flare start = a real dodge), manticore 0.55 s tail-rear volley and 0.4 s claws, karkadann pawing windup played on the body, roc 0.7 s wing heave, griffin and roc talon snaps on dive contact - replicated to guests as two additive cast bytes, cooldown pacing unchanged
 
-### 17.15.1-dev - Restore Boss Scripts and Guard Shader Math
-- `BossEncounter` is a same-named MonoBehaviour script using the former component GUID, allowing boss prefab references to resolve without losing saved fields
-- QuasarJet length fade clamps its `pow` input to the valid range
-- Unity reimport and boss prefab verification remain pending
+### 17.18.0-dev - Give Pollution a Memory: Threat Tiers, Waves, Elites, Siege Brute
+- The sidecar's slow climate-load channel (always emitted, always persisted, never read) becomes the pollution history: `SampleClimate01` per position and `ClimateBurdenFor` per body feed the new industrial threat tiers
+- Tiers from live readings plus the 17.17.2 recruitment heat: quiet, scouts, packs, organized wave (residual and pressure both at 0.30+, own 3-minute cooldown), siege (0.55/0.45+, 5-minute cooldown); the ecological alive-cap still binds every event
+- Waves are 4-6 ghouls led by an elite (2.5x health, rusty tint, extra loot) with flank ambushers on logistics; the siege brute (6x health, 1.9x scale, ash tint) walks past the player to dismantle machines and exposed logistics with a double-damage bite - both are the existing ghoul rig promoted at spawn, no new prefab
+- The hostile spawn broadcast gains an additive variant byte; the host re-announces promoted ghouls immediately so guest replicas get scaled max health and tier visuals without waiting for the self-heal pass
 
-### 17.15.0-dev - Fix Lab Crafting, Smelting Unlocks, and Ore Sampling
-- Research Labs provide Assembler-tier access to all science-pack recipes in nearby and opened inventory crafting
-- Smelting ranks unlock the canonical Furnace recipe, refresh active recipe filters, and have a focused non-destructive Setup repair
-- Planet ore fields use bounded seed offsets and strongest-local-deposit selection; wall-impact damage starts above 30 m/s; Unity acceptance remains pending
+### 17.17.2-dev - Keep Felled Trees Felled, Craft From Open Containers, Calm the Ghoul Response
+- Any gameplay death of a scatter tree now records its stump in the existing per-world harvest store; streaming deaths (pool return, repopulate, world dispose, scene unload) are stamped or guarded and never record, so trees destroyed outside the felling path no longer regrow on load
+- Inventory crafting draws from inventory plus any open container panel (chest, drawer, loot bag, pen, pad, ruin cache) plus the storage network through a new `CompositeItemSource`; consumption draws inventory first, then the open panel, then the network; results still inventory-only
+- Ghoul response rebalanced code-side: hostile multiplier stays at exactly 1 until pressure exceeds 0.18 (deadzone plus smoothstep, unchanged 2.15x ceiling), and organized packs, ambushes and raids need about four minutes of sustained industrial activity (recruitment heat, ninety-second bleed-off); lone scouts and all authored scene values unchanged
 
-### 17.14.0-dev - Persist Trees, Add Hammer Repair, Stabilize HUD and Crafting
-- Harvested deterministic scatter trees are recorded per persistent world/body; Hammer Repair covers tiered pieces and ordinary static BlockItems, while grid repairs remain Welder-only
-- Inventory crafting uses one FIFO queue unless a Bench/Assembler is explicitly open; quantities are per recipe and progress UI updates in place
-- Inspection HUD remounts after UI-root changes; Setup's fall-damage repair loads only player-named prefabs with a root PlayerController; Unity acceptance remains pending
+### 17.17.1-dev - Stop Save-Load Losses and Clip-Free Side Panels
+- Tiered records (foundations, floors, ceilings, walls, windows, doors, gates, railings, pillars) that cannot resolve at restore are logged and carried verbatim into every future save instead of being dropped silently; a 60 s retry re-runs the ordinary restore paths once their assets are loaded, which is the cold-boot race behind "walls sometimes do not load" and "stationary blocks do not load"
+- The restored orbital clock is guarded: a baseline plus a two-minute watchdog re-applies the saved phase if anything rewinds the system to t = 0, saves fall back to the baseline when the registry is gone at quit, and joining clients receive the host's live clock in the handshake so the sun no longer sits somewhere new on every join
+- Crafting assembly readout 224 to 300 units and equipment console 230 to 280 units, both vertical-only scrollers with ellipsis-yielding names and header titles, so queue rows and status chips no longer clip or pan left-right
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,6 +86,8 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Threat tiers, waves, elites and the siege brute acceptance (17.18.0-dev):** confirm in Unity that a dirty district draws an announced organized wave (elite leader, flankers, logistics targets) once spawner heat and residual load qualify, that the siege brute walks past the player to dismantle machines with its double-damage bite, that elite/brute health bars and loot scale, that stopping industry bleeds the response back to ordinary scouts, and that guest replicas show the tier visuals and scaled health. Tier thresholds and cooldowns await live-play tuning.
+- **Tree persistence, open-container crafting and ghoul-curve acceptance (17.17.2-dev):** confirm in Unity that felled or otherwise destroyed trees stay absent across save-load and chunk streaming, that recipes count and consume chest/drawer/bag/pen/pad contents only while their panel is open, and that a running furnace no longer accelerates spawns or recruits packs within minutes while a heavily polluted area still escalates toward the 2.15x ceiling.
 - **RecipeRegistry recovery and research audit (17.16.0-dev):** append-only Setup results and the follow-up Recipe Graph Validator report remain unverified; confirm skipped invalid/ambiguous assets and recipes gated without a ResearchNode reference, with recipe/research tuning unchanged.
 - **Boss prefab serialization and QuasarJet shader warning (17.15.1-dev):** confirm Unity reimports the former `BossEncounter` GUID onto the correctly named script, all four boss prefabs retain their serialized relic settings without missing-script warnings, and the D3D11 `pow` warning is gone.
 - **Science-pack access, Smelting unlock, ore generation, and impact tuning (17.15.0-dev):** confirm placed/opened Research Labs expose all science-pack recipes through ordinary inventory crafting; completed Smelting unlocks the canonical Furnace recipe immediately and after reload; Earth generates its configured non-Iron minerals; wall impacts below 30 m/s do no damage while downward fall damage stays separate. The focused Setup repair's asset-link correctness and preservation of research costs/duration remain unverified in Unity.
@@ -97,7 +103,7 @@
 - **Water Pump recipe report (17.10.0-dev):** source setup authors separate Water Pump and Marine Water Pump outputs/recipes; neither was removed. Confirm whether the reported repeated UI row persists after Setup before treating it as an accidental duplicate.
 - **Advanced traversal (deferred 17.7.0-dev):** wallrunning, wall-jumps, and mantling are outside the momentum-and-slide pass.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
-- **Pollution history and higher threat tiers** (deferred 17.3.0; earlier slices 14.70.0 / 14.73.0 / 17.2.0): live bearings, capped packs, approach ambushes and exposed static logistics raids shipped. Residual-load history, organized waves, elites and siege creatures remain open.
+- **Pollution history and higher threat tiers** (deferred 17.3.0; slices 14.70.0 / 14.73.0 / 17.2.0 / 17.17.2 / 17.18.0): live bearings, capped packs, approach ambushes, exposed logistics raids, recruitment heat and the deadzoned hostile curve shipped earlier; 17.18.0-dev closed the deferred core - residual-load history is now read from the sidecar's slow climate channel, and organized waves, elite ghouls and a siege brute answer dirty districts on their own cooldowns. Remaining open: a dedicated siege-creature species with its own art (the brute is the ghoul rig promoted), player-facing residual-load readouts (API exists, no UI consumes it yet), residual effects on flora/ecology curves, and live-play tuning of tier thresholds.
 - **Auto-craft queue EDITS are host-echo, not intent-RPC** (accepted 14.43.0, narrowed 14.58.0): the simulation itself is host-only since 14.58.0, but a guest's queue/bank edit still applies locally and replicates through the seam - an edit landing in the same instant as a host convergence pass can be overwritten and needs re-doing. Cosmetic-rare; full intent conversion only if live play ever surfaces it.
 - **Storage security enforcement: host-validated since 14.57.0.** Guest container overwrites into guarded networks are checked against the Security Block rules on the host and denied writes are converged away; the per-machine UI gates remain as UX. The machine sims themselves are host-only since 14.58.0 (SimulationIsRemote gate).
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.

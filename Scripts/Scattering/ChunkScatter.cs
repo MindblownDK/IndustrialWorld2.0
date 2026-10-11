@@ -35,10 +35,35 @@ namespace VoxelEngine.Scattering
         private static readonly Dictionary<GameObject, bool> s_buildingPrefabCache = new();
         private static readonly Collider[] s_overlapBuffer = new Collider[32];
 
-        /// <summary>Release cached runtime reservations when a streamed world is destroyed.</summary>
+        // ── 17.17.2-dev: scatter teardown guards ─────────────────────────────
+        // A tree that dies in gameplay is a harvest and must stay dead; a tree that
+        // dies because its chunk streamed out or its world tore down is not. Object
+        // destruction is deferred to the end of the frame, so a boolean around
+        // Destroy() cannot work - the holders are STAMPED instead, and the world
+        // teardown flag covers the whole-planet dispose that destroys chunk roots.
+        private static bool s_worldTeardown;
+
+        /// <summary>True while a sphere world is disposing its chunks; tree deaths
+        /// in that window are streaming, not harvesting.</summary>
+        public static bool WorldTeardownActive => s_worldTeardown;
+
+        /// <summary>Release cached runtime reservations when a streamed world is
+        /// destroyed, and mark the window in which scatter deaths are streaming.</summary>
         public static void ForgetWorld(IChunkScatterWorld world)
         {
             if (world != null) s_reservations.Remove(world);
+            s_worldTeardown = true;
+        }
+
+        /// <summary>Stamp every tree under a scatter holder that is about to be
+        /// destroyed for streaming reasons, so its OnDestroy never records a harvest.
+        /// A fresh world's first scatter pass clears the teardown window again.</summary>
+        public static void MarkScatterTeardown(Transform holder)
+        {
+            if (holder == null) return;
+            var trees = holder.GetComponentsInChildren<VoxelEngine.Trees.Tree>(true);
+            for (int i = 0; i < trees.Length; i++)
+                if (trees[i] != null) trees[i].MarkStreamingTeardown();
         }
 
         public static void Populate(IChunkScatterWorld world, Chunk chunk, BiomeRegistry registry, int seed)
@@ -46,12 +71,18 @@ namespace VoxelEngine.Scattering
             if (world == null || registry == null || registry.biomes == null || registry.biomes.Count == 0) return;
             if (chunk?.go == null || !chunk.isGenerated) return;
 
+            // A living world streaming chunks means the previous world's teardown
+            // window is over; tree deaths from here on are gameplay until proven
+            // otherwise by an explicit stamp.
+            s_worldTeardown = false;
+
             // Clear previously spawned scatter when a chunk is explicitly repopulated. Pool
             // returns also disable the holder, and reservations are pruned before next use.
             var existing = chunk.go.transform.Find("__scatter");
             if (existing != null)
             {
                 RemoveReservationsOwnedBy(world, existing);
+                MarkScatterTeardown(existing);
                 Object.Destroy(existing.gameObject);
             }
 

@@ -47,6 +47,13 @@ namespace VoxelEngine.Combat
         private Transform _player;
         private Vector3 _home, _wanderTarget;
         private float _nextWanderAt, _nextFireball, _nextTeleport, _nextFirewall;
+        // 17.19.0-dev: both fire spells wind up visibly - arms lifting, eyes
+        // flaring orange - before the cast lands. 0 = nothing pending.
+        private float _pendingFireball, _pendingFirewall;
+        private Vector3 _firewallTarget;
+        private EnemyRigAnimator _anim;
+        public const float FireballWindupSeconds = 0.5f;
+        public const float FirewallWindupSeconds = 0.8f;
 
         protected override void Awake()
         {
@@ -64,6 +71,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: animation rig
         }
 
         private void FixedUpdate()
@@ -88,9 +97,26 @@ namespace VoxelEngine.Combat
                 else if (distP < castRange * 0.6f){ moveDir = -toP; spd = chaseSpeed * 0.7f; }   // kite back
                 else                              { moveDir = toP;  spd = 0f; }                  // hold + cast
 
-                if (Time.time >= _nextFireball)  CastFireballs(up);
+                if (_pendingFireball > 0f && Time.time >= _pendingFireball)
+                { _pendingFireball = 0f; _anim?.Strike(); CastFireballs(up); }
+                else if (_pendingFireball <= 0f && Time.time >= _nextFireball)
+                {
+                    _nextFireball = Time.time + fireballCooldown;
+                    _pendingFireball = Time.time + FireballWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Cast, FireballWindupSeconds);
+                }
                 if (Time.time >= _nextTeleport)  Teleport(up);
-                if (Time.time >= _nextFirewall)  CastFireWall(up);
+                if (_pendingFirewall > 0f && Time.time >= _pendingFirewall)
+                { _pendingFirewall = 0f; _anim?.Strike(); CastFireWallAt(_firewallTarget, up); }
+                else if (_pendingFirewall <= 0f && Time.time >= _nextFirewall)
+                {
+                    _nextFirewall = Time.time + firewallCooldown;
+                    _pendingFirewall = Time.time + FirewallWindupSeconds;
+                    // Lock the target NOW: the flare is the cue to step out, and
+                    // the wall ignites where you were standing, not where you are.
+                    _firewallTarget = _player != null ? _player.position : pos;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Cast, FirewallWindupSeconds);
+                }
             }
             else
             {
@@ -120,7 +146,7 @@ namespace VoxelEngine.Combat
 
         private void CastFireballs(Vector3 up)
         {
-            _nextFireball = Time.time + fireballCooldown;
+            // 17.19.0-dev: the cooldown is consumed when the windup STARTS (FixedUpdate).
             if (_player == null) return;
             Vector3 from = transform.position + up * 1.3f;
             Vector3 baseDir = (_player.position + up * 1.2f) - from;
@@ -155,15 +181,16 @@ namespace VoxelEngine.Combat
                 VoxelEngine.UI.BuildFeedbackHud.Show("Ifrit", "Vanishes in smoke!", null, new Color(0.6f, 0.2f, 0.7f));
         }
 
-        private void CastFireWall(Vector3 up)
+        private void CastFireWallAt(Vector3 target, Vector3 up)
         {
-            _nextFirewall = Time.time + firewallCooldown;
-            if (_player == null) return;
-            FireWallHazard.Spawn(_player.position + up * 0.05f, up, firewallMaterial,
+            // 17.19.0-dev: cooldown consumed at windup start; the wall ignites at
+            // the position locked when the flare began, so moving during the
+            // telegraph is a real dodge.
+            FireWallHazard.Spawn(target + up * 0.05f, up, firewallMaterial,
                 firewallDuration, firewallBurnDps, firewallRadius);
             // 14.55.0 - guests draw the same wall, visual-only.
             VoxelEngine.Networking.HostileSync.AnnounceCast(this,
-                VoxelEngine.Networking.HostileSync.CastFirewall, _player.position + up * 0.05f, up);
+                VoxelEngine.Networking.HostileSync.CastFirewall, target + up * 0.05f, up);
             if (showHitFeedback)
                 VoxelEngine.UI.BuildFeedbackHud.Show("Ifrit", "Raises a wall of fire!", null, new Color(1.0f, 0.4f, 0.1f));
         }

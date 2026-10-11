@@ -99,6 +99,14 @@ namespace VoxelEngine.UI
             // ── View Distance (slider) ────────────────────────────────
             p.Add(IntSliderRow("View Distance", 2, 16, GameSettings.ViewDistance, " chunks",
                 v => GameSettings.ViewDistance = v));
+
+            p.Add(T.Divider());
+
+            // ── Wind Lines (17.20.0-dev) ──────────────────────────────
+            p.Add(ToggleRow("Wind Lines",
+                $"Subtle streaks drifting just above the ground, showing where wind blows. Ctrl+{GameSettings.GetKey(InputAction.WindLines)} toggles in game.",
+                GameSettings.WindLinesVisible,
+                on => { GameSettings.WindLinesVisible = on; rebuild?.Invoke(); }));
         }
 
         /// <summary>Camera / input feel.</summary>
@@ -765,7 +773,12 @@ namespace VoxelEngine.UI
                 lbl.style.minHeight = 22;
                 row.Add(lbl);
 
-                var btn = T.SmallButton(GameSettings.GetKey(a), null, T.AccentTeal);
+                // 17.20.0-dev: the wind-lines action is read WITH Ctrl - show the
+                // full combo so the row tells the truth; capture still rebinds the
+                // key half alone.
+                var btn = T.SmallButton(
+                    a == InputAction.WindLines ? "Ctrl + " + GameSettings.GetKey(a) : GameSettings.GetKey(a),
+                    null, T.AccentTeal);
                 btn.style.minWidth = 120;
                 btn.clickable.clicked += () =>
                 {

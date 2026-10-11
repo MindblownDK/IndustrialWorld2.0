@@ -22,24 +22,44 @@ namespace VoxelEngine.Power.Wireless
         private PowerConsumer _consumer;
         [System.NonSerialized] public float CurrentBroadcastWatts; // for HUD/tooltip
 
+        // 17.20.0-dev perf: this Update used to run FindObjectsByType over the
+        // WHOLE scene and allocate a fresh List on EVERY transmitter EVERY frame
+        // - a steady GC drip that shows up as periodic hitching. The scene scan
+        // now runs on a slow staggered clock into reused buffers; the per-frame
+        // part is only the cached-list walk and the delivery itself, which must
+        // stay per-frame because receivers zero their intake each LateUpdate.
+        private const float ScanInterval = 0.5f;
+        private readonly List<PowerReceiver> _receivers = new();
+        private readonly List<PowerReceiver> _scanBuffer = new();
+        private float _nextScan;
+
         private void Awake()
         {
             _consumer = GetComponent<PowerConsumer>();
             if (_consumer == null) _consumer = gameObject.AddComponent<PowerConsumer>();
+            _nextScan = Time.time + Random.Range(0f, ScanInterval);   // stagger co-located transmitters
         }
 
         private void Update()
         {
-            // Find all receivers in range; total their demand.
-            float demand = 0f;
-            var receivers = new List<PowerReceiver>();
-            var all = Object.FindObjectsByType<PowerReceiver>(FindObjectsInactive.Exclude);
-            foreach (var r in all)
+            if (Time.time >= _nextScan)
             {
-                if (r == null) continue;
-                float d = (r.transform.position - transform.position).sqrMagnitude;
-                if (d > range * range) continue;
-                receivers.Add(r);
+                _nextScan = Time.time + ScanInterval;
+                Rescan();
+            }
+
+            Vector3 here = transform.position;
+            float rangeSqr = range * range;
+
+            // Pass 1: total the live demand of the cached in-range receivers.
+            float demand = 0f;
+            int inRange = 0;
+            for (int i = _receivers.Count - 1; i >= 0; i--)
+            {
+                var r = _receivers[i];
+                if (r == null) { _receivers.RemoveAt(i); continue; }   // destroyed since the scan
+                if ((r.transform.position - here).sqrMagnitude > rangeSqr) continue;
+                inRange++;
                 demand += r.requestedWatts;
             }
 
@@ -49,8 +69,29 @@ namespace VoxelEngine.Power.Wireless
 
             // Distribute what we actually GET (consumer.IsPowered tells us if network served us).
             CurrentBroadcastWatts = _consumer.IsPowered ? drain * efficiency : 0f;
-            float perRecv = receivers.Count > 0 ? CurrentBroadcastWatts / receivers.Count : 0f;
-            foreach (var r in receivers) r.SetReceivedThisFrame(perRecv);
+            float perRecv = inRange > 0 ? CurrentBroadcastWatts / inRange : 0f;
+            for (int i = 0; i < _receivers.Count; i++)
+            {
+                var r = _receivers[i];
+                if (r == null) continue;
+                if ((r.transform.position - here).sqrMagnitude > rangeSqr) continue;
+                r.SetReceivedThisFrame(perRecv);
+            }
+        }
+
+        private void Rescan()
+        {
+            _receivers.Clear();
+            Vector3 here = transform.position;
+            float rangeSqr = range * range;
+            var all = Object.FindObjectsByType<PowerReceiver>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < all.Length; i++)
+            {
+                var r = all[i];
+                if (r == null) continue;
+                if ((r.transform.position - here).sqrMagnitude > rangeSqr) continue;
+                _receivers.Add(r);
+            }
         }
 
         private void OnDrawGizmosSelected()

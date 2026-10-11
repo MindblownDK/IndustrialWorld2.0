@@ -26,6 +26,11 @@ namespace VoxelEngine.Environment
         private const float SaveIntervalSeconds = 60f;
         private const float LocalAirScale = 80f;
         private const float LocalRunoffScale = 110f;
+        // 17.18.0-dev: the residual-history channel reads on a much wider scale
+        // than the live channels - climate load accumulates over hours, so one
+        // heavy source left running saturates around 0.6-0.7 and a factory
+        // district climbs past it. Threat tiers sample this, never the UI bands.
+        private const float LocalClimateScale = 1200f;
         private const float BodyAirScale = 12000f;
         private const float MinimumStoredLoad = 0.001f;
         private const float MaxCellLoad = 1000000f;
@@ -247,12 +252,24 @@ namespace VoxelEngine.Environment
         // ── Queries (safe on host, offline and snapshot-driven clients) ──────────
 
         public static float SampleAirborne01(Vector3 worldPosition)
-            => SampleLocal01(worldPosition, runoff: false);
+            => SampleLocal01(worldPosition, LoadChannel.Airborne);
 
         public static float SampleRunoff01(Vector3 worldPosition)
-            => SampleLocal01(worldPosition, runoff: true);
+            => SampleLocal01(worldPosition, LoadChannel.Runoff);
 
-        private static float SampleLocal01(Vector3 worldPosition, bool runoff)
+        /// <summary>
+        /// 17.18.0-dev: residual industrial history at a world position - the slow
+        /// climate-load channel every emission profile has always fed and the
+        /// sidecar has always persisted (half-life around four hours), read for
+        /// gameplay for the first time. Threat tiers use it to tell a factory that
+        /// has been dirtying the district for hours from a furnace lit last minute.
+        /// </summary>
+        public static float SampleClimate01(Vector3 worldPosition)
+            => SampleLocal01(worldPosition, LoadChannel.Climate);
+
+        private enum LoadChannel { Airborne, Runoff, Climate }
+
+        private static float SampleLocal01(Vector3 worldPosition, LoadChannel channel)
         {
             var service = Instance;
             if (service == null || !service.TryResolveBodyAt(worldPosition, out var body)
@@ -278,11 +295,30 @@ namespace VoxelEngine.Environment
                     * (y == 0 ? 1f - ty : ty)
                     * (z == 0 ? 1f - tz : tz);
                 if (!cells.TryGetValue(new Vector3Int(x0 + x, y0 + y, z0 + z), out var load)) continue;
-                units += Mathf.Max(0f, runoff ? load.runoff : load.airborneSmog) * weight;
+                units += ChannelUnits(load, channel) * weight;
             }
 
-            float scale = runoff ? LocalRunoffScale : LocalAirScale;
-            return 1f - Mathf.Exp(-Mathf.Max(0f, units) / scale);
+            return 1f - Mathf.Exp(-Mathf.Max(0f, units) / ChannelScale(channel));
+        }
+
+        private static float ChannelUnits(PollutionLoad load, LoadChannel channel)
+        {
+            switch (channel)
+            {
+                case LoadChannel.Runoff: return Mathf.Max(0f, load.runoff);
+                case LoadChannel.Climate: return Mathf.Max(0f, load.climateLoad);
+                default: return Mathf.Max(0f, load.airborneSmog);
+            }
+        }
+
+        private static float ChannelScale(LoadChannel channel)
+        {
+            switch (channel)
+            {
+                case LoadChannel.Runoff: return LocalRunoffScale;
+                case LoadChannel.Climate: return LocalClimateScale;
+                default: return LocalAirScale;
+            }
         }
 
         public static float AirborneBurdenFor(string bodyName)
@@ -297,6 +333,16 @@ namespace VoxelEngine.Environment
             if (Instance == null || string.IsNullOrEmpty(bodyName)) return 0f;
             return Instance._bodyRecords.TryGetValue(bodyName, out var record)
                 ? Mathf.Clamp01(record.runoffBurden01) : 0f;
+        }
+
+        /// <summary>17.18.0-dev: whole-body residual industrial load (0..1), the
+        /// slow climate channel. Reads and map UIs can surface it; threat tiers
+        /// sample the local cell value instead.</summary>
+        public static float ClimateBurdenFor(string bodyName)
+        {
+            if (Instance == null || string.IsNullOrEmpty(bodyName)) return 0f;
+            return Instance._bodyRecords.TryGetValue(bodyName, out var record)
+                ? Mathf.Clamp01(record.climateBurden01) : 0f;
         }
 
         public static PollutionTelemetry TelemetryAt(Vector3 worldPosition)

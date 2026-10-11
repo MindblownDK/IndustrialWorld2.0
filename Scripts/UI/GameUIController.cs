@@ -1995,6 +1995,13 @@ namespace VoxelEngine.UI
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
             title.style.color = LcdHudTheme.Phosphor;
+            // 17.17.1-dev: header titles yield to their status chip instead of
+            // pushing it out of the column (flex-shrink defaults to 0).
+            title.style.flexShrink = 1;
+            title.style.minWidth = 0;
+            title.style.overflow = Overflow.Hidden;
+            title.style.textOverflow = TextOverflow.Ellipsis;
+            title.style.whiteSpace = WhiteSpace.NoWrap;
             header.Add(title);
 
             // NOTE: ensure/auto-refuel is done by OpenInventory BEFORE the build —
@@ -2510,6 +2517,13 @@ namespace VoxelEngine.UI
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
             title.style.color = LcdHudTheme.Phosphor;
+            // 17.17.1-dev: header titles yield to their status chip instead of
+            // pushing it out of the column (flex-shrink defaults to 0).
+            title.style.flexShrink = 1;
+            title.style.minWidth = 0;
+            title.style.overflow = Overflow.Hidden;
+            title.style.textOverflow = TextOverflow.Ellipsis;
+            title.style.whiteSpace = WhiteSpace.NoWrap;
             header.Add(title);
 
             bool online = equipment.HasBreathingKit;
@@ -2573,6 +2587,13 @@ namespace VoxelEngine.UI
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
             title.style.color = LcdHudTheme.Phosphor;
+            // 17.17.1-dev: this is the widest module header; before the column
+            // widening + shrink rule its chip ("NO DEVICES") was clipped in half.
+            title.style.flexShrink = 1;
+            title.style.minWidth = 0;
+            title.style.overflow = Overflow.Hidden;
+            title.style.textOverflow = TextOverflow.Ellipsis;
+            title.style.whiteSpace = WhiteSpace.NoWrap;
             header.Add(title);
 
             string chipText = map != null && terminal != null ? "NAV + LINK"
@@ -3152,7 +3173,11 @@ namespace VoxelEngine.UI
             _jbPackPwr = null;
 
             var addon = new VisualElement { name = "InventoryEquipmentAddon" };
-            addon.style.width = 230;
+            // 17.17.1-dev: 230 clipped the module header chips ("NO DEVICES" read
+            // "NO DEVIC") and dragged a horizontal scrollbar into the console.
+            // 280 fits the widest header (COMMS & NAVIGATION + chip) with margin;
+            // the column still docks beside the inventory on every supported screen.
+            addon.style.width = 280;
             addon.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
             addon.style.flexShrink = 0;
             addon.style.paddingTop = 6;
@@ -3188,6 +3213,9 @@ namespace VoxelEngine.UI
             content.style.flexGrow = 1;
             content.style.minHeight = 0;
             content.style.paddingRight = 2;
+            // 17.17.1-dev: the equipment console scrolls vertically only; a wide
+            // module header must yield (ellipsis) instead of panning left/right.
+            content.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             UITheme.StyleScroller(content, LcdHudTheme.Phosphor);
             screen.Add(content);
 
@@ -3756,8 +3784,17 @@ namespace VoxelEngine.UI
 
             IItemContainer craftSource = inventory.container;
             var craftRackForSource = craftRack ?? (wirelessActive ? passiveWirelessRack : null);
-            if (craftRackForSource != null)
-                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, craftRackForSource);
+            // 17.17.2-dev: an open container panel (chest, drawer, loot bag, pen,
+            // cargo pad, ruin cache - whatever _rightContainer currently is) now
+            // contributes its contents to crafting even without a storage network.
+            // Rack and/or open layer wrap the inventory in one composite source;
+            // results still land in the inventory only.
+            var openStorage = _rightContainer != null
+                && !ReferenceEquals(_rightContainer, (IItemContainer)inventory.container)
+                    ? _rightContainer
+                    : null;
+            if (craftRackForSource != null || openStorage != null)
+                craftSource = new VoxelEngine.Storage.CompositeItemSource(inventory.container, craftRackForSource, openStorage);
 
             return (allRecipes, craftSource, maxStation);
         }

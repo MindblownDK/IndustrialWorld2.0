@@ -75,8 +75,14 @@ namespace VoxelEngine.Pooling
             c.meshCollider.sharedMesh = null;
 
             // Destroy scatter children (trees/rocks from previous use of this pooled chunk).
+            // 17.17.2-dev: stamp the trees first so their deferred OnDestroy reads as
+            // streaming teardown, never as a player harvest.
             var scatter = c.go.transform.Find("__scatter");
-            if (scatter != null) Object.Destroy(scatter.gameObject);
+            if (scatter != null)
+            {
+                VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(scatter);
+                Object.Destroy(scatter.gameObject);
+            }
 
             // Destroy water mesh child.
             if (c.waterMeshGO != null) { Object.Destroy(c.waterMeshGO); c.waterMeshGO = null; }
@@ -109,7 +115,18 @@ namespace VoxelEngine.Pooling
             if (c.fluidGrid != null) { c.fluidGrid.Dispose(); c.fluidGrid = null; }
             if (c.waterMesh != null) { UnityEngine.Object.Destroy(c.waterMesh); c.waterMesh = null; }
             if (c.mesh != null) Object.Destroy(c.mesh);
-            if (c.go   != null) Object.Destroy(c.go);
+            if (c.go != null)
+            {
+                // 17.17.2-dev: the root destroy takes the scatter holder with it.
+                // Stamp its trees first: ResetAllChunks (body transfers, deep-space
+                // suspension) runs while the world is ALIVE, so the global teardown
+                // flag alone cannot cover this path, and deferred destroys may even
+                // execute after the next body's first scatter pass cleared it.
+                var scatter = c.go.transform.Find("__scatter");
+                if (scatter != null)
+                    VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(scatter);
+                Object.Destroy(c.go);
+            }
         }
 
         private Chunk CreateNew()

@@ -182,6 +182,14 @@ namespace VoxelEngine.Menu
         /// </summary>
         public int orbitPace = OrbitPaceRealistic;
 
+        /// <summary>17.17.1-dev - the host's live orbital clock, handed to joining
+        /// clients inside the handshake's cosmos JSON so a guest's sun, planets and
+        /// moons sit at the host's phase instead of a fresh t = 0. Deliberately NOT
+        /// persisted to the cosmos sidecar: the file holds settings, while this is a
+        /// reading of a moment - a stale one on disk would be worse than none.
+        /// Single player never sets it (the world save restores the clock).</summary>
+        [System.NonSerialized] public double cosmicSeconds;
+
         /// <summary>Index of the planet to spawn on (0 = first planet in the system).</summary>
         public int spawnPlanetIndex = 0;
 
@@ -1063,6 +1071,10 @@ namespace VoxelEngine.Menu
                     seedState        = seedState,
                     spawnPlanetIndex = spawnPlanetIndex,
                     orbitPace        = orbitPace,
+                    // 17.17.1-dev: the wire form carries the LIVE orbital clock so a
+                    // joining client lands in the same sky as the host. The disk form
+                    // (SaveCosmosSidecar) deliberately omits it.
+                    cosmicSeconds    = LiveCosmicSeconds(),
                 });
             }
             catch (System.Exception ex) { Debug.LogWarning("[WorldSession] ExportCosmosJson: " + ex.Message); return ""; }
@@ -1083,6 +1095,9 @@ namespace VoxelEngine.Menu
                 seedState        = data.seedState;
                 spawnPlanetIndex = data.spawnPlanetIndex;
                 orbitPace        = data.orbitPace;
+                // 17.17.1-dev: the host's orbital phase; CosmosBootstrap applies it
+                // once the guest's registry exists. Old hosts send 0: nothing changes.
+                cosmicSeconds    = data.cosmicSeconds;
                 return seedState != null;
             }
             catch (System.Exception ex) { Debug.LogWarning("[WorldSession] ImportCosmosJson: " + ex.Message); return false; }
@@ -1095,6 +1110,18 @@ namespace VoxelEngine.Menu
             public SystemSeedState seedState;
             public int spawnPlanetIndex;
             public int orbitPace;
+            // 17.17.1-dev, additive: only the handshake JSON ever carries a non-zero
+            // reading; sidecar files on disk write and read 0 (field-initialiser
+            // default keeps old files and old builds working untouched).
+            public double cosmicSeconds;
+        }
+
+        /// <summary>The live orbital clock of this process, for the handshake.
+        /// 0 when no registry exists yet (menu, or a world that never booted).</summary>
+        private static double LiveCosmicSeconds()
+        {
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            return registry != null ? registry.SimulationSeconds : 0d;
         }
 
         public static string SanitizeWorldFolderName(string raw)

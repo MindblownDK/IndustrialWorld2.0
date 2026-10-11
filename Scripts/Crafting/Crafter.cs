@@ -247,6 +247,7 @@ namespace VoxelEngine.Crafting
             if (!matchId || string.IsNullOrEmpty(item.itemId)) return source.CountOf(item);
             if (source is ItemContainer box) return box.CountOfId(item.itemId);
             if (source is NetworkItemSource net) return net.CountOfId(item.itemId);
+            if (source is CompositeItemSource composite) return composite.CountOfId(item.itemId);
             return source.CountOf(item);
         }
 
@@ -260,6 +261,7 @@ namespace VoxelEngine.Crafting
             }
             if (source is ItemContainer box) box.RemoveId(item.itemId, count);
             else if (source is NetworkItemSource net) net.RemoveId(item.itemId, count);
+            else if (source is CompositeItemSource composite) composite.RemoveId(item.itemId, count);
             else source.Remove(item, count);
         }
     }

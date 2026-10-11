@@ -43,6 +43,7 @@ namespace VoxelEngine.Combat
         private Transform _player;
         private Vector3 _home, _wanderTarget, _chargeDir;
         private float _nextWanderAt, _stateTimer, _nextChargeAt;
+        private EnemyRigAnimator _anim;   // 17.19.0-dev: stomping gait + pawing pose
 
         protected override void Awake()
         {
@@ -60,6 +61,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: animation rig
         }
 
         // Heavy frontal armor: hits from the front are reduced (flank/rear for full damage).
@@ -112,6 +115,9 @@ namespace VoxelEngine.Combat
                     if (distP <= chargeRange && Time.time >= _nextChargeAt)
                     {
                         _state = State.Windup; _stateTimer = chargeWindup;
+                        // 17.19.0-dev: the pawing windup now plays on the body -
+                        // front hooves stamping, head lowered, eyes amber.
+                        _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Charge, chargeWindup);
                         if (showHitFeedback)
                             VoxelEngine.UI.BuildFeedbackHud.Show("Karkadann", "Paws the ground...", null, new Color(0.90f, 0.50f, 0.20f));
                         break;
@@ -126,6 +132,7 @@ namespace VoxelEngine.Combat
                     {
                         _chargeDir = toPlayer;             // lock the charge line on the player's current position
                         _state = State.Charge; _stateTimer = chargeDuration;
+                        _anim?.Strike();                   // 17.19.0-dev: the lunge snap
                     }
                     break;
 

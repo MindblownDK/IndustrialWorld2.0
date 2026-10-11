@@ -37,6 +37,7 @@ namespace VoxelEngine.Combat
         private Vector3 _home, _wanderTarget;
         private float _orbitAngle, _nextWanderAt, _nextDiveAt;
         private bool _diving;
+        private EnemyRigAnimator _anim;   // 17.19.0-dev: wing beats + talon snap
 
         protected override void Awake()
         {
@@ -56,6 +57,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: animation rig
         }
 
         private void FixedUpdate()
@@ -128,6 +131,9 @@ namespace VoxelEngine.Combat
 
         private void Attack()
         {
+            // 17.19.0-dev: the dive itself is the telegraph - the talon snap on
+            // contact makes the landing readable (and replicates to guests).
+            _anim?.Strike();
             // 14.55.0 - victim-side strike funnel, local or remote.
             VoxelEngine.Networking.HostileSync.StrikePlayer(_player, attackDamage, "Griffin");
         }

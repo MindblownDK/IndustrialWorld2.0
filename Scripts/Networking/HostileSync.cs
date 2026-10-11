@@ -55,6 +55,8 @@ namespace VoxelEngine.Networking
         public const byte CastSpikes    = 1;
         public const byte CastFirewall  = 2;
         public const byte CastGust      = 3;
+        public const byte CastTelegraph = 4;   // 17.19.0-dev: dir.x = TelegraphKind, dir.y = seconds
+        public const byte CastStrike    = 5;   // 17.19.0-dev: the attack snap after a windup
 
         // ── host side ────────────────────────────────────────────────
         private static readonly Dictionary<int, Damageable> _hostEnemies = new();
@@ -71,6 +73,7 @@ namespace VoxelEngine.Networking
             public Vector3 TargetPos;
             public Quaternion TargetRot;
             public float LastSeen;
+            public byte Variant;   // 17.18.0-dev: streamed tier, visuals only
         }
         private static readonly Dictionary<int, Replica> _replicas = new();
         private static readonly Dictionary<Damageable, int> _replicaIdOf = new();
@@ -321,6 +324,19 @@ namespace VoxelEngine.Networking
                     if (roc.dustMaterial != null) ren.sharedMaterial = roc.dustMaterial;
                     Object.Destroy(ring, 0.45f);
                     break;
+
+                // 17.19.0-dev: pose replication. The replica's animator runs on
+                // its own LateUpdate (the AI script stays disabled), driven by
+                // pump position deltas - the telegraph cast just lights the fuse.
+                case CastTelegraph:
+                    EnemyRigAnimator.Attach(rep.Enemy)?.BeginTelegraph(
+                        (EnemyRigAnimator.TelegraphKind)Mathf.Clamp(Mathf.RoundToInt(dir.x), 0, 4),
+                        dir.y);
+                    break;
+
+                case CastStrike:
+                    EnemyRigAnimator.Attach(rep.Enemy)?.BeginStrike();
+                    break;
             }
         }
 
@@ -367,7 +383,23 @@ namespace VoxelEngine.Networking
         private static void AnnounceSpawn(int id, Damageable enemy)
         {
             NetworkBootstrap.Instance.SendEnemySpawn(id, (byte)KindOf(enemy),
-                enemy.transform.position, enemy.transform.rotation, enemy.Health, enemy.maxHealth);
+                enemy.transform.position, enemy.transform.rotation, enemy.Health, enemy.maxHealth,
+                VariantByteOf(enemy));
+        }
+
+        /// <summary>17.18.0-dev: the threat-tier byte for the wire. Only ghouls
+        /// carry variants today; every other hostile streams as normal.</summary>
+        private static byte VariantByteOf(Damageable enemy)
+            => enemy is EnemyGhoul ghoul ? (byte)ghoul.Variant : (byte)0;
+
+        /// <summary>17.18.0-dev: host-side re-announce of one enemy, right now.
+        /// The spawner calls this after promoting a ghoul to elite or siege brute
+        /// so guests receive the scaled maxHealth and the variant byte immediately
+        /// instead of at the next five-second self-heal pass. No-op offline.</summary>
+        public static void ReannounceNow(Damageable enemy)
+        {
+            if (!HostOnline || enemy == null) return;
+            if (_idOf.TryGetValue(enemy, out int id)) AnnounceSpawn(id, enemy);
         }
 
         private static void PumpReplicas()
@@ -407,7 +439,7 @@ namespace VoxelEngine.Networking
         // ─────────────────── remote applies ───────────────────
 
         public static void ApplySpawned(int id, byte kind, Vector3 pos, Quaternion rot,
-            float health, float maxHealth)
+            float health, float maxHealth, byte variant = 0)
         {
             if (NetworkSession.Mode != SessionMode.Client) return;
             if (_replicas.TryGetValue(id, out var existing))
@@ -415,7 +447,21 @@ namespace VoxelEngine.Networking
                 existing.TargetPos = pos;
                 existing.TargetRot = rot;
                 existing.LastSeen = Time.time;
-                if (existing.Enemy != null) existing.Enemy.SetReplicatedHealth(health);
+                if (existing.Enemy != null)
+                {
+                    // 17.18.0-dev: the first announce can predate a promotion -
+                    // the host applies elite/siege stats a moment after Awake and
+                    // re-announces. Refresh the maximum BEFORE the health clamp so
+                    // a promoted replica never pins at its base max.
+                    existing.Enemy.maxHealth = maxHealth;
+                    existing.Enemy.SetReplicatedHealth(health);
+                    if (variant != existing.Variant)
+                    {
+                        existing.Variant = variant;
+                        if (existing.Enemy is EnemyGhoul promoted)
+                            promoted.ApplyVariantVisual((GhoulVariant)variant);
+                    }
+                }
                 return;   // re-announce of a known enemy = pose/health correction
             }
 
@@ -437,10 +483,18 @@ namespace VoxelEngine.Networking
             enemy.enabled = false;   // AI off - HostileSync moves the transform
             var rb = go.GetComponent<Rigidbody>();
             if (rb != null) rb.isKinematic = true;
+            // 17.18.0-dev: build the replica in its streamed tier - visuals only,
+            // the replica never simulates stats of its own.
+            if (variant != 0 && enemy is EnemyGhoul tiered)
+                tiered.ApplyVariantVisual((GhoulVariant)variant);
+            // 17.19.0-dev: replicas animate too - locomotion from the pump's
+            // position deltas, attacks from telegraph/strike casts.
+            EnemyRigAnimator.Attach(enemy);
 
             _replicas[id] = new Replica
             {
-                Enemy = enemy, TargetPos = pos, TargetRot = rot, LastSeen = Time.time
+                Enemy = enemy, TargetPos = pos, TargetRot = rot, LastSeen = Time.time,
+                Variant = variant
             };
             _replicaIdOf[enemy] = id;
         }

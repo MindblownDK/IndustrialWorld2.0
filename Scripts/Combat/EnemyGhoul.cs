@@ -10,6 +10,18 @@ using VoxelEngine.Environment;
 
 namespace VoxelEngine.Combat
 {
+    /// <summary>17.18.0-dev: threat-tier skin over the one ghoul rig. Normal is
+    /// every scout and pack member that has ever spawned; Elite leads organized
+    /// waves; SiegeBrute is the walking demolition answer to a factory district
+    /// that has been dirtying the ecology for hours. The byte values ride the
+    /// existing hostile spawn broadcast, so keep them stable.</summary>
+    public enum GhoulVariant : byte
+    {
+        Normal = 0,
+        Elite = 1,
+        SiegeBrute = 2,
+    }
+
     [RequireComponent(typeof(Rigidbody))]
     public class EnemyGhoul : Damageable
     {
@@ -30,6 +42,13 @@ namespace VoxelEngine.Combat
         private Vector3 _wanderTarget;
         private float _nextWanderAt;
         private float _nextAttackAt;
+        // 17.19.0-dev: visible windup before every bite - the ghoul rears back
+        // with flaring eyes, THEN snaps. 0 = none, 1 = player, 2 = logistics,
+        // 3 = industrial source.
+        private float _windupUntil;
+        private int _pendingAttack;
+        private EnemyRigAnimator _anim;
+        public const float AttackWindupSeconds = 0.45f;
         private PollutionEmitter _industrialTarget;
         private PlacedBlock _industrialTargetBlock;
         private PlacedBlock _logisticsTarget;
@@ -37,6 +56,107 @@ namespace VoxelEngine.Combat
         private bool _raidLogistics;
         private float _ambushUntil;
         private float _nextLogisticsScan;
+
+        // 17.18.0-dev: threat-tier variant state. The host applies stats AND
+        // visuals at spawn; guests build the replica from the streamed variant
+        // byte and apply visuals only (stats arrive through the health stream).
+        private GhoulVariant _visualVariant = GhoulVariant.Normal;
+        private bool _siegePriority;
+
+        /// <summary>The threat tier this ghoul was promoted to. Normal for every
+        /// scout and pack member; set once, never re-rolled.</summary>
+        public GhoulVariant Variant { get; private set; } = GhoulVariant.Normal;
+
+        // ── variant tuning (17.18.0-dev) ──────────────────────────────
+        // Elites are the wave's spearhead: tough, hard-hitting, faster and with
+        // keener eyes. Siege brutes trade speed for demolition mass - they walk
+        // PAST the player to dismantle the machines, and only bite back when
+        // something steps inside their reach.
+        public const float EliteHealthScale = 2.5f;
+        public const float EliteDamageScale = 1.5f;
+        public const float EliteSpeedScale = 1.15f;
+        public const float EliteDetectScale = 1.25f;
+        public const float EliteVisualScale = 1.25f;
+
+        public const float SiegeHealthScale = 6f;
+        public const float SiegeDamageScale = 2.2f;
+        public const float SiegeSpeedScale = 0.8f;
+        public const float SiegeDetectScale = 1.2f;
+        public const float SiegeVisualScale = 1.9f;
+        public const float SiegeBuildingScale = 2f;
+
+        /// <summary>
+        /// Host-side promotion, called right after instantiation and before the
+        /// first re-announce: scales stats, tops health back up to the new
+        /// maximum, enriches the loot roll and applies the visual tier. Idempotent
+        /// per variant. Guests never call this - they use ApplyVariantVisual.
+        /// </summary>
+        public void ApplyVariant(GhoulVariant variant)
+        {
+            if (variant == GhoulVariant.Normal || variant == Variant) return;
+            Variant = variant;
+
+            if (variant == GhoulVariant.Elite)
+            {
+                maxHealth *= EliteHealthScale;
+                attackDamage *= EliteDamageScale;
+                chaseSpeed *= EliteSpeedScale;
+                wanderSpeed *= EliteSpeedScale;
+                detectRange *= EliteDetectScale;
+                maxDrops += 1;
+            }
+            else
+            {
+                maxHealth *= SiegeHealthScale;
+                attackDamage *= SiegeDamageScale;
+                chaseSpeed *= SiegeSpeedScale;
+                wanderSpeed *= SiegeSpeedScale;
+                detectRange *= SiegeDetectScale;
+                minDrops += 1;
+                maxDrops += 2;
+                dropCount += 1;
+                _siegePriority = true;
+                // The brute is a demolition engine: it always hunts the factory
+                // itself, machinery and exposed logistics alike.
+                _raidLogistics = true;
+            }
+            // Health is a protected-set property on Damageable; a derived class
+            // may top it up to the new maximum after the Awake assignment.
+            Health = maxHealth;
+            ApplyVariantVisual(variant);
+        }
+
+        /// <summary>
+        /// Visual tier only: body scale and a per-instance tint. Safe on guest
+        /// replicas (kinematic, AI off) and idempotent per variant. Tints multiply
+        /// onto the prefab's authored colors, so the stone-green skin goes rusty
+        /// red for elites and cold ash for brutes without touching shared assets.
+        /// </summary>
+        public void ApplyVariantVisual(GhoulVariant variant)
+        {
+            if (variant == _visualVariant) return;
+            _visualVariant = variant;
+
+            float scale = variant == GhoulVariant.Elite ? EliteVisualScale
+                : variant == GhoulVariant.SiegeBrute ? SiegeVisualScale
+                : 1f;
+            transform.localScale = Vector3.one * scale;
+
+            Color tint = variant == GhoulVariant.Elite ? new Color(1.35f, 0.62f, 0.50f)
+                : variant == GhoulVariant.SiegeBrute ? new Color(0.70f, 0.72f, 0.80f)
+                : Color.white;
+            if (tint == Color.white) return;
+
+            var renderers = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] == null) continue;
+                // .material instantiates per renderer - a handful of elites on
+                // screen never justifies sharing, and shared assets stay clean.
+                var mat = renderers[i].material;
+                if (mat != null) mat.color *= tint;
+            }
+        }
 
         public bool HasActiveIndustrialTarget => _industrialTarget != null
             && _industrialTargetBlock != null && _industrialTarget.IsActivelyEmitting;
@@ -100,6 +220,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: walk cycle + telegraphs
         }
 
         private void FixedUpdate()
@@ -119,9 +241,32 @@ namespace VoxelEngine.Combat
             bool chasingPlayer = _player != null && distP <= detectRange;
             if (_industrialTarget != null && !HasActiveIndustrialTarget)
                 SetIndustrialTarget(null);
+            // 17.18.0-dev: a siege brute walks PAST the player - the factory is
+            // the objective. The player only becomes the focus by stepping
+            // inside biting reach, or by the industrial objective dying.
+            if (_siegePriority && chasingPlayer && distP > attackRange * 1.5f
+                && HasActiveIndustrialTarget)
+                chasingPlayer = false;
             if (chasingPlayer || (_ambushHold && Time.time >= _ambushUntil))
                 _ambushHold = false;
             bool chasingIndustry = !chasingPlayer && !_ambushHold && HasActiveIndustrialTarget;
+
+            // 17.19.0-dev: an expired windup lands whatever it telegraphed. The
+            // player bite re-checks range with slack - the windup is the escape
+            // window, so only getting clear by more than a body length saves you.
+            if (_pendingAttack != 0 && Time.time >= _windupUntil)
+            {
+                int pending = _pendingAttack;
+                _pendingAttack = 0;
+                _anim?.Strike();
+                if (pending == 1)
+                {
+                    if (_player != null && Vector3.Distance(_player.position, pos) <= attackRange + 1.6f)
+                        AttackPlayer();
+                }
+                else if (pending == 2 && _logisticsTarget != null) AttackLogistics();
+                else if (pending == 3) AttackIndustrialSource();
+            }
 
             Vector3 moveDir;
             float spd;
@@ -133,11 +278,14 @@ namespace VoxelEngine.Combat
                 // The bite needs TRUE range, not the tangent-plane projection: distP ignores
                 // height, so a player hovering far above must not read as in reach.
                 float trueDist = Vector3.Distance(_player.position, pos);
-                if (distP <= attackRange && trueDist <= attackRange + 0.8f
+                if (_pendingAttack == 0
+                    && distP <= attackRange && trueDist <= attackRange + 0.8f
                     && Time.time >= _nextAttackAt)
                 {
                     _nextAttackAt = Time.time + attackCooldown;
-                    AttackPlayer();
+                    _pendingAttack = 1;
+                    _windupUntil = Time.time + AttackWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Windup, AttackWindupSeconds);
                 }
             }
             else if (chasingIndustry)
@@ -154,12 +302,14 @@ namespace VoxelEngine.Combat
                     : Vector3.ProjectOnPlane(transform.forward, up).normalized;
                 spd = tangentDistance > attackRange ? chaseSpeed * 0.85f : 0f;
                 float trueDistance = Vector3.Distance(targetPosition, pos);
-                if (tangentDistance <= attackRange && trueDistance <= attackRange + 1f
+                if (_pendingAttack == 0
+                    && tangentDistance <= attackRange && trueDistance <= attackRange + 1f
                     && Time.time >= _nextAttackAt)
                 {
                     _nextAttackAt = Time.time + attackCooldown;
-                    if (strikingLogistics) AttackLogistics();
-                    else AttackIndustrialSource();
+                    _pendingAttack = strikingLogistics ? 2 : 3;
+                    _windupUntil = Time.time + AttackWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Windup, AttackWindupSeconds);
                 }
             }
             else
@@ -246,6 +396,13 @@ namespace VoxelEngine.Combat
             _logisticsTarget.Damage(IndustrialBiteDamage(), recipient: null);
         }
 
-        private int IndustrialBiteDamage() => Mathf.Max(1, Mathf.RoundToInt(attackDamage * 0.65f));
+        private int IndustrialBiteDamage()
+        {
+            // 17.18.0-dev: siege brutes bite structures roughly twice as hard as
+            // they bite people, so a factory left running in a dirty district has
+            // real repair work to do, not just a scary walk.
+            float buildingScale = Variant == GhoulVariant.SiegeBrute ? SiegeBuildingScale : 1f;
+            return Mathf.Max(1, Mathf.RoundToInt(attackDamage * 0.65f * buildingScale));
+        }
     }
 }

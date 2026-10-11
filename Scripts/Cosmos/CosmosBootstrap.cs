@@ -1007,6 +1007,18 @@ namespace VoxelEngine.Cosmos
                 Debug.Log("[CosmosBootstrap] System_Sol assigned automatically: " + registry.Bodies.Count +
                           " bodies and " + registry.Asteroids.Count + " asteroids are ready for real Keplerian flight.");
             }
+
+            // 17.17.1-dev: a guest that joined over the wire knows the HOST's orbital
+            // phase (WorldSession.cosmicSeconds, delivered in the handshake cosmos
+            // JSON). GenerateLayout builds every system at t = 0, so without this a
+            // joining client always arrived under a brand-new sky - the sun somewhere
+            // different on every join. Single player carries 0 here: its world save
+            // restores the clock through WorldStatePersistence instead.
+            if (session != null && session.cosmicSeconds > 0d && registry.IsReady)
+            {
+                registry.RestoreSimulationSeconds(session.cosmicSeconds);
+                Debug.Log($"[CosmosBootstrap] Join clock applied: system placed at t={session.cosmicSeconds:0.#}s (host phase).");
+            }
         }
 
         private void EnsureGravityProvider()

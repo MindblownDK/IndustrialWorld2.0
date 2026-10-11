@@ -81,7 +81,17 @@ namespace VoxelEngine.Environment
             float passive = supportsLivestock
                 ? Mathf.Clamp01(nativeAbundance * Mathf.Lerp(1f, 0.08f, pressure))
                 : 0f;
-            float hostile = Mathf.Lerp(1f, 2.15f, pressure);
+            // 17.17.2-dev: threat scaling used to react linearly to the
+            // INSTANTANEOUS pollution sample, so a furnace that had merely been
+            // running for a couple of minutes already sped up spawns and raised
+            // the alive-cap next to the player. Light industrial activity now
+            // sits in a deadzone (multiplier stays at exactly 1) and escalation
+            // only begins once real pollution has accumulated, eased through a
+            // smoothstep so crossing the threshold cannot spike the curve. The
+            // full-pollution ceiling is unchanged at 2.15x.
+            float hostileT = Mathf.Clamp01((pressure - 0.18f) / 0.82f);
+            hostileT = hostileT * hostileT * (3f - 2f * hostileT);
+            float hostile = Mathf.Lerp(1f, 2.15f, hostileT);
 
             return new EcologyReading(air, runoff, pressure, vitality, flora, passive,
                 hostile, supportsEcology, supportsLivestock,

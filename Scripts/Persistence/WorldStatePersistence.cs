@@ -447,7 +447,12 @@ namespace VoxelEngine.Persistence
                         save.player = _carriedPlayerBlock;
                         save.localPlayerAbsent = _carriedPlayerBlock == null;
                         var clock = VoxelEngine.Cosmos.CosmicRegistry.Instance;
-                        save.cosmicSimulationSeconds = clock != null ? clock.SimulationSeconds : 0d;
+                        // 17.17.1-dev: if the registry is already gone at quit time the
+                        // session still knows its clock from the restore baseline - a
+                        // save must never park the solar system at t = 0.
+                        save.cosmicSimulationSeconds = clock != null
+                            ? clock.SimulationSeconds
+                            : ComputeExpectedCosmicSeconds();
                     }
                     else
                     {
@@ -607,7 +612,11 @@ namespace VoxelEngine.Persistence
             // 9.57.1-dev: the cosmic clock, so the solar system is where the save left it
             // (orbits, seasons and lighting all read this). Legacy saves have 0 and load at t=0.
             var clock = VoxelEngine.Cosmos.CosmicRegistry.Instance;
-            save.cosmicSimulationSeconds = clock != null ? clock.SimulationSeconds : 0d;
+            // 17.17.1-dev: a null registry at quit time must not store 0 - the restore
+            // baseline still knows the true reading (see ComputeExpectedCosmicSeconds).
+            save.cosmicSimulationSeconds = clock != null
+                ? clock.SimulationSeconds
+                : ComputeExpectedCosmicSeconds();
             return true;
         }
 
@@ -1583,6 +1592,10 @@ namespace VoxelEngine.Persistence
                 }
                 save.placedTiered.Add(savedPiece);
             }
+            // NO DATA LOSS LAW (17.17.1-dev): carry records this session could not
+            // rebuild, exactly as SavePlacedBlocks already does for static blocks.
+            foreach (var carried in _unrestoredTiered)
+                if (carried != null) save.placedTiered.Add(carried);
         }
 
         private void SaveQuarries(SaveData save)
@@ -2178,6 +2191,14 @@ namespace VoxelEngine.Persistence
                 RestoreCargoFlights(save);
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
                           $"({anchoredGrids} from a body anchor) from {path}");
+                // 17.17.1-dev: anything the first pass could not resolve gets a second
+                // chance once the rest of the scene (player, registries, item assets)
+                // has finished loading - see RetryUnrestoredRestores.
+                if (_unrestoredPlaced.Count > 0 || _unrestoredTiered.Count > 0)
+                {
+                    Debug.LogWarning($"[WorldState] {_unrestoredPlaced.Count + _unrestoredTiered.Count} saved record(s) unresolved on the first pass; retrying while their assets load.");
+                    StartCoroutine(RetryUnrestoredRestores());
+                }
             }
             catch (Exception ex)
             {
@@ -2792,6 +2813,12 @@ namespace VoxelEngine.Persistence
         // silently — is the one failure mode a save system may never have.
         private readonly List<SavedGrid> _unrestoredGrids = new();
         private readonly List<SavedPlacedBlock> _unrestoredPlaced = new();
+        // 17.17.1-dev: the tiered half of the same law. Before this, a tiered record
+        // (foundation, wall, window, door, ...) whose definition was not resolvable
+        // at restore time was dropped WITHOUT A WORD and was then missing from every
+        // later save - the only place in the save system where a record could die
+        // silently. It now behaves exactly like its placed-block twin.
+        private readonly List<SavedPlacedTiered> _unrestoredTiered = new();
 
         private int RestoreGrids(SaveData save)
         {
@@ -3282,10 +3309,111 @@ namespace VoxelEngine.Persistence
             if (registry != null && registry.IsReady)
             {
                 registry.RestoreSimulationSeconds(seconds);
+                AnchorCosmicClock(seconds);
                 CosmicClockSettled = true;
                 return;
             }
             StartCoroutine(RestoreCosmicClockWhenReady(seconds));
+        }
+
+        // ── 17.17.1-dev: cosmic clock guardianship ────────────────────────────
+        // The restore itself was never the weak point - something AFTER it could
+        // still rewind the system to t = 0 (a layout regenerated once the bootstrap
+        // finishes, a registry rebuilt late), and a save written during such a
+        // rewind stored 0 and parked the sun somewhere new every session. These two
+        // members remember the reading we restored and what real time has passed
+        // since, so the watchdog can put the system back and a save can never write
+        // a clock we know to be wrong.
+        private double _clockAnchorSeconds;
+        private float  _clockAnchorRealtime;
+        private bool   _clockWatchdogRunning;
+        private float  _nextRetryAt;
+
+        /// <summary>Records a successfully applied clock reading as the session's
+        /// baseline and starts the watchdog once.</summary>
+        private void AnchorCosmicClock(double seconds)
+        {
+            if (seconds <= 0d) return;
+            _clockAnchorSeconds  = seconds;
+            _clockAnchorRealtime = Time.unscaledTime;
+            if (_clockWatchdogRunning) return;
+            _clockWatchdogRunning = true;
+            StartCoroutine(CosmicClockWatchdog());
+        }
+
+        /// <summary>The clock reading this session should be showing right now:
+        /// the restored baseline advanced by real time at the registry's pace.
+        /// 0 when this session never restored anything (a fresh world).</summary>
+        private double ComputeExpectedCosmicSeconds()
+        {
+            if (_clockAnchorSeconds <= 0d) return 0d;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            double pace = registry != null && registry.orbitalTimeScale > 0d ? registry.orbitalTimeScale : 1d;
+            return _clockAnchorSeconds + (Time.unscaledTime - _clockAnchorRealtime) * pace;
+        }
+
+        /// <summary>Watches the orbital clock for the first minutes of a session and
+        /// re-applies the saved reading if anything rewound it to t = 0 underneath
+        /// the restore. A clock that only ever advances can never legitimately drop
+        /// kilometres below its baseline, so a drop is always somebody's reset.</summary>
+        private System.Collections.IEnumerator CosmicClockWatchdog()
+        {
+            float deadline = Time.unscaledTime + 120f;
+            while (Time.unscaledTime < deadline)
+            {
+                yield return null;
+                var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (registry == null || !registry.IsReady) continue;
+                double expected = ComputeExpectedCosmicSeconds();
+                if (expected <= 0d) yield break;
+                // 10 s of slack: propagation hitches and a paused editor must never
+                // read as a rewind.
+                if (registry.SimulationSeconds >= expected - 10d) continue;
+                Debug.LogWarning($"[WorldState] Orbital clock rewound to {registry.SimulationSeconds:0.#}s (expected {expected:0.#}s) — re-applying the saved phase.");
+                registry.RestoreSimulationSeconds(expected);
+                _clockAnchorSeconds  = expected;
+                _clockAnchorRealtime = Time.unscaledTime;
+            }
+        }
+
+        /// <summary>17.17.1-dev - a self-healing second chance for every record the
+        /// first restore pass could not resolve. The definition/item cache sees only
+        /// assets that are already loaded when Start runs; on a cold boot the player
+        /// (and with it the tiered registry and every inventory item asset) can come
+        /// into existence a moment later, which used to cost the session its placed
+        /// pieces until the player left the world and came back. While anything is
+        /// still unrestored we rebuild the cache and run the ordinary restore paths
+        /// again - they recompute their carried lists, so whatever resolves now
+        /// appears in the world, and whatever never resolves stays carried, logged
+        /// and saved instead of vanishing.</summary>
+        private System.Collections.IEnumerator RetryUnrestoredRestores()
+        {
+            float deadline = Time.unscaledTime + 60f;
+            while (Time.unscaledTime < deadline
+                   && (_unrestoredPlaced.Count > 0 || _unrestoredTiered.Count > 0))
+            {
+                yield return null;
+                if (Time.unscaledTime < _nextRetryAt) continue;
+                _nextRetryAt = Time.unscaledTime + 1.5f;
+                if (_loadFailed) yield break;   // a broken save never spawns half a world
+
+                BuildItemCache();
+                int placedBefore  = _unrestoredPlaced.Count;
+                int tieredBefore  = _unrestoredTiered.Count;
+                if (placedBefore > 0)
+                    RestorePlacedBlocks(new SaveData { placedBlocks = new List<SavedPlacedBlock>(_unrestoredPlaced) });
+                if (tieredBefore > 0)
+                    RestorePlacedTiered(new SaveData { placedTiered = new List<SavedPlacedTiered>(_unrestoredTiered) });
+
+                int recovered = (placedBefore - _unrestoredPlaced.Count) + (tieredBefore - _unrestoredTiered.Count);
+                if (recovered > 0)
+                    Debug.Log($"[WorldState] Retry restored {recovered} saved record(s) once their assets were loaded " +
+                              $"({_unrestoredPlaced.Count + _unrestoredTiered.Count} still pending).");
+            }
+            int left = _unrestoredPlaced.Count + _unrestoredTiered.Count;
+            if (left > 0)
+                Debug.LogWarning($"[WorldState] {left} saved record(s) still unrestored after the retry window; " +
+                                 "they stay carried in every save until this build can resolve them.");
         }
 
         /// <summary>14.60.7 - deferred orbital-clock restore for loads where the
@@ -3299,6 +3427,7 @@ namespace VoxelEngine.Persistence
                 if (reg != null && reg.IsReady)
                 {
                     reg.RestoreSimulationSeconds(seconds);
+                    AnchorCosmicClock(seconds);
                     CosmicClockSettled = true;
                     Debug.Log($"[WorldState] Cosmic clock restored (deferred) to t={seconds:0.#}s once the registry was ready.");
                     yield break;
@@ -3342,7 +3471,10 @@ namespace VoxelEngine.Persistence
             // the reading the save was written at before any cosmic coordinate is resolved.
             var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
             if (registry != null && registry.IsReady && save.cosmicSimulationSeconds > 0d)
+            {
                 registry.RestoreSimulationSeconds(save.cosmicSimulationSeconds);
+                AnchorCosmicClock(save.cosmicSimulationSeconds);
+            }
             else if (save.cosmicSimulationSeconds > 0d)
                 // 14.60.7 - the registry can lag this restore at scene load. The old
                 // silent skip left the session at t = 0: every body at the wrong
@@ -4553,11 +4685,32 @@ namespace VoxelEngine.Persistence
 
         private void RestorePlacedTiered(SaveData save)
         {
+            // On a retry pass this list still holds the records the earlier pass
+            // could not build; clearing first means "still unrestored" is recomputed
+            // from exactly the records this pass was handed.
+            _unrestoredTiered.Clear();
             foreach (var ps in save.placedTiered)
             {
-                if (!_tieredById.TryGetValue(ps.family, out var def)) continue;
+                if (ps == null) continue;
+                if (!_tieredById.TryGetValue(ps.family, out var def) || def == null)
+                {
+                    // 17.17.1-dev: this used to be a silent `continue`: the piece never
+                    // appeared AND vanished from the next save. The definition cache is
+                    // built from whatever assets happen to be loaded at Start, so a
+                    // cold boot could lose whole walls to a race. Now the record is
+                    // named in the log, carried forward verbatim, and retried while
+                    // the session runs (see RetryUnrestoredRestores).
+                    Debug.LogError($"[WorldState] Tiered piece '{ps.family}' (tier {ps.tier}) has no definition in this build — record carried forward unchanged.");
+                    _unrestoredTiered.Add(ps);
+                    continue;
+                }
                 var prefab = def.GetPrefab((BuildTier)ps.tier);
-                if (prefab == null) continue;
+                if (prefab == null)
+                {
+                    Debug.LogError($"[WorldState] Tiered piece '{ps.family}' tier {ps.tier} has no prefab for that tier — record carried forward unchanged.");
+                    _unrestoredTiered.Add(ps);
+                    continue;
+                }
                 Quaternion finalRot = (ps.rot.w != 0f || ps.rot.x != 0f || ps.rot.y != 0f || ps.rot.z != 0f) ? ps.rot : Quaternion.Euler(0, ps.rotY, 0);
                 var go = Instantiate(prefab, ps.pos, finalRot);
                 go.name = $"{def.displayName} ({(BuildTier)ps.tier}, restored)";

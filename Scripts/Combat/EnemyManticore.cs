@@ -43,6 +43,12 @@ namespace VoxelEngine.Combat
         private Transform _player;
         private Vector3 _home, _wanderTarget;
         private float _nextWanderAt, _nextMeleeAt, _nextRangedAt;
+        // 17.19.0-dev: the tail rears and glows before the volley; the forelegs
+        // pull back before the claws. 0 = nothing pending.
+        private float _pendingVolley, _pendingMelee;
+        private EnemyRigAnimator _anim;
+        public const float VolleyWindupSeconds = 0.55f;
+        public const float MeleeWindupSeconds = 0.4f;
 
         protected override void Awake()
         {
@@ -62,6 +68,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: animation rig
         }
 
         private void FixedUpdate()
@@ -87,18 +95,33 @@ namespace VoxelEngine.Combat
                 else if (distP > rangedMinRange) spd = 0f;           // firing band — hold + loose spikes
                 else                             spd = chaseSpeed;   // close in for melee
 
-                // Ranged volley (firing band).
-                if (distP <= rangedRange && distP >= rangedMinRange && Time.time >= _nextRangedAt)
+                // Ranged volley (firing band) - 17.19.0-dev: the tail rears and
+                // the eyes glow BEFORE the spikes fly. Aim stays live at the
+                // release: the projectiles are the dodgeable part.
+                if (_pendingVolley > 0f && Time.time >= _pendingVolley)
+                { _pendingVolley = 0f; _anim?.Strike(); FireSpikeVolley(up); }
+                else if (_pendingVolley <= 0f
+                    && distP <= rangedRange && distP >= rangedMinRange && Time.time >= _nextRangedAt)
                 {
                     _nextRangedAt = Time.time + rangedCooldown;
-                    FireSpikeVolley(up);
+                    _pendingVolley = Time.time + VolleyWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Cast, VolleyWindupSeconds);
                 }
-                // Melee claws.
-                if (distP <= meleeRange && Vector3.Distance(_player.position, pos) <= meleeRange + 0.8f
+                // Melee claws - windup first, snap second, with slack re-check.
+                if (_pendingMelee > 0f && Time.time >= _pendingMelee)
+                {
+                    _pendingMelee = 0f;
+                    _anim?.Strike();
+                    if (_player != null && Vector3.Distance(_player.position, pos) <= meleeRange + 1.4f)
+                        MeleeAttack();
+                }
+                else if (_pendingMelee <= 0f
+                    && distP <= meleeRange && Vector3.Distance(_player.position, pos) <= meleeRange + 0.8f
                     && Time.time >= _nextMeleeAt)
                 {
                     _nextMeleeAt = Time.time + meleeCooldown;
-                    MeleeAttack();
+                    _pendingMelee = Time.time + MeleeWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Windup, MeleeWindupSeconds);
                 }
             }
             else

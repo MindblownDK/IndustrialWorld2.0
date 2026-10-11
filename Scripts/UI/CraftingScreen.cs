@@ -96,7 +96,13 @@ namespace VoxelEngine.UI
         private const float TILE      = 58f;
         private const float TILE_ICON = 44f;
         private const float RAIL_W    = 96f;
-        private const float DETAIL_W  = 224f;
+        // 17.17.1-dev: 224 was too tight for the assembly readout — the queue rows
+        // (name + progress bar + timer + cancel) overflowed the column and dragged a
+        // horizontal scrollbar into a panel that must only ever scroll vertically.
+        // 300 gives the queue its fixed parts (bar 58 + timer 50 + cancel 22 + gaps)
+        // plus a real name column, and comes out of the flexible blueprint matrix,
+        // not out of the screen: the panel's outer footprint is unchanged.
+        private const float DETAIL_W  = 300f;
         private const int   QUEUE_CAP = 10; // matches Crafter/queue behaviour
 
         // ───────────────────────────────────────────────────────────────────
@@ -334,6 +340,10 @@ namespace VoxelEngine.UI
             detail.style.paddingBottom = 8;
             LcdHudTheme.ApplyScreen(detail, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.88f), 1f);
             UITheme.StyleScroller(detail, LcdHudTheme.Phosphor);
+            // 17.17.1-dev: this readout scrolls vertically, period. A horizontal
+            // scroller here only ever appeared as a clipped queue row, never as
+            // something worth scrolling to.
+            detail.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             body.Add(detail);
 
             // ── Local re-render helpers (avoid full Refresh → keeps focus) ───
@@ -777,6 +787,9 @@ namespace VoxelEngine.UI
                 var qscroll = new ScrollView(ScrollViewMode.Vertical);
                 VoxelEngine.UI.UITheme.StyleScroller(qscroll);   // themed slim scrollbar
                 qscroll.style.maxHeight = 150;
+                // 17.17.1-dev: the queue list is vertical-only; a wide row must cost
+                // the recipe name (ellipsis), never a horizontal scrollbar.
+                qscroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
                 detail.Add(qscroll);
 
                 var liveRows = new List<QueueRowVisual>();
@@ -794,6 +807,11 @@ namespace VoxelEngine.UI
                     qn.style.color = new StyleColor(T.TextSecondary);
                     qn.style.fontSize = 10;
                     qn.style.flexGrow = 1;
+                    // 17.17.1-dev: UI Toolkit defaults to flex-shrink 0, so a long
+                    // recipe name used to push the bar, timer and cancel button out
+                    // of the column. The name yields first and ellipsises instead.
+                    qn.style.flexShrink = 1;
+                    qn.style.minWidth = 48;
                     qn.style.overflow = Overflow.Hidden;
                     qn.style.textOverflow = TextOverflow.Ellipsis;
                     qn.style.whiteSpace = WhiteSpace.NoWrap;

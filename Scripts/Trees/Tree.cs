@@ -21,6 +21,50 @@ namespace VoxelEngine.Trees
         [HideInInspector] public string scatterPersistencePath;
         [HideInInspector] public string stableScatterIdentity;
 
+        // 17.17.2-dev: stamped by ChunkScatter when the holder dies for streaming
+        // reasons (chunk pool return, repopulate, world dispose). Only un-stamped
+        // deaths are harvests.
+        private bool _streamingTeardown;
+
+        /// <summary>Set by the scatter system before it destroys this tree's holder
+        /// for streaming reasons; OnDestroy then skips the harvest record.</summary>
+        public void MarkStreamingTeardown() => _streamingTeardown = true;
+
+        private void OnDestroy()
+        {
+            // 17.17.2-dev: ANY gameplay death of a scatter tree is a harvest - not
+            // only a felling blow through Tree.Hit. Before this, a tree destroyed by
+            // any other path (blast, fire, a future tool) vanished for the session
+            // and regrew on the next load, because nothing had recorded the stump.
+            // Streaming deaths (chunk pool returns, repopulates, world dispose,
+            // scene unload) are stamped or scene-guarded and never record.
+            if (_streamingTeardown) return;
+            if (!gameObject.scene.isLoaded) return;
+            if (ChunkScatter.WorldTeardownActive) return;
+            TreeHarvestPersistence.RecordHarvested(ResolveStorePath(), ResolveIdentity());
+        }
+
+        /// <summary>The recorded store path, or the live world's when this instance
+        /// predates the wiring (legacy spawn, editor-placed tree).</summary>
+        private string ResolveStorePath()
+        {
+            if (!string.IsNullOrEmpty(scatterPersistencePath)) return scatterPersistencePath;
+            return TreeHarvestPersistence.GetStorePath(VoxelEngine.Core.ActiveWorld.Current
+                as VoxelEngine.Cosmos.IChunkScatterWorld);
+        }
+
+        /// <summary>The recorded surface-cell identity, or the cell under this trunk
+        /// when the instance carries none. The three-quarter-voxel step down lands
+        /// inside the solid surface cell the scatter pass keyed the tree by.</summary>
+        private string ResolveIdentity()
+        {
+            if (!string.IsNullOrEmpty(stableScatterIdentity)) return stableScatterIdentity;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
+            if (world == null) return null;
+            Vector3 baseCell = transform.position - transform.up * (VoxelEngine.Core.VoxelConstants.VOXEL_SIZE * 0.75f);
+            return TreeHarvestPersistence.MakeIdentity(world.WorldToVoxel(baseCell));
+        }
+
         private void Awake()
         {
             hp = maxHp;

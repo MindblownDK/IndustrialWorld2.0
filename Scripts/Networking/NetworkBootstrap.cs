@@ -696,6 +696,10 @@ namespace VoxelEngine.Networking
         public Quaternion Rotation;
         public float Health;
         public float MaxHealth;
+        /// <summary>17.18.0-dev: threat-tier variant (GhoulVariant byte:
+        /// 0 normal, 1 elite, 2 siege brute). Additive; guests replay it as
+        /// visuals only. Same-build clients only, like every hostile field.</summary>
+        public byte Variant;
     }
 
     public struct EnemyPoseBroadcast : IBroadcast
@@ -3908,11 +3912,11 @@ namespace VoxelEngine.Networking
 
         // ── hostiles (14.55.0) ──
 
-        public void SendEnemySpawn(int id, byte kind, Vector3 pos, Quaternion rot, float health, float maxHealth)
+        public void SendEnemySpawn(int id, byte kind, Vector3 pos, Quaternion rot, float health, float maxHealth, byte variant = 0)
         {
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(new EnemySpawnBroadcast
-            { Id = id, Kind = kind, Position = pos, Rotation = rot, Health = health, MaxHealth = maxHealth });
+            { Id = id, Kind = kind, Position = pos, Rotation = rot, Health = health, MaxHealth = maxHealth, Variant = variant });
         }
 
         public void SendEnemyPose(int id, Vector3 pos, Quaternion rot)
@@ -4102,7 +4106,7 @@ namespace VoxelEngine.Networking
         private void OnClientEnemySpawn(EnemySpawnBroadcast msg, Channel channel)
         {
             if (_serverStarted || WorldMismatch) return;
-            HostileSync.ApplySpawned(msg.Id, msg.Kind, msg.Position, msg.Rotation, msg.Health, msg.MaxHealth);
+            HostileSync.ApplySpawned(msg.Id, msg.Kind, msg.Position, msg.Rotation, msg.Health, msg.MaxHealth, msg.Variant);
         }
 
         private void OnClientEnemyPose(EnemyPoseBroadcast msg, Channel channel)

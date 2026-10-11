@@ -28,6 +28,26 @@ namespace VoxelEngine.Combat
 
         private float _nextSpawn;
         private float _nextThreatNotice;
+
+        // 17.17.2-dev: recruitment heat - a local, non-serialized slice of
+        // pollution history. Serialized inspector fields keep their authored
+        // values, so the sustained-activity requirement lives here instead:
+        // heat builds while the spawner keeps seeing an active industrial
+        // source (about four minutes to full) and bleeds off when industry
+        // goes quiet (about ninety seconds to cold). Organized packs, ambushes
+        // and logistics raids only answer at full heat; ordinary near-player
+        // scouts are unaffected.
+        private float _recruitHeat;
+        private float _lastRecruitTick = -1f;
+
+        // 17.18.0-dev: organized-event cadence. Waves and sieges answer the
+        // slow residual-load history (PollutionThreat), and each keeps its own
+        // cooldown so a qualifying district lives under threat pressure rather
+        // than under a spawn-loop machine gun. Local, non-serialized state -
+        // authored scene values stay untouched.
+        private float _nextWaveAt;
+        private float _nextSiegeAt;
+
         private static readonly List<EnemyGhoul> _alive = new List<EnemyGhoul>();
         private static bool _autoCreated;
 
@@ -102,6 +122,19 @@ namespace VoxelEngine.Combat
                 ? industrialSource.GetComponentInParent<VoxelEngine.Building.PlacedBlock>()
                 : null;
             if (industrialSource != null && placed == null) industrialSource = null;
+
+            // 17.17.2-dev: update recruitment heat on every spawn tick and gate
+            // organized industrial responses behind it. One furnace that just
+            // started no longer calls packs within minutes; sustained industry
+            // does. A lone scout may still answer immediately.
+            float tickDt = _lastRecruitTick < 0f ? 0f : Mathf.Min(Time.time - _lastRecruitTick, 30f);
+            _lastRecruitTick = Time.time;
+            if (industrialSource != null)
+                _recruitHeat = Mathf.Clamp01(_recruitHeat + tickDt / 240f);
+            else
+                _recruitHeat = Mathf.Clamp01(_recruitHeat - tickDt / 90f);
+            if (industrialSource != null && _recruitHeat < 1f) industrialSource = null;
+
             Vector3 spawnAnchor = placed != null ? placed.transform.position : ppos;
 
             // Ghouls are surface hunters: no streamed world, meaningful gravity or real
@@ -110,19 +143,76 @@ namespace VoxelEngine.Combat
             if (VoxelEngine.Cosmos.GravityProvider.GetGravity(spawnAnchor).magnitude < 0.5f) return;
 
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(spawnAnchor);
-            int wanted = industrialSource != null
-                ? Mathf.Min(slots, PollutionScentRules.PackSize(sourcePressure))
-                : 1;
-            int ambushBudget = industrialSource != null
-                ? PollutionScentRules.AmbushCount(sourcePressure, wanted)
-                : 0;
-            bool raidLogistics = industrialSource != null && PollutionScentRules.RaidsLogistics(sourcePressure);
+
+            // 17.18.0-dev: resolve the industrial threat tier from live readings.
+            // The residual climate load is sampled at the outlet: it is the
+            // district's own history (hours-scale, persisted in the pollution
+            // sidecar), not the cell the player happens to stand in. The heat
+            // gate has already run, so any surviving source means sustained
+            // activity; tiers then decide whether that activity has earned an
+            // organized answer.
+            float residual = industrialSource != null
+                ? PollutionService.SampleClimate01(industrialSource.ReleasePoint)
+                : 0f;
+            IndustrialThreatTier tier = PollutionThreat.ResolveTier(
+                industrialSource != null, sourcePressure, residual);
+
+            int wanted;
+            int ambushBudget;
+            bool raidLogistics;
+            bool waveEvent = false;
+            bool siegeEvent = false;
+            if (tier == IndustrialThreatTier.Siege && Time.time >= _nextSiegeAt
+                && slots >= 1 + PollutionThreat.SiegeEscortSize)
+            {
+                // Siege: one brute and its escort, all hunting the factory itself.
+                siegeEvent = true;
+                wanted = Mathf.Min(slots, 1 + PollutionThreat.SiegeEscortSize);
+                ambushBudget = PollutionScentRules.AmbushCount(sourcePressure, wanted);
+                raidLogistics = true;
+            }
+            else if (tier == IndustrialThreatTier.Wave && Time.time >= _nextWaveAt
+                && slots >= PollutionThreat.MinWaveSlots)
+            {
+                // Organized wave: an elite spearhead, up to two flank ambushers
+                // and every member on logistics targets. Grown by the residual.
+                waveEvent = true;
+                wanted = Mathf.Min(slots, PollutionThreat.WaveSize(residual));
+                ambushBudget = Mathf.Min(wanted - 1, PollutionThreat.WaveAmbushers);
+                raidLogistics = true;
+            }
+            else
+            {
+                wanted = industrialSource != null
+                    ? Mathf.Min(slots, PollutionScentRules.PackSize(sourcePressure))
+                    : 1;
+                ambushBudget = industrialSource != null
+                    ? PollutionScentRules.AmbushCount(sourcePressure, wanted)
+                    : 0;
+                raidLogistics = industrialSource != null && PollutionScentRules.RaidsLogistics(sourcePressure);
+            }
+
             float baseAngle = Random.Range(0f, 360f);
             int spawned = 0;
             int ambushes = 0;
             for (int member = 0; member < wanted; member++)
             {
-                if (ambushes < ambushBudget
+                // Tier leaders: the siege brute (member 0) and one elite escort;
+                // a wave is led by a single elite. Leaders march openly from the
+                // source anchor - only ordinary members take flank ambush points.
+                GhoulVariant variant = GhoulVariant.Normal;
+                if (siegeEvent)
+                {
+                    if (member == 0) variant = GhoulVariant.SiegeBrute;
+                    else if (member == 1) variant = GhoulVariant.Elite;
+                }
+                else if (waveEvent && member == 0)
+                {
+                    variant = GhoulVariant.Elite;
+                }
+
+                if (variant == GhoulVariant.Normal
+                    && ambushes < ambushBudget
                     && PollutionScentRules.TryAmbushPoint(spawnAnchor, ppos, up, member, out Vector3 ambushPoint)
                     && TrySpawnAt(ambushPoint, up, ppos - ambushPoint, industrialSource, sourcePressure,
                         ambush: true, raidLogistics: raidLogistics))
@@ -135,11 +225,25 @@ namespace VoxelEngine.Combat
                 float angle = baseAngle + member * (360f / wanted);
                 float distance = Random.Range(spawnNearMin, spawnNearMax);
                 if (TrySpawnGhoul(spawnAnchor, up, angle, distance, industrialSource, sourcePressure,
-                        ambush: false, raidLogistics: raidLogistics))
+                        ambush: false, raidLogistics: raidLogistics, variant: variant))
                     spawned++;
             }
-            if (spawned > 0 && industrialSource != null)
-                ShowIndustrialThreatNotice(industrialSource, spawned, ambushes);
+
+            // Organized events keep their own cadence; a partially spawned wave
+            // still spent itself, so the cooldown starts either way.
+            if (spawned > 0)
+            {
+                if (siegeEvent) _nextSiegeAt = Time.time + PollutionThreat.SiegeCooldownSeconds;
+                else if (waveEvent) _nextWaveAt = Time.time + PollutionThreat.WaveCooldownSeconds;
+
+                if (industrialSource != null)
+                {
+                    if (siegeEvent || waveEvent)
+                        ShowOrganizedThreatNotice(industrialSource, spawned, siegeEvent);
+                    else
+                        ShowIndustrialThreatNotice(industrialSource, spawned, ambushes);
+                }
+            }
         }
 
         private bool ShouldCull(EnemyGhoul ghoul)
@@ -154,7 +258,8 @@ namespace VoxelEngine.Combat
         }
 
         private bool TrySpawnGhoul(Vector3 anchor, Vector3 up, float angleDegrees, float distance,
-            PollutionEmitter industrialSource, float sourcePressure, bool ambush, bool raidLogistics)
+            PollutionEmitter industrialSource, float sourcePressure, bool ambush, bool raidLogistics,
+            GhoulVariant variant = GhoulVariant.Normal)
         {
             Vector3 north = Vector3.ProjectOnPlane(Vector3.forward, up);
             if (north.sqrMagnitude < 0.001f) north = Vector3.ProjectOnPlane(Vector3.right, up);
@@ -164,11 +269,12 @@ namespace VoxelEngine.Combat
             float radians = angleDegrees * Mathf.Deg2Rad;
             Vector3 tangent = (north * Mathf.Cos(radians) + east * Mathf.Sin(radians)) * distance;
             if (tangent.sqrMagnitude < 0.001f) return false;
-            return TrySpawnAt(anchor + tangent, up, -tangent, industrialSource, sourcePressure, ambush, raidLogistics);
+            return TrySpawnAt(anchor + tangent, up, -tangent, industrialSource, sourcePressure, ambush, raidLogistics, variant);
         }
 
         private bool TrySpawnAt(Vector3 desired, Vector3 up, Vector3 faceDirection,
-            PollutionEmitter industrialSource, float sourcePressure, bool ambush, bool raidLogistics)
+            PollutionEmitter industrialSource, float sourcePressure, bool ambush, bool raidLogistics,
+            GhoulVariant variant = GhoulVariant.Normal)
         {
             Vector3 face = Vector3.ProjectOnPlane(faceDirection, up);
             if (face.sqrMagnitude < 0.001f) return false;
@@ -196,6 +302,16 @@ namespace VoxelEngine.Combat
                 Debug.LogError("[EnemySpawner] Prefab has no EnemyGhoul component!");
                 Destroy(go);
                 return false;
+            }
+
+            // 17.18.0-dev: promote tiered ghouls right after birth. The Awake
+            // announce carried the base stats, so push the scaled health and the
+            // variant byte to guests immediately instead of at the next
+            // five-second self-heal pass.
+            if (variant != GhoulVariant.Normal)
+            {
+                ghoul.ApplyVariant(variant);
+                VoxelEngine.Networking.HostileSync.ReannounceNow(ghoul);
             }
 
             if (industrialSource != null)
@@ -257,6 +373,33 @@ namespace VoxelEngine.Combat
             VoxelEngine.UI.BuildFeedbackHud.Show("INDUSTRIAL SCENT",
                 source.DisplayName + " (" + bearing + ") has attracted " + arrival + ".", null,
                 new Color(0.92f, 0.42f, 0.16f));
+        }
+
+        /// <summary>17.18.0-dev: waves and sieges announce themselves as events -
+        /// their own cooldowns already rate-limit them, so the ordinary notice
+        /// cooldown only shields the follow-up pack chatter.</summary>
+        private void ShowOrganizedThreatNotice(PollutionEmitter source, int count, bool siege)
+        {
+            var player = VoxelEngine.Player.PlayerStats.Instance;
+            if (source == null || count <= 0 || player == null) return;
+            _nextThreatNotice = Time.time + Mathf.Max(5f, threatNoticeCooldown);
+            string bearing = PollutionScentRules.FormatDirection(
+                player.transform.position, source.ReleasePoint, "nearby");
+            if (siege)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("SIEGE BRUTE",
+                    source.DisplayName + " (" + bearing + ") has called a siege brute and "
+                    + (count - 1) + " escorts. It is coming for the machines - stand in its "
+                    + "way and it will bite through you too.",
+                    null, new Color(0.85f, 0.22f, 0.14f));
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("ORGANIZED WAVE",
+                    "The ecology around " + source.DisplayName + " (" + bearing
+                    + ") has organized a wave of " + count + ", led by an elite ghoul.",
+                    null, new Color(0.92f, 0.32f, 0.18f));
+            }
         }
 
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterSceneLoad)]

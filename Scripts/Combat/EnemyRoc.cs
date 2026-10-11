@@ -47,6 +47,11 @@ namespace VoxelEngine.Combat
         private Transform _player;
         private Vector3 _home, _wanderTarget;
         private float _orbitAngle, _nextWanderAt, _nextDiveAt, _nextGustAt;
+        // 17.19.0-dev: the gust winds up with a big wing raise before the blast;
+        // the talon slam snaps on contact (the dive itself is the telegraph).
+        private float _pendingGust;
+        private EnemyRigAnimator _anim;
+        public const float GustWindupSeconds = 0.7f;
         private bool _diving;
         private bool _enraged;
 
@@ -66,6 +71,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: animation rig
         }
 
         private bool Enraged
@@ -121,7 +128,16 @@ namespace VoxelEngine.Combat
                     spd = engageSpeed * SpeedMul;
 
                     if (Time.time >= _nextDiveAt) _diving = true;
-                    if (Time.time >= _nextGustAt) { WingGust(pos, up); _nextGustAt = Time.time + gustCooldown * CdMul; }
+                    // 17.19.0-dev: the wings heave up first, the blast follows -
+                    // enrage shortens the windup but never removes it.
+                    if (_pendingGust > 0f && Time.time >= _pendingGust)
+                    { _pendingGust = 0f; _anim?.Strike(); WingGust(pos, up); }
+                    else if (_pendingGust <= 0f && Time.time >= _nextGustAt)
+                    {
+                        _nextGustAt = Time.time + gustCooldown * CdMul;
+                        _pendingGust = Time.time + GustWindupSeconds * CdMul;
+                        _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Cast, GustWindupSeconds * CdMul);
+                    }
                 }
             }
             else
@@ -152,6 +168,7 @@ namespace VoxelEngine.Combat
         private void TalonStrike(Vector3 up)
         {
             // 14.55.0 - victim-side strike funnel, local or remote.
+            _anim?.Strike();   // 17.19.0-dev: the talon snap, host and guests
             VoxelEngine.Networking.HostileSync.StrikePlayer(_player, diveDamage, "Roc");
         }
 

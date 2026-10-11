@@ -624,9 +624,12 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         private float _diagTimer;
         private int   _diagGenerated;
         private int   _diagMeshed;
+#endif
+        private float _nextColliderSweep;   // 17.20.0-dev: throttled collider-window sweep
 
         private void Update()
         {
@@ -640,7 +643,17 @@ namespace VoxelEngine.Cosmos
             DispatchGenerationJobs();
             DispatchMeshingJobs();
             JobHandle.ScheduleBatchedJobs();
-            RefreshColliderWindow();
+            // 17.20.0-dev perf: the collider-window sweep visits EVERY loaded chunk with
+            // native mesh queries (bounds + index count) every frame. Content-driven
+            // re-bakes already happen immediately in the meshing-completion paths, and the
+            // window margin is 0.85 chunks, so a 5 Hz sweep gates identically at a fifth
+            // of the per-frame cost - one of the steady main-thread drags behind the
+            // "laggy and chunky" feel in dense streaming.
+            if (Time.unscaledTime >= _nextColliderSweep)
+            {
+                _nextColliderSweep = Time.unscaledTime + 0.2f;
+                RefreshColliderWindow();
+            }
             VoxelEngine.Generation.OilReservoirDecorator.Tick(this);
             
             // Native water meshes are local detail only; throttle their main-thread rebuilds so
@@ -650,7 +663,12 @@ namespace VoxelEngine.Cosmos
             
             ProcessDeferredScatter();
 
-            // ── Comprehensive diagnostics (every 3 seconds) ──
+            // ── Comprehensive diagnostics (every 3 seconds, editor/dev only) ──
+            // 17.20.0-dev perf: this walked every loaded chunk and paid a
+            // Debug.Log stack-trace capture on a 3-second metronome in SHIPPING
+            // builds - a recurring hitch with no player-facing value. Release
+            // builds skip the sweep and the log entirely.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             _diagTimer += Time.deltaTime;
             if (_diagTimer > 3f)
             {
@@ -692,6 +710,7 @@ namespace VoxelEngine.Cosmos
                           $"handshake: meshedR={_meshedBubbleRadius:0}m footing={HasLocalFooting} | " +
                           $"seaRadius:{body?.SeaRadius} meanSurf:{body?.SurfaceRadius}");
             }
+#endif
         }
 
         private void PublishTerrainShaderContext()

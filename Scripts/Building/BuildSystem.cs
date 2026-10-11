@@ -80,6 +80,9 @@ namespace VoxelEngine.Building
             public bool usesInteriorLattice;
             public Vector3 portalHalfExtents;
             public bool usesDedicatedSnap;
+            // 17.19.0-dev: the prefab carries PlacementPivotAnchor - the root
+            // pivot IS the block position, no bounds-derived lift or recentering.
+            public bool anchorAtPivot;
         }
 
         private struct StaticSurfaceLatticePose
@@ -1105,6 +1108,13 @@ namespace VoxelEngine.Building
             var go = Instantiate(block.placedPrefab, pos, rot);
             go.name = block.displayName;
 
+            // 17.19.0-dev: a block that claims ground removes the biome scatter
+            // intersecting it. Scatter no longer refuses placements (it is
+            // decoration, not structure), so it must also never be left standing
+            // inside the new machine. Trees record their harvest through their
+            // own OnDestroy, so the stumps stay removed across save/load.
+            ClearScatterInsidePlaced(go);
+
             var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (placedBelt != null)
                 placedBelt.SetBuildShape(ResolveConveyorBuildShape(placedBelt, hit));
@@ -1580,6 +1590,17 @@ namespace VoxelEngine.Building
             else if (hasUpColliderBounds)
             {
                 lift = -heldMinUp;
+            }
+
+            // 17.19.0-dev: pivot-anchored prefabs place root-on-support. No
+            // bounds lift, no footprint recentering: the authored model decides
+            // where it sits by where the artist put it relative to the root, so
+            // a model parented at local zero lands exactly at the block position.
+            if (profile.anchorAtPivot)
+            {
+                lift = 0f;
+                footprintCenterU = 0f;
+                footprintCenterV = 0f;
             }
 
             Vector3 origin = deck.transform.position;
@@ -2259,7 +2280,9 @@ namespace VoxelEngine.Building
                 usesInteriorLattice = prefab != null && !usesDedicatedSnap && !isPortalPiece
                     && !hasTieredBuildPiece && !hasDynamicBody && !hasDedicatedStaticPart,
                 portalHalfExtents = isPortalPiece ? PortalPieceHalfExtents(prefab) : Vector3.zero,
-                usesDedicatedSnap = usesDedicatedSnap
+                usesDedicatedSnap = usesDedicatedSnap,
+                anchorAtPivot = prefab != null
+                    && prefab.GetComponentInChildren<VoxelEngine.Building.PlacementPivotAnchor>(true) != null
             };
             _staticPlacementProfiles[held] = profile;
             return profile;
@@ -2918,8 +2941,15 @@ namespace VoxelEngine.Building
                 if (snapPos.HasValue) return snapPos.Value;
             }
 
+            // 17.19.0-dev: pivot-anchored prefabs (PlacementPivotAnchor) put the
+            // ROOT on the support surface instead of the cell centre, so a model
+            // authored from local zero appears exactly where the block is placed.
+            bool pivotAnchored = block != null && GetStaticPlacementPrefabProfile(block).anchorAtPivot;
+
             // Free placement = hit point pushed along surface normal by half block size.
-            Vector3 free = hit.point + hit.normal * (gridSize * 0.5f);
+            Vector3 free = pivotAnchored
+                ? hit.point + hit.normal * 0.02f
+                : hit.point + hit.normal * (gridSize * 0.5f);
             if (!gridSnap) return free;
 
             // Snap to grid. Push from the hit surface along the normal.
@@ -2932,7 +2962,14 @@ namespace VoxelEngine.Building
             // placed block already exists, use it as a local placement anchor so follow-up
             // placements stay on the same tangent-frame lattice.
             if (TryGetNearbyPlacedBlockSnap(hit, raw, gs, out var anchoredSnap))
+            {
+                // The tangent lattice resolves cell centres like the world-axis
+                // grid; anchored roots drop half a cell along the local up so
+                // they rest on the same support plane.
+                if (pivotAnchored)
+                    anchoredSnap -= GravityProvider.GetUp(anchoredSnap) * (gs * 0.5f);
                 return anchoredSnap;
+            }
 
             Vector3 snapped = new Vector3(
                 Mathf.Round(raw.x / gs) * gs,
@@ -2944,6 +2981,9 @@ namespace VoxelEngine.Building
             float distToHit = Vector3.Dot(snapped - hit.point, hit.normal);
             if (distToHit < gs * 0.1f)
                 snapped += hit.normal * gs;
+
+            if (pivotAnchored)
+                snapped -= GravityProvider.GetUp(snapped) * (gs * 0.5f);
 
             return snapped;
         }
@@ -3308,6 +3348,30 @@ namespace VoxelEngine.Building
             return true;
         }
 
+        /// <summary>17.19.0-dev: destroy the scatter props intersecting a freshly
+        /// placed block's collider bounds. Non-scatter colliders are ignored.</summary>
+        private static void ClearScatterInsidePlaced(GameObject placed)
+        {
+            if (placed == null) return;
+            var bounds = default(Bounds);
+            bool any = false;
+            foreach (var col in placed.GetComponentsInChildren<Collider>(true))
+            {
+                if (!any) { bounds = col.bounds; any = true; }
+                else bounds.Encapsulate(col.bounds);
+            }
+            if (!any)
+            {
+                foreach (var ren in placed.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (!any) { bounds = ren.bounds; any = true; }
+                    else bounds.Encapsulate(ren.bounds);
+                }
+            }
+            if (!any) return;
+            VoxelEngine.Scattering.ScatterClear.ClearInBox(bounds.center, bounds.extents, Quaternion.identity);
+        }
+
         private bool IsPlacementProbeColliderAllowed(Collider collider,
             bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
             VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost, bool allowAdjacentCoplanarDecks)
@@ -3327,6 +3391,13 @@ namespace VoxelEngine.Building
             // Placed blocks retain their established stacking contract
             if (placed != null)
                 return block != null && block.allowStacking;
+            // 17.19.0-dev: biome scatter (trees, rocks, props under a chunk's
+            // __scatter holder) is decoration, never structure - it must not
+            // refuse a placement. This is what blocked the quarry in any lightly
+            // wooded or rocky mining area. The committing placement clears the
+            // scatter its own footprint overlaps, and the quarry additionally
+            // clears its whole mining area at startup.
+            if (VoxelEngine.Scattering.ScatterClear.IsScatterCollider(collider)) return true;
             // Thin conduits and draped roads may overlap static world geometry.
             if (isThin || isSurfaceOverlay) return true;
             if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)

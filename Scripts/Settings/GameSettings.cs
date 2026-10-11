@@ -34,7 +34,8 @@ namespace VoxelEngine.Settings
         GridInspector,  // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
         Autopilot,      // fly-to-nav-target cruise control (12.22.0-dev)
         PushToTalk,     // hold to speak on proximity voice (14.20.0-dev)
-        Dampeners       // personal inertia dampeners; Ctrl+key locks a relative target (14.62.0-dev)
+        Dampeners,      // personal inertia dampeners; Ctrl+key locks a relative target (14.62.0-dev)
+        WindLines       // surface wind-line visuals; read WITH the Ctrl modifier - Ctrl+B by default (17.20.0-dev)
     }
 
     /// <summary>How the microphone decides it is your turn to speak.
@@ -77,11 +78,12 @@ namespace VoxelEngine.Settings
         private const string K_VOICE_DEV    = "ve.voiceDevice";
         private const string K_LAST_HOST    = "ve.lastHostAddress";
         private const string K_VOICE_MUTED  = "ve.voiceMuted";
+        private const string K_WIND_LINES   = "ve.windLines";
         private const string K_VERSION      = "ve.settingsVersion";
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 24;   // v24: monitor-auto refresh is the default when no explicit override is saved
+        private const int    CURRENT_VERSION = 25;   // v25: wind-lines toggle (Ctrl+B default) joins the bindable actions
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -206,6 +208,10 @@ namespace VoxelEngine.Settings
             PlayerPrefs.Save();
         }
         public static bool  ScreenShake      { get => PlayerPrefs.GetInt("ve_screenshake", 1) != 0; set { PlayerPrefs.SetInt("ve_screenshake", value ? 1 : 0); Notify(); } }
+        /// <summary>17.20.0-dev: subtle surface wind-line streaks. Ctrl+B toggles in
+        /// game; the preference persists so a player who dislikes them stays rid of
+        /// them. Off costs nothing - the emitter stops and clears.</summary>
+        public static bool  WindLinesVisible { get => PlayerPrefs.GetInt(K_WIND_LINES, 1) != 0; set { PlayerPrefs.SetInt(K_WIND_LINES, value ? 1 : 0); Notify(); } }
         /// <summary>Developer-only damage bypass. Release players cannot read or set it.</summary>
         public static bool InfiniteHealth
         {
@@ -373,6 +379,10 @@ namespace VoxelEngine.Settings
             // Z mirrors the cockpit dampener key: one muscle memory, two contexts —
             // seated it is the SHIP's switch (GridCockpit), on foot it is YOURS.
             InputAction.Dampeners       => "Z",
+            // 17.20.0-dev: read WITH the Ctrl modifier (Ctrl+B toggles the surface
+            // wind lines). Plain B stays the build wheel - the wheel's open edge
+            // ignores presses while Ctrl is held, so the two never fire together.
+            InputAction.WindLines       => "B",
             _ => "None"
         };
 
@@ -448,6 +458,8 @@ namespace VoxelEngine.Settings
             // no valid binding exists; existing Crouch and non-empty custom binds stay.
             // v24: an unset refresh preference now means Monitor (Auto); an explicit
             // saved refresh choice is preserved as a deliberate player override.
+            // v25: the wind-lines action is new; the generic pass above fills it with
+            // B (read with the Ctrl modifier). Nothing else to migrate.
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);
@@ -536,6 +548,7 @@ namespace VoxelEngine.Settings
             VoiceActivation  = DEFAULT_VOICE_GATE;
             VoiceVolume      = DEFAULT_VOICE_VOL;
             VoiceDevice      = "";
+            WindLinesVisible = true;
             // Reset every keybind to its hard-coded default (NOT to whatever was previously saved).
             foreach (InputAction a in System.Enum.GetValues(typeof(InputAction)))
                 PlayerPrefs.SetString(K_KEY_PREFIX + a, DefaultKey(a));

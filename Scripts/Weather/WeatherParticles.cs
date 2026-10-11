@@ -57,7 +57,9 @@ namespace VoxelEngine.Weather
         private bool _lastWasBlizzard;
 
         // Diagnostic throttle + one-shot warnings
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         private float _diagTimer;
+#endif
         private bool _warnedNoManager;
 
         private static readonly int IdFallDir = Shader.PropertyToID("_WeatherFallDir");
@@ -233,7 +235,11 @@ namespace VoxelEngine.Weather
                 }
             }
 
-            // Diagnostic logging (throttled every 10 s)
+            // Diagnostic logging (throttled every 10 s, editor/dev only)
+            // 17.20.0-dev perf: a Debug.Log in a shipping build pays a stack-trace
+            // capture on every call - a small but recurring hitch with no
+            // player-facing value. Release builds skip the heartbeat entirely.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             _diagTimer += Time.deltaTime;
             if (_diagTimer >= 10f)
             {
@@ -242,6 +248,7 @@ namespace VoxelEngine.Weather
                           $"snow={isSnow} blizzard={isBlizzard} rainAlive={(_rainPS != null ? _rainPS.particleCount : 0)} " +
                           $"snowAlive={(_snowPS != null ? _snowPS.particleCount : 0)} groundSnow={(_snowGroundPS != null ? _snowGroundPS.particleCount : 0)}");
             }
+#endif
         }
 
         private Vector3 ResolveRadialDown(WeatherManager wm)

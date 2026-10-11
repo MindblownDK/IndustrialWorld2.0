@@ -89,13 +89,17 @@ namespace VoxelEngine.UI
                 return;
             }
 
-            bool pressed = GameSettings.WasPressed(openAction);
+            // 17.20.0-dev: Ctrl+B is the wind-lines toggle - while Ctrl is held the
+            // wheel ignores its open edge so the two never fire together. Plain B
+            // behaves exactly as before.
+            bool ctrl = VoxelEngine.GridSystem.GridInput.Ctrl;
+            bool pressed = !ctrl && GameSettings.WasPressed(openAction);
             bool held = GameSettings.IsHeld(openAction);
 
             // The edge, not the level: a key already down when the context appears
             // must not pop the dial in the player's face. The second clause catches
             // a press edge eaten by a panel closing on the same frame.
-            if (pressed || (held && !_wasHeld))
+            if (pressed || (held && !_wasHeld && !ctrl))
             {
                 _pressTime = Time.unscaledTime;
                 if (!IsOpen) { if (!UIState.IsBlocking) Open(); }

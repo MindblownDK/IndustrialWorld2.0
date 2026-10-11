@@ -39,6 +39,12 @@ namespace VoxelEngine.Combat
         private Transform _player;
         private Vector3 _home, _wanderTarget;
         private float _nextWanderAt, _nextGazeAt, _nextBiteAt;
+        // 17.19.0-dev: visible telegraphs - the gaze gets a green-eyed flare,
+        // the bite a rear-back windup; both land only after the show.
+        private float _gazeWindup, _biteWindup;
+        private EnemyRigAnimator _anim;
+        public const float GazeWindupSeconds = 0.6f;
+        public const float BiteWindupSeconds = 0.4f;
 
         protected override void Awake()
         {
@@ -56,6 +62,8 @@ namespace VoxelEngine.Combat
             // 14.55.0 multiplayer: hostiles exist once, on the host. Guests
             // cull locally-born ones here and keep only streamed replicas.
             if (!VoxelEngine.Networking.HostileSync.OnHostileAwake(this)) return;
+
+            _anim = EnemyRigAnimator.Attach(this);   // 17.19.0-dev: slither + telegraphs
         }
 
         private void FixedUpdate()
@@ -76,18 +84,41 @@ namespace VoxelEngine.Combat
             {
                 moveDir = flatToPlayer.sqrMagnitude > 0.0001f ? flatToPlayer.normalized
                                                               : Vector3.ProjectOnPlane(transform.forward, up).normalized;
-                spd = chaseSpeed;
+                // 17.19.0-dev: a rearing basilisk plants itself - the windup is
+                // the readable "bite incoming" signal, and sliding closer during
+                // it would eat the escape window the telegraph promises.
+                spd = _biteWindup > 0f ? 0f : chaseSpeed;
 
-                if (Time.time >= _nextGazeAt)
+                // The gaze flares first, petrifies second - and the cone is
+                // re-checked at release, so breaking line of sight during the
+                // flare makes the gaze miss.
+                if (_gazeWindup > 0f && Time.time >= _gazeWindup)
                 {
-                    _nextGazeAt = Time.time + gazeCooldown;
+                    _gazeWindup = 0f;
+                    _anim?.Strike();
                     PetrifyingGaze(pos, up);
                 }
-                if (distP <= biteRange && Vector3.Distance(_player.position, pos) <= biteRange + 0.8f
+                else if (_gazeWindup <= 0f && Time.time >= _nextGazeAt && GazeConeHit(pos, up))
+                {
+                    _nextGazeAt = Time.time + gazeCooldown;
+                    _gazeWindup = Time.time + GazeWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Gaze, GazeWindupSeconds);
+                }
+
+                if (_biteWindup > 0f && Time.time >= _biteWindup)
+                {
+                    _biteWindup = 0f;
+                    _anim?.Strike();
+                    if (_player != null && Vector3.Distance(_player.position, pos) <= biteRange + 1.4f)
+                        VenomBite();
+                }
+                else if (_biteWindup <= 0f
+                    && distP <= biteRange && Vector3.Distance(_player.position, pos) <= biteRange + 0.8f
                     && Time.time >= _nextBiteAt)
                 {
                     _nextBiteAt = Time.time + biteCooldown;
-                    VenomBite();
+                    _biteWindup = Time.time + BiteWindupSeconds;
+                    _anim?.Telegraph(EnemyRigAnimator.TelegraphKind.Windup, BiteWindupSeconds);
                 }
             }
             else
@@ -119,6 +150,20 @@ namespace VoxelEngine.Combat
         // Forward cone of petrification: slows the player if they're in front + in range.
         // Dodge by breaking the cone (circle-strafe to its flank/rear) or outranging it.
         // (The Basilisk turns slowly, so a fast or sprinting player can escape the cone.)
+        /// <summary>17.19.0-dev: the same cone test PetrifyingGaze runs, lifted
+        /// out so the telegraph only starts when the gaze would actually hit -
+        /// and so the release re-check can fail while the cast succeeded.</summary>
+        private bool GazeConeHit(Vector3 pos, Vector3 up)
+        {
+            if (_player == null) return false;
+            Vector3 forward = Vector3.ProjectOnPlane(transform.forward, up);
+            if (forward.sqrMagnitude < 0.0001f) return false;
+            Vector3 toP = Vector3.ProjectOnPlane(_player.position - pos, up);
+            float dist = toP.magnitude;
+            if (dist > gazeRange || dist < 0.001f) return false;
+            return Vector3.Dot(forward.normalized, toP.normalized) >= Mathf.Cos(gazeHalfAngle * Mathf.Deg2Rad);
+        }
+
         private void PetrifyingGaze(Vector3 pos, Vector3 up)
         {
             if (_player == null) return;
