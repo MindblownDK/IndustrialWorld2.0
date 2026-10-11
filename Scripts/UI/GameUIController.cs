@@ -196,11 +196,20 @@ namespace VoxelEngine.UI
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_doc.panelSettings != null)
             {
-                // ScaleWithScreenSize (1920×1080 reference, width-priority match): the HUD
-                // must FIT the actual window AND stay large. ConstantPixelSize rendered
-                // the panel 1:1 and pushed the HUD off-screen on smaller windows.
-                // ApplyUiScaleAndFit also forces ScreenSpaceOverlay (world-space quads cut
-                // the HUD off at the screen edges).
+                // UiScaleSystem is the one authority on size. It writes ConstantPixelSize
+                // plus an explicit multiplier of clamp(Screen.height / 1080, 0.667, 2.0),
+                // which gives the panel a layout area of exactly 1080 design units tall on
+                // every supported display and a width that follows the aspect ratio.
+                //
+                // ConstantPixelSize was rejected here once before, and rightly so: with the
+                // multiplier pinned at 1 the panel drew 1:1 and a window shorter than the
+                // design pushed the HUD off-screen. Deriving the multiplier from the screen
+                // height is what fixes that - a 1280x720 window gets 0.667x and a full
+                // 1920x1080 layout area, so nothing is ever pushed out. Aspect ratio takes
+                // no part, which is why a 49 inch 5120x1440 now sizes identically to a
+                // 2560x1440 instead of the old Shrink law's 2.67x crop.
+                // Apply also forces ScreenSpaceOverlay (world-space quads cut the HUD off
+                // at the screen edges).
                 VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             }
             _root = _doc.rootVisualElement;

@@ -1,9 +1,33 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.16.0-dev`
+**Current Version:** `17.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.17.0-dev] Unify UI Scaling Into One Constant-Size Law
+
+**Type:** MINOR — new interface-scaling system and a Settings entry, both save-compatible. No save schema changed.
+
+**GitHub title:** `[17.17.0-dev] Unify UI scaling into one constant-size law`
+
+#### Added and changed
+- `UiScaleSystem` is now the single authority on interface size. It writes one height-anchored, aspect-blind law — `clamp(Screen.height / 1080, 0.667, 2.0)` — through `PanelScaleMode.ConstantPixelSize` plus `PanelSettings.scale`. That is the only mode in which Unity honours an explicit multiplier: `PanelSettings.OnValidate` resets `scale` to 1 in every other mode, and the Inspector exposes the field only for Constant Pixel Size.
+- The layout area Unity gives a panel is `screen / scale`, so the design height is a constant 1080 units on every supported display and only the width follows the aspect ratio. 1280x720 resolves to 0.667x with a full 1920x1080 layout area, so nothing is pushed off-screen; 1920x1080 to 1.000x; 2560x1440 to 1.333x; 5120x1440 to 1.333x with a 3840x1080 area, sized exactly like 2560x1440; 3840x2160 to 2.000x.
+- Retired the law that broke large screens. `PanelScreenMatchMode.Shrink` resolves to `max(screenW / refW, screenH / refH)`, so a 49 inch 5120x1440 scaled the HUD 2.667x AND cropped its layout area to 1920x540 — elements authored for 1080 units of height crammed into 540 of them while drawing two and a half times too large. The separate 1536x864 menu law is retired with it, so the HUD and the menus can no longer disagree about their own size on the same screen.
+- `GameSettings.ApplyUiScaleAndFit` and `UITheme.ApplyMenuScale` are kept as shims, so all five existing call sites are unchanged; both route through the one implementation and still force `ScreenSpaceOverlay`, since world-space quads clip the HUD at the screen edges.
+- `UiScaleDriver` is a lazily created hidden singleton that re-applies the law when `Screen.width` or `Screen.height` changes. `GameSettings.OnChanged` covers a resolution picked in Settings but never fires for a dragged window border or a monitor switch, and under a height-anchored law a changed height means a changed scale.
+- Settings - Interface opens with a UI Scale row: Auto, Small (0.75x), Normal (1.00x), Large (1.50x) and Custom, plus a 0.50x-2.00x fine slider that selects Custom on touch and a live readout of the resolved multiplier and layout area. Small, Normal and Large are absolute and bypass the screen entirely, so a player who wants a literally fixed size can have one. Both the main menu and the pause menu receive it through the shared builder, every control updates in place without a tab rebuild so the scroll position holds mid-drag, and the two preference keys are additive and absent-safe. `GameSettings.ResetToDefaults` restores Auto at 1.00x.
+- Screen-to-panel conversions now read the shared law instead of assuming 1:1 pixels or hand-rolling their own. `BombHud` positioned its fuse countdown labels in raw screen pixels; `GridInspectorHud` carried a private `min(width / 1920, height / 1080)` copy of a law that no longer exists for its worst-block tag; `RadialWheelView`'s dial fit and `ConfirmDialogHud`'s wheel safe-scale both measured against screen pixels, which made them shrink whenever the panel scale was above 1; and the confirm wheel's 28-unit hover deadzone was compared against a screen-pixel offset, making it twice as twitchy at 1440p as at 1080p. The conversions already routed through `RuntimePanelUtils.ScreenToPanel` were correct and are untouched.
+- Added `Assets/Scripts/Editor/UI/UiScaleLawSetup.cs` in a new editor-only folder. Its authoring path writes neutral 1.00x values, so the asset on disk no longer carries whatever the Game view happened to be when somebody last pressed Play; its repair path is wired into Maintenance & Repair and re-authors the scaling fields of every PanelSettings asset in the project, creating the canonical shared panel only when nothing else occupies that path. Themes, text settings, sort orders, target displays, target textures, atlas settings and clear flags are read but never written, and a world-space render mode is reported rather than flipped. Setup Step 3 and the spawn-player step both call it.
+- Re-authored `Resources/MenuPanelSettings.asset` in place to the values that path produces: ScaleMode ScaleWithScreenSize to ConstantPixelSize, ScreenMatchMode Shrink to MatchWidthOrHeight, Match 0.5 to 1. Reference resolution, both DPI values, render mode, theme and atlas limits are unchanged, so no scene or prefab reference is disturbed.
+- Fixed a duplicated XML `<summary>` above `UITheme.ApplyMenuScale`, which had left the `StyleScroller` documentation attached to the wrong member.
+- `UiScaleSystem` separates its two entry points. `Apply` writes the live resolved multiplier and registers the panel for later rewrites; `ApplyAuthored` writes a neutral 1.00x, registers nothing and never starts the runtime driver. Both Setup Wizard paths that author the shared asset use the second one, so pressing a wizard button in Edit Mode can neither bake the Game view's current height into the asset nor leave a tracked asset behind for the runtime to overwrite.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.17.0-dev`, MINOR over `17.16.0-dev`. No save schema, chunk format or world-state field changed. The two new PlayerPrefs keys are additive and default to Auto at 1.00x when absent.
+- No scene editing is required. All six UIDocuments in Game.unity already point at the shared MenuPanelSettings asset, and the single MainMenu.unity document carries a null panel reference that `MainMenuController` resolves from Resources.
+- Static source review plus one Editor compile round. The first pass failed `CS0103` on an unqualified `DontDestroyOnLoad` in `UiScaleSystem.EnsureRunning`, which is an instance member of `UnityEngine.Object` and so is not visible from a static class; it is now qualified, and the editor authoring path was split out in the same pass. No other compiler or Unity runtime is available in this workspace, so the remaining compile, Setup Wizard execution and Play Mode acceptance are unverified. The active branch is confirmed as `Dev` from the repository clone.
 
 ### [17.16.0-dev] Rebuild Recipe Registry Links Without Reauthoring
 

@@ -309,7 +309,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Audit and rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
                 Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
-                Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()));
+                Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()),
+                Setup("Apply the unified UI scale law to every PanelSettings (non-destructive, 17.17.0-dev)", () => VoxelEngine.EditorTools.UiScaleLawSetup.Run()));
         }
 
         private static void AddSetupGroup(UnityEngine.UIElements.VisualElement parent, ref int number,
@@ -724,7 +725,11 @@ namespace VoxelEngine.EditorTools
                 panelSettings.name = "MenuPanelSettings";
                 AssetDatabase.CreateAsset(panelSettings, "Assets/Resources/MenuPanelSettings.asset");
             }
-            VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(panelSettings);
+            // Authored values, not the live law. GameSettings.ApplyUiScaleAndFit now
+            // reads Screen.height, which in the Editor is the Game view, so calling it
+            // here would bake a display-specific multiplier into the asset. The runtime
+            // owns the live value; the asset stays at a neutral 1.00x.
+            VoxelEngine.EditorTools.UiScaleLawSetup.AuthorDesignValues(panelSettings);
             EditorUtility.SetDirty(panelSettings);
             doc.panelSettings = panelSettings;
 
@@ -856,27 +861,35 @@ namespace VoxelEngine.EditorTools
             if (panelSettings == null)
             {
                 panelSettings = ScriptableObject.CreateInstance<UnityEngine.UIElements.PanelSettings>();
-                panelSettings.name      = "MenuPanelSettings";
-                panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
-                panelSettings.referenceResolution = new Vector2Int(1920, 1080);
-                panelSettings.match = 0.5f;
+                panelSettings.name = "MenuPanelSettings";
                 AssetDatabase.CreateAsset(panelSettings, panelSettingsPath);
             }
-            // Step 3 is the explicit authoring point for shared UI scaling. Runtime
-            // controllers no longer overwrite these values, so Inspector edits made
-            // after this step remain under developer control.
-            // ScaleWithScreenSize (not ConstantPixelSize): the HUD must fit ANY window —
-            // a constant-pixel panel is anchored bottom-left and pushed off-screen on
-            // smaller/non-1080p views. Width-priority keeps the HUD large on wide windows.
-            // ScreenSpaceOverlay: world-space quads cut the HUD off at the screen edges.
-            panelSettings.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
-            panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
-            panelSettings.referenceResolution = new Vector2Int(1920, 1080);
-            panelSettings.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
-            panelSettings.match = 0f;
-            panelSettings.scale = 1f;
-            panelSettings.referenceDpi = 96f;
-            panelSettings.fallbackDpi = 96f;
+            // Step 3 is the explicit authoring point for shared UI scaling, and it writes
+            // the NEUTRAL values of the one law owned by VoxelEngine.UI.UiScaleSystem:
+            // ConstantPixelSize at 1.00x against a 1920x1080 reference, height-matched,
+            // rendered as a screen-space overlay.
+            //
+            // ConstantPixelSize here is NOT a fixed 1:1 panel. At runtime UiScaleSystem
+            // writes clamp(Screen.height / 1080, 0.667, 2.0) into PanelSettings.scale -
+            // the only multiplier Unity honours in that mode, since OnValidate resets it
+            // to 1 everywhere else - and the layout area becomes screen / scale. That is
+            // exactly 1080 design units tall on every supported display, with the width
+            // free to follow the aspect ratio:
+            //
+            //   1280x720  -> 0.667x -> 1920x1080 layout area (nothing pushed off-screen)
+            //   1920x1080 -> 1.000x -> 1920x1080
+            //   2560x1440 -> 1.333x -> 1920x1080
+            //   5120x1440 -> 1.333x -> 3840x1080 (sized exactly like 2560x1440)
+            //   3840x2160 -> 2.000x -> 1920x1080
+            //
+            // The law it replaces was ScaleWithScreenSize with PanelScreenMatchMode.Shrink,
+            // which Unity resolves to max(screenW/refW, screenH/refH). On a 49 inch
+            // 5120x1440 that meant a 2.667x scale AND a layout area cropped to 1920x540:
+            // elements drawn for 1080 units of height crammed into 540 of them while being
+            // rendered two and a half times too large. Menus carried a third law of their
+            // own (1536x864 matched on height), so the HUD and the menus disagreed about
+            // their own size on the same screen. Both now route through UiScaleSystem.
+            VoxelEngine.EditorTools.UiScaleLawSetup.AuthorDesignValues(panelSettings);
             EditorUtility.SetDirty(panelSettings);
 
             var serializedPanelSettings = new SerializedObject(panelSettings);

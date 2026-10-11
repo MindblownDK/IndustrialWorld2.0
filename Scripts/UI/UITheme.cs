@@ -807,6 +807,15 @@ namespace VoxelEngine.UI
         // ── Themed ScrollView ─────────────────────────────────────────────
 
         /// <summary>
+        /// Compatibility shim. Menus used to carry their own scale law (1536x864
+        /// matched on height) while the HUD carried another (1920x1080 Shrink), so
+        /// the two disagreed about their own size on the same screen. Both now go
+        /// through UiScaleSystem, which anchors on height against 1920x1080 and
+        /// ignores aspect ratio entirely.
+        /// </summary>
+        public static void ApplyMenuScale(PanelSettings ps) => UiScaleSystem.Apply(ps);
+
+        /// <summary>
         /// Restyles a ScrollView's scrollbars to match the design system: the
         /// default grey Unity scrollbar becomes a slim 6px steel bar in a
         /// near-invisible inset track, with hover brighten + accent-on-drag
@@ -814,19 +823,6 @@ namespace VoxelEngine.UI
         /// Call after constructing any ScrollView inside a themed panel.
         /// Optional accent overrides the default steel-blue thumb colour.
         /// </summary>
-        /// <summary>14.51.0 - one scale law for every menu panel: scale with
-        /// screen size against a 1536x864 reference, matched on height. At
-        /// 1080p everything draws 1.25x bigger than before; at 1440p or 4K it
-        /// keeps exactly that apparent size instead of shrinking to threads.</summary>
-        public static void ApplyMenuScale(PanelSettings ps)
-        {
-            if (ps == null) return;
-            ps.scaleMode = PanelScaleMode.ScaleWithScreenSize;
-            ps.referenceResolution = new Vector2Int(1536, 864);
-            ps.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
-            ps.match = 1f;
-        }
-
         public static void StyleScroller(ScrollView scroll, Color? accent = null)
         {
             if (scroll == null) return;

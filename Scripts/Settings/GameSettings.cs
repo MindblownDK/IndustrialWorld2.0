@@ -499,16 +499,16 @@ namespace VoxelEngine.Settings
             Notify();
         }
 
+        /// <summary>
+        /// Compatibility shim kept so the five existing callers do not have to change.
+        /// All UI scaling is owned by <see cref="VoxelEngine.UI.UiScaleSystem"/> now: one
+        /// height-anchored law applied through ConstantPixelSize, so a 49 inch 5120x1440
+        /// display sizes the interface exactly like a 2560x1440 one instead of the old
+        /// Shrink behaviour, which scaled the HUD 2.67x and cropped its layout area.
+        /// Still forces ScreenSpaceOverlay, as this method always did.
+        /// </summary>
         public static void ApplyUiScaleAndFit(UnityEngine.UIElements.PanelSettings ps)
-        {
-            if (ps == null) return;
-            ps.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
-            ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
-            ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Shrink; // Shrink ensures the UI scales safely without cropping regardless of aspect ratio
-            ps.referenceDpi = 96;
-            ps.fallbackDpi = 96;
-        }
+            => VoxelEngine.UI.UiScaleSystem.Apply(ps);
 
         private static void Notify() => OnChanged?.Invoke();
 
@@ -539,6 +539,8 @@ namespace VoxelEngine.Settings
             // Reset every keybind to its hard-coded default (NOT to whatever was previously saved).
             foreach (InputAction a in System.Enum.GetValues(typeof(InputAction)))
                 PlayerPrefs.SetString(K_KEY_PREFIX + a, DefaultKey(a));
+            // Interface sizing goes back to the height-anchored law at 1.00x.
+            VoxelEngine.UI.UiScaleSystem.ResetToDefault();
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Apply();

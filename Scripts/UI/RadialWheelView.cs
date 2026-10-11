@@ -129,7 +129,14 @@ namespace VoxelEngine.UI
             _iconSlots.Clear();
             _detailLines.Clear();
 
-            _fit = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 760f, 0.52f, 1f);
+            // Fit against the panel's design area, not raw screen pixels: the wheel is
+            // laid out in design units, so measuring it in pixels made it shrink on a
+            // display whose scale was above 1 and grow on one below. Under the shared
+            // height-anchored law the design area is 1080 units tall everywhere, which
+            // puts the dial at full size on every supported display and still leaves the
+            // guard for a genuinely narrow window.
+            Vector2 design = UiScaleSystem.DesignSize;
+            _fit = Mathf.Clamp(Mathf.Min(design.x, design.y) / 760f, 0.52f, 1f);
 
             _layer = new VisualElement { name = "RadialWheelLayer" };
             _layer.style.position = Position.Absolute;

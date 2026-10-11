@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.16.0-dev`
-**Roadmap Version:** `17.16.0-dev`
+**Current Version:** `17.17.0-dev`
+**Roadmap Version:** `17.17.0-dev`
 **Date:** 2026-10-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.17.0-dev - Unify UI Scaling Into One Constant-Size Law
+- `UiScaleSystem` owns every panel: height-anchored `clamp(Screen.height / 1080, 0.667, 2.0)` written through ConstantPixelSize, so the layout area is 1080 design units tall on any display and aspect ratio takes no part
+- The former Shrink law (2.667x scale and a 1920x540 cropped layout area on a 49 inch 5120x1440) and the separate 1536x864 menu law are gone; screen-to-panel conversions in the bomb countdown, grid inspector worst-block tag, radial wheel fit and confirm wheel read the one law
+- Settings - Interface gains Auto / Small / Normal / Large / Custom with a live readout; Setup Step 3 authors neutral 1.00x values and a non-destructive repair re-authors every PanelSettings asset
+
 ### 17.16.0-dev - Link Recipe Registry and Audit Research References
 - Voxel Engine Setup appends complete, unambiguous crafting recipe assets to the canonical RecipeRegistry without changing recipe values or existing links
 - Existing ResearchNode recipe references are preserved and used to select referenced assets; retired/build-token/science duplicates and ambiguous copies are reported instead of guessed
@@ -48,11 +53,6 @@
 - Harvested deterministic scatter trees are recorded per persistent world/body; Hammer Repair covers tiered pieces and ordinary static BlockItems, while grid repairs remain Welder-only
 - Inventory crafting uses one FIFO queue unless a Bench/Assembler is explicitly open; quantities are per recipe and progress UI updates in place
 - Inspection HUD remounts after UI-root changes; Setup's fall-damage repair loads only player-named prefabs with a root PlayerController; Unity acceptance remains pending
-
-### 17.13.1-dev - Restore Voxel Mining Drops
-- Runtime fallback registries resolve mineable materials to canonical item assets and report unresolved drop links
-- Setup repairs only missing dropItem links and creates missing material definitions; populated links and authored yields remain intact
-- Mining targets the active player's Inventory, with a world-drop fallback; Unity acceptance remains pending
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -2223,7 +2223,7 @@ This rule applies to:
 
 10. **Accessibility**
     - Colorblind-friendly indicators.
-    - Adjustable UI scale.
+    - ~~Adjustable UI scale.~~ *(17.17.0-dev)* — one height-anchored law in `UiScaleSystem`, exposed as Auto / Small / Normal / Large / Custom in Settings - Interface.
     - Subtitle support for audio cues.
 
 11. **Theme-Agnostic UI Components**

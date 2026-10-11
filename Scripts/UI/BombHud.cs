@@ -151,8 +151,13 @@ namespace VoxelEngine.UI
                     float remaining = (b is VoxelEngine.Combat.AntimatterBomb ab) ? ab.fuse : ((VoxelEngine.Combat.ExplosiveBlock)b).fuse;
                     var lbl = _labels[li++];
                     lbl.text = Mathf.Max(0, Mathf.CeilToInt(remaining)) + "s";
-                    lbl.style.left = sp.x;
-                    lbl.style.top = Screen.height - sp.y;
+                    // WorldToScreenPoint returns screen pixels with a bottom-left origin;
+                    // the label is positioned in panel design units. Converting through the
+                    // shared scale law keeps the countdown on the bomb at every resolution
+                    // instead of drifting off it whenever the scale is not exactly 1.
+                    Vector2 panelPos = UiScaleSystem.UnityScreenToPanel(sp);
+                    lbl.style.left = panelPos.x;
+                    lbl.style.top  = panelPos.y;
                     float denom = (b is VoxelEngine.Combat.AntimatterBomb) ? 8f : 5f;
                     float frac = Mathf.Clamp01(remaining / Mathf.Max(1f, denom));
                     lbl.style.color = Color.Lerp(new Color(1f, 0.2f, 0.1f), new Color(0.4f, 0.95f, 0.4f), frac);

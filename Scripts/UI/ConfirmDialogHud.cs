@@ -82,7 +82,11 @@ namespace VoxelEngine.UI
             _wheel.style.width = WheelPx;
             _wheel.style.height = WheelPx;
             _wheel.style.position = Position.Relative;
-            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 640f, 0.55f, 1f);
+            // Measured against the panel's design area rather than raw screen pixels,
+            // so the wheel is full size on every supported display and only pulls in
+            // when the layout area itself is genuinely short.
+            Vector2 design = UiScaleSystem.DesignSize;
+            float safeScale = Mathf.Clamp(Mathf.Min(design.x, design.y) / 640f, 0.55f, 1f);
             _wheel.style.scale = new StyleScale(new Scale(new Vector3(safeScale, safeScale, 1f)));
             _overlay.Add(_wheel);
 
@@ -339,7 +343,11 @@ namespace VoxelEngine.UI
 #else
             mouse = Input.mousePosition;
 #endif
-            float dx = mouse.x - Screen.width * 0.5f;
+            // dx is a screen-pixel offset; the 28-unit deadzone is authored in design
+            // units, so convert before comparing. Without this the hover threshold was
+            // effectively 28 screen pixels at any scale - twice as twitchy at 1440p as
+            // at 1080p, and half as responsive again on a 49 inch.
+            float dx = UiScaleSystem.PixelsToUnits(mouse.x - Screen.width * 0.5f);
             if (dx > 28f) SetHovered(0);
             else if (dx < -28f) SetHovered(1);
         }

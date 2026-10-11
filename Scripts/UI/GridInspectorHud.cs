@@ -1078,10 +1078,13 @@ namespace VoxelEngine.UI
                 HideWorstTag();
                 return;
             }
-            // Pixel space → panel space (the panel scales with a shrink factor).
-            float panelScale = Mathf.Max(0.01f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
-            _worstTag.style.left = sp.x / panelScale + 14;
-            _worstTag.style.top = (Screen.height - sp.y) / panelScale - 34;
+            // Screen pixels -> panel design units. This used to hand-roll its own
+            // min(width/1920, height/1080) factor, a private copy of a scale law that
+            // no longer exists; it now reads the one shared law so the tag tracks the
+            // block it points at on every display and at every player-chosen scale.
+            Vector2 panelPos = UiScaleSystem.UnityScreenToPanel(sp);
+            _worstTag.style.left = panelPos.x + 14;
+            _worstTag.style.top = panelPos.y - 34;
             _worstTag.style.display = DisplayStyle.Flex;
 
             string text = "\u25B2 " + _worstBlock.blockName.ToUpperInvariant() + "  "

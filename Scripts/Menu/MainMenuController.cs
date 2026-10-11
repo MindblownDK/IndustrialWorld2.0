@@ -139,7 +139,8 @@ namespace VoxelEngine.Menu
                 // "No Theme Style Sheet set" warning disappears.
                 _doc.panelSettings.themeStyleSheet = LoadOrCreateDefaultTheme();
             }
-            // 14.51.0 - menus scale with the screen (and grew 1.25x at 1080p).
+            // Menus and the in-game HUD share one scale law now, so they can no longer
+            // disagree about their own size on the same screen. See UiScaleSystem.
             T.ApplyMenuScale(_doc.panelSettings);
             if (_newSeed == 0)
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);

@@ -411,9 +411,74 @@ namespace VoxelEngine.UI
             }
         }
 
+        /// <summary>
+        /// Interface sizing, first row of the Interface tab.
+        ///
+        /// Auto is the shared height-anchored law: the layout area stays 1080 design
+        /// units tall on every supported display and only the width follows the aspect
+        /// ratio, so a 49 inch 5120x1440 sizes exactly like a 2560x1440. Small, Normal
+        /// and Large are absolute multipliers for players who want a literally fixed
+        /// size, and Custom takes the slider below.
+        ///
+        /// Every control updates live and in place - no tab rebuild - so the scroll
+        /// position holds while the player drags and the readout never goes stale.
+        /// </summary>
+        private static void BuildUiScaleSection(VisualElement p)
+        {
+            p.Add(SectionLabel("UI Scale"));
+
+            var presets = (UiScalePreset[])Enum.GetValues(typeof(UiScalePreset));
+            var labels = new List<string>(presets.Length);
+            for (int i = 0; i < presets.Length; i++) labels.Add(UiScaleSystem.PresetLabel(presets[i]));
+
+            var hint = Hint(UiScaleSystem.Describe());
+
+            // Rebuilt in place rather than through `rebuild`, which would reconstruct
+            // the whole tab and throw the scroll position away mid-interaction.
+            var segHolder = new VisualElement();
+            void RefreshSegments()
+            {
+                segHolder.Clear();
+                int selected = Math.Max(0, Array.IndexOf(presets, UiScaleSystem.Preset));
+                segHolder.Add(Segmented(labels, selected, i =>
+                {
+                    UiScaleSystem.Preset = presets[i];
+                    RefreshSegments();
+                    hint.text = UiScaleSystem.Describe();
+                }));
+            }
+            RefreshSegments();
+            p.Add(segHolder);
+            p.Add(hint);
+
+            p.Add(FloatSliderRow("Custom Scale", UiScaleSystem.CustomMinScale, UiScaleSystem.CustomMaxScale,
+                UiScaleSystem.CustomScale, "0.00", "x",
+                v =>
+                {
+                    UiScaleSystem.CustomScale = v;
+                    // Touching the fine control means the player wants their own number.
+                    if (UiScaleSystem.Preset != UiScalePreset.Custom)
+                    {
+                        UiScaleSystem.Preset = UiScalePreset.Custom;
+                        RefreshSegments();
+                    }
+                    hint.text = UiScaleSystem.Describe();
+                }));
+            p.Add(Hint("Only used while Custom is selected. Auto, Small, Normal and Large ignore it."));
+
+            // A monitor switch or a dragged window border changes the law with no
+            // Settings event behind it; follow it so the readout stays honest.
+            Action<float> onScale = _ => hint.text = UiScaleSystem.Describe();
+            UiScaleSystem.OnScaleChanged += onScale;
+            p.RegisterCallback<DetachFromPanelEvent>(_ => UiScaleSystem.OnScaleChanged -= onScale);
+        }
+
         /// <summary>Interface theming and production-planner presentation — now full custom editor.</summary>
         public static void InterfaceTab(VisualElement p, Action rebuild)
         {
+            BuildUiScaleSection(p);
+            p.Add(T.Divider());
+
             p.Add(SectionLabel("Global UI Theme"));
             var themes = (BuiltInUITheme[])Enum.GetValues(typeof(BuiltInUITheme));
             var labels = new List<string>();
