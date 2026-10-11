@@ -85,7 +85,7 @@ namespace VoxelEngine.EditorTools
                 $"Player fall-damage prefabs repaired (16 / 40 m/s): {report.fallDamageComponentsRepaired}\n" +
                 $"Warnings: {report.warnings}\n\n" +
                 (report.warnings > 0 ? "See the Console for items that need review." : "No warnings.");
-            EditorUtility.DisplayDialog("17.13.0-dev Survival and Progression Repairs", summary, "OK");
+            EditorUtility.DisplayDialog("17.13.1-dev Survival and Progression Repairs", summary, "OK");
             Debug.Log("[IndustrialCrusadersSurvivalSetup] " + summary.Replace("\n", " | "));
         }
 

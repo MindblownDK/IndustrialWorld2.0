@@ -12,8 +12,11 @@ namespace VoxelEngine.Modification
     /// </summary>
     public static class VoxelEditor
     {
-        // One warning per material per session when a mineable material has no drop item.
+        // One warning per material per session for an incomplete mining-drop definition.
         private static readonly bool[] _warnedNoDrop = new bool[256];
+        private static readonly bool[] _warnedNoDefinition = new bool[256];
+        private static readonly bool[] _warnedInvalidDropAmount = new bool[256];
+        private static bool _warnedMissingInventory;
 
         public struct EditResult
         {
@@ -26,12 +29,15 @@ namespace VoxelEngine.Modification
             public int[]          drops;
         }
 
-        /// <summary>Subtracts a smooth sphere of density at world position. Returns mined item totals.
-        /// Drops are automatically granted to the local player's inventory.</summary>
+        /// <summary>Subtracts a smooth sphere at world position. Drops are granted to the supplied
+        /// player inventory; overflow uses Inventory's world-drop path, and a missing inventory
+        /// falls back to spawning the mined items at the excavation point.</summary>
         public static EditResult Subtract(IVoxelWorld world, MaterialRegistry registry,
-                                          Vector3 worldPos, float radius, float strength)
+                                          Vector3 worldPos, float radius, float strength,
+                                          Inventory dropRecipient = null)
         {
-            return Apply(world, registry, worldPos, radius, strength, subtract:true, autoGrant:true);
+            return Apply(world, registry, worldPos, radius, strength, subtract:true,
+                autoGrant:true, dropRecipient:dropRecipient);
         }
 
         /// <summary>Subtracts a sphere but does NOT auto-grant drops to the player — the caller
@@ -89,11 +95,12 @@ namespace VoxelEngine.Modification
         private static EditResult Apply(IVoxelWorld world, MaterialRegistry registry,
                                         Vector3 worldPos, float radius, float strength,
                                         bool subtract, MaterialId fillMaterial = MaterialId.Stone,
-                                        bool autoGrant = true)
+                                        bool autoGrant = true, Inventory dropRecipient = null)
         {
             if (world == null) return new EditResult();
             return ApplyAt(world, registry, world.WorldToVoxel(worldPos), radius, strength,
-                subtract, fillMaterial, autoGrant, announce: true);
+                subtract, fillMaterial, autoGrant, announce: true,
+                dropRecipient:dropRecipient, dropPosition:worldPos);
         }
 
         /// <summary>Remote replication entry (14.7.0): the identical brush at an exact
@@ -105,15 +112,21 @@ namespace VoxelEngine.Modification
         {
             if (world == null) return;
             ApplyAt(world, registry, centerVoxel, radius, strength, subtract, fillMaterial,
-                autoGrant: false, announce: false);
+                autoGrant: false, announce: false, dropRecipient: null, dropPosition: default);
         }
 
         private static EditResult ApplyAt(IVoxelWorld world, MaterialRegistry registry,
                                           Vector3Int center, float radius, float strength,
                                           bool subtract, MaterialId fillMaterial,
-                                          bool autoGrant, bool announce)
+                                          bool autoGrant, bool announce,
+                                          Inventory dropRecipient, Vector3 dropPosition)
         {
             var result = new EditResult();
+            if (subtract && registry == null)
+            {
+                Debug.LogError("[VoxelEditor] Mining was refused because the active voxel world has no MaterialRegistry; terrain was left unchanged.");
+                return result;
+            }
             int r = Mathf.CeilToInt(radius);
             float r2 = radius * radius;
 
@@ -156,19 +169,35 @@ namespace VoxelEngine.Modification
                     // endlessly while the ore pocket at the centre credited once, so a
                     // mined vein read as "it just gives stone". Yield now equals voxels
                     // actually destroyed, per material — ore pockets pay in ore.
-                    if (fullyRemoved && def != null)
+                    if (fullyRemoved)
                     {
-                        if (def.dropItem != null)
+                        if (def == null)
+                        {
+                            if (!_warnedNoDefinition[v.material])
+                            {
+                                _warnedNoDefinition[v.material] = true;
+                                Debug.LogWarning($"[VoxelEditor] Removed voxel material id {v.material} has no VoxelMaterialDefinition in the active registry; no drop can be resolved. Run the material/drop-link Setup repair.");
+                            }
+                        }
+                        else if (def.dropItem == null)
+                        {
+                            if (def.isMineable && !_warnedNoDrop[v.material])
+                            {
+                                _warnedNoDrop[v.material] = true;
+                                Debug.LogWarning($"[VoxelEditor] Material '{def.displayName}' (id {v.material}) is mineable but has no dropItem — it mines to nothing. Run the material/drop-link Setup repair.");
+                            }
+                        }
+                        else if (def.dropAmount <= 0)
+                        {
+                            if (def.isMineable && !_warnedInvalidDropAmount[v.material])
+                            {
+                                _warnedInvalidDropAmount[v.material] = true;
+                                Debug.LogWarning($"[VoxelEditor] Material '{def.displayName}' (id {v.material}) has non-positive dropAmount {def.dropAmount}; its authored amount was preserved and no item was awarded.");
+                            }
+                        }
+                        else
                         {
                             drops[v.material] += def.dropAmount;
-                        }
-                        else if (def.isMineable && !_warnedNoDrop[v.material])
-                        {
-                            // One honest line per material per session: if an ore asset
-                            // ever loses its drop item reference, the log says so instead
-                            // of the vein silently mining to nothing.
-                            _warnedNoDrop[v.material] = true;
-                            Debug.LogWarning($"[VoxelEditor] Material '{def.displayName}' (id {v.material}) is mineable but has NO dropItem — it mines to nothing. Check its VoxelMaterialDefinition asset.");
                         }
                     }
 
@@ -231,8 +260,14 @@ namespace VoxelEngine.Modification
                     result.primaryAmount = drops[m];
                 }
             }
-            if (autoGrant) ApplyDrops(registry, drops);
-            else           result.drops = drops; // hand the full breakdown back to the caller
+            if (autoGrant)
+            {
+                if (registry != null) ApplyDrops(registry, drops, dropRecipient, dropPosition);
+            }
+            else
+            {
+                result.drops = drops; // hand the full breakdown back to the caller
+            }
 
             // Multiplayer: every brush that changed terrain replicates (14.7.0).
             if (announce && result.changed)
@@ -241,17 +276,40 @@ namespace VoxelEngine.Modification
             return result;
         }
 
-        private static void ApplyDrops(MaterialRegistry registry, int[] drops)
+        private static void ApplyDrops(MaterialRegistry registry, int[] drops,
+                                       Inventory preferredInventory, Vector3 dropPosition)
         {
-            // Find inventory on the local player (first one found).
-            var inv = Object.FindAnyObjectByType<Inventory>();
-            if (inv == null) return;
+            // Mining has the player's exact Inventory reference. Keep a scene fallback
+            // for callers such as vehicle terrain damage that do not originate on the player.
+            var inventory = preferredInventory != null
+                ? preferredInventory
+                : Object.FindAnyObjectByType<Inventory>();
+            if (inventory != null)
+            {
+                for (int m = 1; m < 256; m++)
+                {
+                    if (drops[m] <= 0) continue;
+                    var def = registry.Get((byte)m);
+                    if (def?.dropItem == null) continue;
+                    inventory.Add(def.dropItem, drops[m]);
+                }
+                return;
+            }
+
+            // Never silently destroy mined yield merely because an inventory reference
+            // is unavailable; leave the items at the excavation site instead.
+            if (!_warnedMissingInventory)
+            {
+                _warnedMissingInventory = true;
+                Debug.LogWarning("[VoxelEditor] No player Inventory was available for mining drops; spawned them at the excavation point.");
+            }
             for (int m = 1; m < 256; m++)
             {
                 if (drops[m] <= 0) continue;
                 var def = registry.Get((byte)m);
                 if (def?.dropItem == null) continue;
-                inv.Add(def.dropItem, drops[m]);
+                DroppedItem.Spawn(new ItemStack(def.dropItem, drops[m]),
+                    dropPosition + Vector3.up * 0.45f, Vector3.up);
             }
         }
     }

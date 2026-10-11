@@ -1,9 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.13.0-dev`
+**Current Version:** `17.13.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.13.1-dev] Restore Voxel Mining Drops
+
+**Type:** PATCH — non-destructive mining-drop repair. No save schema or item asset changes.
+
+**GitHub title:** `[17.13.1-dev] Restore voxel mining drops`
+
+#### Fixed and changed
+- Voxel mining passes the active player's Inventory directly to the drop path. If no Inventory can be resolved, mined items are spawned at the excavation point instead of being silently discarded.
+- Runtime MaterialRegistry fallback now resolves canonical mining-drop items from loaded item assets and the Resources-backed ItemPersistenceCatalog. It reports mineable materials whose drop assets cannot be resolved.
+- The Setup Wizard repair registers or creates missing definitions, fills only null dropItem links, and merges canonical items into the full Resources-backed persistence catalog. It is separated from soft-tier normalization, preserving populated links, authored dropAmount values, mining tiers, item assets, and Setup 79 duplicates.
+- Mining diagnostics now identify missing material definitions, null drop links, non-positive drop amounts, and unavailable inventories rather than silently losing yield.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.13.1-dev`, PATCH over `17.13.0-dev`. No save schema changed.
+- Static source checks only. Unity compilation, Setup execution, and Play Mode remain unverified; the active Git branch cannot be confirmed because `.git` metadata is absent.
 
 ### [17.13.0-dev] Fix Interior Placement, Research and Respawns
 

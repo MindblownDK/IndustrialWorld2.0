@@ -1,10 +1,12 @@
 // Assets/Scripts/Editor/Items/MaterialDefinitionAuthoring.cs
 //
-// Ensures every MaterialId that is used as an ore/mineral has a VoxelMaterialDefinition
-// asset registered in MaterialRegistry. Run after adding a new MaterialId (e.g. Lithium)
-// so the new material renders, mines and drops correctly without hand-authoring YAML.
+// Ensures mineable terrain MaterialIds have registered VoxelMaterialDefinitions, canonical
+// drop links, and Resources persistence-catalog entries. Missing links are repaired without
+// replacing populated item references or authored yield values.
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using VoxelEngine.Items;
 using VoxelEngine.Materials;
 
 namespace VoxelEngine.EditorTools
@@ -13,6 +15,7 @@ namespace VoxelEngine.EditorTools
     {
         private const string RegistryPath = "Assets/VoxelEngineAssets/MaterialRegistry.asset";
         private const string MaterialsDir = "Assets/VoxelEngineAssets/Materials";
+        private const string ItemCatalogPath = "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset";
 
         public static void EnsureMaterialDefinitions()
         {
@@ -24,55 +27,215 @@ namespace VoxelEngine.EditorTools
                 Debug.LogError("[Materials] MaterialRegistry.asset not found at " + RegistryPath);
                 return;
             }
+            if (registry.definitions == null)
+                registry.definitions = new List<VoxelMaterialDefinition>();
 
             registry.Build();
             int created = 0;
+            int existingDefinitionsRegistered = 0;
+            int dropLinksRepaired = 0;
+            int warnings = 0;
+            bool registryChanged = false;
+            var canonicalDropsForCatalog = new HashSet<ItemDefinition>();
 
-            // Every solid, mineable id we care about. Air, legacy floor values, and fluids are skipped.
+            // Air and water/liquid voxel IDs are excluded. Crude Oil keeps its authored
+            // item link; the legacy floor value is repaired as Stone for old worlds.
+            // Existing material balance and populated drop links are preserved.
             var ids = new[]
             {
                 MaterialId.Iron, MaterialId.Copper, MaterialId.Coal, MaterialId.Nickel,
                 MaterialId.Silicon, MaterialId.Cobalt, MaterialId.Silver, MaterialId.Gold,
                 MaterialId.Magnesium, MaterialId.Platinum, MaterialId.Uranium, MaterialId.Lithium,
                 MaterialId.Ice, MaterialId.CrudeOil, MaterialId.Stone, MaterialId.Sand, MaterialId.Clay, MaterialId.Grass,
+                MaterialId.Wood, MaterialId.LegacySolidFloor,
             };
 
             foreach (var id in ids)
             {
-                if (registry.Get(id) != null) continue;
+                var def = registry.Get(id);
+                if (def == null)
+                {
+                    string assetPath = MaterialsDir + "/Mat_" + id + ".asset";
+                    def = AssetDatabase.LoadAssetAtPath<VoxelMaterialDefinition>(assetPath);
+                    if (def != null && def.id != id) def = null;
+                    if (def == null)
+                    {
+                        string path = AssetDatabase.LoadMainAssetAtPath(assetPath) == null
+                            ? assetPath
+                            : AssetDatabase.GenerateUniqueAssetPath(assetPath);
+                        def = ScriptableObject.CreateInstance<VoxelMaterialDefinition>();
+                        def.id           = id;
+                        def.displayName  = MaterialRegistry.DefaultDisplayName(id);
+                        def.color        = MaterialRegistry.DefaultColor(id);
+                        def.hardness     = DefaultHardness(id);
+                        def.miningTier   = DefaultMiningTier(id);
+                        def.dropAmount   = 1;
+                        def.isMineable   = id != MaterialId.CrudeOil;
+                        def.isFluid      = id == MaterialId.CrudeOil;
+                        AssetDatabase.CreateAsset(def, path);
+                        created++;
+                    }
+                    else
+                    {
+                        existingDefinitionsRegistered++;
+                    }
+                    registry.definitions.Add(def);
+                    registryChanged = true;
+                }
 
-                string name = id.ToString();
-                string path = MaterialsDir + "/Mat_" + name + ".asset";
-                path = AssetDatabase.GenerateUniqueAssetPath(path);
+                ItemDefinition canonicalDrop = LoadCanonicalDropItem(id);
+                if (canonicalDrop == null)
+                {
+                    if (def.isMineable)
+                    {
+                        warnings++;
+                        Debug.LogWarning("[Materials] No canonical drop item was found for mineable material " + id
+                            + ". The material was left unchanged; restore or review its canonical item asset before rerunning this repair.");
+                    }
+                    continue;
+                }
+                canonicalDropsForCatalog.Add(canonicalDrop);
 
-                var def = ScriptableObject.CreateInstance<VoxelMaterialDefinition>();
-                def.id           = id;
-                def.displayName  = name;
-                def.color        = MaterialRegistry.DefaultColor(id);
-                def.hardness     = DefaultHardness(id);
-                def.miningTier   = DefaultMiningTier(id);
-                def.dropAmount   = 1;
-                def.isMineable   = id != MaterialId.Ice && id != MaterialId.CrudeOil;
-                def.isFluid      = id == MaterialId.CrudeOil;
+                if (def.dropItem == null)
+                {
+                    def.dropItem = canonicalDrop;
+                    EditorUtility.SetDirty(def);
+                    dropLinksRepaired++;
+                }
+                else if (def.dropItem != canonicalDrop)
+                {
+                    // Populated links may be intentional or may reference one of the
+                    // manually managed duplicate items. Preserve them for review.
+                    warnings++;
+                    Debug.LogWarning("[Materials] Preserved the populated drop link '" + def.dropItem.name
+                        + "' on " + id + "; expected canonical asset '" + canonicalDrop.name + "'.");
+                }
 
-                AssetDatabase.CreateAsset(def, path);
-                registry.definitions.Add(def);
-                created++;
+                if (def.isMineable && def.dropAmount <= 0)
+                {
+                    warnings++;
+                    Debug.LogWarning("[Materials] " + id + " has non-positive dropAmount=" + def.dropAmount
+                        + ". Its authored amount was preserved; review it in the material asset.");
+                }
             }
 
-            if (created > 0)
-            {
+            registry.Build();
+            int catalogLinksAdded = EnsureDropItemsInCatalog(canonicalDropsForCatalog,
+                out bool catalogChanged, out bool catalogWarning);
+            if (catalogWarning) warnings++;
+            if (registryChanged || dropLinksRepaired > 0)
                 EditorUtility.SetDirty(registry);
+            if (registryChanged || dropLinksRepaired > 0 || catalogChanged)
+            {
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
-                Debug.Log("[Materials] Created " + created + " missing VoxelMaterialDefinition(s) and registered them.");
             }
-            else
+            Debug.Log("[Materials] Definitions created: " + created + "; existing definitions registered: "
+                + existingDefinitionsRegistered + "; missing drop links repaired: " + dropLinksRepaired
+                + "; item-catalog links added: " + catalogLinksAdded
+                + "; warnings: " + warnings + ". Populated links and authored drop amounts were preserved.");
+            Selection.activeObject = registry;
+        }
+
+        private static int EnsureDropItemsInCatalog(HashSet<ItemDefinition> dropItems,
+            out bool changed, out bool warning)
+        {
+            changed = false;
+            warning = false;
+            EnsureFolder("Assets/Resources/VoxelEngine");
+            var catalog = AssetDatabase.LoadAssetAtPath<ItemPersistenceCatalog>(ItemCatalogPath);
+            if (catalog == null)
             {
-                Debug.Log("[Materials] All material definitions already present. Nothing to do.");
+                if (AssetDatabase.LoadMainAssetAtPath(ItemCatalogPath) != null)
+                {
+                    warning = true;
+                    Debug.LogWarning("[Materials] The ItemPersistenceCatalog path is occupied by another asset type; no catalog links were changed.");
+                    return 0;
+                }
+                catalog = ScriptableObject.CreateInstance<ItemPersistenceCatalog>();
+                catalog.items = new List<ItemDefinition>();
+                AssetDatabase.CreateAsset(catalog, ItemCatalogPath);
+                changed = true;
             }
 
-            Selection.activeObject = registry;
+            var original = catalog.items;
+            var previouslyRegistered = new HashSet<ItemDefinition>();
+            var merged = new List<ItemDefinition>();
+            if (original != null)
+            {
+                foreach (var existing in original)
+                {
+                    if (existing == null || merged.Contains(existing)) continue;
+                    merged.Add(existing);
+                    previouslyRegistered.Add(existing);
+                }
+            }
+
+            // Keep this catalog complete, not just a mining-item subset: it is also the
+            // runtime persistence lookup for every inventory item in the game.
+            var guids = new HashSet<string>(AssetDatabase.FindAssets("t:ItemDefinition"));
+            foreach (var filter in new[] { "t:PortableBatteryItem", "t:HydrogenCanisterItem", "t:JetpackItem" })
+                foreach (var guid in AssetDatabase.FindAssets(filter)) guids.Add(guid);
+            var orderedGuids = new List<string>(guids);
+            orderedGuids.Sort((left, right) => string.CompareOrdinal(
+                AssetDatabase.GUIDToAssetPath(left), AssetDatabase.GUIDToAssetPath(right)));
+            foreach (var guid in orderedGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+                if (item != null && !merged.Contains(item)) merged.Add(item);
+            }
+
+            var orderedDropItems = new List<ItemDefinition>(dropItems);
+            orderedDropItems.Sort((left, right) => string.CompareOrdinal(
+                left != null ? left.name : string.Empty, right != null ? right.name : string.Empty));
+            int added = 0;
+            foreach (var item in orderedDropItems)
+            {
+                if (item == null) continue;
+                if (!previouslyRegistered.Contains(item)) added++;
+                if (!merged.Contains(item)) merged.Add(item);
+            }
+
+            bool listChanged = original == null || original.Count != merged.Count;
+            if (!listChanged)
+            {
+                for (int i = 0; i < merged.Count; i++)
+                {
+                    if (original[i] == merged[i]) continue;
+                    listChanged = true;
+                    break;
+                }
+            }
+            if (listChanged) changed = true;
+            if (changed)
+            {
+                catalog.items = merged;
+                EditorUtility.SetDirty(catalog);
+            }
+            return added;
+        }
+
+        private static ItemDefinition LoadCanonicalDropItem(MaterialId id)
+        {
+            string[] paths = id switch
+            {
+                MaterialId.Iron => new[] { "Assets/VoxelEngineAssets/Industrial/Items/Item_IronOre.asset" },
+                MaterialId.Copper => new[] { "Assets/VoxelEngineAssets/Industrial/Items/Item_CopperOre.asset" },
+                MaterialId.Clay or MaterialId.Grass => new[] { "Assets/VoxelEngineAssets/Items/Item_Clay.asset" },
+                MaterialId.Wood => new[] { "Assets/VoxelEngineAssets/Items/Item_WoodLog.asset" },
+                MaterialId.LegacySolidFloor or MaterialId.MartianDust or MaterialId.VenusAsh
+                    or MaterialId.AcidBog or MaterialId.VolcanicBasalt or MaterialId.CrystalGeode
+                    => new[] { "Assets/VoxelEngineAssets/Items/Item_Stone.asset" },
+                _ => new[] { "Assets/VoxelEngineAssets/Items/Item_" + id + ".asset" },
+            };
+
+            foreach (string path in paths)
+            {
+                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+                if (item != null) return item;
+            }
+            return null;
         }
 
         /// <summary>

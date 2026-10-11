@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.13.0-dev`
-**Roadmap Version:** `17.13.0-dev`
-**Date:** 2026-10-10
+**Current Version:** `17.13.1-dev`
+**Roadmap Version:** `17.13.1-dev`
+**Date:** 2026-10-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.13.1-dev - Restore Voxel Mining Drops
+- Runtime fallback registries resolve mineable materials to canonical item assets and report unresolved drop links
+- Setup repairs only missing dropItem links and creates missing material definitions; populated links and authored yields remain intact
+- Mining targets the active player's Inventory, with a world-drop fallback; Unity acceptance remains pending
+
 ### 17.13.0-dev - Fix Interior Placement, Research and Respawns
 - Tiered-deck BlockItem placement validates authored collider footprints; BuildHammer snapping and dedicated placement paths remain unchanged
 - Tier 1 Science Pack I is timed at 5 seconds; inventory crafting queues it, and `Recipe_Furnace` is gated by instant inventory Smelting research
@@ -48,11 +53,6 @@
 - Bench/Assembler opens inventory crafting without the dedicated right-side station panel; the clicked station queue remains active
 - Placement commit shares the preview ray; tiered-wall support reuses deck footprint math; Shift-drag transfers each visited slot once
 - Ten requested alpha icons added; exact-ID repair and full read-only icon audit are available
-
-### 17.9.0-dev - Station, Combat, Placement, and Settings Repairs
-- Bench/Assembler interactions show inventory, station-filtered recipes, and general crafting; repair preserves custom prefabs
-- Station visual bounds, footprint-clamped deck/wall snaps, invalid ghost previews, 2 mm clearance, reliable melee sweeps, and distant hostile sleep; BuildHammer remains unchanged
-- Monitor refresh auto, live view-distance/theme updates, stable admin scroll, dev-only Infinite Health, and four item icons
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -86,6 +86,7 @@
 - **Static deck/wall placement (17.13.0-dev):** ordinary stationary BlockItems use the visible shared 1 m construction-frame lattice and collider-footprint placement validation; foundation-edge, corner, wall-contact, Crafting Bench/Assembler preview, and station-floor acceptance is pending. BuildHammer snapping remains untouched.
 - **Station and transfer runtime acceptance (17.13.0-dev):** Bench/Assembler inventory-only panel ownership, clicked-tier recipe filtering, clicked-station queue retention, five-second inventory crafting, multi-panel Shift-drag, and release/cancel behavior remain unverified in Unity.
 - **Research, survival, and respawn runtime acceptance (17.13.0-dev):** saved-rank reload, inventory Smelting and Furnace unlock, 16/40 m/s fall damage, 20 HP Steak healing, ordinary-bed initial/death respawn, and cryobed preservation remain unverified in Unity.
+- **Voxel mining drops (17.13.1-dev):** confirm dirt, stone, and each generated ore award the intended items, including the runtime fallback and full-inventory spill cases.
 - **17.9 runtime acceptance (17.10.0-dev):** melee reliability, distant-hostile sleep, refresh-rate FPS cap, live settings updates, admin scroll retention, and release-player Infinite Health exclusion still need Unity build/play validation.
 - **Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
 - **Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.

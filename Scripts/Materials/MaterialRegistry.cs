@@ -1,6 +1,8 @@
 // Assets/Scripts/VoxelEngine/Materials/MaterialRegistry.cs
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.Materials
 {
@@ -189,23 +191,25 @@ namespace VoxelEngine.Materials
         }
 
         private static bool IsFluidId(MaterialId id)
-            => id == MaterialId.WaterLiquid || id == MaterialId.CrudeOil
+            => id == MaterialId.WaterVoxel || id == MaterialId.WaterLiquid || id == MaterialId.CrudeOil
             || id == MaterialId.RefinedOilLiquid || id == MaterialId.LiquidFuelLiquid
             || id == MaterialId.HeavyFuelOilLiquid || id == MaterialId.MarineGasOilLiquid
             || id == MaterialId.CoolantLiquid;
 
         /// <summary>
         /// 9.16.0 field round — builds a registry carrying a runtime definition for EVERY
-        /// known MaterialId (names, colours, hardness and mining tiers mirror the authored
-        /// defaults). Used when the authored MaterialRegistry asset cannot be resolved, so
-        /// the world keeps working exactly as authored instead of silently degrading.
+        /// known MaterialId (names, colours, hardness, mining tiers, and available canonical
+        /// drop items mirror the authored defaults). Used when the authored MaterialRegistry
+        /// asset cannot be resolved; item drops resolve through the runtime persistence catalog.
         /// </summary>
         public static MaterialRegistry CreateRuntimeFallback()
         {
             var registry = ScriptableObject.CreateInstance<MaterialRegistry>();
-            registry.definitions = new System.Collections.Generic.List<VoxelMaterialDefinition>();
+            registry.definitions = new List<VoxelMaterialDefinition>();
+            Dictionary<string, ItemDefinition> dropItems = LoadRuntimeFallbackDropItems();
+            var missingMineableDrops = new List<string>();
 
-            foreach (MaterialId id in (MaterialId[])System.Enum.GetValues(typeof(MaterialId)))
+            foreach (MaterialId id in (MaterialId[])Enum.GetValues(typeof(MaterialId)))
             {
                 if (id == MaterialId.Air) continue;               // air is never described
                 var def = ScriptableObject.CreateInstance<VoxelMaterialDefinition>();
@@ -216,11 +220,90 @@ namespace VoxelEngine.Materials
                 def.miningTier  = IsFluidId(id) ? 0 : DefaultMiningTier(id);
                 def.dropAmount  = 1;
                 def.isFluid     = IsFluidId(id);
-                def.isMineable  = !IsFluidId(id) && id != MaterialId.Ice && id != MaterialId.CrudeOil;
+                def.isMineable  = !IsFluidId(id);
+
+                string[] candidates = RuntimeFallbackDropAssetNames(id);
+                for (int i = 0; i < candidates.Length; i++)
+                {
+                    if (dropItems.TryGetValue(candidates[i], out var item))
+                    {
+                        def.dropItem = item;
+                        break;
+                    }
+                }
+                if (def.isMineable && def.dropItem == null)
+                    missingMineableDrops.Add(id + " (expected " + string.Join(" or ", candidates) + ")");
+
                 registry.definitions.Add(def);
             }
             registry.Build();
+            if (missingMineableDrops.Count > 0)
+            {
+                Debug.LogWarning("[MaterialRegistry] Runtime fallback could not resolve drop items for: "
+                    + string.Join(", ", missingMineableDrops)
+                    + ". Assign the authored MaterialRegistry and ensure the ItemPersistenceCatalog contains the canonical items.");
+            }
             return registry;
+        }
+
+        private static Dictionary<string, ItemDefinition> LoadRuntimeFallbackDropItems()
+        {
+            var byAssetName = new Dictionary<string, ItemDefinition>(StringComparer.OrdinalIgnoreCase);
+            void Cache(ItemDefinition item)
+            {
+                if (item == null || string.IsNullOrWhiteSpace(item.name)) return;
+                if (!byAssetName.ContainsKey(item.name)) byAssetName.Add(item.name, item);
+            }
+
+            foreach (var item in Resources.LoadAll<ItemDefinition>(string.Empty)) Cache(item);
+            foreach (var catalog in Resources.LoadAll<ItemPersistenceCatalog>(string.Empty))
+            {
+                if (catalog == null || catalog.items == null) continue;
+                foreach (var item in catalog.items) Cache(item);
+            }
+            foreach (var item in Resources.FindObjectsOfTypeAll<ItemDefinition>()) Cache(item);
+            foreach (var catalog in Resources.FindObjectsOfTypeAll<ItemPersistenceCatalog>())
+            {
+                if (catalog == null || catalog.items == null) continue;
+                foreach (var item in catalog.items) Cache(item);
+            }
+            return byAssetName;
+        }
+
+        private static string[] RuntimeFallbackDropAssetNames(MaterialId id)
+        {
+            switch (id)
+            {
+                case MaterialId.Stone:
+                case MaterialId.LegacySolidFloor:
+                case MaterialId.MartianDust:
+                case MaterialId.VenusAsh:
+                case MaterialId.AcidBog:
+                case MaterialId.VolcanicBasalt:
+                case MaterialId.CrystalGeode:
+                    return new[] { "Item_Stone" };
+                case MaterialId.Sand:
+                    return new[] { "Item_Sand" };
+                case MaterialId.Clay:
+                case MaterialId.Grass:
+                    return new[] { "Item_Clay" };
+                case MaterialId.Iron:
+                    return new[] { "Item_IronOre" };
+                case MaterialId.Copper:
+                    return new[] { "Item_CopperOre" };
+                case MaterialId.Wood:
+                    return new[] { "Item_WoodLog" };
+                case MaterialId.WaterVoxel:
+                case MaterialId.WaterLiquid:
+                case MaterialId.RefinedOilLiquid:
+                case MaterialId.LiquidFuelLiquid:
+                case MaterialId.HeavyFuelOilLiquid:
+                case MaterialId.MarineGasOilLiquid:
+                case MaterialId.CoolantLiquid:
+                    return Array.Empty<string>();
+                default:
+                    return new[] { "Item_" + id };
+            }
         }
     }
 }

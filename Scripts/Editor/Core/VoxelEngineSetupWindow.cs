@@ -147,11 +147,8 @@ namespace VoxelEngine.EditorTools
             AddSetupGroup(parent, ref number, "Core & Project Bootstrap",
                 "Create the shared registries and core scenes first. These actions are the foundation used by every content group.", true,
                 Setup("Create all base assets and registries", CreateAllAssets),
-                Setup("Ensure material definitions and hand-mineable soft materials", () =>
-                {
-                    VoxelEngine.EditorTools.MaterialDefinitionAuthoring.EnsureMaterialDefinitions();
-                    VoxelEngine.EditorTools.MaterialDefinitionAuthoring.NormalizeSoftTiers();
-                }),
+                Setup("Repair material definitions and mining drops (non-destructive, 17.13.1-dev)", () =>
+                    VoxelEngine.EditorTools.MaterialDefinitionAuthoring.EnsureMaterialDefinitions()),
                 Setup("Spawn player and UI in the active scene", SpawnManagerAndPlayer),
                 Setup("Build the main-menu scene", BuildMainMenuScene),
                 Setup("Build base crafting, tools, stations and blocks", BuildBaseCraftingContent),
@@ -302,8 +299,8 @@ namespace VoxelEngine.EditorTools
             AddSetupGroup(parent, ref number, "Maintenance & Repair",
                 "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
                 Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
-                Setup("Apply 17.13.0-dev progression and Furnace/Smelting repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
-                Setup("Apply 17.13.0-dev survival and crafting-balance repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersSurvivalSetup.Run()),
+                Setup("Apply 17.13.1-dev progression and Furnace/Smelting repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
+                Setup("Apply 17.13.1-dev survival and crafting-balance repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersSurvivalSetup.Run()),
                 Setup("Consolidate duplicate ore items", () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80()),
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair missing recipe links", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),

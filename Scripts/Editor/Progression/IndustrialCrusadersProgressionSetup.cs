@@ -49,7 +49,7 @@ namespace VoxelEngine.EditorTools
             var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(RecipeRegistryPath);
             if (tree == null || registry == null)
             {
-                EditorUtility.DisplayDialog("17.13.0-dev Progression Repairs",
+                EditorUtility.DisplayDialog("17.13.1-dev Progression Repairs",
                     "The research tree or recipe registry is missing. Run the base crafting, research, and factory content entries in Tools > Voxel Engine > Voxel Engine Setup first. No assets were changed.",
                     "OK");
                 return;
@@ -77,7 +77,7 @@ namespace VoxelEngine.EditorTools
 
             if (plank == null || stone == null)
             {
-                EditorUtility.DisplayDialog("17.13.0-dev Progression Repairs",
+                EditorUtility.DisplayDialog("17.13.1-dev Progression Repairs",
                     "Wooden Plank or Stone is missing. Run Core & Project Bootstrap > Build base crafting first. No progression assets were changed.",
                     "OK");
                 return;
@@ -241,7 +241,7 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            EditorUtility.DisplayDialog("17.13.0-dev Progression Repairs",
+            EditorUtility.DisplayDialog("17.13.1-dev Progression Repairs",
                 "Progression repair complete.\n\n" +
                 "Copper chain: " + counts.copperAudit + "\n" +
                 "Wooden Sword: available from the start.\n" +

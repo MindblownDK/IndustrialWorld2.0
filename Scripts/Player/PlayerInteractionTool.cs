@@ -2385,7 +2385,7 @@ namespace VoxelEngine.Player
                 }
             }
 
-            var digResult = VoxelEditor.Subtract(world, registry, miningPoint, radius, strength);
+            var digResult = VoxelEditor.Subtract(world, registry, miningPoint, radius, strength, inventory);
 
             // ── Mining diagnostics (9.5.2) ──────────────────────────────────
             // If a swing changes NOTHING, name the exact blocker in one log line:

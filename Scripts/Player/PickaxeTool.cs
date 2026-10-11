@@ -69,7 +69,8 @@ namespace VoxelEngine.Player
             if (mine)
             {
                 VoxelEditor.TryResolveMiningPoint(world, hit.point, hit.normal, ray.direction, out point);
-                VoxelEditor.Subtract(world, registry, point, brushRadius, strength);
+                VoxelEditor.Subtract(world, registry, point, brushRadius, strength,
+                    GetComponentInParent<VoxelEngine.Items.Inventory>());
             }
             else
                 VoxelEditor.Add(world, registry, point, brushRadius, strength, buildMaterial);
