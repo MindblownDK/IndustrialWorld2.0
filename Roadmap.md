@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.18.0-dev`
-**Roadmap Version:** `17.18.0-dev`
-**Date:** 2026-10-11
+**Current Version:** `17.20.3-dev`
+**Roadmap Version:** `17.20.3-dev`
+**Date:** 2026-10-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,10 +29,15 @@
 
 ## 0. Recently Done
 
-### 17.20.2-dev - Doubled Overlapping Enemies Traced to Duplicate Biome Scatter Entries
-- The overlapping enemy twins were data, not code: four biome definitions listed the same creature twice - a legacy per-biome `Scatter/<Biome>/Enemies` copy beside the canonical `Resources/Enemies` prefab, byte-identical rigs but different assets, both rolling on the same surface points - so Desert/Forest/Mountains/Steppes spawned doubled Manticores/Ghouls/Basilisks/Griffins about two metres apart with independent scale rolls and AI states (one chasing, one idle or asleep beyond the 80-metre boundary): the moving copy and its frozen twin
-- `ChunkScatter` now dedupes creature entries per biome at runtime (computed once, cached): the highest-density entry per creature name wins and the duplicate is never rolled - the same enforcement point as the ruin density rule, a no-op on clean biomes, and props/flora/building categories are untouched
-- A new editor tool (Tools > Voxel Engine > Repair Duplicate Creature Scatter Entries) cleans the biome assets themselves: the canonical `Resources/` prefab wins, kept entries' authored density and scale ranges are never touched, legacy Scatter prefab assets stay on disk, undo-supported and safe to re-run
+### 17.20.3-dev - Ghoul Attacks Swing Clearly; Paused Orbits Stay Put
+- The Ghoul's sibling-mesh shoulders, arms, hands and claws now share a shoulder-rooted pull-back, forward swipe and eased recovery; other hostile rigs are unchanged
+- Cosmic-clock watchdog follows scaled game time like `CosmicRegistry.Update`, so pausing cannot falsely advance the orbital phase or trigger a deep-space frame handoff
+- No prefab, biome data, save schema, chunk format or wire change; no Setup rerun
+
+### 17.20.2-dev - Doubled Overlapping Enemies Fixed: Scatter Creatures End With Their Chunk
+- The frozen twin was a survivor, not a duplicate spawn: every scattered creature detaches from the `__scatter` holder on Awake, so holder teardown on repopulate/pool-return never reached them and no other system culled scatter-born creatures - sleepers lived on as statues near their home points while each revisit spawned fresh creatures beside them from the same deterministic points (moving new copy + authored-pose frozen survivor, growing every revisit and leaking for the whole session)
+- Scatter-born enemies and passive animals now follow their chunk's lifecycle: repopulate, pool return and chunk dispose end the previous batch (`ChunkScatter.DestroyChunkCreatures`, tracked per chunk), the world-teardown window sweeps stragglers, ridden mounts are never destroyed, and creature population stays bounded by the streaming window - spawner hostiles and guest replicas untouched
+- The duplicate creature entries in four biome definitions were confirmed as authored spawn control (one entry wins per surface point, never a double spawn) and deliberately left as they are; the earlier dedupe attempt was fully reverted - no biome asset, prefab or entry-selection change in this round
 
 ### 17.20.1-dev - Visible Wind Lines, No Grass Blink, Bindable Ctrl Combos
 - The wind lines' invisibility was three stacked causes, all fixed: nothing ever CREATED a `WindField` (bootstrap only searched for hand-placed ones) so it is now created when missing and driven by the body settings - which also wakes the sail forces and grass wind on worlds that had none; the line material led with a generic URP particle shader whose fresh material defaults to opaque, so the project's proven transparent weather shader now leads the chain; and the visual is a singleton hostable by the weather rig or the wind object, anchored on the camera
@@ -52,12 +57,6 @@
 - Chest port indicators are constructed in the block's local space (local face normal plus local up-hint) instead of world-space math, so the connector wedges hug their faces at every orientation; the quarry upgrade-install null crash on the success path is fixed
 - New opt-in `PlacementPivotAnchor` marker: root pivot IS the block position, no lift, no footprint re-centering - remade prefabs authored with their model bottom at local Y = 0 land exactly where the ghost shows; unmarked prefabs keep the old convention
 - New `EnemyRigAnimator`: procedural walk/run cycles, diagonal gaits, wing beats, tail waves, idle life and jaw panting for all seven hostile rigs, driven by position-delta speed so host enemies and guest replicas animate from one component; every attack now telegraphs - ghoul 0.45 s bite windup, basilisk 0.4 s bite and 0.6 s gaze flare (cone re-checked at release, plants itself while rearing), ifrit 0.5 s fireball and 0.8 s firewall charge (target locked at flare start = a real dodge), manticore 0.55 s tail-rear volley and 0.4 s claws, karkadann pawing windup played on the body, roc 0.7 s wing heave, griffin and roc talon snaps on dive contact - replicated to guests as two additive cast bytes, cooldown pacing unchanged
-
-### 17.18.0-dev - Give Pollution a Memory: Threat Tiers, Waves, Elites, Siege Brute
-- The sidecar's slow climate-load channel (always emitted, always persisted, never read) becomes the pollution history: `SampleClimate01` per position and `ClimateBurdenFor` per body feed the new industrial threat tiers
-- Tiers from live readings plus the 17.17.2 recruitment heat: quiet, scouts, packs, organized wave (residual and pressure both at 0.30+, own 3-minute cooldown), siege (0.55/0.45+, 5-minute cooldown); the ecological alive-cap still binds every event
-- Waves are 4-6 ghouls led by an elite (2.5x health, rusty tint, extra loot) with flank ambushers on logistics; the siege brute (6x health, 1.9x scale, ash tint) walks past the player to dismantle machines and exposed logistics with a double-damage bite - both are the existing ghoul rig promoted at spawn, no new prefab
-- The hostile spawn broadcast gains an additive variant byte; the host re-announces promoted ghouls immediately so guest replicas get scaled max health and tier visuals without waiting for the self-heal pass
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

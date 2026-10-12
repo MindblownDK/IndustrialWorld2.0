@@ -39,6 +39,11 @@ namespace VoxelEngine.Combat
             public bool Flip;       // mirrored jaw halves (BeakUpper opens the other way)
             public Quaternion AuthoredRot;
             public Vector3 AuthoredPos;
+            public Quaternion AuthoredRootRot;
+            public Vector3 AuthoredRootPos;
+            public Vector3 SwingPivotRoot;
+            public int SwingSide;
+            public bool UseRootArmSwing;
             public Color BaseEyeColor;
             public Material EyeMat;
         }
@@ -52,12 +57,19 @@ namespace VoxelEngine.Combat
         private const float WindupArmDeg = -55f;
         private const float CastArmDeg = -125f;
         private const float StrikeArmDeg = 75f;
+        // The Ghoul is built from separate cubes under one root rather than arm
+        // joints. Its attack pose rotates each complete side around the shoulder,
+        // so the forearm, hand and claws read as one deliberate swipe.
+        private const float GhoulWindupArmDeg = 48f;
+        private const float GhoulStrikeArmDeg = -100f;
         private const float StrikeJawDeg = 32f;
         private const float StrikeSeconds = 0.22f;
+        private const float GhoulStrikeSeconds = 0.34f;
 
         private readonly List<Part> _parts = new(48);
         private Damageable _owner;
         private bool _bound;
+        private bool _isGhoulRig;
         private Vector3 _prevPos;
         private float _speed;
         private float _phase;
@@ -67,6 +79,8 @@ namespace VoxelEngine.Combat
         private float _telT0 = -1f;
         private float _telDur;
         private float _strikeT0 = -1f;
+        private float _strikeDuration = StrikeSeconds;
+        private float _strikeWindupCarry;
 
         /// <summary>Idempotent attach: the enemy Awakes call this on the host,
         /// HostileSync calls it for guest replicas. Returns null only for a
@@ -103,7 +117,7 @@ namespace VoxelEngine.Combat
                     new Vector3((float)(int)kind, duration, 0f));
         }
 
-        /// <summary>The strike snap that lands the attack, replicated too.</summary>
+        /// <summary>The attack's strike motion, replicated too.</summary>
         public void Strike()
         {
             BeginStrike();
@@ -113,11 +127,31 @@ namespace VoxelEngine.Combat
                     _owner.transform.position, Vector3.zero);
         }
 
-        /// <summary>Local-only strike snap (used by the guest replay).</summary>
+        /// <summary>Local-only strike motion (used by the guest replay).</summary>
         public void BeginStrike()
         {
+            float carriedWindup = _isGhoulRig && _telKind == TelegraphKind.Windup
+                ? TelegraphWeight()
+                : 0f;
             _strikeT0 = Time.time;
-            _telKind = TelegraphKind.None;   // the windup hands over to the snap
+            _strikeDuration = _isGhoulRig ? GhoulStrikeSeconds : StrikeSeconds;
+            _strikeWindupCarry = carriedWindup;
+            _telKind = TelegraphKind.None;   // the windup hands over to the strike
+        }
+
+        private float TelegraphWeight()
+        {
+            if (_telKind == TelegraphKind.None || _telT0 < 0f) return 0f;
+            float u = (Time.time - _telT0) / Mathf.Max(0.1f, _telDur);
+            if (u >= 1f)
+            {
+                _telKind = TelegraphKind.None;
+                _telT0 = -1f;
+                return 0f;
+            }
+            return u < 0.25f ? Mathf.SmoothStep(0f, 1f, u * 4f)
+                 : u > 0.8f ? Mathf.SmoothStep(1f, 0f, (u - 0.8f) * 5f)
+                 : 1f;
         }
 
         // ── binding ────────────────────────────────────────────────────
@@ -127,8 +161,11 @@ namespace VoxelEngine.Combat
             _bound = true;
             _parts.Clear();
             _prevPos = transform.position;
+            _isGhoulRig = GetComponent<EnemyGhoul>() != null;
 
             var all = GetComponentsInChildren<Transform>(true);
+            Vector3 leftShoulder = _isGhoulRig ? ResolveGhoulArmPivot(all, 1) : Vector3.zero;
+            Vector3 rightShoulder = _isGhoulRig ? ResolveGhoulArmPivot(all, -1) : Vector3.zero;
             int tailIdx = 0, wingIdx = 0, legIdx = 0, armIdx = 0;
             foreach (var t in all)
             {
@@ -139,12 +176,15 @@ namespace VoxelEngine.Combat
                 else if (Contains(n, "wing")) role = Role.Wing;
                 else if (Contains(n, "tail", "seg", "stinger", "tuft")) role = Role.Tail;
                 else if (Contains(n, "leg", "thigh", "shin", "hoof", "foot", "paw")) role = Role.Leg;
-                else if (Contains(n, "claw", "arm", "hand")) role = Role.Arm;
+                else if (Contains(n, "claw", "arm", "hand")
+                    || (_isGhoulRig && Contains(n, "shoulder", "shldr"))) role = Role.Arm;
                 else if (Contains(n, "beak", "jaw", "mouth", "snout")) role = Role.Jaw;
                 else if (Contains(n, "head", "neck", "skull")) role = Role.Head;
                 else if (Contains(n, "torso", "body", "chest", "hips", "rump", "hump", "belly", "core")) role = Role.Torso;
                 else continue;   // decor (horns, plates, crests, bars) stays rigid
 
+                Vector3 rootLocalPos = transform.InverseTransformPoint(t.position);
+                Quaternion rootLocalRot = Quaternion.Inverse(transform.rotation) * t.rotation;
                 var p = new Part
                 {
                     T = t,
@@ -154,7 +194,15 @@ namespace VoxelEngine.Combat
                     Flip = role == Role.Jaw && Contains(n, "upper"),
                     AuthoredRot = t.localRotation,
                     AuthoredPos = t.localPosition,
+                    AuthoredRootRot = rootLocalRot,
+                    AuthoredRootPos = rootLocalPos,
                 };
+                if (_isGhoulRig && role == Role.Arm)
+                {
+                    p.SwingSide = p.Side != 0 ? p.Side : (rootLocalPos.x <= 0f ? 1 : -1);
+                    p.SwingPivotRoot = p.SwingSide > 0 ? leftShoulder : rightShoulder;
+                    p.UseRootArmSwing = true;
+                }
                 switch (role)
                 {
                     case Role.Tail: p.Index = tailIdx++; break;
@@ -176,6 +224,49 @@ namespace VoxelEngine.Combat
                 }
                 _parts.Add(p);
             }
+        }
+
+        /// <summary>Resolve a shoulder in root-local space for the Ghoul's flat,
+        /// unrigged prefab. The setup-built rig has ShldrL/ShldrR; the upper-arm
+        /// fallback keeps edited prefabs usable without authoring new joints.</summary>
+        private Vector3 ResolveGhoulArmPivot(Transform[] all, int side)
+        {
+            for (int i = 0; i < all.Length; i++)
+            {
+                var t = all[i];
+                if (t == null || t == transform) continue;
+                string n = t.name.ToLowerInvariant();
+                if (SideOf(n) == side && Contains(n, "shoulder", "shldr"))
+                    return transform.InverseTransformPoint(t.position);
+            }
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                var t = all[i];
+                if (t == null || t == transform) continue;
+                string n = t.name.ToLowerInvariant();
+                if (SideOf(n) == side && Contains(n, "uparm", "upperarm"))
+                    return transform.InverseTransformPoint(t.position) + Vector3.up * 0.18f;
+            }
+
+            float highestY = float.NegativeInfinity;
+            Vector3 highestArm = Vector3.zero;
+            for (int i = 0; i < all.Length; i++)
+            {
+                var t = all[i];
+                if (t == null || t == transform) continue;
+                string n = t.name.ToLowerInvariant();
+                if (SideOf(n) != side || !Contains(n, "arm", "hand", "claw")) continue;
+                Vector3 rootPos = transform.InverseTransformPoint(t.position);
+                if (rootPos.y <= highestY) continue;
+                highestY = rootPos.y;
+                highestArm = rootPos;
+            }
+            if (!float.IsNegativeInfinity(highestY)) return highestArm + Vector3.up * 0.12f;
+
+            // The stock Ghoul dimensions; only reached for a customized rig whose
+            // limbs carry no recognizable shoulder or side names.
+            return new Vector3(side > 0 ? -0.24f : 0.24f, 1.18f, 0.04f);
         }
 
         private static bool Contains(string n, params string[] keys)
@@ -245,22 +336,33 @@ namespace VoxelEngine.Combat
             float sf = Mathf.Clamp01(_speed / 2.8f);          // 0 idle .. 1 running
             _phase += dt * (2.2f + _speed * 2.6f);
 
-            // Telegraph envelope: fast in, hold, fast out.
-            float tel = 0f;
-            if (_telKind != TelegraphKind.None && _telT0 >= 0f)
-            {
-                float u = (Time.time - _telT0) / _telDur;
-                if (u >= 1f) { _telKind = TelegraphKind.None; _telT0 = -1f; }
-                else tel = u < 0.25f ? Mathf.SmoothStep(0f, 1f, u * 4f)
-                       : u > 0.8f ? Mathf.SmoothStep(1f, 0f, (u - 0.8f) * 5f)
-                       : 1f;
-            }
+            // Telegraph envelope: fast in, hold, fast out. BeginStrike reads the
+            // same envelope so the Ghoul's windup flows directly into its swing.
+            float tel = TelegraphWeight();
             float strike = 0f;
+            float strikeTime01 = 0f;
+            float ghoulStrikeSwing = 0f;
             if (_strikeT0 >= 0f)
             {
-                float u = (Time.time - _strikeT0) / StrikeSeconds;
-                if (u >= 1f) _strikeT0 = -1f;
-                else strike = 1f - u * u;                        // sharp snap, soft return
+                float u = (Time.time - _strikeT0) / Mathf.Max(0.1f, _strikeDuration);
+                if (u >= 1f)
+                {
+                    _strikeT0 = -1f;
+                    _strikeWindupCarry = 0f;
+                }
+                else
+                {
+                    strikeTime01 = u;
+                    strike = 1f - u * u;                // sharp body snap, soft return
+                    if (_isGhoulRig)
+                    {
+                        // Deliberate pull-through: accelerate the arm from its reared
+                        // pose, hold the forward claw at impact, then ease it home.
+                        if (u < 0.32f) ghoulStrikeSwing = Mathf.SmoothStep(0f, 1f, u / 0.32f);
+                        else if (u < 0.56f) ghoulStrikeSwing = 1f;
+                        else ghoulStrikeSwing = Mathf.SmoothStep(1f, 0f, (u - 0.56f) / 0.44f);
+                    }
+                }
             }
 
             bool flyer = false;
@@ -301,7 +403,8 @@ namespace VoxelEngine.Combat
                     }
                     case Role.Arm:
                     {
-                        float gait = _phase + (p.Side > 0 ? Mathf.PI : 0f);
+                        int swingSide = p.UseRootArmSwing ? p.SwingSide : p.Side;
+                        float gait = _phase + (swingSide > 0 ? Mathf.PI : 0f);
                         pitch = Mathf.Sin(gait) * (4f + ArmSwingDeg * sf);
                         if (flyer) pitch *= 0.3f;
                         break;
@@ -345,7 +448,8 @@ namespace VoxelEngine.Combat
                     switch (_telKind)
                     {
                         case TelegraphKind.Windup:
-                            if (p.Role == Role.Arm) pitch += WindupArmDeg * tel;
+                            if (p.Role == Role.Arm)
+                                pitch += (p.UseRootArmSwing ? GhoulWindupArmDeg : WindupArmDeg) * tel;
                             else if (p.Role == Role.Head) pitch += -12f * tel;
                             else if (p.Role == Role.Jaw) pitch += 18f * tel;
                             else if (p.Role == Role.Torso) off.y -= 0.05f * tel;
@@ -369,10 +473,19 @@ namespace VoxelEngine.Combat
                     }
                 }
 
-                // ── strike snap ──
-                if (strike > 0f)
+                // ── strike motion ──
+                if (strike > 0f || ghoulStrikeSwing > 0f || _strikeWindupCarry > 0f)
                 {
-                    if (p.Role == Role.Arm) pitch += StrikeArmDeg * strike;
+                    if (p.Role == Role.Arm)
+                    {
+                        if (p.UseRootArmSwing)
+                        {
+                            float carriedWindup = _strikeWindupCarry * (1f - strikeTime01);
+                            pitch += GhoulWindupArmDeg * carriedWindup
+                                   + GhoulStrikeArmDeg * ghoulStrikeSwing;
+                        }
+                        else pitch += StrikeArmDeg * strike;
+                    }
                     else if (p.Role == Role.Head) pitch += 18f * strike;
                     else if (p.Role == Role.Jaw) pitch += StrikeJawDeg * strike;
                     else if (p.Role == Role.Torso) off.z += 0.07f * strike;
@@ -383,8 +496,22 @@ namespace VoxelEngine.Combat
                 // directions from one shared jaw value.
                 if (p.Role == Role.Jaw && p.Flip) pitch = -pitch;
 
-                p.T.localRotation = p.AuthoredRot * Quaternion.Euler(pitch, yaw, roll);
-                p.T.localPosition = p.AuthoredPos + off;
+                if (p.UseRootArmSwing)
+                {
+                    // The Ghoul's arms are several sibling meshes, not a bone chain.
+                    // Apply one shoulder-rooted transform to every piece on that side
+                    // so the upper arm, forearm, hand and claws stay connected in motion.
+                    Quaternion swing = Quaternion.Euler(pitch, yaw, roll);
+                    Vector3 rootPose = p.SwingPivotRoot
+                        + swing * (p.AuthoredRootPos - p.SwingPivotRoot) + off;
+                    p.T.position = transform.TransformPoint(rootPose);
+                    p.T.rotation = transform.rotation * swing * p.AuthoredRootRot;
+                }
+                else
+                {
+                    p.T.localRotation = p.AuthoredRot * Quaternion.Euler(pitch, yaw, roll);
+                    p.T.localPosition = p.AuthoredPos + off;
+                }
             }
         }
 

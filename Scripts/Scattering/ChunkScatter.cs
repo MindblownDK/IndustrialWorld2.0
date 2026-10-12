@@ -29,22 +29,26 @@ namespace VoxelEngine.Scattering
         }
 
         private static readonly Dictionary<IChunkScatterWorld, List<Reservation>> s_reservations = new();
+
+        // 17.20.2-dev: scattered creatures detach from the __scatter holder the
+        // moment they Awake (free rigidbody motion on the rotating spherical
+        // worlds), so the holder teardown that cleans rocks, flora and trees on
+        // repopulate and pool return never reached them - and no other system
+        // culled scatter-born creatures: the spawner's despawn covers only its
+        // own ghouls, and the sleep manager suspends far hostiles but never
+        // removes them. Leftovers slept on as frozen statues near their home
+        // points, and the next visit's repopulate spawned fresh creatures from
+        // the same deterministic scatter points right beside the survivor - the
+        // doubled, overlapping enemies (one moving, one frozen in its authored
+        // pose) that grew with every revisit and leaked for the whole session.
+        // Track each chunk's spawned creatures and end them with the chunk's own
+        // lifecycle: repopulate, pool return and chunk dispose.
+        private static readonly Dictionary<Chunk, List<GameObject>> s_chunkCreatures = new();
+        private static readonly List<Chunk> s_deadChunks = new();
         private static readonly Dictionary<GameObject, bool> s_livingPrefabCache = new();
         private static readonly Dictionary<GameObject, bool> s_passivePrefabCache = new();
         private static readonly Dictionary<GameObject, bool> s_enemyPrefabCache = new();
         private static readonly Dictionary<GameObject, bool> s_buildingPrefabCache = new();
-
-        // 17.20.2-dev: some biome assets list the same creature twice - a legacy
-        // per-biome copy under VoxelEngineAssets/Scatter/<Biome>/Enemies beside the
-        // canonical Resources/Enemies prefab (byte-identical rig, different asset).
-        // Both entries rolled across the same surface points, so forests and deserts
-        // spawned doubled, overlapping enemies and herds - one twin often asleep or
-        // idle beside its awake copy. Like the ruin density rule, the fix is enforced
-        // at runtime so existing assets and future setup runs cannot undo it: the
-        // highest-density entry per creature name is the current authored value and
-        // wins; the duplicate is never rolled.
-        private static readonly Dictionary<BiomeDefinition, BiomeDefinition.ScatterEntry[]> s_enemyDedup = new();
-        private static readonly Dictionary<BiomeDefinition, BiomeDefinition.ScatterEntry[]> s_passiveDedup = new();
         private static readonly Collider[] s_overlapBuffer = new Collider[32];
 
         // ── 17.17.2-dev: scatter teardown guards ─────────────────────────────
@@ -64,6 +68,22 @@ namespace VoxelEngine.Scattering
         public static void ForgetWorld(IChunkScatterWorld world)
         {
             if (world != null) s_reservations.Remove(world);
+            // 17.20.2-dev: detached creatures outlive even their chunk root's
+            // destroy, so the teardown window ends any still tracked against a
+            // dead chunk - streaming teardown, never a gameplay death.
+            if (s_chunkCreatures.Count > 0)
+            {
+                s_deadChunks.Clear();
+                foreach (var pair in s_chunkCreatures)
+                    if (pair.Key == null || pair.Key.go == null) s_deadChunks.Add(pair.Key);
+                for (int i = 0; i < s_deadChunks.Count; i++)
+                {
+                    if (s_chunkCreatures.TryGetValue(s_deadChunks[i], out var creatures))
+                        for (int j = 0; j < creatures.Count; j++)
+                            if (creatures[j] != null) Object.Destroy(creatures[j]);
+                    s_chunkCreatures.Remove(s_deadChunks[i]);
+                }
+            }
             s_worldTeardown = true;
         }
 
@@ -97,6 +117,9 @@ namespace VoxelEngine.Scattering
                 MarkScatterTeardown(existing);
                 Object.Destroy(existing.gameObject);
             }
+            // 17.20.2-dev: the previous batch of detached creatures ends before the
+            // new one spawns, so a revisit meets one population, not two.
+            DestroyChunkCreatures(chunk);
 
             const int S = VoxelConstants.CHUNK_SIZE;
             // A hashed quarter-sample retains roughly one candidate per 4 square metres
@@ -176,8 +199,8 @@ namespace VoxelEngine.Scattering
                     {
                         0 => biome.buildingScatter,
                         1 => biome.scatter,
-                        2 => DedupedCreatures(biome, 2),
-                        _ => DedupedCreatures(biome, 3),
+                        2 => biome.enemyScatter,
+                        _ => biome.passiveScatter,
                     };
                     if (entries == null || entries.Length == 0) continue;
 
@@ -315,6 +338,16 @@ namespace VoxelEngine.Scattering
                             col.center = new Vector3(0f, col.height * 0.5f, 0f);
                         }
                         Register(world, instance, worldPos, clearRadius);
+                        if (isEnemy || isPassiveAnimal)
+                        {
+                            // 17.20.2-dev: tracked per chunk so repopulate, pool
+                            // return and chunk dispose can end them - they detached
+                            // from the holder on Awake and would otherwise outlive
+                            // every teardown path.
+                            if (!s_chunkCreatures.TryGetValue(chunk, out var creatures))
+                                s_chunkCreatures[chunk] = creatures = new List<GameObject>(4);
+                            creatures.Add(instance);
+                        }
                         placed = true;
                         break; // one authored scatter choice per validated surface point
                     }
@@ -443,6 +476,27 @@ namespace VoxelEngine.Scattering
             }
         }
 
+        /// <summary>17.20.2-dev: end every creature this chunk's scatter spawned.
+        /// Called on repopulate, pool return and chunk dispose so scatter-born
+        /// creatures follow their chunk's lifecycle instead of sleeping on forever
+        /// beside their own replacement. A mount with a rider is never stream
+        /// content and is kept. The reservations of destroyed instances prune
+        /// themselves the next time IsBlocked walks the list. Spawner-born
+        /// hostiles and guest replicas are not tracked here and are unaffected.</summary>
+        public static void DestroyChunkCreatures(Chunk chunk)
+        {
+            if (chunk == null || !s_chunkCreatures.TryGetValue(chunk, out var creatures)) return;
+            for (int i = 0; i < creatures.Count; i++)
+            {
+                var creature = creatures[i];
+                if (creature == null) continue;
+                var rideable = creature.GetComponent<VoxelEngine.Fauna.RideableAnimal>();
+                if (rideable != null && rideable.Rider != null) continue;
+                Object.Destroy(creature);
+            }
+            s_chunkCreatures.Remove(chunk);
+        }
+
         private static bool HasAnyScatter(BiomeDefinition biome)
         {
             return biome != null
@@ -450,47 +504,6 @@ namespace VoxelEngine.Scattering
                     || (biome.enemyScatter != null && biome.enemyScatter.Length > 0)
                     || (biome.passiveScatter != null && biome.passiveScatter.Length > 0)
                     || (biome.buildingScatter != null && biome.buildingScatter.Length > 0));
-        }
-
-        /// <summary>17.20.2-dev: creature entries (enemy/passive passes) with the
-        /// legacy per-biome duplicate assets filtered out, cached per biome. The
-        /// entry with the highest density per creature name wins - that is the
-        /// current-generation authored value; ties keep the earlier entry. Entries
-        /// with a missing prefab pass through untouched so the downstream null
-        /// check keeps reporting them the way it always has.</summary>
-        private static BiomeDefinition.ScatterEntry[] DedupedCreatures(BiomeDefinition biome, int categoryPass)
-        {
-            var cache = categoryPass == 2 ? s_enemyDedup : s_passiveDedup;
-            if (cache.TryGetValue(biome, out var cached)) return cached;
-
-            var raw = categoryPass == 2 ? biome.enemyScatter : biome.passiveScatter;
-            var result = raw;
-            if (raw != null && raw.Length > 1)
-            {
-                var bestByName = new Dictionary<string, int>();
-                bool foundDuplicate = false;
-                for (int i = 0; i < raw.Length; i++)
-                {
-                    var prefab = raw[i].prefab;
-                    if (prefab == null) continue;
-                    if (bestByName.TryGetValue(prefab.name, out int kept))
-                    {
-                        foundDuplicate = true;
-                        if (raw[i].density > raw[kept].density) bestByName[prefab.name] = i;
-                    }
-                    else bestByName[prefab.name] = i;
-                }
-                if (foundDuplicate)
-                {
-                    var keep = new HashSet<int>(bestByName.Values);
-                    var list = new List<BiomeDefinition.ScatterEntry>(raw.Length);
-                    for (int i = 0; i < raw.Length; i++)
-                        if (raw[i].prefab == null || keep.Contains(i)) list.Add(raw[i]);
-                    result = list.ToArray();
-                }
-            }
-            cache[biome] = result;
-            return result;
         }
 
         private static bool IsTreePrefab(GameObject prefab)

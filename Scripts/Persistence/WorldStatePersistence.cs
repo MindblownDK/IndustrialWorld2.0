@@ -3321,11 +3321,11 @@ namespace VoxelEngine.Persistence
         // still rewind the system to t = 0 (a layout regenerated once the bootstrap
         // finishes, a registry rebuilt late), and a save written during such a
         // rewind stored 0 and parked the sun somewhere new every session. These two
-        // members remember the reading we restored and what real time has passed
-        // since, so the watchdog can put the system back and a save can never write
+        // members remember the reading we restored and how much scaled game time
+        // has passed since, so the watchdog can put the system back and a save can never write
         // a clock we know to be wrong.
         private double _clockAnchorSeconds;
-        private float  _clockAnchorRealtime;
+        private double _clockAnchorGameTime;
         private bool   _clockWatchdogRunning;
         private float  _nextRetryAt;
 
@@ -3335,21 +3335,22 @@ namespace VoxelEngine.Persistence
         {
             if (seconds <= 0d) return;
             _clockAnchorSeconds  = seconds;
-            _clockAnchorRealtime = Time.unscaledTime;
+            _clockAnchorGameTime = Time.timeAsDouble;
             if (_clockWatchdogRunning) return;
             _clockWatchdogRunning = true;
             StartCoroutine(CosmicClockWatchdog());
         }
 
         /// <summary>The clock reading this session should be showing right now:
-        /// the restored baseline advanced by real time at the registry's pace.
+        /// the restored baseline advanced by the same scaled game time used by
+        /// CosmicRegistry.Update. Pausing therefore freezes both clocks together.
         /// 0 when this session never restored anything (a fresh world).</summary>
         private double ComputeExpectedCosmicSeconds()
         {
             if (_clockAnchorSeconds <= 0d) return 0d;
             var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
             double pace = registry != null && registry.orbitalTimeScale > 0d ? registry.orbitalTimeScale : 1d;
-            return _clockAnchorSeconds + (Time.unscaledTime - _clockAnchorRealtime) * pace;
+            return _clockAnchorSeconds + (Time.timeAsDouble - _clockAnchorGameTime) * pace;
         }
 
         /// <summary>Watches the orbital clock for the first minutes of a session and
@@ -3372,7 +3373,7 @@ namespace VoxelEngine.Persistence
                 Debug.LogWarning($"[WorldState] Orbital clock rewound to {registry.SimulationSeconds:0.#}s (expected {expected:0.#}s) — re-applying the saved phase.");
                 registry.RestoreSimulationSeconds(expected);
                 _clockAnchorSeconds  = expected;
-                _clockAnchorRealtime = Time.unscaledTime;
+                _clockAnchorGameTime = Time.timeAsDouble;
             }
         }
 

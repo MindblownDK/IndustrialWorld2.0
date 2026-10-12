@@ -83,6 +83,10 @@ namespace VoxelEngine.Pooling
                 VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(scatter);
                 Object.Destroy(scatter.gameObject);
             }
+            // 17.20.2-dev: detached creatures left the holder on Awake, so the
+            // destroy above never reached them; end them with the chunk or the
+            // next populate spawns a second population beside the survivors.
+            VoxelEngine.Scattering.ChunkScatter.DestroyChunkCreatures(c);
 
             // Destroy water mesh child.
             if (c.waterMeshGO != null) { Object.Destroy(c.waterMeshGO); c.waterMeshGO = null; }
@@ -125,6 +129,9 @@ namespace VoxelEngine.Pooling
                 var scatter = c.go.transform.Find("__scatter");
                 if (scatter != null)
                     VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(scatter);
+                // 17.20.2-dev: detached creatures survive even the chunk root's
+                // destroy - end them with the chunk (ridden mounts are kept).
+                VoxelEngine.Scattering.ChunkScatter.DestroyChunkCreatures(c);
                 Object.Destroy(c.go);
             }
         }
