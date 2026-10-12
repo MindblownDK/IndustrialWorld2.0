@@ -33,6 +33,18 @@ namespace VoxelEngine.Scattering
         private static readonly Dictionary<GameObject, bool> s_passivePrefabCache = new();
         private static readonly Dictionary<GameObject, bool> s_enemyPrefabCache = new();
         private static readonly Dictionary<GameObject, bool> s_buildingPrefabCache = new();
+
+        // 17.20.2-dev: some biome assets list the same creature twice - a legacy
+        // per-biome copy under VoxelEngineAssets/Scatter/<Biome>/Enemies beside the
+        // canonical Resources/Enemies prefab (byte-identical rig, different asset).
+        // Both entries rolled across the same surface points, so forests and deserts
+        // spawned doubled, overlapping enemies and herds - one twin often asleep or
+        // idle beside its awake copy. Like the ruin density rule, the fix is enforced
+        // at runtime so existing assets and future setup runs cannot undo it: the
+        // highest-density entry per creature name is the current authored value and
+        // wins; the duplicate is never rolled.
+        private static readonly Dictionary<BiomeDefinition, BiomeDefinition.ScatterEntry[]> s_enemyDedup = new();
+        private static readonly Dictionary<BiomeDefinition, BiomeDefinition.ScatterEntry[]> s_passiveDedup = new();
         private static readonly Collider[] s_overlapBuffer = new Collider[32];
 
         // ── 17.17.2-dev: scatter teardown guards ─────────────────────────────
@@ -164,8 +176,8 @@ namespace VoxelEngine.Scattering
                     {
                         0 => biome.buildingScatter,
                         1 => biome.scatter,
-                        2 => biome.enemyScatter,
-                        _ => biome.passiveScatter,
+                        2 => DedupedCreatures(biome, 2),
+                        _ => DedupedCreatures(biome, 3),
                     };
                     if (entries == null || entries.Length == 0) continue;
 
@@ -438,6 +450,47 @@ namespace VoxelEngine.Scattering
                     || (biome.enemyScatter != null && biome.enemyScatter.Length > 0)
                     || (biome.passiveScatter != null && biome.passiveScatter.Length > 0)
                     || (biome.buildingScatter != null && biome.buildingScatter.Length > 0));
+        }
+
+        /// <summary>17.20.2-dev: creature entries (enemy/passive passes) with the
+        /// legacy per-biome duplicate assets filtered out, cached per biome. The
+        /// entry with the highest density per creature name wins - that is the
+        /// current-generation authored value; ties keep the earlier entry. Entries
+        /// with a missing prefab pass through untouched so the downstream null
+        /// check keeps reporting them the way it always has.</summary>
+        private static BiomeDefinition.ScatterEntry[] DedupedCreatures(BiomeDefinition biome, int categoryPass)
+        {
+            var cache = categoryPass == 2 ? s_enemyDedup : s_passiveDedup;
+            if (cache.TryGetValue(biome, out var cached)) return cached;
+
+            var raw = categoryPass == 2 ? biome.enemyScatter : biome.passiveScatter;
+            var result = raw;
+            if (raw != null && raw.Length > 1)
+            {
+                var bestByName = new Dictionary<string, int>();
+                bool foundDuplicate = false;
+                for (int i = 0; i < raw.Length; i++)
+                {
+                    var prefab = raw[i].prefab;
+                    if (prefab == null) continue;
+                    if (bestByName.TryGetValue(prefab.name, out int kept))
+                    {
+                        foundDuplicate = true;
+                        if (raw[i].density > raw[kept].density) bestByName[prefab.name] = i;
+                    }
+                    else bestByName[prefab.name] = i;
+                }
+                if (foundDuplicate)
+                {
+                    var keep = new HashSet<int>(bestByName.Values);
+                    var list = new List<BiomeDefinition.ScatterEntry>(raw.Length);
+                    for (int i = 0; i < raw.Length; i++)
+                        if (raw[i].prefab == null || keep.Contains(i)) list.Add(raw[i]);
+                    result = list.ToArray();
+                }
+            }
+            cache[biome] = result;
+            return result;
         }
 
         private static bool IsTreePrefab(GameObject prefab)

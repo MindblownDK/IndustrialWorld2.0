@@ -104,7 +104,7 @@ namespace VoxelEngine.UI
 
             // ── Wind Lines (17.20.0-dev) ──────────────────────────────
             p.Add(ToggleRow("Wind Lines",
-                $"Subtle streaks drifting just above the ground, showing where wind blows. Ctrl+{GameSettings.GetKey(InputAction.WindLines)} toggles in game.",
+                $"Subtle streaks drifting just above the ground, showing where wind blows. {GameSettings.GetKey(InputAction.WindLines)} toggles in game.",
                 GameSettings.WindLinesVisible,
                 on => { GameSettings.WindLinesVisible = on; rebuild?.Invoke(); }));
         }
@@ -773,20 +773,31 @@ namespace VoxelEngine.UI
                 lbl.style.minHeight = 22;
                 row.Add(lbl);
 
-                // 17.20.0-dev: the wind-lines action is read WITH Ctrl - show the
-                // full combo so the row tells the truth; capture still rebinds the
-                // key half alone.
-                var btn = T.SmallButton(
-                    a == InputAction.WindLines ? "Ctrl + " + GameSettings.GetKey(a) : GameSettings.GetKey(a),
-                    null, T.AccentTeal);
+                var btn = T.SmallButton(GameSettings.GetKey(a), null, T.AccentTeal);
                 btn.style.minWidth = 120;
+                // This row's index in `rows` - captured at build time (the row is
+                // appended right below), NOT at click time when every row exists.
+                int rowIdx = rows.Count;
                 btn.clickable.clicked += () =>
                 {
                     btn.text = "Press key…";
                     btn.style.backgroundColor = new StyleColor(
                         new Color(T.AccentGold.r, T.AccentGold.g, T.AccentGold.b, 0.80f));
                     var cap = host.gameObject.AddComponent<KeyRebindCapture>();
-                    cap.onCaptured = code => { GameSettings.SetKey(a, code); rebuild?.Invoke(); };
+                    // 17.20.1-dev: update THIS row in place. The full rebuild used to
+                    // reset the keybind tab's scroll position to the top on every
+                    // capture, which made binding anything below the fold a chore.
+                    cap.onCaptured = code =>
+                    {
+                        GameSettings.SetKey(a, code);
+                        btn.text = code;                       // combo codes read as stored: "Ctrl+B"
+                        btn.style.backgroundColor = new StyleColor(T.AccentTeal);
+                        if (rowIdx >= 0 && rowIdx < rows.Count)
+                        {
+                            var r = rows[rowIdx];
+                            rows[rowIdx] = (r.row, r.funcHay, code.ToLowerInvariant());
+                        }
+                    };
                 };
                 row.Add(btn);
                 p.Add(row);

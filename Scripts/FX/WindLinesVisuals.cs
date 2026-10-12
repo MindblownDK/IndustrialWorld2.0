@@ -44,6 +44,42 @@ namespace VoxelEngine.FX
         private ParticleSystem.VelocityOverLifetimeModule _vel;
         private Transform _emitterT;
 
+        /// <summary>Singleton: both the weather rig and the cosmos bootstrap may
+        /// attach this component; the second instance retires itself.</summary>
+        public static WindLinesVisuals Instance { get; private set; }
+
+        // Anchor source: the weather follow rig when the world has one, else the
+        // main camera - so the lines work even when hosted on the WindField object.
+        private Transform _anchorT;
+        private float _anchorRetry;
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this) { Destroy(this); return; }
+            Instance = this;
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
+        private Vector3 AnchorPosition()
+        {
+            if (_anchorT == null && Time.unscaledTime >= _anchorRetry)
+            {
+                _anchorRetry = Time.unscaledTime + 1f;
+                var wm = VoxelEngine.Weather.WeatherManager.Instance;
+                if (wm != null) _anchorT = wm.transform;
+                else
+                {
+                    var cam = Camera.main;
+                    if (cam != null) _anchorT = cam.transform;
+                }
+            }
+            return _anchorT != null ? _anchorT.position : transform.position;
+        }
+
         // Cached state so Update never touches a module without a real change.
         private Vector3 _lastVel = Vector3.zero;
         private float _lastRate = -1f;
@@ -80,7 +116,7 @@ namespace VoxelEngine.FX
             _wasVisible = true;
             if (_ps == null) return;
 
-            Vector3 anchor = transform.position;   // the weather rig follows the camera
+            Vector3 anchor = AnchorPosition();
             Vector3 up = GravityProvider.GetUp(anchor);
             if (up.sqrMagnitude < 1e-6f) { StopLines(); return; }
             up.Normalize();
@@ -144,13 +180,14 @@ namespace VoxelEngine.FX
             if (_ps != null && _ps.isPlaying) _ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
         }
 
-        // ── Ctrl+B (key half rebindable; Ctrl is the fixed modifier, the same
-        //    contract as the dampeners' Ctrl+key reference lock) ──
+        // ── Ctrl+B by default: the binding itself carries the modifier (the
+        //    stored code is literally "Ctrl+B"), so WasPressed already requires
+        //    Ctrl - no separate modifier check here. Rebindable in Settings -
+        //    Keybinds, combos included. ──
         private void HandleToggleInput()
         {
             if (UIState.IsBlocking || UIState.TextInputActive) return;
             if (!GameSettings.WasPressed(InputAction.WindLines)) return;
-            if (!GridInput.Ctrl) return;
 
             GameSettings.WindLinesVisible = !GameSettings.WindLinesVisible;
             bool on = GameSettings.WindLinesVisible;
@@ -226,13 +263,28 @@ namespace VoxelEngine.FX
 
         private static Material CreateLineMaterial()
         {
-            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
+            // The project's own weather particle shader FIRST - it is the proven
+            // transparent path the rain and snow already render through (Blend
+            // SrcAlpha/OneMinusSrcAlpha, ZWrite off, tint + shape modes). A fresh
+            // Material() on the generic URP particle shader defaults to OPAQUE and
+            // rendered the wisps effectively invisible - the 17.20.0 bug.
+            var shader = Shader.Find("VoxelEngine/WeatherParticlesURP")
+                      ?? Shader.Find("Universal Render Pipeline/Particles/Unlit")
                       ?? Shader.Find("Particles/Standard Unlit")
                       ?? Shader.Find("Sprites/Default");
             var mat = new Material(shader) { name = "WindLineMat" };
             var tint = new Color(0.92f, 0.96f, 1.00f, 1f);
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", tint);
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
+            if (mat.HasProperty("_ShapeMode")) mat.SetFloat("_ShapeMode", 0f);   // soft puff, stretched by the renderer
+            // Fallback shaders need transparency configured by hand.
+            if (mat.HasProperty("_Surface"))
+            {
+                mat.SetFloat("_Surface", 1f);
+                mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            }
             mat.color = tint;
             mat.renderQueue = 3020;
             if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);

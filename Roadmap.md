@@ -29,6 +29,17 @@
 
 ## 0. Recently Done
 
+### 17.20.2-dev - Doubled Overlapping Enemies Traced to Duplicate Biome Scatter Entries
+- The overlapping enemy twins were data, not code: four biome definitions listed the same creature twice - a legacy per-biome `Scatter/<Biome>/Enemies` copy beside the canonical `Resources/Enemies` prefab, byte-identical rigs but different assets, both rolling on the same surface points - so Desert/Forest/Mountains/Steppes spawned doubled Manticores/Ghouls/Basilisks/Griffins about two metres apart with independent scale rolls and AI states (one chasing, one idle or asleep beyond the 80-metre boundary): the moving copy and its frozen twin
+- `ChunkScatter` now dedupes creature entries per biome at runtime (computed once, cached): the highest-density entry per creature name wins and the duplicate is never rolled - the same enforcement point as the ruin density rule, a no-op on clean biomes, and props/flora/building categories are untouched
+- A new editor tool (Tools > Voxel Engine > Repair Duplicate Creature Scatter Entries) cleans the biome assets themselves: the canonical `Resources/` prefab wins, kept entries' authored density and scale ranges are never touched, legacy Scatter prefab assets stay on disk, undo-supported and safe to re-run
+
+### 17.20.1-dev - Visible Wind Lines, No Grass Blink, Bindable Ctrl Combos
+- The wind lines' invisibility was three stacked causes, all fixed: nothing ever CREATED a `WindField` (bootstrap only searched for hand-placed ones) so it is now created when missing and driven by the body settings - which also wakes the sail forces and grass wind on worlds that had none; the line material led with a generic URP particle shader whose fresh material defaults to opaque, so the project's proven transparent weather shader now leads the chain; and the visual is a singleton hostable by the weather rig or the wind object, anchored on the camera
+- Ctrl+B stopped blinking the grass: the preference setter fired `OnChanged`, which `QualityPresetApplier` answers by force-rebuilding the GPU grass - the setter now persists directly (the visual polls it per frame), no event, no rebuild
+- Settings - Keybinds binds modifier combos: holding Ctrl during capture stores `Ctrl+X`, enforced by both input backends, while modifier keys still bind plain for Sprint/Slide; captures write their row in place instead of rebuilding the tab, so the scroll position survives; the wind-lines default is now literally `Ctrl+B` (migration v26, custom binds preserved) and the build wheel still owns plain B
+- The "two enemy prefabs overlapping" report was investigated and every code path ruled out (single-rig builders, full guest-cull destroy, tint-only variants, pose-only animator); the prefab assets live outside the sparse clone, so reproduction details were requested before any speculative change - nothing touched on the enemy side this round
+
 ### 17.20.0-dev - Surface Wind Lines on Ctrl+B, Plus a Frame-Time Cleanup Pass
 - Subtle Astroneer-style streaks drift through the air just above the ground, reading the game's own `WindField` projected on the surface tangent and gated by atmosphere sampling - no air, no lines; density, rate and streak length all scale with live wind, faint at a breeze, long and fast in a storm
 - One velocity-stretched particle system on the weather follow rig (self-healed like every weather subsystem, zero wiring, zero per-frame allocations); Ctrl+B toggles with a toast, the key half rebinds in Settings - Keybinds as "Ctrl + B", the preference persists and mirrors into a Settings - Display row; plain B still opens the build wheel - the wheel ignores its open edge while Ctrl is held
@@ -47,16 +58,6 @@
 - Tiers from live readings plus the 17.17.2 recruitment heat: quiet, scouts, packs, organized wave (residual and pressure both at 0.30+, own 3-minute cooldown), siege (0.55/0.45+, 5-minute cooldown); the ecological alive-cap still binds every event
 - Waves are 4-6 ghouls led by an elite (2.5x health, rusty tint, extra loot) with flank ambushers on logistics; the siege brute (6x health, 1.9x scale, ash tint) walks past the player to dismantle machines and exposed logistics with a double-damage bite - both are the existing ghoul rig promoted at spawn, no new prefab
 - The hostile spawn broadcast gains an additive variant byte; the host re-announces promoted ghouls immediately so guest replicas get scaled max health and tier visuals without waiting for the self-heal pass
-
-### 17.17.2-dev - Keep Felled Trees Felled, Craft From Open Containers, Calm the Ghoul Response
-- Any gameplay death of a scatter tree now records its stump in the existing per-world harvest store; streaming deaths (pool return, repopulate, world dispose, scene unload) are stamped or guarded and never record, so trees destroyed outside the felling path no longer regrow on load
-- Inventory crafting draws from inventory plus any open container panel (chest, drawer, loot bag, pen, pad, ruin cache) plus the storage network through a new `CompositeItemSource`; consumption draws inventory first, then the open panel, then the network; results still inventory-only
-- Ghoul response rebalanced code-side: hostile multiplier stays at exactly 1 until pressure exceeds 0.18 (deadzone plus smoothstep, unchanged 2.15x ceiling), and organized packs, ambushes and raids need about four minutes of sustained industrial activity (recruitment heat, ninety-second bleed-off); lone scouts and all authored scene values unchanged
-
-### 17.17.1-dev - Stop Save-Load Losses and Clip-Free Side Panels
-- Tiered records (foundations, floors, ceilings, walls, windows, doors, gates, railings, pillars) that cannot resolve at restore are logged and carried verbatim into every future save instead of being dropped silently; a 60 s retry re-runs the ordinary restore paths once their assets are loaded, which is the cold-boot race behind "walls sometimes do not load" and "stationary blocks do not load"
-- The restored orbital clock is guarded: a baseline plus a two-minute watchdog re-applies the saved phase if anything rewinds the system to t = 0, saves fall back to the baseline when the registry is gone at quit, and joining clients receive the host's live clock in the handshake so the sun no longer sits somewhere new on every join
-- Crafting assembly readout 224 to 300 units and equipment console 230 to 280 units, both vertical-only scrollers with ellipsis-yielding names and header titles, so queue rows and status chips no longer clip or pan left-right
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

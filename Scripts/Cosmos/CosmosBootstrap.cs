@@ -402,7 +402,23 @@ namespace VoxelEngine.Cosmos
             TryResolveViewerAndAnchor();
 
             _wind = FindAnyObjectByType<WindField>();
-            if (_wind != null) _wind.ApplyBody(body.settings);
+            // 17.20.1-dev: nothing in the codebase ever CREATED a WindField - the
+            // bootstrap only searched for a hand-placed one, so any world without
+            // it had silent sails, still grass and (new) nothing for the wind
+            // lines to draw. Create when missing; a scene-authored WindField is
+            // reused and driven exactly as before.
+            if (_wind == null)
+            {
+                var windGO = new GameObject("WindField");
+                _wind = windGO.AddComponent<WindField>();
+            }
+            _wind.ApplyBody(body.settings);
+            // The wind-lines visual prefers the weather follow rig; this guarantees
+            // it also exists on worlds whose scenes have no weather component
+            // (the component is a singleton - whichever host gets there first wins).
+            if (VoxelEngine.FX.WindLinesVisuals.Instance == null
+                && _wind.GetComponent<VoxelEngine.FX.WindLinesVisuals>() == null)
+                _wind.gameObject.AddComponent<VoxelEngine.FX.WindLinesVisuals>();
             if (_weather == null) _weather = FindAnyObjectByType<VoxelEngine.Weather.WeatherManager>();
             if (_weather != null) _weather.ApplyBody(body.settings);
 

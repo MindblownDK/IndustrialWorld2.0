@@ -185,7 +185,10 @@ namespace VoxelEngine.Weather
             if (_seaState == null) _seaState = gameObject.AddComponent<WeatherSeaState>();
             // 17.20.0-dev: subtle surface wind lines ride the same camera-follow rig
             // (Ctrl+B toggles; created if missing, reused if the setup pre-added one).
-            if (GetComponent<VoxelEngine.FX.WindLinesVisuals>() == null)
+            // 17.20.1-dev: singleton-checked - the cosmos bootstrap may already host
+            // the instance on the WindField object, and then this must not double up.
+            if (VoxelEngine.FX.WindLinesVisuals.Instance == null
+                && GetComponent<VoxelEngine.FX.WindLinesVisuals>() == null)
                 gameObject.AddComponent<VoxelEngine.FX.WindLinesVisuals>();
 
             _nextStateChange = Random.Range(minStateDuration, maxStateDuration);

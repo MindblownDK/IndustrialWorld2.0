@@ -37,7 +37,20 @@ namespace VoxelEngine.Settings
                         member[0].IsDefined(typeof(System.ObsoleteAttribute), inherit: false))
                         continue;
 
-                    try { if (Keyboard.current[k].wasPressedThisFrame) { Done(k.ToString()); return; } }
+                    try
+                    {
+                        if (Keyboard.current[k].wasPressedThisFrame)
+                        {
+                            // 17.20.1-dev: hold Ctrl while pressing a bindable key and
+                            // the combo "Ctrl+X" is recorded - GameSettings.Read parses
+                            // the prefix. Modifier keys themselves (Ctrl, Shift, Alt...)
+                            // still bind plain, so Sprint/Slide keeps working.
+                            string code = k.ToString();
+                            if (!IsModifierName(code) && CtrlHeld()) code = "Ctrl+" + code;
+                            Done(code);
+                            return;
+                        }
+                    }
                     catch { /* some Key enum entries can throw on certain layouts */ }
                 }
             }
@@ -46,7 +59,30 @@ namespace VoxelEngine.Settings
             if (Input.GetMouseButtonDown(1)) { Done("Mouse1"); return; }
             if (Input.GetMouseButtonDown(2)) { Done("Mouse2"); return; }
             foreach (KeyCode kc in System.Enum.GetValues(typeof(KeyCode)))
-                if (Input.GetKeyDown(kc)) { Done(kc.ToString()); return; }
+                if (Input.GetKeyDown(kc))
+                {
+                    string code = kc.ToString();
+                    if (!IsModifierName(code) && CtrlHeld()) code = "Ctrl+" + code;
+                    Done(code);
+                    return;
+                }
+#endif
+        }
+
+        /// <summary>True for the modifier keys themselves. Name-based so it works on
+        /// both input backends: every modifier enum name starts Left/Right (arrows
+        /// are the only bindable exceptions), plus the odd AltGr out.</summary>
+        private static bool IsModifierName(string code)
+            => code == "AltGr"
+            || ((code.StartsWith("Left") || code.StartsWith("Right")) && !code.Contains("Arrow"));
+
+        private static bool CtrlHeld()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            return kb != null && (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed);
+#else
+            return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 #endif
         }
 

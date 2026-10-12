@@ -83,7 +83,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 25;   // v25: wind-lines toggle (Ctrl+B default) joins the bindable actions
+        private const int    CURRENT_VERSION = 26;   // v26: modifier-combo binds ("Ctrl+X"); wind lines default becomes literally Ctrl+B
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -210,8 +210,15 @@ namespace VoxelEngine.Settings
         public static bool  ScreenShake      { get => PlayerPrefs.GetInt("ve_screenshake", 1) != 0; set { PlayerPrefs.SetInt("ve_screenshake", value ? 1 : 0); Notify(); } }
         /// <summary>17.20.0-dev: subtle surface wind-line streaks. Ctrl+B toggles in
         /// game; the preference persists so a player who dislikes them stays rid of
-        /// them. Off costs nothing - the emitter stops and clears.</summary>
-        public static bool  WindLinesVisible { get => PlayerPrefs.GetInt(K_WIND_LINES, 1) != 0; set { PlayerPrefs.SetInt(K_WIND_LINES, value ? 1 : 0); Notify(); } }
+        /// them. Off costs nothing - the emitter stops and clears. Deliberately does
+        /// NOT fire OnChanged: the visuals poll this every frame, and a Notify here
+        /// made every toggle re-run QualityPresetApplier, which hard-rebuilds the
+        /// GPU grass (grass visibly blinked on each Ctrl+B).</summary>
+        public static bool  WindLinesVisible
+        {
+            get => PlayerPrefs.GetInt(K_WIND_LINES, 1) != 0;
+            set { PlayerPrefs.SetInt(K_WIND_LINES, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
         /// <summary>Developer-only damage bypass. Release players cannot read or set it.</summary>
         public static bool InfiniteHealth
         {
@@ -379,10 +386,11 @@ namespace VoxelEngine.Settings
             // Z mirrors the cockpit dampener key: one muscle memory, two contexts —
             // seated it is the SHIP's switch (GridCockpit), on foot it is YOURS.
             InputAction.Dampeners       => "Z",
-            // 17.20.0-dev: read WITH the Ctrl modifier (Ctrl+B toggles the surface
-            // wind lines). Plain B stays the build wheel - the wheel's open edge
-            // ignores presses while Ctrl is held, so the two never fire together.
-            InputAction.WindLines       => "B",
+            // 17.20.0-dev, 17.20.1-dev: the binding itself carries the modifier -
+            // "Ctrl+B" is the stored code and Read enforces the combo, so binding
+            // a different key keeps the Ctrl contract. Plain B stays the build
+            // wheel; the wheel ignores its open edge while Ctrl is held.
+            InputAction.WindLines       => "Ctrl+B",
             _ => "None"
         };
 
@@ -460,6 +468,14 @@ namespace VoxelEngine.Settings
             // saved refresh choice is preserved as a deliberate player override.
             // v25: the wind-lines action is new; the generic pass above fills it with
             // B (read with the Ctrl modifier). Nothing else to migrate.
+
+            // v26: real modifier-combo support - a stored code may now be "Ctrl+X"
+            // and Read enforces the modifier. The wind-lines default becomes that
+            // literal combo; profiles still sitting on the old plain-B default
+            // migrate, and any deliberate custom bind is preserved.
+            string windLines = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.WindLines, "");
+            if (string.IsNullOrEmpty(windLines) || windLines == "B")
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.WindLines, DefaultKey(InputAction.WindLines));
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);
@@ -572,9 +588,20 @@ namespace VoxelEngine.Settings
             string code = GetKey(a);
             if (string.IsNullOrEmpty(code) || code == "None") return false;
 
+            // 17.20.1-dev: modifier-combo binds. A stored code may be "Ctrl+X";
+            // the combo fires only while Ctrl is held AND X makes its edge/hold.
+            bool needCtrl = false;
+            if (code.Length > 5 && code.StartsWith("Ctrl+", StringComparison.OrdinalIgnoreCase))
+            {
+                needCtrl = true;
+                code = code.Substring(5);
+                if (string.IsNullOrEmpty(code) || code == "None") return false;
+            }
+
             if (code.Length >= 5 && code[0] == 'M' && code[1] == 'o' && code[2] == 'u' && code[3] == 's' && code[4] == 'e')
             {
                 if (Mouse.current == null) return false;
+                if (needCtrl && !CtrlDown()) return false;
                 switch (code)
                 {
                     case "Mouse0": return downEdge ? Mouse.current.leftButton.wasPressedThisFrame   : Mouse.current.leftButton.isPressed;
@@ -588,6 +615,7 @@ namespace VoxelEngine.Settings
             if (!System.Enum.TryParse<Key>(code, true, out var k)) return false;
             if (k == Key.None) return false;            // Keyboard indexer throws on Key.None
             if ((int)k <= 0)   return false;            // catches any other invalid enum entries
+            if (needCtrl && !CtrlDown()) return false;
 
             try
             {
@@ -599,11 +627,32 @@ namespace VoxelEngine.Settings
             catch (System.IndexOutOfRangeException)    { return false; }
             catch (System.NullReferenceException)      { return false; }
         }
+
+        private static bool CtrlDown() => Keyboard.current != null
+            && (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed);
 #else
+        // 17.20.1-dev: shared "Ctrl+" prefix strip for the legacy readers.
+        private static bool StripCtrlCombo(ref string code, out bool needCtrl)
+        {
+            needCtrl = false;
+            if (code.Length > 5 && code.StartsWith("Ctrl+", StringComparison.OrdinalIgnoreCase))
+            {
+                needCtrl = true;
+                code = code.Substring(5);
+                if (string.IsNullOrEmpty(code) || code == "None") return false;
+            }
+            return true;
+        }
+
+        private static bool CtrlDown()
+            => Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+
         public static bool IsHeld(InputAction a)
         {
             string code = GetKey(a);
             if (string.IsNullOrEmpty(code) || code == "None") return false;
+            if (!StripCtrlCombo(ref code, out bool needCtrl)) return false;
+            if (needCtrl && !CtrlDown()) return false;
             if (code == "Mouse0") return Input.GetMouseButton(0);
             if (code == "Mouse1") return Input.GetMouseButton(1);
             if (code == "Mouse2") return Input.GetMouseButton(2);
@@ -616,6 +665,8 @@ namespace VoxelEngine.Settings
         {
             string code = GetKey(a);
             if (string.IsNullOrEmpty(code) || code == "None") return false;
+            if (!StripCtrlCombo(ref code, out bool needCtrl)) return false;
+            if (needCtrl && !CtrlDown()) return false;
             if (code == "Mouse0") return Input.GetMouseButtonDown(0);
             if (code == "Mouse1") return Input.GetMouseButtonDown(1);
             if (code == "Mouse2") return Input.GetMouseButtonDown(2);
