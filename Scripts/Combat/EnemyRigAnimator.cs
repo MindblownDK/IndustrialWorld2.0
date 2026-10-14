@@ -39,11 +39,13 @@ namespace VoxelEngine.Combat
             public bool Flip;       // mirrored jaw halves (BeakUpper opens the other way)
             public Quaternion AuthoredRot;
             public Vector3 AuthoredPos;
-            public Quaternion AuthoredRootRot;
-            public Vector3 AuthoredRootPos;
-            public Vector3 SwingPivotRoot;
-            public int SwingSide;
-            public bool UseRootArmSwing;
+            // Per-instance pose cache only; Unity must rebuild these runtime values
+            // instead of including them in the cross-platform serialized type layout.
+            [System.NonSerialized] public Quaternion AuthoredRootRot;
+            [System.NonSerialized] public Vector3 AuthoredRootPos;
+            [System.NonSerialized] public Vector3 SwingPivotRoot;
+            [System.NonSerialized] public int SwingSide;
+            [System.NonSerialized] public bool UseRootArmSwing;
             public Color BaseEyeColor;
             public Material EyeMat;
         }

@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.20.3-dev`
+**Current Version:** `17.20.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.20.4-dev] Keep Runtime Enemy Pose Data Out of Player Serialization
+
+**Type:** PATCH - player-build compatibility and release-build warning cleanup. No gameplay, save schema, chunk format or wire change.
+
+**GitHub title:** `[17.20.4-dev] Fix player build serialization mismatch and health-flag warning`
+
+#### Fixed
+- **The player build rejected `EnemyRigAnimator.Part`'s extra runtime-pose fields.** Shoulder pivots and root-space authored transforms are rebuilt by `Bind` for every enemy and must never be serialized. These five cache fields are now explicitly `[System.NonSerialized]`, keeping the Editor and target-platform serialized layouts identical while preserving the Ghoul's runtime swing.
+- **Removed the release-only unused `infiniteHealth` field that emitted CS0414.** The Inspector toggle remains available in the Editor and development builds; release builds still force the static damage-bypass state off and no longer keep a private copy that is only assigned.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.20.4-dev`, PATCH over `17.20.3-dev`. No save schema, prefab data, chunk format or wire change; no manual steps or Setup rerun.
+- Static source review, preprocessor/brace balance and whitespace checks pass. Unity Editor/player builds are unavailable here; rebuild after Unity recompiles the changed scripts to verify the platform serializer now agrees.
 
 ### [17.20.3-dev] Ghoul Arms Now Swing as One, Paused Orbits Stay Put
 

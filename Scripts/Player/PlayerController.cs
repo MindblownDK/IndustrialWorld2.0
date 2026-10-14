@@ -28,8 +28,6 @@ namespace VoxelEngine.Player
         [Header("Developer Testing")]
         [Tooltip("Development-build test flag: the player takes no damage while this is on.")]
         public bool infiniteHealth = false;
-#else
-        private bool infiniteHealth;
 #endif
         /// <summary>Development-only live damage-bypass flag, read by PlayerStats.</summary>
         public static bool InfiniteHealth { get; private set; }
@@ -296,7 +294,6 @@ namespace VoxelEngine.Player
             infiniteHealth = InfiniteHealth;
 #else
             InfiniteHealth = false;
-            infiniteHealth = false;
 #endif
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
@@ -402,7 +399,6 @@ namespace VoxelEngine.Player
             infiniteHealth = InfiniteHealth;
 #else
             InfiniteHealth = false;
-            infiniteHealth = false;
 #endif
             // If the spawner hasn't finished placing us yet, freeze entirely (no input, no gravity).
             // Prevents falling-through-ungenerated-chunks AND prevents the player taking

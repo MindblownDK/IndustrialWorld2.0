@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.20.3-dev`
-**Roadmap Version:** `17.20.3-dev`
+**Current Version:** `17.20.4-dev`
+**Roadmap Version:** `17.20.4-dev`
 **Date:** 2026-10-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.20.4-dev - Keep Runtime Enemy Pose Data Out of Player Serialization
+- The Ghoul arm-pose cache is explicitly nonserialized and rebuilt at bind time, so Editor and player type layouts agree
+- Release builds no longer carry an unused private `infiniteHealth` copy; the development Inspector toggle is preserved
+- No gameplay, save, prefab, chunk or wire changes; no Setup rerun
+
 ### 17.20.3-dev - Ghoul Attacks Swing Clearly; Paused Orbits Stay Put
 - The Ghoul's sibling-mesh shoulders, arms, hands and claws now share a shoulder-rooted pull-back, forward swipe and eased recovery; other hostile rigs are unchanged
 - Cosmic-clock watchdog follows scaled game time like `CosmicRegistry.Update`, so pausing cannot falsely advance the orbital phase or trigger a deep-space frame handoff
@@ -50,13 +55,6 @@
 - One velocity-stretched particle system on the weather follow rig (self-healed like every weather subsystem, zero wiring, zero per-frame allocations); Ctrl+B toggles with a toast, the key half rebinds in Settings - Keybinds as "Ctrl + B", the preference persists and mirrors into a Settings - Display row; plain B still opens the build wheel - the wheel ignores its open edge while Ctrl is held
 - Perf pass after "laggy and chunky": wireless power transmitters stop scanning the whole scene and allocating every frame (staggered 2 Hz scans into a reused list, per-frame delivery semantics preserved); the per-frame all-chunk collider-window sweep with native mesh queries throttles to 5 Hz inside its 0.85-chunk margin; the 3-second SphereWorld diagnostics (double chunk walk + voxel sampling + stack-trace-carrying log) and the 10-second weather heartbeat become editor/dev-only
 - A full static audit of every Update/LateUpdate/FixedUpdate body verified the streaming, meshing, scatter, pollution, spawner, hostile-sync and audio paths are already jobified, budgeted or throttled; remaining chunky candidates (mesh-upload spikes, scatter bursts, GPU readback) need a live profiler and a report of exactly when they bite
-
-### 17.19.0-dev - Quarry on Spheres, Flat Ports, True Pivots, Telegraphed Monsters
-- The quarry is rebuilt around the block's surface frame (local right/up/forward from the placed rotation): the area, tape, frame, drill and preview lie flat on any world, per-column ground probes follow undulation, cells resolve local-to-world-to-voxel so the pit descends radially; flat worlds behave identically and the save record is unchanged - a reloaded pit skips its empty cells and resumes at the hole floor
-- Placement ignores scatter colliders (a tree no longer vetoes a quarry or any block), the committed footprint destroys the scatter inside it, and the quarry clears its whole mining area at startup and on every range resize - cleared trees record their stumps through the existing harvest persistence, so they stay down across save/load
-- Chest port indicators are constructed in the block's local space (local face normal plus local up-hint) instead of world-space math, so the connector wedges hug their faces at every orientation; the quarry upgrade-install null crash on the success path is fixed
-- New opt-in `PlacementPivotAnchor` marker: root pivot IS the block position, no lift, no footprint re-centering - remade prefabs authored with their model bottom at local Y = 0 land exactly where the ghost shows; unmarked prefabs keep the old convention
-- New `EnemyRigAnimator`: procedural walk/run cycles, diagonal gaits, wing beats, tail waves, idle life and jaw panting for all seven hostile rigs, driven by position-delta speed so host enemies and guest replicas animate from one component; every attack now telegraphs - ghoul 0.45 s bite windup, basilisk 0.4 s bite and 0.6 s gaze flare (cone re-checked at release, plants itself while rearing), ifrit 0.5 s fireball and 0.8 s firewall charge (target locked at flare start = a real dodge), manticore 0.55 s tail-rear volley and 0.4 s claws, karkadann pawing windup played on the body, roc 0.7 s wing heave, griffin and roc talon snaps on dive contact - replicated to guests as two additive cast bytes, cooldown pacing unchanged
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
