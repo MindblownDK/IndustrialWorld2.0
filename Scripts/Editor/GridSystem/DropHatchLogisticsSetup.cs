@@ -369,7 +369,10 @@ namespace VoxelEngine.EditorTools
                     }
                 }
 
-                return PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                blockItem.placedPrefab = saved;
+                EditorUtility.SetDirty(blockItem);
+                return saved;
             }
             finally
             {

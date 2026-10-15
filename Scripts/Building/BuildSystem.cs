@@ -196,6 +196,44 @@ namespace VoxelEngine.Building
         private bool _ghostNoHitLogged;
         private static readonly System.Collections.Generic.HashSet<BlockItem> s_noPrefabWarned = new();
 
+        private static void TryAutoResolveMissingPrefab(BlockItem block)
+        {
+            if (block == null || block.placedPrefab != null) return;
+#if UNITY_EDITOR
+            string strippedName = (block.name ?? "").StartsWith("Block_") ? block.name.Substring(6) : block.name;
+            string[] candidatePaths =
+            {
+                $"Assets/VoxelEngineAssets/Prefabs/Machines/{strippedName}.prefab",
+                $"Assets/VoxelEngineAssets/Farming/Prefabs/{strippedName}.prefab",
+                $"Assets/VoxelEngineAssets/Factory/Prefabs/{strippedName}.prefab",
+                $"Assets/VoxelEngineAssets/Prefabs/{strippedName}.prefab"
+            };
+            for (int i = 0; i < candidatePaths.Length; i++)
+            {
+                var pf = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(candidatePaths[i]);
+                if (pf != null)
+                {
+                    block.placedPrefab = pf;
+                    UnityEditor.EditorUtility.SetDirty(block);
+                    return;
+                }
+            }
+            string[] guids = UnityEditor.AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/VoxelEngineAssets" });
+            for (int i = 0; i < guids.Length; i++)
+            {
+                var pf = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(UnityEditor.AssetDatabase.GUIDToAssetPath(guids[i]));
+                if (pf == null) continue;
+                var pb = pf.GetComponent<PlacedBlock>();
+                if (pb != null && pb.Item == block)
+                {
+                    block.placedPrefab = pf;
+                    UnityEditor.EditorUtility.SetDirty(block);
+                    return;
+                }
+            }
+#endif
+        }
+
         private void TraceGhost(string state)
         {
             if (_ghostTraceState == state) return;
@@ -220,6 +258,8 @@ namespace VoxelEngine.Building
                     : $"'{stack.item.displayName}' is not a placeable block");
                 return;
             }
+            if (block.placedPrefab == null)
+                TryAutoResolveMissingPrefab(block);
             if (block.placedPrefab == null)
             {
                 HoldingBlock = false; HeldBlockName = string.Empty; HideGhost();

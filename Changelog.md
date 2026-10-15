@@ -1,9 +1,22 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.25.2-dev`
+**Current Version:** `17.25.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.25.3-dev] Link BlockItem.placedPrefab for Tree Farm Plot, Automatic Tree Farm, Biomass Press & Receiving Chute
+
+**Type:** PATCH - assigns `blockItem.placedPrefab` after saving prefabs in `BiofuelAndTreeFarmSetup` and `DropHatchLogisticsSetup`, and adds automatic `TryAutoResolveMissingPrefab` self-healing in `BuildSystem`. Save-compatible.
+
+**GitHub title:** `[17.25.3-dev] Link BlockItem.placedPrefab in BiofuelAndTreeFarmSetup and DropHatchLogisticsSetup`
+
+#### Fixed
+- **`BlockItem.placedPrefab` wiring (`Scripts/Editor/Farming/BiofuelAndTreeFarmSetup.cs`, `Scripts/Editor/GridSystem/DropHatchLogisticsSetup.cs`).** Assigned `blockItem.placedPrefab = saved` and marked `blockItem` dirty after `PrefabUtility.SaveAsPrefabAsset` for `Block_TreeFarmPlot` (`Tree Farming Plot`), `Block_AutoTreeFarm` (`Automatic Tree Farm`), `Block_BiomassPress` (`Biomass Press`), and `Block_ReceivingChute` (`Large Receiving Chute`).
+- **Automatic `placedPrefab` self-healing in `BuildSystem` (`Scripts/Building/BuildSystem.cs`).** Added `TryAutoResolveMissingPrefab(BlockItem)` so that if a `BlockItem` has `placedPrefab == null` when selected on the hotbar in the Editor, `BuildSystem` automatically locates its prefab under `Assets/VoxelEngineAssets` (by candidate path or `PlacedBlock.Item == block`) and links `block.placedPrefab` on the spot without requiring a manual Setup Wizard re-run.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.25.3-dev`, PATCH over `17.25.2-dev`. Save-compatible.
 
 ### [17.25.2-dev] Fix BiofuelAndTreeFarmSetup Editor Field Names
 
