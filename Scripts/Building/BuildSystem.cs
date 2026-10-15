@@ -2986,6 +2986,25 @@ namespace VoxelEngine.Building
             // authored from local zero appears exactly where the block is placed.
             bool pivotAnchored = block != null && GetStaticPlacementPrefabProfile(block).anchorAtPivot;
 
+            // 17.26.0-dev - SURFACE-FLUSH PLACEMENT ON NATURAL GROUND.
+            //
+            // The 1 m world-axis lattice below only means something where a lattice
+            // actually exists: a foundation, a tiered deck, or another static block.
+            // Aimed at raw voxel terrain it rounded X/Y/Z independently of the
+            // surface, so the ghost dropped up to half a metre INTO the ground - and
+            // the support probe in IsPlacementValid then found terrain inside the
+            // block and refused the click. "Snaps too far down, and most of the time
+            // it is unplaceable" was exactly that pair of behaviours.
+            //
+            // On natural ground the aimed surface decides the pose: the block is
+            // seated so the LOWEST POINT of its own authored colliders touches the
+            // hit surface (a 1 m cube lands exactly as it always did; a machine that
+            // is 2.4 m tall around its pivot now stands ON the ground instead of
+            // being buried to its middle). The lattice still governs decks, tiered
+            // pieces and placements against existing static blocks.
+            if (!HasStaticPlacementLatticeHost(hit.collider))
+                return ComputeSurfaceFlushPlacement(hit, block, pivotAnchored);
+
             // Free placement = hit point pushed along surface normal by half block size.
             Vector3 free = pivotAnchored
                 ? hit.point + hit.normal * 0.02f
@@ -3026,6 +3045,50 @@ namespace VoxelEngine.Building
                 snapped -= GravityProvider.GetUp(snapped) * (gs * 0.5f);
 
             return snapped;
+        }
+
+        /// <summary>
+        /// 17.26.0-dev: true when the aimed collider belongs to a player-made lattice -
+        /// a static placed block, a tiered construction piece or a movable grid. Those
+        /// surfaces decide their own lattice and keep the historical 1 m grid snap;
+        /// raw voxel terrain does not, and gets the surface-flush pose instead.
+        /// </summary>
+        private static bool HasStaticPlacementLatticeHost(Collider collider)
+        {
+            if (collider == null) return false;
+            if (collider.GetComponentInParent<PlacedBlock>() != null) return true;
+            if (collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() != null) return true;
+            if (collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 17.26.0-dev: sit a static block on the surface the player aimed at, with no
+        /// world-axis rounding. The offset along the surface normal is the prefab's own
+        /// footprint: the distance from its root pivot down to its lowest authored
+        /// collider, so any prefab - centred pivot or bottom-at-zero - lands ON the
+        /// ground rather than inside it.
+        /// </summary>
+        private Vector3 ComputeSurfaceFlushPlacement(RaycastHit hit, BlockItem block, bool pivotAnchored)
+        {
+            Vector3 normal = hit.normal.sqrMagnitude > 0.0001f
+                ? hit.normal.normalized
+                : GravityProvider.GetUp(hit.point);
+            return hit.point + normal * StaticPlacementSurfaceOffset(block, pivotAnchored);
+        }
+
+        /// <summary>Clearance above the aimed surface, measured from the prefab's own
+        /// collider footprint (see <see cref="ComputeSurfaceFlushPlacement"/>).</summary>
+        private float StaticPlacementSurfaceOffset(BlockItem block, bool pivotAnchored)
+        {
+            const float SurfaceClearance = 0.02f;
+            if (pivotAnchored) return SurfaceClearance;
+            var profile = block != null ? GetStaticPlacementPrefabProfile(block) : null;
+            if (block != null && block.placedPrefab != null && profile != null
+                && TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders,
+                    Quaternion.identity, Vector3.up, out float minLocalY, out _))
+                return Mathf.Clamp(-minLocalY, 0f, 8f) + SurfaceClearance;
+            return Mathf.Max(0.05f, gridSize * 0.5f) + SurfaceClearance;
         }
 
         /// <summary>

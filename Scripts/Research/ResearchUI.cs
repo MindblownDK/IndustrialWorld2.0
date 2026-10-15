@@ -86,7 +86,6 @@ namespace VoxelEngine.Research
         private bool             _searchHasFocus;
         private ResearchNode     _selected;
         private ResearchLab      _activeLab;
-        private ResearchSubCategory? _activeSub = null;
         private string           _searchQuery = string.Empty;
 
         // Drag-to-pan state
@@ -345,7 +344,9 @@ namespace VoxelEngine.Research
             bodyRow.style.flexGrow = 1;
             bodyRow.style.minHeight = 0;
             flexCol.Add(bodyRow);
-            BuildTabsColumn(bodyRow);
+            // 17.26.0-dev - the BRANCH FILTER column is gone. The tree is one map with
+            // search and the dependency layout doing the filtering, so the panel hands
+            // the whole width to the canvas instead of a tab strip that hid nodes.
             BuildCanvasColumn(bodyRow);
             BuildDetailsPanel(flexCol);
         }
@@ -736,63 +737,18 @@ namespace VoxelEngine.Research
         }
         private TextField _searchField;
 
-        // ── Left Tabs ───────────────────────────────────────────────────
-        private static readonly (ResearchSubCategory? sub, string label, string icon)[] SUB_TABS =
-        {
-            (null,                            "All",       "✦"),
-            (ResearchSubCategory.Logistics,   "Logistics",  "⇄"),
-            (ResearchSubCategory.Production,  "Production", "⚙"),
-            (ResearchSubCategory.Power,       "Power",      "⚡"),
-            (ResearchSubCategory.Chemistry,   "Chemistry",  "⚗"),
-            (ResearchSubCategory.Storage,     "Storage",    "▣"),
-            (ResearchSubCategory.Building,    "Building",   "▤"),
-            (ResearchSubCategory.Military,    "Military",   "✚"),
-        };
+        // ── Branch filter (REMOVED 17.26.0-dev) ─────────────────────────
+        // The left tab strip filtered the map by ResearchSubCategory and read as an
+        // empty screen whenever the selected branch had no nodes yet - the Military
+        // and Building sections in particular. The map is one tree now: search finds
+        // a node, the dependency layout shows where it sits, and the sub-category
+        // still rides each card as a label. Nothing filters nodes out of the view.
+        //
+        // The node's own sub-category is still authored and still drives the card
+        // label and the ordering inside a layer, so no content work is lost.
 
-        private void BuildTabsColumn(VisualElement parent)
-        {
-            var col = new VisualElement();
-            col.style.width = 150;
-            col.style.marginRight = 8;
-            col.style.flexShrink = 0;
-            parent.Add(col);
-
-            var hint = new Label("BRANCH FILTER");
-            hint.style.color = TextMuted;
-            hint.style.fontSize = 9;
-            hint.style.letterSpacing = 2.5f;
-            hint.style.marginBottom = 4;
-            hint.style.marginTop = 2;
-            col.Add(hint);
-
-            foreach (var t in SUB_TABS)
-            {
-                bool active = (_activeSub == t.sub);
-                var b = new Button(() =>
-                {
-                    _activeSub = t.sub;
-                    _selected = null;
-                    RebuildCanvas();
-                }) { text = $" {t.icon}  {t.label}" };
-                b.style.minHeight = 30;
-                b.style.marginBottom = 2;
-                b.style.color = active ? TextPrimary : TextMuted;
-                b.style.fontSize = 11;
-                b.style.unityFontStyleAndWeight = FontStyle.Bold;
-                b.style.backgroundColor = new StyleColor(active ? new Color(0.15f, 0.18f, 0.22f) : Color.clear);
-                b.style.unityTextAlign = TextAnchor.MiddleLeft;
-                b.style.paddingLeft = 10;
-                SetRadius(b, 5);
-                ZeroBorder(b);
-                if (active)
-                {
-                    b.style.borderLeftWidth = 3;
-                    b.style.borderLeftColor = new StyleColor(ACCENT_BLUE);
-                }
-                AddHoverEffect(b, active ? new Color(0.15f, 0.18f, 0.22f) : Color.clear, new Color(0.12f, 0.14f, 0.18f));
-                col.Add(b);
-            }
-        }
+        private static string BranchLabelFor(ResearchNode node)
+            => node == null ? "GENERAL" : node.subCategory.ToString().ToUpperInvariant();
 
         // ── Canvas Column ───────────────────────────────────────────────
         private void BuildCanvasColumn(VisualElement parent)
@@ -926,7 +882,7 @@ namespace VoxelEngine.Research
                 if (n == null) continue;
                 // Flight is a jetpack, not a research unlock.
                 if (n.upgradeKind == PlayerUpgradeKind.UnlockFlight || n.nodeId == "up_flight") continue;
-                if (_activeSub.HasValue && n.subCategory != _activeSub.Value) continue;
+                // 17.26.0-dev: no branch filter - every node in the tree is on the map.
                 if (!string.IsNullOrEmpty(_searchQuery))
                 {
                     string q = _searchQuery.ToLowerInvariant();
@@ -1310,7 +1266,7 @@ namespace VoxelEngine.Research
             name.pickingMode = PickingMode.Ignore;
             topRow.Add(name);
 
-            var branchTag = new Label($"{n.subCategory.ToString().ToUpperInvariant()}   /   TIER {Mathf.Clamp(n.tier, 1, 10):00}");
+            var branchTag = new Label($"{BranchLabelFor(n)}   /   TIER {Mathf.Clamp(n.tier, 1, 10):00}");
             branchTag.style.color = TextMuted;
             branchTag.style.fontSize = 8;
             branchTag.style.letterSpacing = 1f;

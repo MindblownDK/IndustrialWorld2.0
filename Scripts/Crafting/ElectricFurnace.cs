@@ -325,6 +325,10 @@ namespace VoxelEngine.Crafting
             foreach (var r in knownRecipes)
             {
                 if (r == null || r.input == null) continue;
+                // 17.26.0-dev: research-gated smelts (steel, brass) are skipped until
+                // their alloy node is finished - the furnace simply has no recipe for
+                // the input yet, exactly as if the ore were unknown.
+                if (!r.IsAvailable) continue;
                 // Identity, not reference: the same logical ore exists as more than one
                 // asset in the project, and a stack from the "other" one must still smelt.
                 if (ItemIdentity.Same(r.input, slot.item) && slot.count >= r.inputCount) return r;

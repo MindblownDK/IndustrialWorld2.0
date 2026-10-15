@@ -67,6 +67,23 @@ namespace VoxelEngine.Persistence
         private float _restoreDeathWatchUntil = -1f;
         private float _saveTimer;
 
+        // 17.26.0-dev - the same second-chance pose mechanism, for the two structure
+        // kinds that never had one: static placed blocks and tiered construction
+        // pieces. A missing base is almost always a POSE problem, not a missing
+        // record - a body-anchored pose resolved against a cosmos that was still
+        // building lands "far away off planet", and a piece that lands inside
+        // geometry can die before anyone sees it.
+        private readonly List<KeyValuePair<PlacedBlock, SavedPlacedBlock>> _placedPoseCorrectionQueue
+            = new List<KeyValuePair<PlacedBlock, SavedPlacedBlock>>();
+        private readonly List<KeyValuePair<PlacedTieredBlock, SavedPlacedTiered>> _tieredPoseCorrectionQueue
+            = new List<KeyValuePair<PlacedTieredBlock, SavedPlacedTiered>>();
+
+        /// <summary>The save object the ordinary restore sequence just applied. The pose
+        /// correction pass needs it because a quarry matches its machine by POSITION -
+        /// a block that only just moved onto its true pose must have its saved depth,
+        /// phase, upgrades and output applied again, against the settled world.</summary>
+        private SaveData _lastRestoredSave;
+
         /// <summary>
         /// Current save schema version. Bump this when the format changes in a way a
         /// loader must react to, and add a migration step in <see cref="MigrateSave"/>.
@@ -501,7 +518,15 @@ namespace VoxelEngine.Persistence
                 // Pollution is additive and keeps its own body-local sidecar, but follows
                 // the same explicit/autosave cadence as the rest of the authoritative world.
                 VoxelEngine.Environment.PollutionService.Instance?.SaveNow();
-                Debug.Log($"[WorldState] Saved -> {path} (previous snapshot: {backupPath})");
+                // 17.26.0-dev: the save says out loud what it contains. A base that
+                // "vanishes on reload" is diagnosed in one line from this: if the counts
+                // are the same on both sides of a reload, the records are fine and the
+                // problem is a pose; if they drop, something in this session deleted the
+                // objects and the carried counts name it.
+                int carried = _unrestoredPlaced.Count + _unrestoredTiered.Count + _unrestoredGrids.Count;
+                Debug.Log($"[WorldState] Saved -> {path} (previous snapshot: {backupPath}) - " +
+                          $"{save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} grids" +
+                          (carried > 0 ? $" + {carried} carried record(s) this build could not rebuild" : ""));
 
                 // 11.4 Offline survival — record logout time/pos/cryobed for O₂ consumption on next login
                 try
@@ -1638,6 +1663,20 @@ namespace VoxelEngine.Persistence
                     hp     = pb.hp,
                     ownerId = pb.ownerId ?? ""
                 };
+                // 17.26.0-dev: the same body anchor a static block carries.
+                var pieceAnchor = FindAnchoringBody(pb.transform.position);
+                if (pieceAnchor != null)
+                {
+                    Vector3 local = pieceAnchor.transform.InverseTransformPoint(pb.transform.position);
+                    if (IsFiniteVector(local))
+                    {
+                        savedPiece.hasBodyAnchor = true;
+                        savedPiece.anchorBody    = pieceAnchor.settings.bodyName;
+                        savedPiece.anchorLocalX  = local.x;
+                        savedPiece.anchorLocalY  = local.y;
+                        savedPiece.anchorLocalZ  = local.z;
+                    }
+                }
                 var codeLock = pb.GetComponentInChildren<CodeLock>(true);
                 if (codeLock != null)
                 {
@@ -2280,32 +2319,28 @@ namespace VoxelEngine.Persistence
                 // 14.65.2 - clock FIRST: the bodies must sit at the saved orbital
                 // phase before any body-anchored pose (grids, then the player) resolves.
                 RestoreCosmicClock(save.cosmicSimulationSeconds);
-                RestorePlacedTiered(save);
-                RestorePlacedBlocks(save);
-                // 14.65.2 - grids BEFORE the player: a save written on a ship deck can
-                // then prove its raw coordinate against the restored hull (deck rescue)
-                // instead of being vetoed by a body comparison at the wrong phase.
-                int anchoredGrids = RestoreGrids(save);
-                if (!save.localPlayerAbsent) RestorePlayer(save);
-                RestoreQuarries(save);
-                RestoreRefuelPads(save);
-                RestoreDronePorts(save);
-                RestoreLootBags(save);
-                RestoreDeepOre(save);
-                // Always load, even from an empty list: a stale ledger from a previous
-                // world would otherwise hand this one free late-game research.
-                VoxelEngine.Combat.BossRelicLedger.LoadFrom(save.bossRelics);
-                RestoreStationRooms(save);
-                RestoreCargoFlights(save);
-                Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
-                          $"({anchoredGrids} from a body anchor) from {path}");
-                // 17.17.1-dev: anything the first pass could not resolve gets a second
-                // chance once the rest of the scene (player, registries, item assets)
-                // has finished loading - see RetryUnrestoredRestores.
-                if (_unrestoredPlaced.Count > 0 || _unrestoredTiered.Count > 0)
+
+                // 17.26.0-dev - AND WAIT FOR IT.
+                //
+                // Restoring the clock is DEFERRED when the cosmos registry is still
+                // building (RestoreCosmicClockWhenReady, 14.60.7). Every body-relative
+                // pose in this file - blocks, tiered pieces, ships, quarries, the
+                // player - is only meaningful once that clock is applied, and resolving
+                // them against a t = 0 solar system is exactly the reported trio:
+                // "sometimes it loads, sometimes it comes back kilometres off the
+                // planet, sometimes nothing comes back at all". So when the clock has
+                // not settled yet and the file actually holds world objects, the whole
+                // restore sequence waits for it instead of guessing.
+                if (!CosmicClockSettled && HasWorldObjectRecords(save))
                 {
-                    Debug.LogWarning($"[WorldState] {_unrestoredPlaced.Count + _unrestoredTiered.Count} saved record(s) unresolved on the first pass; retrying while their assets load.");
-                    StartCoroutine(RetryUnrestoredRestores());
+                    StartCoroutine(RestoreWorldObjectsWhenClockSettles(save, path));
+                    Debug.LogWarning("[WorldState] The cosmos is not at its saved phase yet - " +
+                                     DescribeWorldObjectRecords(save) +
+                                     " will be restored the moment the orbital clock settles.");
+                }
+                else
+                {
+                    RestoreWorldObjects(save, path);
                 }
             }
             catch (Exception ex)
@@ -3851,11 +3886,215 @@ namespace VoxelEngine.Persistence
             track.RestoreSwitchSelection(selection, pointsSetByPlayer);
         }
 
+        // ============================================================
+        //   17.26.0-dev - THE WORLD-OBJECT RESTORE, AS ONE GUARDED UNIT
+        // ============================================================
+        //
+        // Every structure a player built lives in this sequence. It used to run as one
+        // straight line inside LoadAll, which meant a single throwing record took the
+        // REST of the world with it: the base, then the ships, then the player - all
+        // gone from a session that otherwise looked fine, while the file still held
+        // every record. Each step is now guarded on its own, so one bad record can cost
+        // its own step and nothing else, and every failure is named in the console.
+        //
+        // It is also a single entry point on purpose: the deferred path (the orbital
+        // clock has not settled yet) runs THIS method, so a world restored late is
+        // restored by exactly the same code in exactly the same order.
+
+        /// <summary>True when the file holds anything that lives in the world as an
+        /// object - i.e. anything whose pose is body-relative and therefore needs the
+        /// orbital clock to be applied before it can be resolved.</summary>
+        private static bool HasWorldObjectRecords(SaveData save)
+        {
+            if (save == null) return false;
+            return (save.placedBlocks != null && save.placedBlocks.Count > 0)
+                || (save.placedTiered != null && save.placedTiered.Count > 0)
+                || (save.grids != null && save.grids.Count > 0)
+                || (save.quarries != null && save.quarries.Count > 0)
+                || (save.refuelPads != null && save.refuelPads.Count > 0)
+                || (save.lootBags != null && save.lootBags.Count > 0)
+                || (save.dronePorts != null && save.dronePorts.Count > 0)
+                || !save.localPlayerAbsent;
+        }
+
+        private static string DescribeWorldObjectRecords(SaveData save)
+        {
+            if (save == null) return "the world";
+            int blocks = save.placedBlocks != null ? save.placedBlocks.Count : 0;
+            int tiered = save.placedTiered != null ? save.placedTiered.Count : 0;
+            int grids = save.grids != null ? save.grids.Count : 0;
+            return $"{tiered} tiered piece(s), {blocks} placed block(s) and {grids} movable grid(s)";
+        }
+
+        /// <summary>Wait for the orbital clock, then run the ordinary restore sequence.
+        /// Bounded: a cosmos that never becomes ready must not hold a world hostage, so
+        /// the sequence runs anyway once the window closes (and says so).</summary>
+        private System.Collections.IEnumerator RestoreWorldObjectsWhenClockSettles(SaveData save, string path)
+        {
+            float deadline = Time.unscaledTime + 30f;
+            while (!CosmicClockSettled && Time.unscaledTime < deadline)
+                yield return null;
+            // One extra frame: a clock applied this frame needs a frame to place bodies.
+            yield return null;
+
+            if (!CosmicClockSettled)
+                Debug.LogWarning("[WorldState] The orbital clock never settled; restoring the world objects " +
+                                 "against the current universe. Records that cannot be resolved stay carried " +
+                                 "in every save until they can be.");
+
+            RestoreWorldObjects(save, path);
+        }
+
+        /// <summary>The one restore sequence for everything that lives in the world.
+        /// <paramref name="path"/> is only used for the log line.</summary>
+        private void RestoreWorldObjects(SaveData save, string path = null)
+        {
+            if (save == null) return;
+            _lastRestoredSave = save;
+            int anchoredGrids = 0;
+            int failures = 0;
+
+            void Step(string label, System.Action action)
+            {
+                try { action(); }
+                catch (System.Exception e)
+                {
+                    failures++;
+                    Debug.LogError($"[WorldState] Restore step '{label}' failed and was skipped - every other " +
+                                   $"step still ran. Nothing was deleted: the records stay in the file. {e}");
+                }
+            }
+
+            Step("tiered construction", () => RestorePlacedTiered(save));
+            Step("placed blocks", () => RestorePlacedBlocks(save));
+            // 14.65.2 - grids BEFORE the player: a save written on a ship deck can
+            // then prove its raw coordinate against the restored hull (deck rescue)
+            // instead of being vetoed by a body comparison at the wrong phase.
+            Step("movable grids", () => { anchoredGrids = RestoreGrids(save); });
+            Step("player", () => { if (!save.localPlayerAbsent) RestorePlayer(save); });
+            Step("quarries", () => RestoreQuarries(save));
+            Step("refuel pads", () => RestoreRefuelPads(save));
+            Step("drone ports", () => RestoreDronePorts(save));
+            Step("loot bags", () => RestoreLootBags(save));
+            Step("deep-ore taps", () => RestoreDeepOre(save));
+            // Always load, even from an empty list: a stale ledger from a previous
+            // world would otherwise hand this one free late-game research.
+            Step("boss relics", () => VoxelEngine.Combat.BossRelicLedger.LoadFrom(save.bossRelics));
+            Step("station rooms", () => RestoreStationRooms(save));
+            Step("cargo flights", () => RestoreCargoFlights(save));
+
+            Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + " +
+                      $"{save.grids.Count} movable grids ({anchoredGrids} of them from a body anchor)" +
+                      (string.IsNullOrEmpty(path) ? "" : $" from {path}") +
+                      (failures > 0 ? $" - {failures} restore step(s) FAILED, see the errors above. Nothing was " +
+                                      "deleted: those records stay in the file." : "."));
+
+            // 17.17.1-dev: anything the first pass could not resolve gets a second chance
+            // once the rest of the scene (player, registries, item assets) has finished
+            // loading - see RetryUnrestoredRestores. It lives here, rather than in
+            // LoadAll, so the deferred path (17.26.0-dev) keeps the same safety net: it
+            // reaches this method minutes after LoadAll returned.
+            if (_unrestoredPlaced.Count > 0 || _unrestoredTiered.Count > 0)
+            {
+                Debug.LogWarning($"[WorldState] {_unrestoredPlaced.Count + _unrestoredTiered.Count} saved record(s) unresolved on the first pass; retrying while their assets load.");
+                StartCoroutine(RetryUnrestoredRestores());
+            }
+
+            // 17.26.0-dev: anything restored while the cosmos was still building gets a
+            // second chance once it settles - exactly what grids have had since 14.65.2.
+            if (_placedPoseCorrectionQueue.Count > 0 || _tieredPoseCorrectionQueue.Count > 0)
+                StartCoroutine(CorrectRestoredStructurePoses());
+        }
+
+        /// <summary>
+        /// 17.26.0-dev - second chance for static blocks and tiered pieces, mirroring
+        /// what grids have had since 14.65.2. If the cosmos finished building after the
+        /// structures were restored, their body anchors resolved against the wrong
+        /// universe; once it settles, every queued record is re-resolved and a piece
+        /// sitting far from its true pose is re-parked - with its containers, ports and
+        /// machines riding the transform, because it is the same object.
+        /// </summary>
+        private System.Collections.IEnumerator CorrectRestoredStructurePoses()
+        {
+            float deadline = Time.unscaledTime + 25f;
+            while (Time.unscaledTime < deadline)
+            {
+                var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (reg != null && reg.IsReady && CosmicClockSettled) break;
+                yield return null;
+            }
+            yield return null;   // let a freshly applied clock place its bodies
+
+            int moved = 0;
+            foreach (var pair in _placedPoseCorrectionQueue)
+            {
+                var block = pair.Key;
+                var record = pair.Value;
+                if (block == null || record == null) continue;
+                try
+                {
+                    Vector3 pos = ResolvePlacedBlockPosition(record, out bool fromAnchor);
+                    if (!fromAnchor) continue;
+                    Vector3 delta = pos - block.transform.position;
+                    if (delta.sqrMagnitude <= 4f) continue;   // close enough - leave it alone
+                    Debug.LogWarning($"[WorldState] Re-parked placed block '{record.itemId}' {delta.magnitude:0} m onto " +
+                                     "its settled anchor pose (the cosmos finished loading after the block restored).");
+                    block.transform.position = pos;
+                    if (record.rot.w != 0f || record.rot.x != 0f || record.rot.y != 0f || record.rot.z != 0f)
+                        block.transform.rotation = record.rot;
+                    VoxelEngine.Power.PowerCable.RefreshNearbyCables(block.transform.position, 6f);
+                    VoxelEngine.Networks.DataCable.RefreshNearbyDataCables(block.transform.position, 6f);
+                    moved++;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[WorldState] Placed-block pose correction failed: " + e);
+                }
+            }
+            _placedPoseCorrectionQueue.Clear();
+
+            foreach (var pair in _tieredPoseCorrectionQueue)
+            {
+                var piece = pair.Key;
+                var record = pair.Value;
+                if (piece == null || record == null) continue;
+                try
+                {
+                    if (!TryResolveTieredPiecePosition(record, out Vector3 pos)) continue;
+                    Vector3 delta = pos - piece.transform.position;
+                    if (delta.sqrMagnitude <= 4f) continue;
+                    Debug.LogWarning($"[WorldState] Re-parked tiered piece '{record.family}' {delta.magnitude:0} m onto " +
+                                     "its settled anchor pose (the cosmos finished loading after the piece restored).");
+                    piece.transform.position = pos;
+                    if (record.rot.w != 0f || record.rot.x != 0f || record.rot.y != 0f || record.rot.z != 0f)
+                        piece.transform.rotation = record.rot;
+                    moved++;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[WorldState] Tiered-piece pose correction failed: " + e);
+                }
+            }
+            _tieredPoseCorrectionQueue.Clear();
+
+            if (moved > 0)
+            {
+                Debug.Log($"[WorldState] Pose correction re-parked {moved} structure(s) onto their settled anchors.");
+                // Quarries match their block by proximity on restore, so a machine that
+                // only just moved onto its true pose gets its saved state re-applied.
+                if (_lastRestoredSave != null) RestoreQuarries(_lastRestoredSave);
+            }
+        }
+
         private void RestorePlacedBlocks(SaveData save)
         {
             int restored = 0;
             int anchored = 0;
             _unrestoredPlaced.Clear();
+            // 17.26.0-dev: a block is only queued for the pose pass when the universe it
+            // was resolved against may not be the saved one.
+            var poseReg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            bool cosmosSettledNow = poseReg != null && poseReg.IsReady && CosmicClockSettled;
             foreach (var sb in save.placedBlocks)
             {
                 if (sb == null) continue;
@@ -3883,6 +4122,9 @@ namespace VoxelEngine.Persistence
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
                 pb.ownerId = sb.ownerId ?? "";
+                if (!cosmosSettledNow && sb.hasBodyAnchor)
+                    _placedPoseCorrectionQueue.Add(
+                        new KeyValuePair<PlacedBlock, SavedPlacedBlock>(pb, sb));
                 // A battered base still looks battered after a reload (9.30.0).
                 VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(pb, pb.Damage01);
                 var conveyor = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
@@ -4061,6 +4303,33 @@ namespace VoxelEngine.Persistence
         /// saves, or a block that was floating in deep space) the saved scene coordinate is
         /// used unchanged.
         /// </summary>
+        /// <summary>17.26.0-dev: where a saved tiered piece belongs in THIS scene. The
+        /// body anchor is the frame-independent answer and is preferred whenever the
+        /// record has one; a legacy record falls back to its raw scene coordinate, and
+        /// the caller is told which it got.</summary>
+        private static bool TryResolveTieredPiecePosition(SavedPlacedTiered piece, out Vector3 position)
+        {
+            position = default;
+            if (piece == null) return false;
+            if (piece.hasBodyAnchor && !string.IsNullOrEmpty(piece.anchorBody))
+            {
+                var body = FindSceneBodyByName(piece.anchorBody);
+                if (body != null)
+                {
+                    Vector3 anchored = body.transform.TransformPoint(
+                        new Vector3(piece.anchorLocalX, piece.anchorLocalY, piece.anchorLocalZ));
+                    if (IsFiniteVector(anchored)) { position = anchored; return true; }
+                }
+                else
+                {
+                    Debug.LogWarning($"[WorldState] Tiered piece '{piece.family}' was anchored to '{piece.anchorBody}', " +
+                                     "which is not in this scene; restoring it at its saved scene coordinate instead.");
+                }
+            }
+            if (IsFiniteVector(piece.pos)) { position = piece.pos; return true; }
+            return false;
+        }
+
         private static Vector3 ResolvePlacedBlockPosition(SavedPlacedBlock block, out bool fromAnchor)
         {
             fromAnchor = false;
@@ -4821,12 +5090,22 @@ namespace VoxelEngine.Persistence
                     continue;
                 }
                 Quaternion finalRot = (ps.rot.w != 0f || ps.rot.x != 0f || ps.rot.y != 0f || ps.rot.z != 0f) ? ps.rot : Quaternion.Euler(0, ps.rotY, 0);
-                var go = Instantiate(prefab, ps.pos, finalRot);
+                // 17.26.0-dev: the body anchor first (frame-independent), the raw scene
+                // coordinate only for legacy records that have no anchor.
+                Vector3 piecePos = TryResolveTieredPiecePosition(ps, out Vector3 resolvedPiecePos)
+                    ? resolvedPiecePos : ps.pos;
+                var go = Instantiate(prefab, piecePos, finalRot);
                 go.name = $"{def.displayName} ({(BuildTier)ps.tier}, restored)";
                 var pb = go.GetComponent<PlacedTieredBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
                 pb.Initialize(def, (BuildTier)ps.tier);
                 pb.ownerId = ps.ownerId ?? "";
+                // 17.26.0-dev: an anchored piece is watched through the settling window
+                // like an anchored grid; the correction pass re-parks it if the cosmos
+                // was still building when it was restored.
+                if (ps.hasBodyAnchor)
+                    _tieredPoseCorrectionQueue.Add(
+                        new KeyValuePair<PlacedTieredBlock, SavedPlacedTiered>(pb, ps));
                 pb.hp = ps.hp > 0 ? ps.hp : pb.hp;
                 // Cracks from the saved HP (9.30.0).
                 int maxHp = Mathf.Max(1, def.GetStats((BuildTier)ps.tier).hp);
@@ -6065,6 +6344,14 @@ namespace VoxelEngine.Persistence
             public string family; public int tier;
             public Vector3 pos;   public Quaternion rot; public float rotY;
             public int hp;
+            // 17.26.0-dev - the frame-independent pose, exactly like SavedPlacedBlock and
+            // SavedGrid have always had. A tiered piece used to carry ONLY the raw scene
+            // coordinate, which is valid in the session that wrote it and nowhere else:
+            // the floating origin re-anchors between sessions, so a hammered-up base came
+            // back kilometres from where it was built - or not at all.
+            public bool hasBodyAnchor;
+            public string anchorBody;
+            public float anchorLocalX, anchorLocalY, anchorLocalZ;
             // Additive 14.69.0: stable placer identity; empty is a legacy piece.
             public string ownerId = "";
             // Code lock (13.17.0; ids since 14.0.0 - pre-release schema change,

@@ -18,15 +18,18 @@ MonoBehaviour:
     Press for sustainable timber harvesting and liquid/solid Biofuel refining.
   iconTint: {r: 1, g: 1, b: 1, a: 1}
   category: 0
-  subCategory: 0
-  tier: 1
-  column: 0
+  subCategory: 2
+  tier: 3
+  column: 12
   eraLabel: 
-  prerequisites: []
+  prerequisites:
+  - {fileID: 11400000, guid: d703759b123acf64b9a31adbeef1f91d, type: 2}
   requiresOrbitalLab: 0
   requiresRelic: 0
-  researchSeconds: 40
-  cost: []
+  researchSeconds: 120
+  cost:
+  - pack: {fileID: 11400000, guid: b58ff88af19dc134c96ca63079e30a5c, type: 2}
+    count: 40
   unlocksRecipes:
   - {fileID: 11400000, guid: 5474c830458a1a64a921a890c452cc25, type: 2}
   - {fileID: 11400000, guid: 7cc3b0eb657cb244e8d28db5bea395a6, type: 2}

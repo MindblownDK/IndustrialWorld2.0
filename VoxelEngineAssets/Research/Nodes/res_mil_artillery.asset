@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_mil_artillery
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_mil_artillery
+  displayName: Field Artillery
+  description: 'Indirect fire and siege pieces: the heavy cannon, the minigun turret,
+    the Schwerer Gustav, the mortar and the giant-shell turret, with their shell
+    and mortar rounds.'
+  iconTint: {r: 0.62, g: 0.7, b: 0.4, a: 1}
+  category: 0
+  subCategory: 7
+  tier: 5
+  column: 11
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: 5f9ed37c22b56ff429001546e9e396a3, type: 2}
+  - {fileID: 11400000, guid: 9b9de48b37bed8a45a9f3b6bb3756324, type: 2}
+  requiresOrbitalLab: 0
+  requiresRelic: 0
+  researchSeconds: 180
+  cost:
+  - pack: {fileID: 11400000, guid: 080d81aee84fd5b4486b15264d31da24, type: 2}
+    count: 60
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 2c3f882185abe2849a14e5554e622924, type: 2}
+  - {fileID: 11400000, guid: 4ac48c01b133fe04099f2e979d4e6b63, type: 2}
+  - {fileID: 11400000, guid: 4c6ef9164fe16b54687649f01302bdd6, type: 2}
+  - {fileID: 11400000, guid: fd285d648d589c045bd12f896c8cf42e, type: 2}
+  - {fileID: 11400000, guid: 4a1a61c9677ede2429705b548d4a5c68, type: 2}
+  - {fileID: 11400000, guid: b350e38096163d548a986c377c34f5c1, type: 2}
+  - {fileID: 11400000, guid: e13ed794f89f73c4e8daef6ae0383c70, type: 2}
+  - {fileID: 11400000, guid: 53df9ff73825d2d41a0b2d0be51c0d3a, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

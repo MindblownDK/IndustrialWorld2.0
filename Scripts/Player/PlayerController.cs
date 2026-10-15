@@ -903,7 +903,15 @@ namespace VoxelEngine.Player
             // ground check lost the surface. Anti-stick is now the job of the
             // footing recovery, which solves to an absolute clearance in BOTH
             // directions and therefore has a fixed point instead of a drift.
+            // 17.26.0-dev - a planted player stays planted. The move is measured so
+            // any sideways creep the CharacterController invents on its own (surface
+            // slide under the standing stick) is given straight back; only a still
+            // player is touched, and never while a deck or the boots are carrying him.
+            Vector3 beforeWalkMove = transform.position;
+            Vector3 intendedHoriz = Vector3.ProjectOnPlane(_velocity, up);
             _cc.Move(_velocity * dt);
+            if (!inWater)
+                SuppressStandingSlide(up, beforeWalkMove, intendedHoriz, wish, dt);
 
             if (!inWater)
                 RecoverTerrainFooting(up);
@@ -914,6 +922,56 @@ namespace VoxelEngine.Player
                 UpdateDeckAnchor(up, inWater);
             else
                 _hasCarryAnchor = false;   // boots own the anchor this frame
+        }
+
+        // ── standing-slide guard (17.26.0-dev) ──────────────────────────
+
+        /// <summary>Horizontal speed below which a player with no input counts as
+        /// STANDING for the slide guard. Above it the player is moving on purpose and
+        /// the guard stays out of the way.</summary>
+        private const float PlantedSlideMaxSpeed = 0.35f;
+        /// <summary>Slide smaller than this (per frame) is measurement noise, not creep.</summary>
+        private const float PlantedSlideEpsilon = 0.0002f;
+        /// <summary>Most horizontal correction returned in one frame (metres), so the
+        /// guard can never fight a legitimate push, knock or moving deck.</summary>
+        private const float PlantedSlideMaxCorrection = 0.03f;
+
+        /// <summary>
+        /// Cancels the sideways creep that a CharacterController adds to a STILL player.
+        ///
+        /// The grounded stick pushes the capsule 2 m/s along the local up every frame, and
+        /// Move() responds to that by sliding the capsule along whatever surface it is on.
+        /// On voxel terrain - a stair-step of slightly tilted cells - that slide is sideways
+        /// motion the player never asked for, produced as POSITION rather than velocity, so
+        /// friction has nothing to remove and the player drifts across the ground on their
+        /// own ("floats sideways on land").
+        ///
+        /// The guard measures the horizontal displacement of this frame's Move, subtracts
+        /// the displacement the player's own velocity intended, and hands the remainder
+        /// back. It only ever runs for a grounded player with no movement input, no slide,
+        /// no deck carry and no engaged magnetic boots, so walking, knockback, ice, slopes
+        /// and moving hulls are all untouched.
+        /// </summary>
+        private void SuppressStandingSlide(Vector3 up, Vector3 beforeMove, Vector3 intendedHoriz,
+            Vector2 wish, float dt)
+        {
+            if (!_grounded || _sliding || _crouched) return;
+            if (IsMounted || inspectorFlyToggle) return;
+            if (_hasCarryAnchor) return;                       // a moving deck owns this move
+            if (_boots != null && _boots.Engaged) return;      // ...and so do the boots
+            if (wish.sqrMagnitude > 0.0001f) return;           // the player is walking
+            if (intendedHoriz.sqrMagnitude > PlantedSlideMaxSpeed * PlantedSlideMaxSpeed) return;
+            if (up.sqrMagnitude < 0.0001f) return;
+
+            Vector3 actualHoriz = Vector3.ProjectOnPlane(transform.position - beforeMove, up);
+            Vector3 intended = Vector3.ProjectOnPlane(intendedHoriz * dt, up);
+            Vector3 slide = actualHoriz - intended;
+            if (slide.sqrMagnitude < PlantedSlideEpsilon * PlantedSlideEpsilon) return;
+            // Cap the correction per frame: what this removes is creep measured in
+            // centimetres per second, so the cap is never reached in normal play -
+            // it exists so nothing else can ever be swallowed by this guard.
+            float maxStep = PlantedSlideMaxCorrection * (dt > 0f ? dt * 60f : 1f);
+            _cc.Move(-Vector3.ClampMagnitude(slide, Mathf.Max(0.001f, maxStep)));
         }
 
         // ── moving decks ────────────────────────────────────────────────

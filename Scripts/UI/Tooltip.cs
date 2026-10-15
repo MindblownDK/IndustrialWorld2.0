@@ -387,13 +387,18 @@ namespace VoxelEngine.UI
             foreach (var sr in Resources.FindObjectsOfTypeAll<VoxelEngine.Crafting.SmeltingRecipe>())
             {
                 if (sr == null || sr.output == null) continue;
+                // 17.26.0-dev: a locked smelt is listed WITH its research name instead of
+                // being silently dropped - "you cannot get this yet, and here is why" is
+                // the useful answer.
+                string lockedBy = sr.LockedByResearchName;
                 string inp = sr.input != null ? $"{Mathf.Max(1, sr.inputCount)}\u00D7 {sr.input.displayName}" : "None";
                 AddMethod(sr.output, new CachedProductionMethod
                 {
-                    Machine = "Furnace / Smelter",
+                    Machine = lockedBy != null ? $"Furnace / Smelter (requires {lockedBy})" : "Furnace / Smelter",
                     Inputs  = inp,
                     Output  = $"{Mathf.Max(1, sr.outputCount)}\u00D7 {sr.output.displayName}",
-                    Seconds = sr.smeltSeconds
+                    Seconds = sr.smeltSeconds,
+                    RequiredResearch = lockedBy
                 });
             }
 

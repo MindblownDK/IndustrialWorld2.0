@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.25.3-dev`
-**Roadmap Version:** `17.25.3-dev`
+**Current Version:** `17.26.0-dev`
+**Roadmap Version:** `17.26.0-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.26.0-dev - Structure Reload Survival, Placement Seating, Quarry Front Face & Research Gating
+- `WorldStatePersistence` restores every world object through one guarded sequence that waits for the orbital clock, resolves tiered pieces through a new optional body anchor, and re-parks any queued block or tiered piece onto its settled anchor pose; save/load carry-count logging added
+- `BuildSystem` seats static blocks on the aimed surface whenever the target is not a placed block, tiered piece or grid; `PlayerController` returns the sideways creep a still player gets from the grounded stick; `Quarry` mines only in front of the machine (`forwardOffset` start, 8 m down-probe) and rebuilds its drill head when restored mid-mining
+- `SmeltingRecipe.requiresResearch` plus the `ResearchManager` rule that a node's unlock list gates a recipe regardless of its default flag; Military branch authored (7 nodes, turrets/artillery/explosives/relic/strategic) and the forestry and alloy chains gated, with the research branch filter removed from `ResearchUI`
+
 ### 17.25.3-dev / 17.25.2-dev / 17.25.1-dev / 17.25.0-dev - Biofuel Chain, Biomass Press & Automatic Tree Farm
 - Added `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `WildTreeSaplingDrop` (`1-2` `Tree Sapling` drops from wild trees without touching `Tree.cs`), `Wood Chips` (`12s` fuel), `Biofuel Briquette` (`65s` fuel), and `Organic Fertilizer`, plus `CoalGeneratorFuel` liquid Biofuel sipping from adjacent `BiomassPress` or `WaterTank` networks
 - Added `TreeFarmPlot` (`3x1x3` arboricultural timber planter with 3-tier growing tree, irrigation `2x` and fertilizer `1.5x` bonuses) and `AutoTreeFarm` (`4x3x4` automated forestry plot & gantry saw-harvester with `500 L` irrigation tank, `10m` nearby plot tending, and belt/chute export), and extended `Harvester` to tend `TreeFarmPlot`s
@@ -48,11 +53,6 @@
 - Shipped `OreWasher` (`2x2x2` hydro-rotary trommel + sluice classifier) with 500 L internal `Wash Water` tank, auto-refill from adjacent `WaterPipe` networks, `LiquidCanister` pour/draw, and `OreWasherMotionAnimator`
 - Authored `Washed Iron Ore`, `Washed Copper Ore`, and `Mineral Tailings`, plus bonus-yield smelting (`1x Washed Ore -> 2x Ingot`) and tailings reprocessing/crushing/vitrification loops
 - Added `Retain Tailings` vs. `Sluice Discharge` runoff modes wired into `PollutionEmitter` (`PollutionSource_OreWashing`) and `PollutionService`
-
-### 17.21.0-dev - Research Queue & Team Sync, Scatter Persistence & Timed Regrowth, Crafting Tooltips, Predictable Wind, LOS Combat, and Movement & UI Fixes
-- Research gains a toggleable 5-slot queue and Team Shared Research across World Settings, Server Admin, and `server_config.json`, plus drag-to-pan canvas, Space-to-research, Green/Blue/Purple `I`/`II`/`III` science pack dots, hidden `0/N` costs on completed nodes, non-Assembler Research Lab tier, and unblocked Lab UI interaction
-- Trees and non-mob scatter persist across save/load via deterministic per-cell RNG and `ScatterHarvestTracker` and regrow only on an in-game timer when unpolluted and away from structures; `GameVersion` matches `17.21.0-dev`; weather debug hotkeys are Editor-only; `SettingsUI.InterfaceTab` live-updates active button state
-- Movement in dug holes avoids corner upward push via ankle-level floor recovery and shin-wall slope checks; enemy attacks and projectiles enforce line-of-sight; wind and pollution advection follow a predictable planet-tangent direction; `CodeLock` spans both sides of single doors; crafting required ingredients show recipe tooltips
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

@@ -583,24 +583,79 @@ namespace VoxelEngine.Research
                 && string.Equals(recipe.outputItem.itemId, "block_furnace", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// 17.26.0-dev - two recipe assets can be the same recipe. The project carries
+        /// duplicate assets (Recipe_Circuit, Recipe_CopperPlate, the ore smelts), so a
+        /// node that unlocks one must unlock its twin, and the same node must be the
+        /// gate for both. Name equality is the safest identity we have here: two
+        /// different recipes that merely produce the same item (bonus-yield ore smelts)
+        /// must NOT unlock each other.
+        /// </summary>
+        private static bool SameRecipe(RecipeDefinition a, RecipeDefinition b)
+            => a == b || (a != null && b != null
+                && string.Equals(a.name, b.name, StringComparison.OrdinalIgnoreCase));
+
+        private static bool IsUnlockedByBlueprint(RecipeDefinition recipe)
+        {
+            try
+            {
+                return VoxelEngine.Exploration.BlueprintUnlockManager.Instance != null &&
+                       VoxelEngine.Exploration.BlueprintUnlockManager.Instance.IsUnlocked(recipe);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// True when some node in the tree lists this recipe. <paramref name="allResearched"/>
+        /// is true only when EVERY node that lists it has been completed - several nodes
+        /// may share a recipe, and the recipe opens when the last one is done.
+        /// </summary>
+        private bool IsClaimedByResearch(RecipeDefinition recipe, out bool allResearched)
+        {
+            allResearched = false;
+            if (tree == null || tree.nodes == null) return false;
+
+            bool claimed = false;
+            bool everyClaimResearched = true;
+            foreach (var node in tree.nodes)
+            {
+                if (node == null || node.unlocksRecipes == null) continue;
+                for (int i = 0; i < node.unlocksRecipes.Length; i++)
+                {
+                    if (!SameRecipe(node.unlocksRecipes[i], recipe)) continue;
+                    claimed = true;
+                    if (GetRank(node) <= 0) everyClaimResearched = false;
+                }
+            }
+            allResearched = claimed && everyClaimResearched;
+            return claimed;
+        }
+
         public bool IsRecipeUnlocked(RecipeDefinition recipe)
         {
             if (recipe == null) return false;
+
+            // 17.26.0-dev - RESEARCH WINS OVER THE FLAG.
+            //
+            // A recipe that a research node lists is gated by that node, even when the
+            // recipe's own unlockedByDefault flag still says otherwise. The flag is
+            // rewritten by the content steps under Tools > Voxel Engine > Voxel Engine
+            // Setup on every run, so a gate that trusted the flag alone re-opened itself
+            // the next time someone re-ran "Build the auto turret" - which is exactly how
+            // the Military branch read as empty while every turret, gun and bomb was
+            // craftable from the first minute. A node's unlock list is therefore the
+            // authority; the flag is only a default for recipes no node mentions.
+            //
+            // Ruin blueprints still win: a found blueprint grants its recipe outright.
+            if (IsUnlockedByBlueprint(recipe)) return true;
+            if (IsClaimedByResearch(recipe, out bool allClaimedResearched)) return allClaimedResearched;
+
             if (recipe.unlockedByDefault) return true;
 
             // The canonical furnace recipe is progression-gated by Smelting. This
             // runtime rule keeps an existing Smelting rank effective even when an
             // older ResearchTree asset points at a stale/duplicate recipe reference.
             if (IsCanonicalFurnaceRecipe(recipe) && IsUnlocked("res_smelting")) return true;
-
-            // Blueprint unlocks (ruins) — 4.9.0
-            try
-            {
-                if (VoxelEngine.Exploration.BlueprintUnlockManager.Instance != null &&
-                    VoxelEngine.Exploration.BlueprintUnlockManager.Instance.IsUnlocked(recipe))
-                    return true;
-            }
-            catch { }
 
             // Search through all nodes in the tree.
             if (tree == null) return false;
@@ -613,7 +668,7 @@ namespace VoxelEngine.Research
                 {
                     foreach (var r in node.unlocksRecipes)
                     {
-                        if (r == recipe) return true;
+                        if (SameRecipe(r, recipe)) return true;
                     }
                 }
             }

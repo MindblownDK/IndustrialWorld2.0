@@ -1405,6 +1405,9 @@ namespace VoxelEngine.UI
             foreach (var recipe in Resources.FindObjectsOfTypeAll<SmeltingRecipe>())
             {
                 if (recipe == null || recipe.output == null) continue;
+                // 17.26.0-dev: a smelt that is still locked by research is not offered in
+                // the browser - offering it and then failing at the furnace reads as a bug.
+                if (!recipe.IsAvailable) continue;
                 var entry = new RecipeEntry
                 {
                     Kind = "Smelting",

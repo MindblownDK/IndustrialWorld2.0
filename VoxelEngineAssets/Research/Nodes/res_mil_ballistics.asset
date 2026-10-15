@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_mil_ballistics
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_mil_ballistics
+  displayName: Ballistics & Small Arms
+  description: Rifled barrels, cased ammunition and the first proper firearms. Unlocks
+    the Rifle, the iron pistol, ammunition casting and the training dummy.
+  iconTint: {r: 0.55, g: 0.6, b: 0.66, a: 1}
+  category: 0
+  subCategory: 7
+  tier: 3
+  column: 11
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: f354bc28489e7f940aec59c10fca06df, type: 2}
+  requiresOrbitalLab: 0
+  requiresRelic: 0
+  researchSeconds: 120
+  cost:
+  - pack: {fileID: 11400000, guid: b58ff88af19dc134c96ca63079e30a5c, type: 2}
+    count: 40
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 9b470dbc78929e44f8df149184b15f22, type: 2}
+  - {fileID: 11400000, guid: 2cbc3103f89eaf847a9414f3b534ddbb, type: 2}
+  - {fileID: 11400000, guid: 8e7c578751aa5264c84ff0e75d9f9968, type: 2}
+  - {fileID: 11400000, guid: d414a586fab2869488b8132dfa9c305a, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

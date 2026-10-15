@@ -22,6 +22,16 @@
 // free of decorations before the first layer is cut. Tree stumps are recorded
 // through their own OnDestroy harvest path, so they stay gone across save/load.
 //
+// 17.26.0-dev - THE MINING AREA IS IN FRONT OF THE MACHINE.
+// The old rectangle was CENTRED laterally and merely offset forward, so with the
+// default 16 m area six of its metres lay BEHIND the machine and the block sat
+// inside its own excavation - "the mining square is around the block, which makes
+// no sense". The area now starts at `forwardOffset` metres in front of the
+// machine's centre plane and extends `EffSize` metres further forward, exactly
+// like the machine this design follows: the box is cleared ground in front of the
+// quarry, the frame is built around that box, and the drill walks it layer by
+// layer from the top down. Nothing is mined under or behind the machine.
+//
 // Public API, serialized tuning fields and the save record (depth, cursor,
 // phase, upgrade levels) are unchanged.
 
@@ -107,8 +117,13 @@ namespace VoxelEngine.Transport
         // an excavated column finds no ground in the band and restarts at the
         // block plane, where the already-mined cells are simply skipped until
         // the depth counter reaches the hole floor again.
+        //
+        // 17.26.0-dev: the band is deeper below the plane than above it because the
+        // mining area now lies IN FRONT of the machine, which is regularly downhill
+        // of it. A wider band means a quarry parked on a slope still finds the
+        // surface of every column in front of it instead of mining air.
         private const float ProbeUp = 2.0f;
-        private const float ProbeDown = 3.0f;
+        private const float ProbeDown = 8.0f;
         private const float ProbeStep = 0.25f;
 
         private float _mbY = -1.2f, _mtY = 1.2f;   // model bottom/top in LOCAL y
@@ -150,13 +165,15 @@ namespace VoxelEngine.Transport
 
         // ── surface-frame area ──────────────────────────────────────────
         // Local coordinates: X = right, Y = up, Z = forward (the placed,
-        // surface-aligned, yaw-stepped block rotation). The area rectangle is
-        // centred laterally and offset forward, exactly like the flat original.
+        // surface-aligned, yaw-stepped block rotation). The area is a rectangle
+        // centred laterally and lying WHOLLY IN FRONT of the machine: its first
+        // column starts at `forwardOffset` metres past the machine's centre plane
+        // (17.26.0-dev), so the block itself is never inside its own excavation.
 
         private Vector3 CellLocal(int a, int b, int depth)
         {
             float x = (a + 0.5f) - AreaX * 0.5f;
-            float z = forwardOffset + (b + 0.5f) - AreaZ * 0.5f;
+            float z = forwardOffset + (b + 0.5f);
             float top = (_colTop != null && a * AreaZ + b < _colTop.Length)
                 ? _colTop[a * AreaZ + b] : -0.5f;
             return new Vector3(x, top - depth - 0.5f, z);
@@ -176,7 +193,7 @@ namespace VoxelEngine.Transport
             for (int b = 0; b < sz; b++)
             {
                 float x = (a + 0.5f) - sz * 0.5f;
-                float z = forwardOffset + (b + 0.5f) - sz * 0.5f;
+                float z = forwardOffset + (b + 0.5f);
                 float top = -0.5f;
                 for (float y = ProbeUp; y >= -ProbeDown; y -= ProbeStep)
                 {
@@ -187,8 +204,8 @@ namespace VoxelEngine.Transport
                 _colTop[a * sz + b] = top;
             }
 
-            // Compatibility bounds in voxel space (debug/UI only): the eight
-            // rectangle corners at their probed ground heights.
+            // Compatibility bounds in voxel space (debug/UI only): the four corners
+            // of the front rectangle at their probed ground heights.
             bool any = false;
             Vector3Int lo = Vector3Int.zero, hi = Vector3Int.zero;
             for (int a = 0; a < sz; a += Mathf.Max(1, sz - 1))
@@ -197,7 +214,7 @@ namespace VoxelEngine.Transport
                 Vector3 world = transform.TransformPoint(new Vector3(
                     (a + 0.5f) - sz * 0.5f,
                     _colTop[a * sz + b],
-                    forwardOffset + (b + 0.5f) - sz * 0.5f));
+                    forwardOffset + (b + 0.5f)));
                 Vector3Int vox = _w.WorldToVoxel(world);
                 if (!any) { lo = hi = vox; any = true; }
                 else { lo = Vector3Int.Min(lo, vox); hi = Vector3Int.Max(hi, vox); }
@@ -210,12 +227,15 @@ namespace VoxelEngine.Transport
         /// <summary>17.19.0-dev: remove trees/rocks/props standing in the mining
         /// area so the frame, tape and drill never intersect decoration - and so
         /// the area mines cleanly. Trees record their harvest on the way out and
-        /// stay felled across save/load.</summary>
+        /// stay felled across save/load. 17.26.0-dev: the box follows the area's
+        /// new in-front footprint, so a machine no longer clears the ground it is
+        /// standing on.</summary>
         void ClearMiningAreaScatter()
         {
             if (_w == null) return;
             int sz = Mathf.Max(1, EffSize);
-            Vector3 center = transform.TransformPoint(new Vector3(0f, 2f, forwardOffset));
+            Vector3 center = transform.TransformPoint(
+                new Vector3(0f, 2f, forwardOffset + sz * 0.5f));
             Vector3 halfExtents = new Vector3(sz * 0.5f + 0.5f, 6f, sz * 0.5f + 0.5f);
             VoxelEngine.Scattering.ScatterClear.ClearInBox(center, halfExtents, transform.rotation);
         }
@@ -270,7 +290,16 @@ namespace VoxelEngine.Transport
                 case QuarryPhase.Idle: if (hp) ETP(); break;
                 case QuarryPhase.TapeFrame: if (!hp) return; _tt += Time.deltaTime; TkT(); if (_tt>=tapePreviewDuration){DTp();EFP();} break;
                 case QuarryPhase.BuildingFrame: if (!hp) return; _fbt += Time.deltaTime; if (_fbt>=frameBuildInterval){_fbt=0f; if(_fi<_fp.Count)PS(_fp[_fi++]); else{Phase=QuarryPhase.Mining;CDr();}} break;
-                case QuarryPhase.Mining: if (!hp) return; _mt += Time.deltaTime; if (_mt>=EffInterval){_mt-=EffInterval; for(int i=0;i<minePerTick;i++)MO();} TkD(); break;
+                case QuarryPhase.Mining:
+                    if (!hp) return;
+                    // 17.26.0-dev: a quarry restored mid-mining never ran CDr() (that
+                    // only happens on the BUILD -> MINE transition), so it excavated
+                    // with no drill head on screen. The head is rebuilt on demand.
+                    if (_dr == null) CDr();
+                    _mt += Time.deltaTime;
+                    if (_mt>=EffInterval){_mt-=EffInterval; for(int i=0;i<minePerTick;i++)MO();}
+                    TkD();
+                    break;
                 case QuarryPhase.Complete: if(_dr){Destroy(_dr);_dr=null;} if(_bm){Destroy(_bm);_bm=null;} break;
             }
         }
@@ -286,10 +315,13 @@ namespace VoxelEngine.Transport
         void EFP() { Phase=QuarryPhase.BuildingFrame; PF(); _fi=0; _fbt=0f; }
 
         // ── local rectangle corners (tape, ghost, frame) ────────────────
+        // 17.26.0-dev: FwdMin is the machine's own front plane, so the whole
+        // rectangle - tape, frame, ghost, drill targets and the placement preview -
+        // sits in front of the quarry and never straddles it.
         private float LatMin => -AreaX * 0.5f;
         private float LatMax => AreaX * 0.5f;
-        private float FwdMin => forwardOffset - AreaZ * 0.5f;
-        private float FwdMax => forwardOffset + AreaZ * 0.5f;
+        private float FwdMin => forwardOffset;
+        private float FwdMax => forwardOffset + AreaZ;
         private float GroundY()
         {
             if (_colTop == null || _colTop.Length == 0) return 0f;
@@ -307,8 +339,10 @@ namespace VoxelEngine.Transport
             HPP();
             _pp = new GameObject("QPP");
             _pp.transform.SetPositionAndRotation(wp, rot);
+            // 17.26.0-dev: the preview shows what the machine will actually mine -
+            // a square that starts at its front face and extends `sz` metres forward.
             float half = sz * 0.5f;
-            float x0 = -half, x1 = half, z0 = fo - half, z1 = fo + half;
+            float x0 = -half, x1 = half, z0 = fo, z1 = fo + sz;
             float yTop = 0.5f;          // surface
             float yBot = -1.2f;         // model bottom
             Color gc = new(1f, 0.8f, 0.2f, 0.55f);
@@ -528,7 +562,17 @@ namespace VoxelEngine.Transport
             return _portContainers;
         }
 
-        public void RestoreState(int d,int cx,int cz,int ph,int rl,int sl,int el){CurrentDepth=d;_cx=cx;_cz=cz;Phase=(QuarryPhase)ph;InstalledRangeLevel=rl;InstalledSpeedLevel=sl;InstalledEfficiencyLevel=el;if(Phase==QuarryPhase.Complete){if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}}
+        public void RestoreState(int d,int cx,int cz,int ph,int rl,int sl,int el)
+        {
+            CurrentDepth=d;_cx=cx;_cz=cz;Phase=(QuarryPhase)ph;
+            InstalledRangeLevel=rl;InstalledSpeedLevel=sl;InstalledEfficiencyLevel=el;
+            // A restored machine must resume VISIBLY: the tape and frame are gone and
+            // the drill head is a runtime object, so the mining state rebuilds its
+            // head instead of excavating invisibly (17.26.0-dev).
+            if(Phase==QuarryPhase.Mining && _ok && _dr==null) CDr();
+            if(Phase==QuarryPhase.Complete){if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
+            if(_ok){_ls=EffSize;RecomputeArea();CalculateMaxDepth();CreateGhostIfUnpowered();}
+        }
         void OnDestroy(){DestroyGhost();DTp();HPP();foreach(var fb in _fs)if(fb)Destroy(fb);_fs.Clear();if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
         static Material ME(Color c,float es){var s=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(s);m.color=c;m.SetColor("_BaseColor",c);m.SetColor("_EmissionColor",c*es);m.EnableKeyword("_EMISSION");return m;}
     }

@@ -198,6 +198,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Build factory foundations, conveyors and high-voltage grid", BuildFactoryFoundationsContent),
                 Setup("Build ore washing, tailings and metallurgical foundry loop", () => VoxelEngine.EditorTools.OreWashingSetup.RunStep115()),
                 Setup("Build biofuel chain, biomass press and automatic tree farm", () => VoxelEngine.EditorTools.BiofuelAndTreeFarmSetup.RunStep117()),
+                Setup("Gate biomass, tree plots and the biofuel chain behind research (17.26.0-dev)", () => VoxelEngine.EditorTools.ResearchGatingSetup.RunStep119()),
+                Setup("Gate alloy smelting and metallurgy behind research (17.26.0-dev)", () => VoxelEngine.EditorTools.ResearchGatingSetup.RunStep120()),
                 Setup("Add or repair factory prefab visuals", () => VoxelEngine.EditorTools.FactoryPrefabVisualsBuilder.BuildAll()),
                 Setup("Build geological prospecting and ore detection", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59()),
                 Setup("Author the distillation plant", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69()),
@@ -283,7 +285,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Build the energy and relic turret", BuildEnergyRelicTurretContent),
                 Setup("Refresh jetpack fuel accounting", BuildJetpackFuelContent),
                 Setup("Build armour stations and timed upgrades", BuildArmorStationsAndUpgrades),
-                Setup("Build team banners and Crusader shield", () => VoxelEngine.EditorTools.BannerSetup.RunStep106()));
+                Setup("Build team banners and Crusader shield", () => VoxelEngine.EditorTools.BannerSetup.RunStep106()),
+                Setup("Author the military research branch and gate the arsenal (17.26.0-dev)", () => VoxelEngine.EditorTools.MilitaryResearchSetup.RunStep118()));
 
             AddSetupGroup(parent, ref number, "Creatures, Enemies & Bosses",
                 "All passive animals, mounts, hostile creatures, mythical enemies and boss progression are in one place.", false,
