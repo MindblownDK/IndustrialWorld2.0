@@ -1,9 +1,26 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.0-dev`
+**Current Version:** `17.27.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.27.1-dev] The Quarry Meter's Missing Namespace (Build Fix)
+
+**Type:** PATCH - the front multimeter's new script did not compile: it used `PowerConsumer` without importing the namespace that type is declared in. One import fixes it, and every file 17.27.0-dev touched was then audited mechanically for the same mistake. No behaviour, save, schema or public API change.
+
+**GitHub title:** `[17.27.1-dev] Fix the quarry multimeter compile error (missing power namespace)`
+
+#### Fixed
+- **`Assets/Scripts/Transport/QuarryMultimeter.cs(37,17): error CS0246: The type or namespace name 'PowerConsumer' could not be found`.** The meter caches the machine's `PowerConsumer` so it can read the power state the lamp reports, but the new file sits in `VoxelEngine.Transport` while `PowerConsumer` is declared in `VoxelEngine.Power` - and the script imported only `UnityEngine`. `using VoxelEngine.Power;` is now the file's second import, which is the whole fix: `Quarry`, `QuarryPowerState` and `PowerConsumer` resolve, and `WorldTextMaterial` and `BuildSystem` were already reached by their full names.
+- **The same class of fault was then looked for in every file the previous round touched.** A type-to-namespace index of the project (952 scripts) was built and each type a touched file uses was checked against that file's own namespace and its imports. The meter was the only real hit: `CreatureSpawnGround` is declared in the spawner's own `VoxelEngine.Combat` and reached from the animal spawner by its full name, the static builder's new player check names `VoxelEngine.Player.PlayerController` in full, `MachineUIs` reaches `QuarryPowerState` through the `VoxelEngine.Transport` import it already carried, and the quarry setup's `BlockItem`, `PortConfig.FacePort`, `PlacementPivotAnchor`, `ShadowCastingMode` (through `UnityEngine.Rendering`) and `Quarry`/`QuarryMultimeter` all resolve against declarations that were read out of the repository rather than assumed. The quarries' power fields (`wattsPerSecond`, `connectRadius`), the port enums (`CubeFace`, `PortDirection`, `PortNetworkType.Power`) and `Quarry.EnsureUpgrades` were verified the same way.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.27.1-dev`, PATCH over `17.27.0-dev` - a build fix, no behaviour change. Save-compatible and schema-compatible (`CurrentSchemaVersion` stays `2`); no save field, item, recipe, prefab or balance value was touched and no setup step has to be re-run, so a world already updated to `17.27.0-dev` carries over as it stands. The rebuilt machine, its four collider volumes, its pivot anchor and its front meter and inlet are exactly as the previous entry describes.
+- Not compiled in Unity here: no Editor or build step exists in the working environment, so this round is the source-level fix plus the resolution audit described above rather than a verified build. The console line the audit answers is the one reported from the project, and the report is the only build proof there is.
+
+#### What to run
+1. Nothing new. Run `Tools > Voxel Engine > Voxel Engine Setup > Factory, Industry & Power > "Rebuild the Quarry machine and its front multimeter (17.27.0-dev)"` if it has not been run yet - its name, its prefab and its wiring are unchanged - and then work through the play-test list in the `17.27.0-dev` entry below.
 
 ### [17.27.0-dev] The Quarry Machine and Its Front Multimeter, the Static Placement Verdict, Mob Spawn Surfaces & the Standing Bob (Second Pass)
 

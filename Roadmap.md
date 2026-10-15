@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.0-dev`
-**Roadmap Version:** `17.27.0-dev`
+**Current Version:** `17.27.1-dev`
+**Roadmap Version:** `17.27.1-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,9 +29,9 @@
 
 ## 0. Recently Done
 
-### 17.27.0-dev - Quarry Machine & Front Multimeter, Static Placement Verdict, Mob Spawn Surfaces, Standing Bob Second Pass
+### 17.27.1-dev / 17.27.0-dev - Quarry Machine & Front Multimeter, Static Placement Verdict, Mob Spawn Surfaces, Standing Bob Second Pass
 - Quarry rebuilt as a large industrial machine (`QuarryMachineSetup`, wizard step) with tracks, gantry, cutter wheel, conveyor, cab and stacks; the root is the ground contact plane (`PlacementPivotAnchor`) and collision is split body / blade / inlet / cutter wheel so the front meter and POWER IN socket stay walkable
-- `QuarryMultimeter` prints live draw / maximum draw / depth on the machine's face with a needle dial and a state lamp; `Quarry.PowerState` separates NO CABLE from NO SUPPLY and `PowerNetworkManager` bonds a cable to any part of a machine's bounds
+- `QuarryMultimeter` prints live draw / maximum draw / depth on the machine's face with a needle dial and a state lamp; `Quarry.PowerState` separates NO CABLE from NO SUPPLY and `PowerNetworkManager` bonds a cable to any part of a machine's bounds; the meter script declares its `VoxelEngine.Power` dependency (17.27.1-dev)
 - `BuildSystem` shows an amber "no target" preview (with the surface followed far past reach) instead of a red floating machine, and only structures refuse a static placement; `CreatureSpawnGround` gives hostiles and herds one surface solve that cannot bury them; a planted player now sits inside a centimetre footing band
 
 ### 17.26.1-dev - Grid Ground Placement, Teardown Save Interlock, Standing Bob & Taller Player

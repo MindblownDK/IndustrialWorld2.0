@@ -15,9 +15,11 @@
 //     QuarryMultimeter: live draw, maximum draw, current depth and the reason there is
 //     no power (no cable / no supply).
 //
-// The root pivot is the machine's ground contact plane, and the machine's collider is one
-// box covering the body, so its tape/frame are measured from the ground instead of from a
-// hidden centre.
+// The root pivot is the machine's ground contact plane and the prefab declares it
+// (PlacementPivotAnchor), so the machine seats on the surface the ghost showed and its
+// tape/frame are measured from the ground instead of from a hidden centre. Collision is
+// four volumes - body, tow blade, power inlet and cutter wheel - so the fittings on the
+// front are solid while the panel and the inlet stay walkable and readable.
 //
 // NON-DESTRUCTIVE: the prefab is rebuilt in place (same path, same GUID, so every placed
 // quarry and the Block_Quarry item keep their references), materials are reused exactly as
@@ -371,8 +373,8 @@ namespace VoxelEngine.EditorTools
         private static GameObject Sphere(Transform parent, string name, Material mat, Vector3 pos, float diameter)
             => Part(parent, name, mat, pos, Vector3.one * diameter, null, PrimitiveType.Sphere);
 
-        /// <summary>Detail parts never carry their own collider (the root's single box is
-        /// the machine's solid volume) and never cast shadows where it would be noise.</summary>
+        /// <summary>Detail parts never carry their own collider - the root's four boxes are
+        /// the machine's solid volume - and never cast shadows where it would be noise.</summary>
         private static GameObject Part(Transform parent, string name, Material mat, Vector3 pos, Vector3 scale,
             Vector3? euler, PrimitiveType type)
         {

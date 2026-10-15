@@ -13,6 +13,7 @@
 // the machine's behaviour can never disagree. It refreshes a few times a second - a meter
 // is not a video display - and it does nothing at all on a placement ghost.
 using UnityEngine;
+using VoxelEngine.Power;
 
 namespace VoxelEngine.Transport
 {
