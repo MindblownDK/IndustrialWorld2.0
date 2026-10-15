@@ -216,7 +216,14 @@ namespace VoxelEngine.Building
         private void Awake()
         {
             if (container == null) container = new ItemContainer(displayName, size);
-            else container.Resize(size);
+            else
+            {
+                container.Resize(size);
+                // 17.27.8-dev - a container that came from the prefab or an older save
+                // carries the generic default name, so the panel was titled "Container"
+                // instead of the chest's own name. The chest knows what it is: say so.
+                container.Rename(displayName);
+            }
             ApplyWeightLimit();
             EnsureRefs();
             EnforcePortLock();

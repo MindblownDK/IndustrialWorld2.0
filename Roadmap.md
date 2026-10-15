@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.7-dev`
-**Roadmap Version:** `17.27.7-dev`
+**Current Version:** `17.27.8-dev`
+**Roadmap Version:** `17.27.8-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.27.8-dev - Visible Container Load, Explained Weight Refusals, Per-Tier Chest Caps
+- The opened container's panel carries a live `CONTAINER LOAD` readout (`BuildContainerLoadReadout`) - `used / cap` over a segmented bar, amber from 85 percent, red with `FULL` at the cap - because the mass cap every `ItemContainer` enforces was only visible inside a chest's CONFIGURE overlay
+- `ExplainRefusedDrop` answers a drag or shift-click refused BY WEIGHT with one toast naming the container and the numbers (both sides: a full chest, and an inventory at its own cargo cap), on a four-second cadence, and stays silent when the refusal was a filter instead
+- Storage wizard step 77 writes an explicit cap per chest tier - Wooden Crate 2 000 kg, Chest 5 000 kg, Iron Chest 10 000 kg, Steel Chest 20 000 kg - only where the field is still unset, so a chest stops inheriting an invisible world rule and an authored number is never overwritten; `ItemContainer.Rename` plus `Chest.Awake` give a chest back its own panel title (it read "Container" whenever the container came from a prefab or an older save)
+
 ### 17.27.7-dev - Verified Holes in the Bob, the Creature Footing and the Placement Verdict
 - `PlayerController` asks one question about ground in both halves of `CheckRadialGround` (not the player's own rig, not water, up-ish normal), holds the planted treatment across a one-frame probe blip while `WalkableGroundWithin` can still find ground within 60 cm, and gives the eye no step compensation while planted
 - `CreatureSpawnGround` treats `SphereWorld.TryGroundSurface` as an optional check, judges it as a signed `up` band (`MaxAboveGround` 0.9 / `MaxBelowGround` 3.0) instead of a 3-D 20 cm distance, gates the footing on `SphereWorld.IsSubmerged` (fluids only - `IsDryFooting` is the scatter rule and refuses every slope), and names a refusal after ten consecutive ones
@@ -43,11 +48,6 @@
 - The cutter wheel, hub, teeth and spokes hang under `CutterWheelPivot`, which `Quarry.SpinCutter` turns about its axle (165 deg/s cutting, 26 while surveying and framing, coasting down, still when unpowered or complete); the pit's column scan covers 24 m up / 32 m down in two passes, so every column starts at its own highest solid voxel, and the machine's labels and readout are sized from measured text width
 - The quarry's instruments sit on its REAR face (screen, needle dial, power socket, state lamp, measured name bar) because the pit is dug on the front; the labelled glowing power plate is gone, the port declares `NegZ` Input/Power, and machine labels are turned to face outwards and swapped onto the depth-tested font material at runtime by `WorldTextMaterial.ApplyToHierarchy`
 - `ResearchUI` has its branch strip back: only branches with nodes are listed (each with a count), ALL is always first, BUILDING is never offered, and Player Upgrades gets its own tab; `GameUIController` fills an EMPTY slot from a stack on the cursor with a one-item copy of that stack instead of writing a count with no item
-
-### 17.27.1-dev / 17.27.0-dev - Quarry Machine & Instrument Cluster, Static Placement Verdict, Mob Spawn Surfaces, Standing Bob Second Pass
-- Quarry rebuilt as a large industrial machine (`QuarryMachineSetup`, wizard step) with tracks, gantry, cutter wheel, conveyor, cab and stacks; the root is the ground contact plane (`PlacementPivotAnchor`) and collision is split body / blade / socket / cutter wheel so the instrument panel stays walkable
-- `QuarryMultimeter` prints live draw / maximum draw / depth with a needle dial and a state lamp; `Quarry.PowerState` separates NO CABLE from NO SUPPLY and `PowerNetworkManager` bonds a cable to any part of a machine's bounds; the meter script declares its `VoxelEngine.Power` dependency (17.27.1-dev)
-- `BuildSystem` shows an amber "no target" preview (with the surface followed far past reach) instead of a red floating machine, and only structures refuse a static placement; `CreatureSpawnGround` gives hostiles and herds one surface solve that cannot bury them; a planted player now sits inside a centimetre footing band
 
 ### 17.26.1-dev - Grid Ground Placement, Teardown Save Interlock, Standing Bob & Taller Player
 - `GridBuilder.PlacementObstructed` keeps the static builder's allowance law: terrain, the builder's own body and scatter never block a grid cell, and a refusal names its blocker on screen and in the console
@@ -1591,6 +1591,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Provider Chest: pipes and belts FILL it (ports pinned to Input); `LogisticsNetwork` hands its stock to in-range requesters.
    - Requester Chest: the network fills it wirelessly; its ports (pinned to Output) FEED the pipes downstream. Its request list is a dedicated field, separate from the port filters.
    - **Weight limits (11.10.0-dev):** Provider 1200 kg, Buffer 900 kg, Requester 600 kg, enforced by the container weight system and shown as a Load bar.
+   - **Weight limits (17.27.8-dev) - the ordinary chest family carries its own numbers too:** Wooden Crate 2 000 kg, Chest (30-slot) 5 000 kg, Iron Chest 10 000 kg, Steel Chest 20 000 kg, written by setup step 77 only where the field is still unset. The 5 000 kg of the base chest is the same figure the world container rule produced at 100 percent, so it is now a written number rather than an inherited one; machines and network containers keep following the world setting (`containerWeightPercent`). Any container's panel shows `CONTAINER LOAD` and a drop refused by weight says so.
    - Buffer Chest: both roles at once, faces NOT pinned. Tops itself up to a per-item `bufferStockTarget` from providers and supplies other requesters; buffer-to-buffer stocking is refused. Authored by setup step 78.
    - **Balance rule:** a buffer requests only up to its stock target. Without that cap a buffer drains every provider it can reach, which is the standard failure mode of this block.
 

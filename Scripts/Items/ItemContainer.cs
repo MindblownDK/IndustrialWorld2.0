@@ -19,6 +19,14 @@ namespace VoxelEngine.Items
         [SerializeField] private int             _minSize = 1;   // expected size; used by self-heal
 
         public string Name => _name;
+
+        /// <summary>17.27.8-dev - set the name a container shows in its panel title.
+        /// A chest whose container arrives from a prefab (or an older save) carries the
+        /// generic default and titled its own panel "Container" instead of "Chest".</summary>
+        public void Rename(string name)
+        {
+            if (!string.IsNullOrEmpty(name)) _name = name;
+        }
         // IMPORTANT: any access through this getter triggers a self-heal so stale or
         // pre-feature serialized containers can never throw IndexOutOfRange.
         public IReadOnlyList<ItemStack> Slots { get { EnsureValid(); return _slots; } }

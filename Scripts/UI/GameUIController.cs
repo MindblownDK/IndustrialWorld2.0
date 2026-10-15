@@ -4127,6 +4127,8 @@ namespace VoxelEngine.UI
 
             panel.Add(MakeTitle(c.Name));
             panel.Add(IndustrialTheme.HazardDivider());
+            var loadReadout = BuildContainerLoadReadout(c);
+            if (loadReadout != null) panel.Add(loadReadout);
 
             // Death loot bag (14.36.0): one button returns everything to the
             // exact slots it was lost from. Occupied slots fall back to normal
@@ -4188,6 +4190,74 @@ namespace VoxelEngine.UI
             IndustrialTheme.Frame(panel);
         }
 
+
+        /// <summary>17.27.8-dev - HOW FULL THE OPEN CONTAINER IS, BY WEIGHT.
+        ///
+        /// Every ItemContainer enforces a mass cap, and a chest sitting on that cap stops
+        /// accepting anything while still showing empty slots - which reads as a broken
+        /// chest, and was reported as one ("I cannot insert anything into this chest with
+        /// three slots empty"). The number existed only inside the chest's CONFIGURE
+        /// overlay, and nothing on the panel said a drop had been refused. The inventory
+        /// pane has shown its own load for ages; a container pane now shows the same
+        /// readout, in the same instrument style, and turns red at the cap so "full" is a
+        /// state you can SEE rather than one you have to infer from a silent refusal.
+        /// Returns null when the container has no cap, so the caller adds nothing.</summary>
+        private VisualElement BuildContainerLoadReadout(IItemContainer c)
+        {
+            if (!(c is ItemContainer box)) return null;
+            float max = box.MaxWeightKg;
+            if (max <= 0f) return null;
+
+            float current = box.CurrentWeightKg;
+            float fill = Mathf.Clamp01(current / max);
+            bool full = current + 0.0001f >= max;
+            Color signal = full ? UITheme.AccentRed
+                : fill >= 0.85f ? UITheme.AccentAmber : LcdHudTheme.Phosphor;
+
+            var card = new VisualElement { name = "ContainerCargoLoadReadout" };
+            card.style.marginTop = 4;
+            card.style.marginBottom = 6;
+            card.style.paddingTop = 6;
+            card.style.paddingBottom = 6;
+            card.style.paddingLeft = 8;
+            card.style.paddingRight = 8;
+            LcdHudTheme.ApplyDataCard(card, signal);
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+
+            var caption = LcdHudTheme.CaptionLabel("CONTAINER LOAD");
+            caption.style.flexGrow = 1;
+            row.Add(caption);
+
+            var value = new Label(VoxelEngine.Items.MassFormat.FormatRatio(current, max) + (full ? "   FULL" : ""));
+            value.style.fontSize = 10;
+            value.style.letterSpacing = 0.45f;
+            value.style.unityFontStyleAndWeight = FontStyle.Bold;
+            value.style.color = new StyleColor(signal);
+            value.pickingMode = PickingMode.Ignore;
+            row.Add(value);
+            card.Add(row);
+
+            var track = LcdHudTheme.CreateSegmentTrack(10, out var segments, 9f);
+            track.style.marginTop = 5;
+            LcdHudTheme.SetSegments(segments, fill, signal);
+            card.Add(track);
+
+            if (full)
+            {
+                var note = new Label("At the weight cap: nothing more fits until the load drops. "
+                    + "Heavy bulk stacks - dirt, stone, sand - are what put it here.");
+                note.style.fontSize = 9;
+                note.style.marginTop = 4;
+                note.style.whiteSpace = WhiteSpace.Normal;
+                note.style.color = new StyleColor(new Color(signal.r, signal.g, signal.b, 0.85f));
+                note.pickingMode = PickingMode.Ignore;
+                card.Add(note);
+            }
+            return card;
+        }
 
         /// <summary>
         /// Append the shared collapsible Item-Ports widget to a machine panel when
@@ -5469,6 +5539,49 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             Refresh();
         }
 
+        private float _nextWeightHint;
+        private const float WeightHintCooldown = 4f;
+
+        /// <summary>17.27.8-dev - A DROP REFUSED BY WEIGHT SAYS SO.
+        ///
+        /// This is the other half of the report that a chest with empty slots would not
+        /// take anything from the inventory. The container's mass cap is real and has
+        /// always refused the drop - but a refused drag simply handed the stack back to
+        /// where it came from, silently, so a chest standing on its cap behaved exactly
+        /// like a chest with a broken insert. Call this at every refusal point that can be
+        /// caused by weight, and only when the refusal really IS weight: a container with
+        /// an item filter that refused the stack gets no weight toast.
+        ///
+        /// Returns true when it spoke.</summary>
+        private bool ExplainRefusedDrop(IItemContainer dest, ItemStack carried)
+        {
+            if (!(dest is ItemContainer box) || carried == null || carried.IsEmpty || carried.item == null)
+                return false;
+            float cap = box.MaxWeightKg;
+            if (cap <= 0f) return false;
+
+            float used = box.CurrentWeightKg;
+            float free = Mathf.Max(0f, cap - used);
+            float want = VoxelEngine.Items.MassUtil.StackMass(carried.item, carried.count);
+            bool noRoom   = free + 0.0001f < Mathf.Max(0.0001f, carried.item.massPerUnit);
+            bool tooHeavy = want > free + 0.0001f;
+            if (!noRoom && !tooHeavy) return false;
+
+            if (Time.unscaledTime >= _nextWeightHint)
+            {
+                _nextWeightHint = Time.unscaledTime + WeightHintCooldown;
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    noRoom ? box.Name + " is full by weight" : "Too heavy for " + box.Name,
+                    noRoom
+                        ? VoxelEngine.Items.MassFormat.FormatRatio(used, cap)
+                          + " - nothing more fits until the load drops."
+                        : VoxelEngine.Items.MassFormat.Format(free) + " free, this stack needs "
+                          + VoxelEngine.Items.MassFormat.Format(want) + ".",
+                    carried.item.icon, UITheme.AccentAmber);
+            }
+            return true;
+        }
+
         /// <summary>Drop what the player is carrying into (destC, destIdx).
         ///
         /// The carried stack is the single source of truth while a drag is active (see
@@ -5530,7 +5643,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 int move  = Mathf.Min(space, carried.count);
                 if (!sameContainer)
                     move = Mathf.Min(move, MaxDirectAdd(destC, carried.item, move));
-                if (move <= 0) { CancelDrag(); Refresh(); return; }
+                if (move <= 0) { ExplainRefusedDrop(destC, carried); CancelDrag(); Refresh(); return; }
                 dstStack.count += move;
                 destC.SetSlot(destIdx, dstStack);
                 carried.count -= move;
@@ -5546,7 +5659,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 int move = sameContainer
                     ? carried.count
                     : Mathf.Min(carried.count, MaxDirectAdd(destC, carried.item, carried.count));
-                if (move <= 0) { CancelDrag(); Refresh(); return; }
+                if (move <= 0) { ExplainRefusedDrop(destC, carried); CancelDrag(); Refresh(); return; }
                 var placed = carried.Clone();
                 placed.count = move;
                 destC.SetSlot(destIdx, placed);
@@ -5557,8 +5670,15 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             // Plain swap: what was in the destination goes back to the emptied source slot.
             // Respect destination/source AcceptFilter and mass gates during direct swaps.
-            if (!sameContainer && (!CanDirectSet(destC, carried, dstStack) || !CanDirectSet(srcC, dstStack, carried)))
+            if (!sameContainer && !CanDirectSet(destC, carried, dstStack))
             {
+                ExplainRefusedDrop(destC, carried);   // the destination is the side that refused
+                CancelDrag();
+                return;
+            }
+            if (!sameContainer && !CanDirectSet(srcC, dstStack, carried))
+            {
+                ExplainRefusedDrop(srcC, dstStack);   // the swap back is what does not fit
                 CancelDrag();
                 return;
             }
@@ -7211,7 +7331,16 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             var clone = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
             var leftover = dest.Insert(clone);
             int moved = leftover == null ? srcStack.count : (srcStack.count - leftover.count);
-            if (moved <= 0) return;
+            if (moved <= 0)
+            {
+                // 17.27.8-dev: a shift-click into a container on its weight cap used to
+                // look like a dead key. Same rule as a drag: say why, once, and only when
+                // weight is really the reason.
+                ExplainRefusedDrop(dest, srcStack);
+                return;
+            }
+            // A partial move means the remainder did not fit - the cap is the usual reason.
+            if (moved < srcStack.count) ExplainRefusedDrop(dest, leftover);
             if (moved >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
             else                          { srcStack.count -= moved; sourceC.SetSlot(sourceIdx, srcStack); }
         }

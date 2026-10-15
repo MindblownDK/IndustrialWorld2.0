@@ -22,8 +22,11 @@ namespace IndustrialWorld.EditorTools
     /// step's own is only created when missing; when it exists, a missing Chest component
     /// is added, a null or wrong slot count / display name is corrected, and a broken
     /// recipe link (null output or input item) is re-linked — but authored craft times,
-    /// quantities, health and icons are never reset. The pre-existing Chest is never
-    /// touched. Every change is logged with the [Setup 77] prefix.
+    /// quantities, health and icons are never reset. The pre-existing 30-slot Chest keeps
+    /// every authored value too, with one addition on top (17.27.8-dev): the chests in this
+    /// family now carry an EXPLICIT weight cap - 2 000 / 5 000 / 10 000 / 20 000 kg - written
+    /// only where the field is still unset, so a number a player typed is never overwritten.
+    /// Every change is logged with the [Setup 77] prefix.
     /// </summary>
     public static class StorageChestTiersSetup
     {
@@ -43,6 +46,10 @@ namespace IndustrialWorld.EditorTools
             public string              assetName;    // asset/prefab stem, e.g. "WoodenCrate"
             public string              displayName;  // player-facing, e.g. "Wooden Crate"
             public int                 size;
+            /// <summary>17.27.8-dev - what this chest may hold, in kg. An explicit number per
+            /// tier, so "why will it not take this" has an answer that is written down instead
+            /// of inherited from the world's container rule.</summary>
+            public float               weightKg;
             public Color               tint;
             public string              description;
             public StationTier         station;
@@ -91,6 +98,7 @@ namespace IndustrialWorld.EditorTools
                         assetName    = "WoodenCrate",
                         displayName  = "Wooden Crate",
                         size         = 9,
+                        weightKg     = 2000f,
                         tint         = new Color(0.45f, 0.32f, 0.18f),
                         description  = "9-slot storage. Crafted from planks straight in your inventory.",
                         station      = StationTier.None,
@@ -102,6 +110,7 @@ namespace IndustrialWorld.EditorTools
                         assetName    = "IronChest",
                         displayName  = "Iron Chest",
                         size         = 18,
+                        weightKg     = 10000f,
                         tint         = new Color(0.45f, 0.47f, 0.52f),
                         description  = "18-slot storage. Crafted at the Crafting Bench from iron ingots and planks.",
                         station      = StationTier.CraftingBench,
@@ -113,6 +122,7 @@ namespace IndustrialWorld.EditorTools
                         assetName    = "SteelChest",
                         displayName  = "Steel Chest",
                         size         = 36,
+                        weightKg     = 20000f,
                         tint         = new Color(0.30f, 0.38f, 0.50f),
                         description  = "36-slot storage. Crafted at the Assembler from steel and iron ingots.",
                         station      = StationTier.Assembler,
@@ -120,6 +130,17 @@ namespace IndustrialWorld.EditorTools
                         inputs       = new[] { ((ItemDefinition)steelIngot, 4), ((ItemDefinition)ironIngot, 4) }
                     }
                 };
+
+                // 17.27.8-dev - THE PRE-EXISTING 30-SLOT CHEST GETS A NUMBER TOO.
+                //
+                // It was the one storage block with no cap of its own, so it followed the
+                // world container rule (5 000 kg at 100 percent). That rule is invisible in
+                // play, and a chest standing on it refuses inserts while its panel still
+                // shows empty slots - the reported "I cannot insert anything into this chest
+                // with three slots empty". The cap is written here as an explicit 5 000 kg,
+                // and ONLY when the field is still unset: a number the player typed is never
+                // touched, and this step never creates the chest - the main setup owns it.
+                bool baseChestFound = EnsureBaseChestCap(out float baseCap, out bool baseChanged);
 
                 int changedTiers = 0;
                 foreach (var t in tiers)
@@ -136,19 +157,26 @@ namespace IndustrialWorld.EditorTools
                 Debug.Log("[Setup 77] Storage chest tiers ready: " +
                           (changedTiers == 0
                               ? "all three tiers already present and correct, nothing written."
-                              : changedTiers + " of 3 tier(s) created or corrected."));
+                              : changedTiers + " of 3 tier(s) created or corrected.") +
+                          (baseChestFound
+                              ? " The 30-slot Chest carries a " + baseCap.ToString("0")
+                                + " kg cap" + (baseChanged ? " (just written)." : " (already set).")
+                              : " The 30-slot Chest was not found in "
+                                + StationsFolder + ", so its cap was left alone."));
 
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
                 EditorUtility.DisplayDialog("Storage Chest Tiers",
                     "Storage chest tiers ready.\n\n" +
-                    "  Wooden Crate   9 slots   — planks x4, in your inventory\n" +
-                    "  Iron Chest    18 slots   — iron ingot x4 + planks x2, Crafting Bench\n" +
-                    "  Steel Chest   36 slots   — steel ingot x4 + iron ingot x4, Assembler\n\n" +
-                    "The pre-existing 30-slot Chest was left untouched. Missing content was created, " +
-                    "broken links were repaired, authored values were never reset. " +
-                    "See the console for every change.", "OK");
+                    "  Wooden Crate   9 slots   2 000 kg  — planks x4, in your inventory\n" +
+                    "  Chest         30 slots   5 000 kg  (the pre-existing block)\n" +
+                    "  Iron Chest    18 slots  10 000 kg  — iron ingot x4 + planks x2, Crafting Bench\n" +
+                    "  Steel Chest   36 slots  20 000 kg  — steel ingot x4 + iron ingot x4, Assembler\n\n" +
+                    "Every chest now carries its own capacity, which it shows on its panel as " +
+                    "CONTAINER LOAD and enforces on every insert. A cap that was already set was " +
+                    "left alone; missing content was created, broken links were repaired, authored " +
+                    "values were never reset. See the console for every change.", "OK");
             }
             catch (Exception ex)
             {
@@ -157,6 +185,51 @@ namespace IndustrialWorld.EditorTools
                     "Setup stopped: " + ex.Message + "\n\nNothing was written.", "OK");
             }
         }
+
+        /// <summary>17.27.8-dev - give the pre-existing 30-slot Chest an explicit weight cap.
+        /// Non-destructive: only the field's unset state is filled in, a chest that already
+        /// carries any number keeps it, and a missing prefab is reported instead of created
+        /// (the main setup owns that block). <paramref name="cap"/> reports the cap the chest
+        /// has after this runs; returns false when the prefab is not there at all.</summary>
+        private static bool EnsureBaseChestCap(out float cap, out bool changed)
+        {
+            cap = 0f;
+            changed = false;
+            string path = StationsFolder + "/Chest.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (existing == null)
+            {
+                Debug.Log("[Setup 77] No " + path + " to cap; the main setup owns the 30-slot "
+                          + "Chest, so nothing was created here.");
+                return false;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(path);
+            var chest = contents.GetComponent<Chest>();
+            if (chest == null)
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+                Debug.LogWarning("[Setup 77] " + path + " has no Chest component; its weight cap "
+                                 + "was left alone.");
+                return false;
+            }
+            if (chest.weightLimitKg <= 0f)
+            {
+                chest.weightLimitKg = BaseChestCapKg;
+                changed = true;
+                PrefabUtility.SaveAsPrefabAsset(contents, path);
+                Debug.Log("[Setup 77] Chest prefab weight cap set to " + BaseChestCapKg.ToString("0")
+                          + " kg (it used to follow the world's container rule, which could not be "
+                          + "seen in play).");
+            }
+            cap = chest.weightLimitKg;
+            PrefabUtility.UnloadPrefabContents(contents);
+            return true;
+        }
+
+        /// <summary>The 30-slot Chest's cap. The same 5 000 kg the world container rule
+        /// produced at 100 percent, now a written number the panel can show.</summary>
+        private const float BaseChestCapKg = 5000f;
 
         private static string DescribeInputs(Tier t)
         {
@@ -193,6 +266,7 @@ namespace IndustrialWorld.EditorTools
                 var newChest = root.AddComponent<Chest>();
                 newChest.size = t.size;
                 newChest.displayName = t.displayName;
+                newChest.weightLimitKg = t.weightKg;   // 17.27.8-dev
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 Object.DestroyImmediate(root);
                 changed = true;
@@ -225,6 +299,14 @@ namespace IndustrialWorld.EditorTools
                     chest.displayName = t.displayName;
                     dirty = true;
                     Debug.Log("[Setup 77] " + t.assetName + " prefab display name corrected to \"" + t.displayName + "\".");
+                }
+                // 17.27.8-dev: an unset cap is filled in; a number someone typed is kept.
+                if (chest.weightLimitKg <= 0f)
+                {
+                    chest.weightLimitKg = t.weightKg;
+                    dirty = true;
+                    Debug.Log("[Setup 77] " + t.assetName + " prefab weight cap set to "
+                              + t.weightKg.ToString("0") + " kg.");
                 }
             }
             if (dirty) PrefabUtility.SaveAsPrefabAsset(contents, path);
