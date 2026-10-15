@@ -1,9 +1,21 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.3-dev`
+**Current Version:** `17.24.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.24.4-dev] Fix EnsureFolder Call in DropHatchLogisticsSetup
+
+**Type:** PATCH - aligns `EnsureFolder(string, string)` call in `AssignLogisticsMaterials` inside `DropHatchLogisticsSetup.cs`. Save-compatible.
+
+**GitHub title:** `[17.24.4-dev] Fix EnsureFolder call in DropHatchLogisticsSetup`
+
+#### Fixed
+- **`DropHatchLogisticsSetup.AssignLogisticsMaterials` (`Scripts/Editor/GridSystem/DropHatchLogisticsSetup.cs`).** Passed `(AssetRoot, "Materials")` and `($"{AssetRoot}/Materials", "Logistics")` to `EnsureFolder(string, string)`.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.24.4-dev`, PATCH over `17.24.3-dev`. Save-compatible.
 
 ### [17.24.3-dev] Fix Receiving Chute Hopper Slope Orientation, Corner Gussets & Persistent Prefab Materials
 

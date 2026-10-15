@@ -380,8 +380,9 @@ namespace VoxelEngine.EditorTools
         private static void AssignLogisticsMaterials(GameObject root)
         {
             if (root == null) return;
+            EnsureFolder(AssetRoot, "Materials");
+            EnsureFolder($"{AssetRoot}/Materials", "Logistics");
             string matFolder = $"{AssetRoot}/Materials/Logistics";
-            EnsureFolder(matFolder);
 
             var baseSteel   = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsBaseSteel.mat",   new Color(0.20f, 0.23f, 0.27f));
             var hopperSteel = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsHopperSteel.mat", new Color(0.28f, 0.32f, 0.37f));

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.3-dev`
-**Roadmap Version:** `17.24.3-dev`
+**Current Version:** `17.24.4-dev`
+**Roadmap Version:** `17.24.4-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,7 +29,7 @@
 
 ## 0. Recently Done
 
-### 17.24.3-dev / 17.24.2-dev / 17.24.1-dev / 17.24.0-dev - Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
+### 17.24.4-dev / 17.24.3-dev / 17.24.2-dev / 17.24.1-dev / 17.24.0-dev - Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
 - Added `GridCargoDropHatch` (Small & Large Grid) with multi-stage clam-shell bay door animation, auto-pull from grid containers, and 4 mutually exclusive multi-item export filters toggleable from both the block UI and the cockpit hotbar (`GridControlHud`)
 - Added `ReceivingChute` (`3x2x3` stationary flared catch hopper) and `GridReceivingChute` (Small & Large Grid catch hopper) that capture falling `DroppedItem`s in a wide overhead funnel zone and route them to connected belts/chutes/chests or grid cargo containers
 - Fixed machine UI scroll reset across live rebuilds, `SlotCard`/`SlotGrid` border overflow, item tooltips while machine panels are open, Right-Click half-stack to cursor, Shift+Right-Click half-stack transfer, and removed bottom machine hint blurbs
