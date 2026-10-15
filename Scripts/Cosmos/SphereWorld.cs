@@ -1840,6 +1840,28 @@ namespace VoxelEngine.Cosmos
             return false;
         }
 
+        /// <summary>17.27.7-dev - IS THIS POINT UNDER WATER? Answered on its own, without the
+        /// "is there solid rock above it" half that <see cref="IsDryFooting"/> carries for
+        /// scatter placement. A creature standing on a hillside has solid voxels above its
+        /// head and that is a slope, not a flood - but the scatter rule was being used to
+        /// decide whether a mob had dry ground, so every spawn on a slope was refused in
+        /// silence. Walks up from the point in half-metre steps and answers true as soon as
+        /// one of them is fluid.</summary>
+        public bool IsSubmerged(Vector3 worldPoint, float aboveMetres = 2f)
+        {
+            if (body == null) return false;
+            Vector3 local = body.transform.InverseTransformPoint(worldPoint);
+            Vector3 up = local.normalized;
+            int steps = Mathf.Max(1, Mathf.RoundToInt(aboveMetres / 0.5f));
+            for (int i = 1; i <= steps; i++)
+            {
+                Vector3Int q = Vector3Int.FloorToInt((local + up * (i * 0.5f)) / VoxelConstants.VOXEL_SIZE);
+                if (TryGetGeneratedVoxel(q, out Voxel v) && VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v))
+                    return true;
+            }
+            return false;
+        }
+
         public bool IsDryFooting(Vector3 worldPoint)
         {
             if (body == null) return false;

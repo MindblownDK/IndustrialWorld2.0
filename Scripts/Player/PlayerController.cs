@@ -87,6 +87,14 @@ namespace VoxelEngine.Player
         /// Inside the band the body is a fixed point; a stationary player can no longer
         /// be pumped up and down by millimetre noise in the sampled ground.</summary>
         private const float PlantedFootingDeadband = 0.02f;
+
+        /// <summary>17.27.7-dev: how far below the feet walkable ground still counts as "this
+        /// was a probe blip, not a fall". Seams between chunk meshes, the lip of a placed block
+        /// and the apex of a terrain cone all make the normal probe (33 cm) miss for a frame
+        /// while the ground is still a hand's width away; handing the body back to gravity for
+        /// that frame is how a standing player ends up in a lift-and-settle cycle. Ledges are
+        /// metres, not centimetres, so this reach stays below one.</summary>
+        private const float PlantedGroundBlipReach = 0.60f;
         /// <summary>17.27.0-dev - smallest footing movement worth handing to the eye as a
         /// step. Real steps are centimetres; maintenance is millimetres, and feeding that
         /// into the camera and decaying it back out was a bob in its own right.</summary>
@@ -192,6 +200,7 @@ namespace VoxelEngine.Player
         private Vector3 _velocity;          // includes Y in walk mode; in fly mode XYZ
         private MagneticBoots _boots;       // 14.61.0 - grid carry/stick/reference
         private bool   _grounded;
+        private bool   _planted;             // last frame's planted verdict (see the blip grace)
         private bool   _wasGrounded;
         private bool   _onIce;
         // Asphalt underfoot (9.41.0). Kept as a reference as well as a flag so the same probe that
@@ -893,9 +902,28 @@ namespace VoxelEngine.Player
                 // their own attachment), the radial velocity is simply held at zero and the
                 // capsule stands perfectly still. Walking, jumping, water and the boots are
                 // all untouched.
-                planted = _grounded
-                    && wishDir.sqrMagnitude < 0.001f
+                bool noIntentToMove = wishDir.sqrMagnitude < 0.001f
                     && (_boots == null || !_boots.Engaged);
+                planted = _grounded && noIntentToMove;
+                // 17.27.7-dev: HOLD PLANTED ACROSS A GROUND BLIP. The ground probe under a
+                // standing player can miss for a single frame - a seam between chunk meshes,
+                // the lip of a placed block, the apex of a terrain cone - and while the planted
+                // treatment is off, gravity and the stick are back, so the footing solve lifts
+                // the body straight after and the eye rides the pair. That is the bob that
+                // survived the previous two rounds: not a solver that never settles, but a
+                // verdict that flickers. A player who is asking for nothing, is not rising, and
+                // was planted a moment ago stays planted across the blip.
+                //
+                // The test is GROUND, not time: the next half metre under the feet must still
+                // be walkable. A blip is a probe that missed a surface a hand's width below;
+                // stepping off a ledge is a surface that is not there at all, so falling keeps
+                // working exactly as it did - a time grace alone would have floated a player
+                // for a fifth of a second off every cliff.
+                if (!planted && noIntentToMove && _planted
+                    && VerticalSpeed(up) <= 0.05f
+                    && WalkableGroundWithin(up, PlantedGroundBlipReach))
+                    planted = true;
+                _planted = planted;
                 if (planted)
                 {
                     _velocity = Vector3.ProjectOnPlane(_velocity, up);
@@ -1597,7 +1625,11 @@ namespace VoxelEngine.Player
             Vector3 beforeSettle = transform.position;
             _cc.Move(-up * settleAmount);
             float movedDown = Vector3.Dot(beforeSettle - transform.position, up);
-            if (movedDown > CameraStepCompensationMinimum)
+            // 17.27.7-dev: a planted player does not take a step, so the eye is never handed a
+            // step compensation. While planted the camera height is exactly the smoothed eye
+            // height - a constant for a body that is not moving, which is what makes "stand
+            // still and the view is still" an invariant rather than a hope.
+            if (!planted && movedDown > CameraStepCompensationMinimum)
                 _cameraStepOffset = Mathf.Clamp(_cameraStepOffset + movedDown, -0.35f, 0.35f);
             _grounded = true;
         }
@@ -1696,9 +1728,16 @@ namespace VoxelEngine.Player
         {
             if (_cc == null) return false;
             float checkDist = Mathf.Max(0.32f, terrainFootClearance + 0.24f);
-            Vector3 rayOrigin = transform.position + up * 0.08f;
-            if (Physics.Raycast(rayOrigin, -up, checkDist + 0.03f, ~0, QueryTriggerInteraction.Ignore))
-                return true;
+
+            // 17.27.7-dev: the ray half of this test used to accept ANY hit and only asked
+            // that something was there. Its origin sits inside the player's own capsule, so
+            // the player's own collider could answer "ground" (the sweep below has always
+            // filtered that out), and it accepted a liquid surface or a wall face - neither of
+            // which is ground a still player can be standing on. A wrong verdict here is a
+            // gravity pulse under a standing body: the same bob class the planted blip grace
+            // closes. Both halves now ask one question: is there WALKABLE ground under the
+            // feet that is neither me nor water?
+            if (WalkableGroundWithin(up, checkDist + 0.03f)) return true;
 
             float sphereRadius = Mathf.Max(0.12f, _cc.radius * 0.72f);
             Vector3 sphereOrigin = transform.position + up * (sphereRadius + 0.12f);
@@ -1706,14 +1745,38 @@ namespace VoxelEngine.Player
                 sphereOrigin, sphereRadius, -up, _terrainProbeHits, checkDist, ~0, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
-                var col = _terrainProbeHits[i].collider;
-                if (col == null) continue;
-                if (col.transform == transform || col.transform.IsChildOf(transform) || transform.IsChildOf(col.transform))
-                    continue;
-                if (IsLiquidSurfaceCollider(col)) continue;
-                return true;
+                var hit = _terrainProbeHits[i];
+                if (IsWalkableGroundCollider(hit.collider, up, hit.normal)) return true;
             }
             return false;
+        }
+
+        /// <summary>Is there walkable ground within <paramref name="distance"/> below the feet?
+        /// The straight-down probe both the ground check and the planted blip test ask.</summary>
+        private bool WalkableGroundWithin(Vector3 up, float distance)
+        {
+            if (_cc == null) return false;
+            Vector3 origin = transform.position + up * 0.08f;
+            int rays = Physics.RaycastNonAlloc(
+                origin, -up, _terrainProbeHits, Mathf.Max(0.05f, distance), ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < rays; i++)
+            {
+                var hit = _terrainProbeHits[i];
+                if (IsWalkableGroundCollider(hit.collider, up, hit.normal)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>May this collider hold the player up? Never the player's own rig, never a
+        /// liquid surface, and never a surface that is not up-ish - a wall beside the feet, an
+        /// underside, the side of a block.</summary>
+        private bool IsWalkableGroundCollider(Collider collider, Vector3 up, Vector3 normal)
+        {
+            if (collider == null) return false;
+            if (collider.transform == transform || collider.transform.IsChildOf(transform)
+                || transform.IsChildOf(collider.transform)) return false;
+            if (IsLiquidSurfaceCollider(collider)) return false;
+            return Vector3.Dot(normal, up) > 0.45f;
         }
     }
 }

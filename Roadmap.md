@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.6-dev`
-**Roadmap Version:** `17.27.6-dev`
+**Current Version:** `17.27.7-dev`
+**Roadmap Version:** `17.27.7-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.27.7-dev - Verified Holes in the Bob, the Creature Footing and the Placement Verdict
+- `PlayerController` asks one question about ground in both halves of `CheckRadialGround` (not the player's own rig, not water, up-ish normal), holds the planted treatment across a one-frame probe blip while `WalkableGroundWithin` can still find ground within 60 cm, and gives the eye no step compensation while planted
+- `CreatureSpawnGround` treats `SphereWorld.TryGroundSurface` as an optional check, judges it as a signed `up` band (`MaxAboveGround` 0.9 / `MaxBelowGround` 3.0) instead of a 3-D 20 cm distance, gates the footing on `SphereWorld.IsSubmerged` (fluids only - `IsDryFooting` is the scatter rule and refuses every slope), and names a refusal after ten consecutive ones
+- `BuildSystem`'s static verdict carries a `PlacementRefusal` reason and puts one throttled HUD line on it when the ghost turns red, with a click always answering; the verdict boolean, the scenery allowance law and `AddSmoothLift`'s 0.03 m gate are unchanged
+
 ### 17.27.6-dev / 17.27.5-dev / 17.27.4-dev - Whole-Cell Excavation, Outline Resume on Load, Job Bar & Hand-Carried Drags
 - `Quarry` cuts every voxel a cell's footprint covers (rasterised from the cell's eight corners in voxel space, clamped to a 3-voxel cube) instead of the voxel its centre rounds to, checks output room before each cut, raises an outline-resume request in `RestoreState` that `TryResumeOutline` completes on the first live frame with measured height (17.27.6-dev: the machine is spawned before `Start` runs, so an in-`RestoreState` rebuild was skipped), finds the cutter pivot anywhere in the machine and warns once when a prefab has none
 - The machine panel shows `Quarry.JobProgress01` / `JobProgressLabel` (survey, frame, then pit depth) rather than one cell's bite, and the rear instrument cluster with its name band sits 28 cm lower on the machine
@@ -48,11 +53,6 @@
 - `GridBuilder.PlacementObstructed` keeps the static builder's allowance law: terrain, the builder's own body and scatter never block a grid cell, and a refusal names its blocker on screen and in the console
 - `WorldStatePersistence.WorldTearingDown` refuses any save raised after the world starts unloading, so the scene-teardown save can no longer overwrite the complete SAVE & QUIT one; `PlayerController` holds a planted player's radial velocity at zero (no stick, no gravity) instead of letting the ground solve fight gravity
 - Player body 1.85 -> 1.95 m and eye 1.65 -> 1.74 m, enforced as a shipped-height floor at wake so existing player objects grow without being re-made; `VoxelWaterURP` parses again (three property headers carried a dotted version tag, which ShaderLab rejects)
-
-### 17.26.0-dev - Structure Reload Survival, Placement Seating, Quarry Front Face & Research Gating
-- `WorldStatePersistence` restores every world object through one guarded sequence that waits for the orbital clock, resolves tiered pieces through a new optional body anchor, and re-parks any queued block or tiered piece onto its settled anchor pose; save/load carry-count logging added
-- `BuildSystem` seats static blocks on the aimed surface whenever the target is not a placed block, tiered piece or grid; `PlayerController` returns the sideways creep a still player gets from the grounded stick; `Quarry` mines only in front of the machine (`forwardOffset` start, 8 m down-probe) and rebuilds its drill head when restored mid-mining
-- `SmeltingRecipe.requiresResearch` plus the `ResearchManager` rule that a node's unlock list gates a recipe regardless of its default flag; Military branch authored (7 nodes, turrets/artillery/explosives/relic/strategic) and the forestry and alloy chains gated, with the research branch filter removed from `ResearchUI`
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

@@ -271,6 +271,62 @@ namespace VoxelEngine.Building
 
         private float _nextAimHint;
 
+        /// <summary>17.27.7-dev - WHY the placement verdict refused. The verdict itself is a
+        /// boolean that tints the ghost, and a red ghost on its own is indistinguishable from a
+        /// broken placement system: a machine aimed at your own feet, a cell with a pipe in it
+        /// and a cell between two buildings all looked identical. Every other refusal in this
+        /// file already explains itself - "Too far to build", "No surface in view", "Cannot
+        /// pave", "Port already connected" - the static path was the one that stayed silent.</summary>
+        public enum PlacementRefusal
+        {
+            None,
+            StandingHere,      // the builder's own capsule is in the way
+            GroundTooSteep,    // a road cell that will not grade
+            AlreadyThere,      // a placed block, a frame or a conduit already occupies the cell
+            NoRoom,            // the probe found something solid in the volume
+            NotOnMachineFace   // a grid item aimed at a machine, but not on a face or an open port
+        }
+
+        private PlacementRefusal _lastRefusalHinted = PlacementRefusal.None;
+        private float _nextRefusalHint;
+        private const float RefusalHintCooldown = 6f;
+
+        private static string RefusalTitle(PlacementRefusal reason) => reason switch
+        {
+            PlacementRefusal.StandingHere => "You are in the way",
+            PlacementRefusal.GroundTooSteep => "Ground too steep",
+            PlacementRefusal.AlreadyThere => "Cell already built",
+            PlacementRefusal.NoRoom => "No room here",
+            PlacementRefusal.NotOnMachineFace => "Not a machine face",
+            _ => "Cannot place here"
+        };
+
+        private static string RefusalDetail(PlacementRefusal reason) => reason switch
+        {
+            PlacementRefusal.StandingHere => "You are standing where it goes. Step back, then place it.",
+            PlacementRefusal.GroundTooSteep => "The ground under this cell is too steep to take it. Flatten the site first.",
+            PlacementRefusal.AlreadyThere => "Another structure or conduit already occupies this cell.",
+            PlacementRefusal.NoRoom => "Something solid is in the way - a machine, a building, a pipe or another player.",
+            PlacementRefusal.NotOnMachineFace => "Aim at the machine's face or at one of its open ports.",
+            _ => "This cell is not available."
+        };
+
+        /// <summary>One polite line for a refused placement, on the same cadence as the aim
+        /// hint (a ghost left red for ten seconds is one message, not one per frame). A click
+        /// always answers - that is the one moment the player is asking a direct question.</summary>
+        private void ShowPlacementRefusal(BlockItem block, PlacementRefusal reason, bool force)
+        {
+            if (reason == PlacementRefusal.None) return;
+            if (!force)
+            {
+                if (reason == _lastRefusalHinted && Time.unscaledTime < _nextRefusalHint) return;
+                _nextRefusalHint = Time.unscaledTime + RefusalHintCooldown;
+            }
+            _lastRefusalHinted = reason;
+            VoxelEngine.UI.BuildFeedbackHud.Show(RefusalTitle(reason), RefusalDetail(reason),
+                block != null ? block.icon : null, new Color(0.90f, 0.45f, 0.25f));
+        }
+
         private void TraceGhost(string state)
         {
             if (_ghostTraceState == state) return;
@@ -490,6 +546,8 @@ namespace VoxelEngine.Building
                 _ghost.transform.SetPositionAndRotation(worldPosition, worldRotation);
                 ConfigurePipeGhostConnection(block, targetGrid, worldPosition, GridSize.Small.CellSize());
                 ApplyGhostMaterialIfChanged(validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
+                if (!validPrecision && !s_portCapBlocked)
+                    ShowPlacementRefusal(block, PlacementRefusal.NotOnMachineFace, force: false);
 
                 if (showGhostPort) ShowGhostPortRing(ghostPortWorldPos, ghostPortOutWorld, ghostPortColor);
                 if (s_portCapBlocked && Time.unscaledTime - _portCapFeedbackAt >= PortCapFeedbackInterval)
@@ -514,8 +572,9 @@ namespace VoxelEngine.Building
             if (IsUnifiedPipe(block))
                 ConfigurePipeGhostConnection(block, null, pos, Mathf.Max(0.01f, gridSize));
 
-            bool valid = IsPlacementValid(pos, block, rot);
+            bool valid = IsPlacementValid(pos, block, rot, out var refusal);
             ApplyGhostMaterialIfChanged(valid ? _ghostMaterialValid : _ghostMaterialInvalid);
+            if (!valid) ShowPlacementRefusal(block, refusal, force: false);
         }
 
         private void UpdateQuarryPreview()
@@ -1187,16 +1246,23 @@ namespace VoxelEngine.Building
             }
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
-            if (!IsPlacementValid(pos, block, rot))
+            if (!IsPlacementValid(pos, block, rot, out var refusal))
             {
+                // A click is a direct question and always gets an answer; the road's own
+                // toast says more than the generic line, so it is not doubled up.
+                bool roadSpoke = false;
                 if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block))
                 {
                     var band = VoxelEngine.Building.RoadPaver.EvaluateCell(block, pos, rot, out _);
                     if (band != VoxelEngine.Building.AsphaltRoad.GradeBand.Smooth
                         && band != VoxelEngine.Building.AsphaltRoad.GradeBand.Rough)
+                    {
+                        roadSpoke = true;
                         VoxelEngine.UI.BuildFeedbackHud.Show("Cannot pave",
                             VoxelEngine.Building.AsphaltRoad.DescribeSite(band), block.icon, Color.yellow);
+                    }
                 }
+                if (!roadSpoke) ShowPlacementRefusal(block, refusal, force: true);
                 return false;
             }
 
@@ -3316,8 +3382,9 @@ namespace VoxelEngine.Building
         /// anchored to an existing road on a slope inherits that road's rotation, and grading it
         /// against the surface rotation instead would let the ghost and the click disagree.
         /// </summary>
-        private bool IsPlacementValid(Vector3 pos, BlockItem block, Quaternion rot)
+        private bool IsPlacementValid(Vector3 pos, BlockItem block, Quaternion rot, out PlacementRefusal refusal)
         {
+            refusal = PlacementRefusal.None;
             // Never place inside the player — a proper capsule column test, not a flat
             // distance check: blocks spawning between the player's feet used to launch
             // them upwards. Player pivot ≈ feet, capsule ≈ 1.9 m tall.
@@ -3330,7 +3397,11 @@ namespace VoxelEngine.Building
             float playerHeightOffset = Vector3.Dot(relativeToPlayer, surfaceUp);
             bool insideColumn = planarOffset.sqrMagnitude < 0.65f * 0.65f;
             bool withinHeight = playerHeightOffset > -0.4f && playerHeightOffset < 2.05f;
-            if (insideColumn && withinHeight) return false;
+            if (insideColumn && withinHeight)
+            {
+                refusal = PlacementRefusal.StandingHere;
+                return false;
+            }
 
             // Only actual conduits use the tight placement volume/terrain exception.
             // allowStacking is a broader content flag (many ordinary foundations use it),
@@ -3355,7 +3426,10 @@ namespace VoxelEngine.Building
                 var grade = VoxelEngine.Building.RoadPaver.EvaluateCell(block, pos, rot, out _);
                 if (grade != VoxelEngine.Building.AsphaltRoad.GradeBand.Smooth
                     && grade != VoxelEngine.Building.AsphaltRoad.GradeBand.Rough)
+                {
+                    refusal = PlacementRefusal.GroundTooSteep;
                     return false;
+                }
             }
 
             // Portal pieces (12.39.5-dev) are 5 m cells: the small centre probe below
@@ -3366,7 +3440,10 @@ namespace VoxelEngine.Building
             // can kiss a slope without being refused.
             if (placementProfile != null && placementProfile.isPortalPiece
                 && HasPlacedBlockVolumeOverlap(pos, placementProfile.portalHalfExtents * 0.94f, rot))
+            {
+                refusal = PlacementRefusal.AlreadyThere;
                 return false;
+            }
 
             // Prevent Energy Pipes from being placed overlapping or occupying the exact same position as an existing conduit
             if (isThin && block != null && block.placedPrefab != null && block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null)
@@ -3383,7 +3460,10 @@ namespace VoxelEngine.Building
                         {
                             // If centers are too close (< 0.25m), it is an illegal duplicate/overlapping pipe placement
                             if ((targetCable.transform.position - pos).sqrMagnitude < 0.25f * 0.25f)
+                            {
+                                refusal = PlacementRefusal.AlreadyThere;
                                 return false;
+                            }
                         }
                     }
                 }
@@ -3402,7 +3482,10 @@ namespace VoxelEngine.Building
                         var targetData = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
                         if (targetData != null
                             && (targetData.transform.position - pos).sqrMagnitude < 0.25f * 0.25f)
+                        {
+                            refusal = PlacementRefusal.AlreadyThere;
                             return false;
+                        }
                     }
                 }
             }
@@ -3418,14 +3501,20 @@ namespace VoxelEngine.Building
                 // to the station's actual collision geometry and tint a clear floor
                 // placement red. A 1 cm inset treats support contact as contact while
                 // retaining the real solid-volume rejection.
-                return IsPlacementProbeClear(probeCenter, probeHalfExtents, rot,
-                    isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
-                    allowAdjacentCoplanarDecks: true);
+                if (IsPlacementProbeClear(probeCenter, probeHalfExtents, rot,
+                        isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
+                        allowAdjacentCoplanarDecks: true))
+                    return true;
+                refusal = PlacementRefusal.NoRoom;
+                return false;
             }
 
-            return IsPlacementProbeClear(pos, Vector3.one * checkSize, Quaternion.identity,
-                isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
-                allowAdjacentCoplanarDecks: false);
+            if (IsPlacementProbeClear(pos, Vector3.one * checkSize, Quaternion.identity,
+                    isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
+                    allowAdjacentCoplanarDecks: false))
+                return true;
+            refusal = PlacementRefusal.NoRoom;
+            return false;
         }
 
         private static bool TryGetInteriorLatticeProbe(Vector3 rootPosition, Quaternion rootRotation,
