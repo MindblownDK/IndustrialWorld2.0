@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.3-dev`
-**Roadmap Version:** `17.27.3-dev`
+**Current Version:** `17.27.4-dev`
+**Roadmap Version:** `17.27.4-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.27.4-dev - Whole-Cell Excavation, Outline Across a Load, Job Bar & Hand-Carried Drags
+- `Quarry` cuts every voxel a cell's footprint covers (rasterised from the cell's eight corners in voxel space, clamped to a 3-voxel cube) instead of the voxel its centre rounds to, checks output room before each cut, rebuilds the tape and pit frame from `RestoreState`, finds the cutter pivot anywhere in the machine and warns once when a prefab has none
+- The machine panel shows `Quarry.JobProgress01` / `JobProgressLabel` (survey, frame, then pit depth) rather than one cell's bite, and the rear instrument cluster with its name band sits 28 cm lower on the machine
+- `GameUIController` carries a dragged stack in hand: `BeginDrag` takes it out of the container (drawer capacity released, split leaves the remainder), a refused drop returns it, a partial drop returns the remainder, and closing a window drops it on the ground through the normal drop path
+
 ### 17.27.3-dev / 17.27.2-dev - Cutter Wheel Motion, Surface-Started Pit, Rear Instrument Display, Branch Filter Return
 - The cutter wheel, hub, teeth and spokes hang under `CutterWheelPivot`, which `Quarry.SpinCutter` turns about its axle (165 deg/s cutting, 26 while surveying and framing, coasting down, still when unpowered or complete); the pit's column scan covers 24 m up / 32 m down in two passes, so every column starts at its own highest solid voxel, and the machine's labels and readout are sized from measured text width
 - The quarry's instruments sit on its REAR face (screen, needle dial, power socket, state lamp, measured name bar) because the pit is dug on the front; the labelled glowing power plate is gone, the port declares `NegZ` Input/Power, and machine labels are turned to face outwards and swapped onto the depth-tested font material at runtime by `WorldTextMaterial.ApplyToHierarchy`
@@ -48,11 +53,6 @@
 - `WorldStatePersistence` restores every world object through one guarded sequence that waits for the orbital clock, resolves tiered pieces through a new optional body anchor, and re-parks any queued block or tiered piece onto its settled anchor pose; save/load carry-count logging added
 - `BuildSystem` seats static blocks on the aimed surface whenever the target is not a placed block, tiered piece or grid; `PlayerController` returns the sideways creep a still player gets from the grounded stick; `Quarry` mines only in front of the machine (`forwardOffset` start, 8 m down-probe) and rebuilds its drill head when restored mid-mining
 - `SmeltingRecipe.requiresResearch` plus the `ResearchManager` rule that a node's unlock list gates a recipe regardless of its default flag; Military branch authored (7 nodes, turrets/artillery/explosives/relic/strategic) and the forestry and alloy chains gated, with the research branch filter removed from `ResearchUI`
-
-### 17.25.3-dev / 17.25.2-dev / 17.25.1-dev / 17.25.0-dev - Biofuel Chain, Biomass Press & Automatic Tree Farm
-- Added `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `WildTreeSaplingDrop` (`1-2` `Tree Sapling` drops from wild trees without touching `Tree.cs`), `Wood Chips` (`12s` fuel), `Biofuel Briquette` (`65s` fuel), and `Organic Fertilizer`, plus `CoalGeneratorFuel` liquid Biofuel sipping from adjacent `BiomassPress` or `WaterTank` networks
-- Added `TreeFarmPlot` (`3x1x3` arboricultural timber planter with 3-tier growing tree, irrigation `2x` and fertilizer `1.5x` bonuses) and `AutoTreeFarm` (`4x3x4` automated forestry plot & gantry saw-harvester with `500 L` irrigation tank, `10m` nearby plot tending, and belt/chute export), and extended `Harvester` to tend `TreeFarmPlot`s
-- Added `BiomassPress` (`2x2x2` industrial screw-press & bio-refinery with `1000 L` water tank, `1500 L` biofuel tank, `ProcessingRecipe` + universal crop/wood/biomass/chip auto-modes), UI panels, persistence, and non-destructive Setup Wizard authoring (`BiofuelAndTreeFarmSetup`)
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

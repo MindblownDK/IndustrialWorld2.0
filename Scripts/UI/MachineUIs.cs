@@ -1898,7 +1898,7 @@ namespace VoxelEngine.UI
             {
                 string powerText = q.PowerState switch
                 {
-                    QuarryPowerState.Unwired => "No cable - run power to the front inlet",
+                    QuarryPowerState.Unwired => "No cable - run power to the rear socket",
                     QuarryPowerState.Starved => $"Supply too low - needs {q.RatedPowerDrawW:0} W",
                     _ => $"{q.LivePowerDrawW:0} / {q.MaxPowerDrawW:0} W  \u00B7  Connected"
                 };
@@ -1916,7 +1916,11 @@ namespace VoxelEngine.UI
                 $"{q.quarryTier}", T.TextSecondary));
 
             right.Add(T.Spacer(4));
-            var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
+            // 17.27.4-dev: the bar shows the JOB - survey, frame, then the pit from its own
+            // surface down - because MineProgress01 is a single cell's bite (it fills and
+            // resets twice a second, so the bar looked like it was twitching, not working).
+            right.Add(T.Muted(q.JobProgressLabel));
+            var (progBar, _) = T.ProgressBar(q.JobProgress01, T.AccentCyan, 8, true);
             right.Add(progBar);
 
             // Item ports are appended by GameUIController via AppendItemPorts so

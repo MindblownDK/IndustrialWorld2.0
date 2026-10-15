@@ -180,12 +180,19 @@ namespace VoxelEngine.UI
         private bool _quickTransferDragActive;
         private readonly HashSet<QuickTransferSlotKey> _quickTransferDragVisited = new();
 
+        /// <summary>17.27.4-dev - WHAT THE PLAYER IS CARRYING.
+        ///
+        /// The stack LEAVES its slot the moment it is picked up and lives here until it is
+        /// dropped: while a drag is in flight the item exists in exactly one place, the hand.
+        /// The previous model left it in the source slot for the whole drag and moved it at the
+        /// drop, so the player saw their item in two places at once, and a window closed
+        /// mid-drag quietly kept it in the container they had walked away from.</summary>
         private struct DragSource
         {
-            public IItemContainer container;
+            public IItemContainer container;   // where it came from: where a refused drop returns it
             public int            slotIndex;
-            public ItemStack      stack;
-            public int            partialCount;
+            public ItemStack      stack;       // the stack in hand (authoritative while active)
+            public bool           split;       // began as a right-click split: empty slots only
             public bool           active;
         }
 
@@ -1336,8 +1343,10 @@ namespace VoxelEngine.UI
             ClearActiveQueueBinding();
             _openCoalGen    = null;
             UnwatchAllContainers();
-            CancelDrag();   // drop the held item back into source slot if user closes mid-drag
-            CancelDrag();
+            // 17.27.4-dev: whatever is still in the player's hand when the window closes goes
+            // on the ground. It used to be written back into a slot the player had already
+            // walked away from.
+            CancelDrag(dropToWorld: true);
             RelockCursor();
             Refresh();
         }
@@ -5120,21 +5129,6 @@ namespace VoxelEngine.UI
                 slot.style.borderLeftColor = slot.style.borderRightColor = bColor;
             }
 
-            // When a half-stack / partial drag is active from this slot, display the
-            // remaining portion in the slot while the split half sits on the cursor.
-            if (_dragSource.active && _dragSource.partialCount > 0
-                && ReferenceEquals(_dragSource.container, container) && _dragSource.slotIndex == index
-                && stack != null && !stack.IsEmpty)
-            {
-                int rem = Mathf.Max(0, stack.count - _dragSource.partialCount);
-                if (rem <= 0) stack = new ItemStack();
-                else
-                {
-                    stack = stack.Clone();
-                    stack.count = rem;
-                }
-            }
-
             if (!stack.IsEmpty)
             {
                 // Icon
@@ -5401,17 +5395,34 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         // ============================================================
         private void BeginDrag(IItemContainer c, int idx, int partialCount = 0)
         {
+            if (c == null) return;
             var st = c.GetSlot(idx);
-            if (st.IsEmpty) return;
-            int clampedPartial = partialCount > 0 ? Mathf.Clamp(partialCount, 1, st.count) : 0;
+            if (st == null || st.IsEmpty || st.item == null) return;
+
+            int take = partialCount > 0 ? Mathf.Clamp(partialCount, 1, st.count) : st.count;
+            bool split = take < st.count;
             var dragStack = st.Clone();
-            if (clampedPartial > 0) dragStack.count = clampedPartial;
+            dragStack.count = take;
+
+            // TAKE IT OUT NOW (17.27.4-dev). The hand is the only place a carried stack lives,
+            // so the source slot is emptied (or reduced by the split) at the moment of pickup
+            // and shows the truth immediately. A drawer source releases its virtual capacity
+            // by the same amount.
+            if (c is VoxelEngine.Storage.StorageDrawer pickDrawer) pickDrawer.Remove(st.item, take);
+            else if (split)
+            {
+                var rest = st.Clone();
+                rest.count = st.count - take;
+                c.SetSlot(idx, rest);
+            }
+            else c.SetSlot(idx, new ItemStack());
+
             _dragSource = new DragSource
             {
                 container    = c,
                 slotIndex    = idx,
                 stack        = dragStack,
-                partialCount = clampedPartial,
+                split        = split,
                 active       = true
             };
 
@@ -5422,9 +5433,9 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             _dragGhost.style.backgroundColor = new StyleColor(new Color(0.13f, 0.15f, 0.19f, 0.85f));
             SetBorderRadius(_dragGhost, 4);
             _dragGhost.pickingMode = PickingMode.Ignore;
-            if (st.item.icon != null)
+            if (dragStack.item.icon != null)
             {
-                var img = new Image { sprite = st.item.icon };
+                var img = new Image { sprite = dragStack.item.icon };
                 img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                 img.style.width = 40; img.style.height = 40;
                 img.style.marginLeft = 4; img.style.marginTop = 4;
@@ -5436,12 +5447,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 var box = new VisualElement();
                 box.style.width = 32; box.style.height = 32;
                 box.style.marginLeft = 8; box.style.marginTop = 8;
-                box.style.backgroundColor = new StyleColor(st.item.iconTint);
+                box.style.backgroundColor = new StyleColor(dragStack.item.iconTint);
                 box.pickingMode = PickingMode.Ignore;
                 _dragGhost.Add(box);
             }
             int ghostCount = dragStack.count;
-            if (ghostCount > 1 || clampedPartial > 0)
+            if (ghostCount > 1)
             {
                 var l = new Label(ghostCount.ToString()) { name = DragGhostCountName };
                 l.style.position = Position.Absolute;
@@ -5454,161 +5465,192 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             _root.Add(_dragGhost);
             _dragGhost.BringToFront();
 
-            if (clampedPartial > 0)
-                Refresh();
+            // The source slot just changed: show it at once.
+            Refresh();
         }
 
+        /// <summary>Drop what the player is carrying into (destC, destIdx).
+        ///
+        /// The carried stack is the single source of truth while a drag is active (see
+        /// DragSource), so every branch here places from the hand and hands anything it could
+        /// not place back to the container it came from. Nothing is ever read back out of the
+        /// source slot, because nothing is there any more.</summary>
         private void EndDrag(IItemContainer destC, int destIdx)
         {
             if (!_dragSource.active) return;
+            if (destC == null) { CancelDrag(); return; }
+
             var srcC = _dragSource.container;
             int srcIdx = _dragSource.slotIndex;
-            int partial = _dragSource.partialCount;
+            var carried = _dragSource.stack != null ? _dragSource.stack.Clone() : new ItemStack();
+            if (carried.IsEmpty || carried.item == null) { FinishDrag(); Refresh(); return; }
 
-            // Take FRESH copies so list-element references can't double-count.
-            var fullSrcStack = srcC.GetSlot(srcIdx).Clone();
-            var dstStack = destC.GetSlot(destIdx).Clone();
+            var dstStack = destC.GetSlot(destIdx)?.Clone() ?? new ItemStack();
 
-            // Same slot — cancel (and refresh so a partial-drag source slot shows full count again).
-            if (srcC == destC && srcIdx == destIdx)
-            {
-                bool wasPartial = partial > 0;
-                CancelDrag();
-                if (wasPartial) Refresh();
-                return;
-            }
-
-            if (fullSrcStack.IsEmpty)
-            {
-                CancelDrag();
-                Refresh();
-                return;
-            }
-
-            bool isPartialSplit = partial > 0 && partial < fullSrcStack.count;
-            var srcStack = fullSrcStack.Clone();
-            int remainingAtSource = 0;
-            if (isPartialSplit)
-            {
-                srcStack.count = partial;
-                remainingAtSource = fullSrcStack.count - partial;
-            }
+            // Dropped back on the slot it came from: put it back.
+            if (ReferenceEquals(srcC, destC) && srcIdx == destIdx) { CancelDrag(); return; }
 
             // UI-only filter slots record the item type without consuming the dragged stack.
             if (destC is VoxelEngine.Storage.IItemFilterSlot filterSlot)
             {
-                if (!srcStack.IsEmpty) filterSlot.ApplyFilter(srcStack.item);
+                filterSlot.ApplyFilter(carried.item);
                 CancelDrag();
                 Refresh();
                 return;
             }
 
-            // Virtual drawer storage is capacity-based, not slot-swap based.
+            // Virtual drawer storage is capacity-based, not slot-swap based. What the drawer
+            // could not take comes home.
             if (destC is VoxelEngine.Storage.StorageDrawer destDrawer)
             {
-                int accepted = destDrawer.InsertItems(srcStack.item, srcStack.count);
-                if (accepted > 0)
-                {
-                    if (srcC is VoxelEngine.Storage.StorageDrawer srcDrawer) srcDrawer.Remove(srcStack.item, accepted);
-                    else
-                    {
-                        int leftTotal = fullSrcStack.count - accepted;
-                        if (leftTotal <= 0) srcC.SetSlot(srcIdx, new ItemStack());
-                        else { fullSrcStack.count = leftTotal; srcC.SetSlot(srcIdx, fullSrcStack); }
-                    }
-                }
-                CancelDrag();
-                Refresh();
+                // InsertItems returns what the drawer ACCEPTED, so the rest is still in hand.
+                carried.count -= destDrawer.InsertItems(carried.item, carried.count);
+                ReturnOrDiscard(carried, srcC, srcIdx);
                 return;
             }
+
             if (srcC is VoxelEngine.Storage.StorageDrawer sourceDrawer)
             {
-                var clone = srcStack.Clone();
-                var leftover = destC.Insert(clone);
-                int moved = srcStack.count - (leftover?.count ?? 0);
-                if (moved > 0) sourceDrawer.Remove(srcStack.item, moved);
-                CancelDrag();
+                var leftover = destC.Insert(carried.Clone());
+                int left = leftover != null ? leftover.count : 0;
+                int moved = carried.count - left;
+                if (moved > 0) sourceDrawer.Remove(carried.item, moved);
+                if (left > 0) sourceDrawer.InsertItems(carried.item, left);
+                FinishDrag();
                 Refresh();
                 return;
             }
 
-            bool sameContainer = srcC == destC;
+            bool sameContainer = ReferenceEquals(srcC, destC);
 
-            // Stack merge onto matching item.
-            if (!srcStack.IsEmpty && !dstStack.IsEmpty &&
-                dstStack.item == srcStack.item && srcStack.item.IsStackable)
+            // Stack merge onto a matching item.
+            if (!dstStack.IsEmpty && dstStack.item == carried.item && carried.item.IsStackable)
             {
-                int space = ItemStack.MaxItemsPerStack(srcStack.item) - dstStack.count;
-                int move  = Mathf.Min(space, srcStack.count);
+                int space = ItemStack.MaxItemsPerStack(carried.item) - dstStack.count;
+                int move  = Mathf.Min(space, carried.count);
                 if (!sameContainer)
-                    move = Mathf.Min(move, MaxDirectAdd(destC, srcStack.item, move));
-                if (move <= 0)
-                {
-                    CancelDrag();
-                    if (isPartialSplit) Refresh();
-                    return;
-                }
+                    move = Mathf.Min(move, MaxDirectAdd(destC, carried.item, move));
+                if (move <= 0) { CancelDrag(); Refresh(); return; }
                 dstStack.count += move;
-                int leftTotal = fullSrcStack.count - move;
                 destC.SetSlot(destIdx, dstStack);
-                if (leftTotal > 0)
-                {
-                    fullSrcStack.count = leftTotal;
-                    srcC.SetSlot(srcIdx, fullSrcStack);
-                }
-                else
-                {
-                    srcC.SetSlot(srcIdx, new ItemStack());
-                }
+                carried.count -= move;
+                ReturnOrDiscard(carried, srcC, srcIdx);
+                return;
             }
-            else if (isPartialSplit)
+
+            // A split only ever goes into an empty slot: the rest of that stack is still in its
+            // source slot, so there is nothing here to swap with.
+            if (_dragSource.split)
             {
-                // Partial / half-stack placement: can only place into an empty slot
-                // (merging onto a matching stack is handled above).
-                if (!dstStack.IsEmpty)
-                {
-                    CancelDrag();
-                    Refresh();
-                    return;
-                }
-                int move = sameContainer ? srcStack.count : MaxDirectAdd(destC, srcStack.item, srcStack.count);
-                if (move <= 0)
-                {
-                    CancelDrag();
-                    Refresh();
-                    return;
-                }
-                var placed = srcStack.Clone();
+                if (!dstStack.IsEmpty) { CancelDrag(); Refresh(); return; }
+                int move = sameContainer
+                    ? carried.count
+                    : Mathf.Min(carried.count, MaxDirectAdd(destC, carried.item, carried.count));
+                if (move <= 0) { CancelDrag(); Refresh(); return; }
+                var placed = carried.Clone();
                 placed.count = move;
                 destC.SetSlot(destIdx, placed);
-
-                int leftTotal = fullSrcStack.count - move;
-                if (leftTotal > 0)
-                {
-                    fullSrcStack.count = leftTotal;
-                    srcC.SetSlot(srcIdx, fullSrcStack);
-                }
-                else
-                {
-                    srcC.SetSlot(srcIdx, new ItemStack());
-                }
+                carried.count -= move;
+                ReturnOrDiscard(carried, srcC, srcIdx);
+                return;
             }
-            else
+
+            // Plain swap: what was in the destination goes back to the emptied source slot.
+            // Respect destination/source AcceptFilter and mass gates during direct swaps.
+            if (!sameContainer && (!CanDirectSet(destC, carried, dstStack) || !CanDirectSet(srcC, dstStack, carried)))
             {
-                // Respect destination/source AcceptFilter and mass gates during direct swaps.
-                // Insert() already honours filters, but SetSlot()-based swaps used to bypass them.
-                if (!sameContainer && (!CanDirectSet(destC, srcStack, dstStack) || !CanDirectSet(srcC, dstStack, srcStack)))
-                {
-                    CancelDrag();
-                    return;
-                }
-
-                // Plain swap.
-                destC.SetSlot(destIdx, srcStack);
-                srcC.SetSlot(srcIdx, dstStack);
+                CancelDrag();
+                return;
             }
-            CancelDrag();
+            destC.SetSlot(destIdx, carried);
+            srcC.SetSlot(srcIdx, dstStack);
+            FinishDrag();
             Refresh();
+        }
+
+        /// <summary>End a drag that moved everything the player was carrying.</summary>
+        private void FinishDrag()
+        {
+            _dragSource.active = false;
+            _dragSource.stack = new ItemStack();
+            _dragSource.split = false;
+            ResetQuickTransferDrag();
+            if (_dragGhost != null) { _dragGhost.RemoveFromHierarchy(); _dragGhost = null; }
+        }
+
+        /// <summary>After a drop, hand whatever is left in the hand back to the container it came
+        /// from and end the drag. Nothing is left in the hand.</summary>
+        private void ReturnOrDiscard(ItemStack left, IItemContainer srcC, int srcIdx)
+        {
+            if (left != null && !left.IsEmpty && left.item != null && !ReturnHeld(left, srcC, srcIdx))
+                SpawnHeldToWorld(left);
+            FinishDrag();
+            Refresh();
+        }
+
+        /// <summary>Give a carried stack back to its source container. The slot it was taken out
+        /// of is used first (that is where it came from); a drawer takes it back through its own
+        /// capacity, and a container that cannot take it at all leaves it to the caller.</summary>
+        private bool ReturnHeld(ItemStack held, IItemContainer srcC, int srcIdx)
+        {
+            if (held == null || held.IsEmpty || held.item == null) return true;
+            if (srcC == null) return false;
+
+            if (srcC is VoxelEngine.Storage.StorageDrawer drawer)
+            {
+                held.count -= drawer.InsertItems(held.item, held.count);
+                return held.count <= 0;
+            }
+
+            var here = srcC.GetSlot(srcIdx)?.Clone() ?? new ItemStack();
+            if (here.IsEmpty)
+            {
+                srcC.SetSlot(srcIdx, held);
+                return true;
+            }
+            if (here.item == held.item && held.item.IsStackable)
+            {
+                int space = ItemStack.MaxItemsPerStack(held.item) - here.count;
+                int move = Mathf.Min(space, held.count);
+                if (move > 0)
+                {
+                    here.count += move;
+                    srcC.SetSlot(srcIdx, here);
+                    held.count -= move;
+                }
+            }
+            return held.count <= 0;
+        }
+
+        /// <summary>Put a carried stack on the ground. Used when a window closes with an item in
+        /// hand: the drop obeys the same physical cap as any other drop, and anything the world
+        /// cannot hold is reported instead of vanishing.</summary>
+        private void SpawnHeldToWorld(ItemStack held)
+        {
+            if (held == null || held.IsEmpty || held.item == null) return;
+            GetDropPose(out Vector3 spawnPos, out Vector3 tossDir);
+
+            int capacity = VoxelEngine.Items.DroppedItem.AvailablePhysicalCapacity;
+            int spawnCount = Mathf.Min(held.count, Mathf.Max(0, capacity));
+            if (spawnCount > 0)
+            {
+                var toDrop = new ItemStack
+                {
+                    item = held.item,
+                    count = spawnCount,
+                    durability = held.durability,
+                    charge = held.charge,
+                    payload = held.payload
+                };
+                var dropped = VoxelEngine.Items.DroppedItem.Spawn(toDrop, spawnPos, tossDir);
+                if (dropped != null) dropped.SetDropOwner(inventory);
+            }
+
+            int voided = held.count - spawnCount;
+            if (voided > 0)
+                VoxelEngine.UI.BuildFeedbackHud.Show("Drop Limit Reached",
+                    $"{voided} x {held.item.displayName} could not be dropped",
+                    held.item.icon, new Color(0.95f, 0.55f, 0.20f));
         }
 
         private static int MaxDirectAdd(IItemContainer container, ItemDefinition item, int wanted)
@@ -5641,12 +5683,30 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             return true;
         }
 
-        private void CancelDrag()
+        /// <summary>End a drag without placing anything.
+        ///
+        /// <paramref name="dropToWorld"/> is how a CLOSED window behaves: the stack was in the
+        /// player's hand, so it goes on the ground rather than materialising back into a
+        /// container the player has walked away from. Every other cancel - a refused drop, a
+        /// click on the slot it came from - returns it to where it was picked up.</summary>
+        private void CancelDrag(bool dropToWorld = false)
         {
-            _dragSource.active = false;
-            _dragSource.partialCount = 0;
-            ResetQuickTransferDrag();
-            if (_dragGhost != null) { _dragGhost.RemoveFromHierarchy(); _dragGhost = null; }
+            var held  = _dragSource.stack;
+            var srcC  = _dragSource.container;
+            int srcIdx = _dragSource.slotIndex;
+            FinishDrag();
+
+            if (held == null || held.IsEmpty || held.item == null) return;
+
+            if (dropToWorld)
+            {
+                SpawnHeldToWorld(held);
+                Refresh();
+                return;
+            }
+
+            if (!ReturnHeld(held, srcC, srcIdx)) SpawnHeldToWorld(held);
+            Refresh();
         }
 
         private const string DragGhostCountName = "DragGhostCount";
@@ -5668,41 +5728,30 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         private bool DepositOneFromDrag(IItemContainer destC, int destIdx)
         {
             if (!_dragSource.active || destC == null) return false;
-            var srcC = _dragSource.container;
-            int srcIdx = _dragSource.slotIndex;
-            if (srcC == null) return false;
 
             if (destC is VoxelEngine.Storage.IItemFilterSlot
                 || destC is VoxelEngine.Storage.StorageDrawer
-                || srcC is VoxelEngine.Storage.StorageDrawer) return false;
+                || _dragSource.container is VoxelEngine.Storage.StorageDrawer) return false;
 
-            var fullSrc = srcC.GetSlot(srcIdx).Clone();
-            if (fullSrc.IsEmpty || fullSrc.item == null) { CancelDrag(); Refresh(); return true; }
+            var held = _dragSource.stack;
+            if (held == null || held.IsEmpty || held.item == null) { FinishDrag(); Refresh(); return true; }
 
-            int partial = _dragSource.partialCount;
-            bool partialSplit = partial > 0 && partial < fullSrc.count;
-            int carried = partialSplit ? partial : fullSrc.count;
-
-            // The same slot, or a slot that cannot take this item: leave the drag alone.
-            if (srcC == destC && srcIdx == destIdx) return true;
+            // The slot it came from, or a slot that cannot take this item: leave the drag alone.
+            if (ReferenceEquals(_dragSource.container, destC) && _dragSource.slotIndex == destIdx) return true;
             var dst = destC.GetSlot(destIdx).Clone();
             if (!dst.IsEmpty)
             {
-                if (dst.item != fullSrc.item || !fullSrc.item.IsStackable) return true;
-                if (dst.count >= ItemStack.MaxItemsPerStack(fullSrc.item)) return true;
+                if (dst.item != held.item || !held.item.IsStackable) return true;
+                if (dst.count >= ItemStack.MaxItemsPerStack(held.item)) return true;
             }
 
-            // One item moves, and only one: the destination gains it, the source
-            // container loses it, and the cursor carries one less.
-            //
-            // An EMPTY slot holds no item to increment. Adding 1 to its count used to
-            // write a slot that said "one item" and named none, which the next refresh
-            // dropped on the floor - the item simply vanished. The destination now takes a
-            // one-item copy of the source stack, so per-instance state (durability, a
-            // storage disk's payload) rides along exactly as it does on a normal move.
+            // One item moves, and only one: an EMPTY slot takes a one-item copy of the stack in
+            // hand (a count with no item behind it is just an empty slot, and writing one that
+            // way is how this gesture used to eat the item), a matching stack is topped up, and
+            // the hand holds one fewer.
             if (dst.IsEmpty)
             {
-                var moved = fullSrc.Clone();
+                var moved = held.Clone();
                 moved.count = 1;
                 destC.SetSlot(destIdx, moved);
             }
@@ -5712,20 +5761,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 destC.SetSlot(destIdx, dst);
             }
 
-            fullSrc.count -= 1;
-            if (fullSrc.count <= 0) srcC.SetSlot(srcIdx, new ItemStack());
-            else srcC.SetSlot(srcIdx, fullSrc);
+            held.count -= 1;
+            if (held.count <= 0) { FinishDrag(); Refresh(); return true; }
 
-            carried -= 1;
-            if (carried <= 0)
-            {
-                CancelDrag();
-                Refresh();
-                return true;
-            }
-
-            _dragSource.partialCount = partialSplit ? carried : 0;
-            UpdateDragGhostCount(carried);
+            _dragSource.stack = held;
+            UpdateDragGhostCount(held.count);
             Refresh();
             return true;
         }
@@ -5774,13 +5814,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         /// Used by the drag-onto-empty handler so users can drop items into
         /// storage without the obscure shift-click ritual.
         /// </summary>
-        private bool TryInsertDraggedIntoNetwork()
+        private bool TryInsertDraggedIntoNetwork(out bool networkReached)
         {
+            networkReached = false;
             if (!_dragSource.active) return false;
-            var srcC   = _dragSource.container;
-            int srcIdx = _dragSource.slotIndex;
-            var stack  = srcC.GetSlot(srcIdx);
-            if (stack.IsEmpty) return false;
+            var stack = _dragSource.stack;
+            if (stack == null || stack.IsEmpty) return false;
 
             VoxelEngine.Storage.ServerRack rack = null;
             if (_openStorageTerminal != null) rack = _openStorageTerminal.ConnectedRack;
@@ -5790,13 +5829,16 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 if (transmitters.Length > 0) rack = transmitters[0].ConnectedRack;
             }
             if (rack == null) return false;
+            networkReached = true;
 
             int leftover = rack.NetworkInsert(stack.item, stack.count);
             int moved    = stack.count - leftover;
             if (moved <= 0) return false;
 
-            if (leftover <= 0) srcC.SetSlot(srcIdx, new ItemStack());
-            else { stack.count = leftover; srcC.SetSlot(srcIdx, stack); }
+            // Whatever the network could not take stays in the hand, so the caller can put it
+            // back rather than dropping a player's ore on the floor.
+            stack.count = Mathf.Max(0, leftover);
+            _dragSource.stack = stack;
 
             BuildFeedbackHud.Show($"Stored {stack.item.displayName}",
                 $"+{moved}", stack.item.icon, UITheme.AccentCyan);
@@ -6696,14 +6738,17 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         // because some players use that as a quick discard gesture
                         // when no storage panel is open.
                         if (_dragSource.container == inventory?.container &&
-                            TryInsertDraggedIntoNetwork())
+                            TryInsertDraggedIntoNetwork(out bool networkReached))
                         {
+                            // The network took everything: the hand is empty.
                             CancelDrag();
                         }
                         else
                         {
-                            DropItemFromSlot(_dragSource.container, _dragSource.slotIndex);
-                            CancelDrag();
+                            // Nowhere to put it: a stack that is still in the player's hand
+                            // goes on the ground (and a partly-accepted one, back where it
+                            // came from, so storage can never eat the remainder).
+                            CancelDrag(dropToWorld: !networkReached);
                         }
                     }
                     return;

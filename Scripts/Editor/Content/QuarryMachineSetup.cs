@@ -253,15 +253,15 @@ namespace VoxelEngine.EditorTools
             // ═══ REAR INSTRUMENT CLUSTER: DISPLAY, DIAL, SOCKET, LAMP ═══
             // Mounted on the rear face, where the player stands. See the file header: the
             // front of this machine faces a hole in the ground.
-            Box(t, "MeterCabinet", dark, new Vector3(2.35f, 3.10f, -2.80f), new Vector3(2.90f, 2.50f, 0.36f));
-            Box(t, "MeterBezel", steel, new Vector3(2.35f, 3.28f, -2.99f), new Vector3(2.52f, 1.24f, 0.10f));
-            Box(t, "ScreenGlass", screenMat, new Vector3(2.35f, 3.28f, -3.04f), new Vector3(2.30f, 1.04f, 0.05f));
-            Box(t, "ScreenLipTop", steel, new Vector3(2.35f, 3.86f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
-            Box(t, "ScreenLipBottom", steel, new Vector3(2.35f, 2.70f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
-            Box(t, "MeterStrip", steel, new Vector3(2.35f, 2.28f, -2.99f), new Vector3(2.52f, 0.62f, 0.10f));
+            Box(t, "MeterCabinet", dark, new Vector3(2.35f, 2.82f, -2.80f), new Vector3(2.90f, 2.50f, 0.36f));
+            Box(t, "MeterBezel", steel, new Vector3(2.35f, 3.00f, -2.99f), new Vector3(2.52f, 1.24f, 0.10f));
+            Box(t, "ScreenGlass", screenMat, new Vector3(2.35f, 3.00f, -3.04f), new Vector3(2.30f, 1.04f, 0.05f));
+            Box(t, "ScreenLipTop", steel, new Vector3(2.35f, 3.58f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
+            Box(t, "ScreenLipBottom", steel, new Vector3(2.35f, 2.42f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
+            Box(t, "MeterStrip", steel, new Vector3(2.35f, 2.00f, -2.99f), new Vector3(2.52f, 0.62f, 0.10f));
 
             // -- needle dial, left end of the strip --
-            var dialCentre = new Vector3(1.78f, 2.28f, -3.05f);
+            var dialCentre = new Vector3(1.78f, 2.00f, -3.05f);
             Cyl(t, "MeterDial", dark, dialCentre, 0.58f, 0.10f, new Vector3(90f, 0f, 0f));
             Cyl(t, "MeterDialFace", dialFace, new Vector3(dialCentre.x, dialCentre.y, dialCentre.z - 0.04f), 0.50f, 0.06f, new Vector3(90f, 0f, 0f));
             for (int i = -1; i <= 1; i++)
@@ -279,16 +279,16 @@ namespace VoxelEngine.EditorTools
 
             // -- power socket, middle of the strip. No text and no lit plate: the state
             //    lamp beside it is the only thing that needs to speak --
-            Box(t, "PowerSocketHousing", steel, new Vector3(2.72f, 2.28f, -3.10f), new Vector3(0.72f, 0.58f, 0.22f));
-            Box(t, "PowerSocketPlate", dark, new Vector3(2.72f, 2.28f, -3.24f), new Vector3(0.54f, 0.44f, 0.08f));
-            Box(t, "PowerSocketLugA", copper, new Vector3(2.58f, 2.28f, -3.28f), new Vector3(0.10f, 0.26f, 0.10f));
-            Box(t, "PowerSocketLugB", copper, new Vector3(2.86f, 2.28f, -3.28f), new Vector3(0.10f, 0.26f, 0.10f));
-            Box(t, "PowerSocketHazardL", hazard, new Vector3(2.28f, 2.28f, -3.10f), new Vector3(0.10f, 0.62f, 0.24f));
-            Box(t, "PowerSocketHazardR", hazard, new Vector3(3.16f, 2.28f, -3.10f), new Vector3(0.10f, 0.62f, 0.24f));
+            Box(t, "PowerSocketHousing", steel, new Vector3(2.72f, 2.00f, -3.10f), new Vector3(0.72f, 0.58f, 0.22f));
+            Box(t, "PowerSocketPlate", dark, new Vector3(2.72f, 2.00f, -3.24f), new Vector3(0.54f, 0.44f, 0.08f));
+            Box(t, "PowerSocketLugA", copper, new Vector3(2.58f, 2.00f, -3.28f), new Vector3(0.10f, 0.26f, 0.10f));
+            Box(t, "PowerSocketLugB", copper, new Vector3(2.86f, 2.00f, -3.28f), new Vector3(0.10f, 0.26f, 0.10f));
+            Box(t, "PowerSocketHazardL", hazard, new Vector3(2.28f, 2.00f, -3.10f), new Vector3(0.10f, 0.62f, 0.24f));
+            Box(t, "PowerSocketHazardR", hazard, new Vector3(3.16f, 2.00f, -3.10f), new Vector3(0.10f, 0.62f, 0.24f));
 
             // -- state lamp, right end of the strip --
-            var lampGo = Sphere(t, "MeterStateLamp", lampWarm, new Vector3(3.44f, 2.28f, -3.02f), 0.22f);
-            Box(t, "MeterLampHood", steel, new Vector3(3.44f, 2.42f, -3.04f), new Vector3(0.30f, 0.10f, 0.16f));
+            var lampGo = Sphere(t, "MeterStateLamp", lampWarm, new Vector3(3.44f, 2.00f, -3.02f), 0.22f);
+            Box(t, "MeterLampHood", steel, new Vector3(3.44f, 2.14f, -3.04f), new Vector3(0.30f, 0.10f, 0.16f));
 
             // The readout is authored with no yaw (TextMesh glyphs read from their local
             // -Z, and this one is mounted on the machine's -Z face) and FITTED to the
@@ -297,7 +297,7 @@ namespace VoxelEngine.EditorTools
             // width, so no state the drill can be in runs off the side of the screen.
             const string WidestLine = "QUARRY DRILL  OUTPUT FULL";
             float readoutGlyph = Mathf.Min(0.15f, 1.95f / Mathf.Max(0.0001f, TextWidth(WidestLine, 1f)));
-            var textScreen = Text(t, "MeterReadout", new Vector3(2.35f, 3.68f, -3.10f), "QUARRY DRILL  IDLE",
+            var textScreen = Text(t, "MeterReadout", new Vector3(2.35f, 3.40f, -3.10f), "QUARRY DRILL  IDLE",
                 readoutGlyph, TextAnchor.UpperCenter, new Color(0.62f, 1f, 0.78f));
             textScreen.lineSpacing = 1.12f;
 
@@ -308,17 +308,17 @@ namespace VoxelEngine.EditorTools
             // over the edge of the machine again.
             const float NameBandWidth = 2.70f;
             const string MachineName = "QUARRY DRILL Mk III";
-            Box(t, "NamePlate", steel, new Vector3(2.35f, 4.11f, -2.99f), new Vector3(NameBandWidth, 0.38f, 0.10f));
+            Box(t, "NamePlate", steel, new Vector3(2.35f, 3.83f, -2.99f), new Vector3(NameBandWidth, 0.38f, 0.10f));
             float nameGlyph = Mathf.Min(0.19f, (NameBandWidth - 0.24f) / Mathf.Max(0.0001f, TextWidth(MachineName, 1f)));
-            Text(t, "NamePlateText", new Vector3(2.35f, 4.11f, -3.05f), MachineName,
+            Text(t, "NamePlateText", new Vector3(2.35f, 3.83f, -3.05f), MachineName,
                 nameGlyph, TextAnchor.MiddleCenter, new Color(0.10f, 0.10f, 0.11f));
             Box(t, "RearDoor", steel, new Vector3(-1.70f, 2.95f, -2.72f), new Vector3(2.40f, 2.20f, 0.14f));
             Box(t, "RearDoorFrame", paint, new Vector3(-1.70f, 4.12f, -2.72f), new Vector3(2.80f, 0.22f, 0.18f));
             Box(t, "RearHandle", dark, new Vector3(-2.60f, 2.60f, -2.84f), new Vector3(0.30f, 0.10f, 0.10f));
             for (int i = 0; i < 4; i++)
-                Box(t, "RearVent" + i, dark, new Vector3(-1.70f, 4.44f + i * 0.24f, -2.76f), new Vector3(2.20f, 0.14f, 0.10f));
+                Box(t, "RearVent" + i, dark, new Vector3(-1.70f, 4.20f + i * 0.24f, -2.76f), new Vector3(2.20f, 0.14f, 0.10f));
             // Copper power spine along the rear sill, from the socket into the hull.
-            Box(t, "BusBar", copper, new Vector3(0.55f, 1.72f, -2.86f), new Vector3(6.60f, 0.14f, 0.14f));
+            Box(t, "BusBar", copper, new Vector3(0.55f, 1.48f, -2.86f), new Vector3(6.60f, 0.14f, 0.14f));
 
             // ═══ RIGGING ═══════════════════════════════════════════════
             // Four solid volumes on the root: the hull the player walks into, the volume a
@@ -336,7 +336,7 @@ namespace VoxelEngine.EditorTools
             // The rear socket is solid too, so a cable bonding to it does not walk through
             // the panel and the cluster stays reachable from behind.
             var inletCollider = root.AddComponent<BoxCollider>();
-            inletCollider.center = new Vector3(2.72f, 2.28f, -3.18f);
+            inletCollider.center = new Vector3(2.72f, 2.00f, -3.18f);
             inletCollider.size = new Vector3(0.90f, 0.90f, 0.58f);
             // The root IS the ground contact plane, so the build system may seat this
             // prefab by its pivot instead of guessing from collider bounds.

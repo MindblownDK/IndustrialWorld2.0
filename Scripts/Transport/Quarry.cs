@@ -94,6 +94,29 @@ namespace VoxelEngine.Transport
         public int MaxDepth { get; private set; }
         public bool IsMining => Phase == QuarryPhase.Mining;
         public float MineProgress01 => _mt / Mathf.Max(0.01f, EffInterval);
+
+        /// <summary>How far the WHOLE job is: the survey, then the frame, then the pit.
+        /// This is what the machine panel shows, because `MineProgress01` is one cell's bite
+        /// - it fills and resets twice a second and reads as a bar that never gets anywhere
+        /// (17.27.4-dev).</summary>
+        public float JobProgress01 => Phase switch
+        {
+            QuarryPhase.TapeFrame     => tapePreviewDuration > 0f ? Mathf.Clamp01(_tt / tapePreviewDuration) : 0f,
+            QuarryPhase.BuildingFrame => _fp.Count > 0 ? Mathf.Clamp01((float)_fi / _fp.Count) : 0f,
+            QuarryPhase.Mining        => MaxDepth > 0 ? Mathf.Clamp01((float)CurrentDepth / MaxDepth) : 0f,
+            QuarryPhase.Complete      => 1f,
+            _                         => 0f
+        };
+
+        /// <summary>The bar's caption: the phase in words with the number that matters.</summary>
+        public string JobProgressLabel => Phase switch
+        {
+            QuarryPhase.TapeFrame     => "SURVEYING THE AREA",
+            QuarryPhase.BuildingFrame => $"BUILDING THE FRAME  {_fi} / {Mathf.Max(1, _fp.Count)}",
+            QuarryPhase.Mining        => $"EXCAVATING  {CurrentDepth} / {MaxDepth}",
+            QuarryPhase.Complete      => "PIT COMPLETE",
+            _                         => "IDLE - WAITING FOR POWER"
+        };
         public ItemContainer Output { get { EnsureOutput(); return _out; } }
         public int AreaX { get; private set; }
         public int AreaZ { get; private set; }
@@ -249,9 +272,7 @@ namespace VoxelEngine.Transport
         {
             float x = (a + 0.5f) - AreaX * 0.5f;
             float z = forwardOffset + (b + 0.5f);
-            float top = (_colTop != null && a * AreaZ + b < _colTop.Length)
-                ? _colTop[a * AreaZ + b] : -0.5f;
-            return new Vector3(x, top - depth - 0.5f, z);
+            return new Vector3(x, ColTop(a, b) - depth - 0.5f, z);
         }
 
         private Vector3Int CellVoxel(int a, int b, int depth)
@@ -413,6 +434,7 @@ namespace VoxelEngine.Transport
         // quarry restored mid-mine, or built from an older prefab, simply has no pivot and
         // this does nothing.
         private Transform _cw;
+        private bool _cwMissing;
         private float _cwSpeed;
         private const float CutterSpinMining = 165f;    // degrees/second while cutting
         private const float CutterSpinWorking = 26f;    // degrees/second while surveying/building
@@ -420,7 +442,22 @@ namespace VoxelEngine.Transport
 
         void SpinCutter(float dt, bool powered)
         {
-            if (_cw == null) _cw = transform.Find("CutterWheelPivot");
+            if (_cw == null && !_cwMissing)
+            {
+                // Direct child first (how the wizard authors it), then anywhere in the body:
+                // a prefab that hangs the wheel under a sub-frame must still turn.
+                _cw = transform.Find("CutterWheelPivot") ?? FindDeep(transform, "CutterWheelPivot");
+                if (_cw == null)
+                {
+                    _cwMissing = true;
+                    // One clear line instead of a silently parked machine: a quarry built
+                    // from a prefab older than the spinning wheel has no pivot to turn.
+                    Debug.LogWarning("[Quarry] '" + name + "' has no CutterWheelPivot, so its cutter " +
+                                     "wheel cannot turn. Run Tools > Voxel Engine > Voxel Engine Setup > " +
+                                     "Factory, Industry & Power > 'Rebuild the Quarry machine...' to author " +
+                                     "the current machine.", this);
+                }
+            }
             if (_cw == null) return;
 
             float target = !powered ? 0f
@@ -430,6 +467,21 @@ namespace VoxelEngine.Transport
 
             _cwSpeed = Mathf.MoveTowards(_cwSpeed, target, CutterSpinAccel * dt);
             if (_cwSpeed != 0f) _cw.Rotate(Vector3.right, _cwSpeed * dt, Space.Self);
+        }
+
+        /// <summary>Depth-first search for a child by name, for prefabs whose hierarchy
+        /// differs from the one the setup tool authors.</summary>
+        private static Transform FindDeep(Transform root, string name)
+        {
+            if (root == null) return null;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                var child = root.GetChild(i);
+                if (child.name == name) return child;
+                var hit = FindDeep(child, name);
+                if (hit != null) return hit;
+            }
+            return null;
         }
 
         void CreateGhostIfUnpowered()
@@ -625,23 +677,79 @@ namespace VoxelEngine.Transport
         {
             if(CurrentDepth>=MaxDepth){Phase=QuarryPhase.Complete;if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);_dr=_bm=null;return;}
             EnsureOutput();
-            bool sp=false;for(int i=0;i<_out.Size;i++)if(_out.GetSlot(i).IsEmpty){sp=true;break;}
-            if(!sp){IsOutputFull=true;return;}
+            if(!HasOutputRoom()){IsOutputFull=true;return;}
             IsOutputFull=false;
-            var t=CellVoxel(_cx,_cz,CurrentDepth);
-            var v=_w.GetVoxelWorld(t);
-            if(v.material==(byte)MaterialId.LegacySolidFloor)v.material=(byte)MaterialId.Stone;
-            if(v.density>VoxelConstants.ISO_LEVEL)
-            {
-                var def=_mr?.Get(v.material);
-                if(def==null||!def.isMineable||quarryTier>=def.miningTier)
-                {
-                    _w.SetVoxelWorld(t,Voxel.Empty);
-                    if(def?.dropItem&&def.dropAmount>0)OI(def.dropItem,def.dropAmount);
-                }
-            }
+
+            // 17.27.4-dev: THE CELL'S FOOTPRINT IS MINED, NOT ITS CENTRE VOXEL.
+            //
+            // The machine is surface-aligned, so on a sphere its own X/Z axes are not the
+            // voxel grid's axes - they cut through the grid at whatever angle the ground
+            // there happens to have. A single cell centre therefore rounds to a voxel that
+            // its neighbour never touches, and the pit came out as strands of untouched
+            // ground standing between the cuts. Every voxel the cell covers at this layer
+            // is cut instead, from the real corners of the cell, so the floor is a floor.
+            CellVoxelBox(_cx, _cz, CurrentDepth, out var lo, out var hi);
+            bool room = true;
+            for (int x = lo.x; x <= hi.x && room; x++)
+            for (int y = lo.y; y <= hi.y && room; y++)
+            for (int z = lo.z; z <= hi.z && room; z++)
+                room = CutVoxel(new Vector3Int(x, y, z));
+            if (!room) IsOutputFull = true;
             AD();
         }
+
+        /// <summary>Is there a slot for one more drop? Checked BEFORE a voxel is cut, so a
+        /// full output holds the machine up instead of voiding ore.</summary>
+        bool HasOutputRoom()
+        {
+            EnsureOutput();
+            for (int i = 0; i < _out.Size; i++) if (_out.GetSlot(i).IsEmpty) return true;
+            return false;
+        }
+
+        /// <summary>Cut one voxel. Returns false when the drop could not be stored, which stops
+        /// this tick's cutting (the voxel is left standing for the next one).</summary>
+        bool CutVoxel(Vector3Int v)
+        {
+            var vox = _w.GetVoxelWorld(v);
+            if(vox.material==(byte)MaterialId.LegacySolidFloor)vox.material=(byte)MaterialId.Stone;
+            if(vox.density<=VoxelConstants.ISO_LEVEL)return true;               // already air
+            var def=_mr?.Get(vox.material);
+            if(def!=null&&def.isMineable&&quarryTier<def.miningTier)return true; // too hard for this tier
+            if(def?.dropItem!=null&&def.dropAmount>0&&!HasOutputRoom())return false;
+            _w.SetVoxelWorld(v,Voxel.Empty);
+            if(def?.dropItem!=null&&def.dropAmount>0)OI(def.dropItem,def.dropAmount);
+            return true;
+        }
+
+        /// <summary>The voxel box a cell occupies at one depth layer, taken from the cell's own
+        /// eight corners: the layer a surface-aligned machine cuts is a slab that passes
+        /// diagonally through the grid, and the corners are the only honest description of it.
+        /// Clamped to a 3-voxel cube, because a one metre cell can never need more.</summary>
+        void CellVoxelBox(int a, int b, int depth, out Vector3Int lo, out Vector3Int hi)
+        {
+            float x0 = a - AreaX * 0.5f, x1 = x0 + 1f;
+            float z0 = forwardOffset + b,  z1 = z0 + 1f;
+            float yTop = ColTop(a, b) - depth;
+            float yBot = yTop - 1f;
+            lo = new Vector3Int(int.MaxValue, int.MaxValue, int.MaxValue);
+            hi = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
+            for (int i = 0; i < 8; i++)
+            {
+                var local = new Vector3((i & 1) == 0 ? x0 : x1,
+                                        (i & 2) == 0 ? yBot : yTop,
+                                        (i & 4) == 0 ? z0 : z1);
+                var vox = _w.WorldToVoxel(transform.TransformPoint(local));
+                lo = Vector3Int.Min(lo, vox);
+                hi = Vector3Int.Max(hi, vox);
+            }
+            hi = Vector3Int.Min(hi, lo + new Vector3Int(2, 2, 2));
+        }
+
+        /// <summary>This column's probed surface height in local y, with the historical block
+        /// plane as the fallback for a column that found no ground at all.</summary>
+        float ColTop(int a, int b)
+            => (_colTop != null && a * AreaZ + b < _colTop.Length) ? _colTop[a * AreaZ + b] : -0.5f;
         void AD(){_cx++;if(_cx>=AreaX){_cx=0;_cz++;if(_cz>=AreaZ){_cz=0;CurrentDepth++;}}}
         // Mined items go ONLY into the Output container. The shared
         // ItemPortRouting component then ejects them through configured OUTPUT
@@ -700,6 +808,16 @@ namespace VoxelEngine.Transport
             if(Phase==QuarryPhase.Mining && _ok && _dr==null) CDr();
             if(Phase==QuarryPhase.Complete){if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
             if(_ok){_ls=EffSize;RecomputeArea();CalculateMaxDepth();CreateGhostIfUnpowered();}
+            // 17.27.4-dev: the tape and the pit frame are runtime objects, so a reload used to
+            // leave a working quarry with no outline at all - the mining area simply vanished
+            // from the world. The frame is rebuilt from the same pieces the build phase put
+            // there, and a machine still surveying gets its tape back.
+            if(_ok && _fs.Count==0 && (Phase==QuarryPhase.BuildingFrame || Phase==QuarryPhase.Mining))
+            {
+                PF();
+                foreach(var piece in _fp) PS(piece);
+            }
+            if(_ok && Phase==QuarryPhase.TapeFrame && _ta==null) CTp();
         }
         void OnDestroy(){DestroyGhost();DTp();HPP();foreach(var fb in _fs)if(fb)Destroy(fb);_fs.Clear();if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
         static Material ME(Color c,float es){var s=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(s);m.color=c;m.SetColor("_BaseColor",c);m.SetColor("_EmissionColor",c*es);m.EnableKeyword("_EMISSION");return m;}
