@@ -328,14 +328,41 @@ namespace VoxelEngine.Items
 
         private void TryCollectOnContact(Collider other)
         {
-            if (other == null || Time.time - _spawnTime < _pickupDelay) return;
+            if (other == null) return;
             if (stack == null || stack.IsEmpty) return;
+
+            var stationaryChute = other.GetComponentInParent<VoxelEngine.Simulation.ReceivingChute>();
+            if (stationaryChute != null && stationaryChute.TryCollectDroppedItem(this)) return;
+
+            var gridChute = other.GetComponentInParent<VoxelEngine.GridSystem.GridReceivingChute>();
+            if (gridChute != null && gridChute.TryCollectDroppedItem(this)) return;
+
+            if (Time.time - _spawnTime < _pickupDelay) return;
 
             var belt = other.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>();
             if (belt != null && TryInsertIntoConveyor(belt)) return;
 
             var inv = other.GetComponentInParent<Inventory>();
             if (inv != null && (inv != _dropOwner || _ownerLeftPickupRange)) TryPickup(inv);
+        }
+
+        /// <summary>Consumes up to <paramref name="count"/> items from this world drop into a receiving chute or collector.</summary>
+        public int ConsumeCount(int count)
+        {
+            if (stack == null || stack.IsEmpty || count <= 0) return 0;
+            int taken = Mathf.Min(stack.count, count);
+            stack.count -= taken;
+            _registeredItemCount = Mathf.Max(0, _registeredItemCount - taken);
+            ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - taken);
+            if (stack.count <= 0)
+            {
+                Despawn();
+            }
+            else
+            {
+                VoxelEngine.Networking.DropSync.AnnounceUpdated(this);
+            }
+            return taken;
         }
 
         private void OnTriggerExit(Collider other)

@@ -46,6 +46,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridSatellitePayload sp2: return MakeScrollable(SatellitePayloadPanel(sp2));
                 case GridSatelliteLab sl:   return MakeScrollable(SatelliteLabPanel(sl));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
+                case GridCargoDropHatch dh: return MakeScrollable(DropHatchPanel(dh, slot));
+                case GridReceivingChute grc: return MakeScrollable(GridReceivingChutePanel(grc, slot));
                 case GridWeapon gw:         return MakeScrollable(WeaponPanel(gw, slot));
                 case GridRefinery rf:       return MakeScrollable(ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r));
                 case GridChemicalPlant cp:  return MakeScrollable(ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid, cp.selectedRecipe, r => cp.selectedRecipe = r));
@@ -3879,6 +3881,253 @@ namespace VoxelEngine.GridSystem.UI
             r.style.flexDirection = FlexDirection.Row;
             r.style.alignItems = Align.Center;
             return r;
+        }
+
+        // ── CARGO DROP HATCH (17.24.0-dev) ──────────────────────────────────────
+        private static VisualElement DropHatchPanel(GridCargoDropHatch dh, MachineUIs.SlotBuilder slot)
+        {
+            dh.EnsureContainers();
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            bool dropping = dh.Enabled && dh.hatchOpen && dh.Open01 >= 0.65f && !dh.container.IsEmpty();
+            string status = !dh.Enabled ? "DISABLED"
+                : dropping ? "DROPPING"
+                : dh.hatchOpen ? "BAY OPEN"
+                : "CLOSED";
+            Color statusCol = !dh.Enabled ? T.AccentRed
+                : dropping ? T.AccentGreen
+                : dh.hatchOpen ? T.AccentGold
+                : T.TextMuted;
+
+            var title = string.IsNullOrWhiteSpace(dh.blockName) || dh.blockName == "Armor Block"
+                ? "Cargo Drop Hatch"
+                : dh.blockName;
+            var (hdr, _, _, _) = T.HeaderRow($"🪂 {title}", status, statusCol);
+            p.Add(hdr);
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!dh.Enabled ? 0 : dh.hatchOpen ? 2 : 1));
+
+            p.Add(GridUIHelpers.WeightCapHeader(dh.CurrentMassKg, dh.maxMassKg));
+            var segTrack = LcdHudTheme.CreateSegmentTrack(14, out var segs, height: 9f);
+            segTrack.style.marginTop = 2;
+            p.Add(segTrack);
+            LcdHudTheme.AnimateSegments(segs, dh.Fill01, dh.Fill01 >= 0.99f ? T.AccentRed : T.AccentGold);
+            p.Add(T.StatRow("📦", "Total Dropped", $"{dh.TotalDroppedCount:N0} items", T.AccentCyan));
+            p.Add(T.StatRow("🚪", "Bay Doors", $"{dh.Open01 * 100f:0}% ({(dh.hatchOpen ? "OPEN" : "SHUT")})",
+                dh.hatchOpen ? T.AccentGreen : T.TextSecondary));
+            p.Add(T.Spacer(6));
+
+            // ── Primary Hatch Controls ──
+            p.Add(GridUIHelpers.SectionTitle("Bay Door & Auto-Pull Controls"));
+            var ctrlRow = new VisualElement();
+            ctrlRow.style.flexDirection = FlexDirection.Row;
+            ctrlRow.style.flexWrap = Wrap.Wrap;
+            ctrlRow.style.alignItems = Align.Center;
+            ctrlRow.style.marginBottom = 6;
+
+            var doorBtn = T.SmallButton(dh.hatchOpen ? "🚪 CLOSE HATCH" : "🚪 OPEN HATCH", () =>
+            {
+                dh.ToggleHatchOpen();
+            }, dh.hatchOpen ? T.AccentAmber : T.AccentGreen);
+            doorBtn.style.marginRight = 6;
+            doorBtn.style.marginBottom = 4;
+            ctrlRow.Add(doorBtn);
+
+            var pullBtn = T.SmallButton(dh.autoPullFromGrid ? "Auto-Pull: ON" : "Auto-Pull: OFF", () =>
+            {
+                dh.autoPullFromGrid = !dh.autoPullFromGrid;
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
+                VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
+            }, dh.autoPullFromGrid ? T.AccentCyan : T.BgSlot);
+            pullBtn.style.marginRight = 6;
+            pullBtn.style.marginBottom = 4;
+            ctrlRow.Add(pullBtn);
+
+            var autoDoorBtn = T.SmallButton(dh.autoOpenWithFilter ? "Auto-Door: ON" : "Auto-Door: OFF", () =>
+            {
+                dh.autoOpenWithFilter = !dh.autoOpenWithFilter;
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
+                VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
+            }, dh.autoOpenWithFilter ? T.AccentGold : T.BgSlot);
+            autoDoorBtn.style.marginBottom = 4;
+            ctrlRow.Add(autoDoorBtn);
+            p.Add(ctrlRow);
+
+            // ── 4 Toggleable Multi-Item Filters (only one active at once) ──
+            var filterHeaderRow = new VisualElement();
+            filterHeaderRow.style.flexDirection = FlexDirection.Row;
+            filterHeaderRow.style.alignItems = Align.Center;
+            filterHeaderRow.style.marginTop = 4;
+            filterHeaderRow.style.marginBottom = 4;
+            var filterTitle = GridUIHelpers.SectionTitle("4 Toggleable Export Filters (1 Active Max)");
+            filterTitle.style.flexGrow = 1;
+            filterHeaderRow.Add(filterTitle);
+
+            var allOffBtn = T.SmallButton("ALL OFF", () => dh.SetActiveFilter(-1),
+                dh.activeFilterIndex < 0 ? T.AccentRed : T.BgSlot);
+            filterHeaderRow.Add(allOffBtn);
+            p.Add(filterHeaderRow);
+
+            for (int i = 0; i < GridCargoDropHatch.FilterCount; i++)
+            {
+                int filterIdx = i;
+                var preset = dh.GetFilter(filterIdx);
+                bool isActive = dh.activeFilterIndex == filterIdx;
+
+                var card = T.Card();
+                card.style.marginBottom = 6;
+                card.style.flexDirection = FlexDirection.Column;
+                if (isActive) T.Border(card, 1, T.AccentGreen);
+
+                var topRow = new VisualElement();
+                topRow.style.flexDirection = FlexDirection.Row;
+                topRow.style.alignItems = Align.Center;
+                topRow.style.flexWrap = Wrap.Wrap;
+
+                var toggleBtn = T.SmallButton(isActive ? $"● F{filterIdx + 1}: ACTIVE" : $"○ F{filterIdx + 1}: OFF", () =>
+                {
+                    dh.ToggleFilter(filterIdx);
+                }, isActive ? T.AccentGreen : T.BgSlot);
+                toggleBtn.style.marginRight = 6;
+                toggleBtn.style.minWidth = 104;
+                topRow.Add(toggleBtn);
+
+                var nameField = new TextField { value = preset.label ?? $"Filter {filterIdx + 1}" };
+                nameField.style.width = 115;
+                nameField.style.marginRight = 6;
+                nameField.RegisterValueChangedCallback(e =>
+                {
+                    preset.label = e.newValue;
+                    VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
+                });
+                nameField.RegisterCallback<FocusInEvent>(_ => PortConfigHud.IsAnyDropdownOpen = true);
+                nameField.RegisterCallback<FocusOutEvent>(_ => PortConfigHud.IsAnyDropdownOpen = false);
+                topRow.Add(nameField);
+
+                var allItemsBtn = T.SmallButton(preset.matchAllItems ? "All Items: ON" : "All Items: OFF", () =>
+                {
+                    preset.matchAllItems = !preset.matchAllItems;
+                    VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
+                    VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
+                }, preset.matchAllItems ? T.AccentGold : T.BgSlot);
+                allItemsBtn.style.marginRight = 6;
+                topRow.Add(allItemsBtn);
+
+                var editBtn = T.SmallButton("Edit Items...", () =>
+                {
+                    var root = card.panel?.visualTree;
+                    if (root != null)
+                    {
+                        preset.ResolveSavedIds();
+                        ItemFilterDialog.OpenList(
+                            root,
+                            $"Drop Hatch · Filter {filterIdx + 1} ({preset.label})",
+                            "Search or shift-click inventory items to include in this filter preset.",
+                            () =>
+                            {
+                                preset.ResolveSavedIds();
+                                return preset.items;
+                            },
+                            item =>
+                            {
+                                preset.AddItem(item);
+                                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
+                            },
+                            item =>
+                            {
+                                preset.RemoveItem(item);
+                                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
+                            },
+                            () => VoxelEngine.UI.GameUIController.Instance?.RequestRefresh());
+                    }
+                }, T.AccentCyan);
+                topRow.Add(editBtn);
+
+                card.Add(topRow);
+                card.Add(T.Spacer(3));
+                card.Add(T.Muted($"Matches: {preset.SummaryText()}"));
+                p.Add(card);
+            }
+
+            p.Add(T.Spacer(4));
+            p.Add(GridUIHelpers.SectionTitle("Hatch Drop Buffer"));
+            var grid = T.SlotGrid(6);
+            for (int i = 0; i < dh.container.Size; i++)
+                grid.Add(slot(dh.container, i, dh.container.GetSlot(i), false, true));
+            p.Add(grid);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton("🛰  Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(dh.Grid), T.AccentCyan));
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
+        // ── GRID RECEIVING CHUTE (17.24.0-dev) ──────────────────────────────────
+        private static VisualElement GridReceivingChutePanel(GridReceivingChute grc, MachineUIs.SlotBuilder slot)
+        {
+            grc.EnsureContainers();
+            var p = T.MachinePanel();
+            p.style.width = 460;
+
+            string status = !grc.Enabled ? "DISABLED"
+                : grc.Fill01 >= 0.99f ? "FULL"
+                : "CATCHING";
+            Color statusCol = !grc.Enabled ? T.AccentRed
+                : grc.Fill01 >= 0.99f ? T.AccentAmber
+                : T.AccentGreen;
+
+            var title = string.IsNullOrWhiteSpace(grc.blockName) || grc.blockName == "Armor Block"
+                ? "Grid Receiving Chute"
+                : grc.blockName;
+            var (hdr, _, _, _) = T.HeaderRow($"📥 {title}", status, statusCol);
+            p.Add(hdr);
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!grc.Enabled ? 0 : grc.Fill01 >= 0.99f ? 1 : 2));
+
+            p.Add(GridUIHelpers.WeightCapHeader(grc.CurrentMassKg, grc.maxMassKg));
+            var segTrack = LcdHudTheme.CreateSegmentTrack(14, out var segs, height: 9f);
+            segTrack.style.marginTop = 2;
+            p.Add(segTrack);
+            LcdHudTheme.AnimateSegments(segs, grc.Fill01, grc.Fill01 >= 0.99f ? T.AccentRed : T.AccentCyan);
+            p.Add(T.StatRow("📥", "Total Captured", $"{grc.TotalCapturedCount:N0} items", T.AccentCyan));
+            p.Add(T.Spacer(6));
+
+            var ctrlRow = new VisualElement();
+            ctrlRow.style.flexDirection = FlexDirection.Row;
+            ctrlRow.style.alignItems = Align.Center;
+            ctrlRow.style.marginBottom = 8;
+
+            var enableBtn = T.SmallButton(grc.Enabled ? "Enabled" : "Disabled", () =>
+            {
+                grc.Enabled = !grc.Enabled;
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(grc);
+                VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
+            }, grc.Enabled ? T.AccentGreen : T.AccentRed);
+            enableBtn.style.marginRight = 8;
+            ctrlRow.Add(enableBtn);
+
+            var pushBtn = T.SmallButton(grc.autoPushToGridCargo ? "Auto-Push to Grid Cargo: ON" : "Auto-Push to Grid Cargo: OFF", () =>
+            {
+                grc.autoPushToGridCargo = !grc.autoPushToGridCargo;
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(grc);
+                VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
+            }, grc.autoPushToGridCargo ? T.AccentCyan : T.BgSlot);
+            ctrlRow.Add(pushBtn);
+            p.Add(ctrlRow);
+
+            p.Add(GridUIHelpers.SectionTitle("Captured Hopper Buffer"));
+            var grid = T.SlotGrid(6);
+            for (int i = 0; i < grc.container.Size; i++)
+                grid.Add(slot(grc.container, i, grc.container.GetSlot(i), false, true));
+            p.Add(grid);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton("🛰  Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(grc.Grid), T.AccentCyan));
+            IndustrialTheme.Frame(p);
+            return p;
         }
     }
 }

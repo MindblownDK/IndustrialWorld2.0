@@ -1146,6 +1146,12 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridBeacon beacon) return beacon.IsActive ? "Active" : "Off";
             if (block is GridOreDetector detector) return $"{detector.DetectedOres.Count} ores";
             if (block is GridSlidingDoor door) return door.IsOpen ? "Open" : "Closed";
+            if (block is GridCargoDropHatch dh)
+                return dh.activeFilterIndex >= 0
+                    ? $"F{dh.activeFilterIndex + 1} Active · {(dh.hatchOpen ? "Open" : "Shut")}"
+                    : (dh.hatchOpen ? "Open" : "Closed");
+            if (block is GridReceivingChute grc)
+                return grc.Enabled ? $"Catching ({grc.TotalCapturedCount:N0})" : "Disabled";
             if (block is VoxelEngine.Simulation.GridLightBlock light) return light.IsOnline ? "On" : "Off";
             if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return block.Enabled ? "On" : "Off";
             if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
@@ -1171,6 +1177,8 @@ namespace VoxelEngine.GridSystem.UI
             if (block is VoxelEngine.Maritime.GridHullBlock) return "Hull Blocks";
             if (block is GridBattery) return "Batteries";
             if (block is GridCargoContainer) return "Cargo Containers";
+            if (block is GridCargoDropHatch) return "Cargo Drop Hatches";
+            if (block is GridReceivingChute) return "Receiving Chutes";
             if (block is GridDrill) return "Mining Drills";
             if (block is GridThruster) return "Thrusters";
             if (block is GridGasTank) return "Gas Tanks";
@@ -1262,6 +1270,14 @@ namespace VoxelEngine.GridSystem.UI
                     case GridCargoContainer cargo:
                         if (cargo.container == null) cargo.OnPlaced();
                         Add($"{cargo.blockName} (Cargo)", cargo.container, cargo.maxMassKg);
+                        break;
+                    case GridCargoDropHatch dropHatch:
+                        dropHatch.EnsureContainers();
+                        Add($"{dropHatch.blockName} (Drop Hatch)", dropHatch.container, dropHatch.maxMassKg);
+                        break;
+                    case GridReceivingChute gridChute:
+                        gridChute.EnsureContainers();
+                        Add($"{gridChute.blockName} (Receiving Chute)", gridChute.container, gridChute.maxMassKg);
                         break;
                     case GridDockingPort dock:
                         if (dock.container == null) dock.OnPlaced();

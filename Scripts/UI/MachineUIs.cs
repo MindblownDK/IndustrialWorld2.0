@@ -123,7 +123,7 @@ namespace VoxelEngine.UI
             p.Add(IndustrialTheme.HazardDivider());
             p.Add(IndustrialTheme.Lamps(!washer.UserEnabled || !washer.IsOnline ? 0 : washer.IsActive ? 2 : 1));
 
-            var content = new ScrollView(ScrollViewMode.Vertical);
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "OreWasherContentScroll" };
             content.style.flexGrow = 1;
             content.style.marginTop = 6;
             T.StyleScroller(content);
@@ -217,7 +217,7 @@ namespace VoxelEngine.UI
             content.Add(T.Divider());
 
             content.Add(T.Subtitle("Recipe Selection"));
-            var recipeList = new ScrollView(ScrollViewMode.Vertical);
+            var recipeList = new ScrollView(ScrollViewMode.Vertical) { name = "OreWasherRecipeScroll" };
             recipeList.style.maxHeight = 168;
             recipeList.style.marginBottom = 8;
             T.StyleScroller(recipeList);
@@ -246,8 +246,6 @@ namespace VoxelEngine.UI
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(washer.upgradeC, slot)));
             }
             content.Add(slotRow);
-            content.Add(T.Spacer(8));
-            content.Add(T.Muted("Connect a Water Pipe (or pour with a Liquid Canister) and feed Crushed Ore or Mineral Tailings."));
             IndustrialTheme.Frame(p);
             return p;
         }
@@ -271,7 +269,7 @@ namespace VoxelEngine.UI
             p.Add(IndustrialTheme.HazardDivider());
             p.Add(IndustrialTheme.Lamps(!foundry.UserEnabled || !foundry.IsOnline ? 0 : foundry.IsActive ? 2 : 1));
 
-            var content = new ScrollView(ScrollViewMode.Vertical);
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "FoundryContentScroll" };
             content.style.flexGrow = 1;
             content.style.marginTop = 6;
             T.StyleScroller(content);
@@ -323,7 +321,7 @@ namespace VoxelEngine.UI
             content.Add(T.Divider());
 
             content.Add(T.Subtitle("Metallurgical Recipes"));
-            var recipeList = new ScrollView(ScrollViewMode.Vertical);
+            var recipeList = new ScrollView(ScrollViewMode.Vertical) { name = "FoundryRecipeScroll" };
             recipeList.style.maxHeight = 176;
             recipeList.style.marginBottom = 8;
             T.StyleScroller(recipeList);
@@ -357,10 +355,6 @@ namespace VoxelEngine.UI
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(foundry.upgradeC, slot)));
             }
             content.Add(slotRow);
-            content.Add(T.Spacer(8));
-            content.Add(T.Muted(foundry.UsesSolidFuel
-                ? "Cokes Coal into Metallurgical Coke, carburizes Iron + Coke into Steel, and cements Copper + Zinc Calamine + Coke into Brass. Byproduct Foundry Slag can be crushed or washed."
-                : "High-temperature 3-phase electric arc foundry. Runs coking, steel, and brass alloying at 1.75x base speed with bonus ingot yields."));
             IndustrialTheme.Frame(p);
             return p;
         }
@@ -491,6 +485,62 @@ namespace VoxelEngine.UI
             content.Add(modeRow);
 
             content.Add(T.Muted("Import pulls items from the belt side into the inventory side. Export pulls from the inventory side and pushes onto the belt side."));
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
+        public static VisualElement ReceivingChutePanel(ReceivingChute chute, SlotBuilder slot)
+        {
+            chute.EnsureContainers();
+            var p = T.MachinePanel();
+            string status = !chute.UserEnabled ? "DISABLED"
+                : chute.Fill01 >= 0.99f ? "FULL"
+                : chute.IsActive ? "TRANSFERRING"
+                : "CATCHING";
+            Color statusColor = !chute.UserEnabled ? T.AccentRed
+                : chute.Fill01 >= 0.99f ? T.AccentAmber
+                : T.AccentGreen;
+
+            p.Add(BuildHeader("📥", chute.MachineName, status, statusColor, T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!chute.UserEnabled ? 0 : chute.Fill01 >= 0.99f ? 1 : 2));
+
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "ReceivingChuteContentScroll" };
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            p.Add(content);
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            top.style.flexWrap = Wrap.Wrap;
+            top.style.marginBottom = 8;
+
+            var toggleBtn = T.SmallButton(chute.UserEnabled ? "Enabled" : "Disabled", () =>
+            {
+                chute.UserEnabled = !chute.UserEnabled;
+                GameUIController.Instance?.RequestRefresh();
+            }, chute.UserEnabled ? T.AccentGreen : T.AccentRed);
+            toggleBtn.style.marginRight = 8;
+            top.Add(toggleBtn);
+
+            var pushBtn = T.SmallButton(chute.autoPushToNeighbors ? "Auto-Export: ON" : "Auto-Export: OFF", () =>
+            {
+                chute.autoPushToNeighbors = !chute.autoPushToNeighbors;
+                GameUIController.Instance?.RequestRefresh();
+            }, chute.autoPushToNeighbors ? T.AccentCyan : T.BgSlot);
+            top.Add(pushBtn);
+            content.Add(top);
+
+            content.Add(T.StatRow("▣", "Buffered Items", $"{chute.BufferedItemCount:N0}", T.AccentCyan));
+            content.Add(T.StatRow("📥", "Total Captured", $"{chute.TotalCapturedCount:N0}", T.AccentGold));
+            var (fillBar, _) = T.ProgressBar(chute.Fill01, T.AccentCyan, 8, false);
+            content.Add(fillBar);
+            content.Add(T.Divider());
+
+            content.Add(T.Subtitle("Hopper Buffer"));
+            content.Add(T.SlotCard("Captured Items", SlotGrid(chute.buffer, slot)));
             IndustrialTheme.Frame(p);
             return p;
         }
@@ -647,7 +697,7 @@ namespace VoxelEngine.UI
             p.Add(IndustrialTheme.HazardDivider());
             p.Add(IndustrialTheme.Lamps(!machine.UserEnabled || !machine.IsOnline ? 0 : machine.IsActive ? 2 : 1));
 
-            var content = new ScrollView(ScrollViewMode.Vertical);
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "ProcContentScroll" };
             content.style.flexGrow = 1;
             content.style.marginTop = 6;
             T.StyleScroller(content);
@@ -671,7 +721,7 @@ namespace VoxelEngine.UI
             content.Add(T.Divider());
 
             content.Add(T.Subtitle("Recipe Selection"));
-            var recipeList = new ScrollView(ScrollViewMode.Vertical);
+            var recipeList = new ScrollView(ScrollViewMode.Vertical) { name = "ProcRecipeScroll" };
             recipeList.style.maxHeight = 168;
             recipeList.style.marginBottom = 8;
             T.StyleScroller(recipeList);
@@ -700,19 +750,40 @@ namespace VoxelEngine.UI
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(upgrades, slot)));
             }
             content.Add(slotRow);
-            content.Add(T.Spacer(8));
-            content.Add(T.Muted(hint));
             IndustrialTheme.Frame(p);
             return p;
         }
 
         private static VisualElement SlotGrid(ItemContainer container, SlotBuilder slot)
         {
-            var grid = T.SlotGrid();
-            if (container == null || slot == null) return grid;
+            var col = new VisualElement();
+            col.style.flexDirection = FlexDirection.Column;
+            col.style.flexShrink    = 0;
+            col.style.alignItems    = Align.Center;
+            if (container == null || slot == null || container.Size <= 0) return col;
+
+            const int maxCols = 4;
+            VisualElement currentRow = null;
             for (int i = 0; i < container.Size; i++)
-                grid.Add(slot(container, i, container.GetSlot(i), false, true));
-            return grid;
+            {
+                if (i % maxCols == 0)
+                {
+                    currentRow = new VisualElement();
+                    currentRow.style.flexDirection = FlexDirection.Row;
+                    currentRow.style.flexWrap      = Wrap.NoWrap;
+                    currentRow.style.flexShrink    = 0;
+                    currentRow.style.alignItems    = Align.Center;
+                    if (i > 0) currentRow.style.marginTop = 4;
+                    col.Add(currentRow);
+                }
+                var slotEl = slot(container, i, container.GetSlot(i), false, true);
+                if (slotEl != null)
+                {
+                    slotEl.style.flexShrink = 0;
+                    currentRow.Add(slotEl);
+                }
+            }
+            return col;
         }
 
         private static Button ModeButton(string text, bool selected, Color accent, System.Action onClick)

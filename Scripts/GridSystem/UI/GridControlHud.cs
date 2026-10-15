@@ -229,6 +229,7 @@ namespace VoxelEngine.GridSystem.UI
 
             // Digit keys fire the slots while seated (the player hotbar yields them).
             var slots = SlotsFor(grid);
+            EnsureDefaultDropHatchBindings(grid, slots);
             for (int i = 0; i < SlotCount; i++)
                 if (GameSettings.WasPressed(HotbarAction(i)))
                     ExecuteSlot(grid, i);
@@ -364,6 +365,25 @@ namespace VoxelEngine.GridSystem.UI
                 return anyLocked ? "LOCKED" : "FREE";
             }
 
+            if (a.actionId != null && a.actionId.StartsWith("hatch_", System.StringComparison.Ordinal))
+            {
+                GridCargoDropHatch hatch = null;
+                foreach (var b in members)
+                    if (b is GridCargoDropHatch dh) { hatch = dh; break; }
+                if (hatch == null) return "N/A";
+                return a.actionId switch
+                {
+                    "hatch_toggle"       => hatch.hatchOpen ? "OPEN" : "SHUT",
+                    "hatch_filter_1"     => hatch.activeFilterIndex == 0 ? "ACTIVE" : "OFF",
+                    "hatch_filter_2"     => hatch.activeFilterIndex == 1 ? "ACTIVE" : "OFF",
+                    "hatch_filter_3"     => hatch.activeFilterIndex == 2 ? "ACTIVE" : "OFF",
+                    "hatch_filter_4"     => hatch.activeFilterIndex == 3 ? "ACTIVE" : "OFF",
+                    "hatch_filter_cycle" => hatch.activeFilterIndex >= 0 ? $"F{hatch.activeFilterIndex + 1}" : "OFF",
+                    "hatch_filter_off"   => hatch.activeFilterIndex < 0 ? "OFF" : $"F{hatch.activeFilterIndex + 1}",
+                    _                    => hatch.hatchOpen ? "OPEN" : "SHUT"
+                };
+            }
+
             int on = 0;
             foreach (var b in members) if (b.Enabled) on++;
             if (on == 0) return "OFF";
@@ -373,9 +393,13 @@ namespace VoxelEngine.GridSystem.UI
         private static Color SlotStateColor(string tag) => tag switch
         {
             "ON" => L.Phosphor,
+            "ACTIVE" => L.Phosphor,
+            "OPEN" => L.Phosphor,
+            "F1" or "F2" or "F3" or "F4" => L.Phosphor,
             "LOCKED" => new Color(0.35f, 0.80f, 0.95f),
             "MIXED" => T.AccentAmber,
             "FREE" => T.AccentAmber,
+            "SHUT" => T.AccentAmber,
             "OFF" => new Color(0.55f, 0.35f, 0.30f),
             _ => new Color(0.42f, 0.45f, 0.43f),
         };
@@ -418,12 +442,13 @@ namespace VoxelEngine.GridSystem.UI
                 new("on", "TURN ON"),
                 new("off", "TURN OFF"),
             };
-            bool gear = false, battery = false, tank = false;
+            bool gear = false, battery = false, tank = false, dropHatch = false;
             foreach (var b in members)
             {
                 if (b is GridLandingGear) gear = true;
                 else if (b is GridBattery) battery = true;
                 else if (b is GridLiquidTank || b is GridGasTank) tank = true;
+                else if (b is GridCargoDropHatch) dropHatch = true;
             }
             if (gear)
             {
@@ -434,7 +459,62 @@ namespace VoxelEngine.GridSystem.UI
             }
             if (battery) actions.Add(new ActionDef("battery_cycle", "CYCLE BATTERY MODE"));
             if (tank) actions.Add(new ActionDef("tank_cycle", "CYCLE TANK MODE"));
+            if (dropHatch)
+            {
+                actions.Add(new ActionDef("hatch_toggle", "OPEN / CLOSE HATCH"));
+                actions.Add(new ActionDef("hatch_filter_1", "FILTER 1 TOGGLE"));
+                actions.Add(new ActionDef("hatch_filter_2", "FILTER 2 TOGGLE"));
+                actions.Add(new ActionDef("hatch_filter_3", "FILTER 3 TOGGLE"));
+                actions.Add(new ActionDef("hatch_filter_4", "FILTER 4 TOGGLE"));
+                actions.Add(new ActionDef("hatch_filter_cycle", "CYCLE FILTER (1-4 / OFF)"));
+                actions.Add(new ActionDef("hatch_filter_off", "ALL FILTERS OFF"));
+            }
             return actions;
+        }
+
+        private static void EnsureDefaultDropHatchBindings(GridEntity grid, SlotAssignment[] slots)
+        {
+            if (grid == null || slots == null) return;
+            GridCargoDropHatch firstHatch = null;
+            bool anyHatchBound = false;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i] != null && slots[i].actionId != null && slots[i].actionId.StartsWith("hatch_", System.StringComparison.Ordinal))
+                {
+                    anyHatchBound = true;
+                    break;
+                }
+            }
+            if (anyHatchBound) return;
+
+            foreach (var b in grid.AllBlocks)
+            {
+                if (b is GridCargoDropHatch dh)
+                {
+                    firstHatch = dh;
+                    break;
+                }
+            }
+            if (firstHatch == null) return;
+
+            // Auto-populate up to 5 free hotbar slots with Filter 1..4 + Hatch Open/Close
+            // so the pilot can toggle the 4 filters directly from the cockpit hotbar keys.
+            string[] defaultIds = { "hatch_filter_1", "hatch_filter_2", "hatch_filter_3", "hatch_filter_4", "hatch_toggle" };
+            string[] defaultLabels = { "FILTER 1 TOGGLE", "FILTER 2 TOGGLE", "FILTER 3 TOGGLE", "FILTER 4 TOGGLE", "OPEN / CLOSE HATCH" };
+            int nextDefault = 0;
+            for (int i = 0; i < slots.Length && nextDefault < defaultIds.Length; i++)
+            {
+                if (slots[i] != null) continue;
+                slots[i] = new SlotAssignment
+                {
+                    kind = TargetKind.Block,
+                    block = firstHatch,
+                    key = BlockDisplayName(firstHatch),
+                    actionId = defaultIds[nextDefault],
+                    actionLabel = defaultLabels[nextDefault]
+                };
+                nextDefault++;
+            }
         }
 
         private static void ExecuteSlot(GridEntity grid, int index)
@@ -543,6 +623,61 @@ namespace VoxelEngine.GridSystem.UI
                         else if (b is GridGasTank gas) gas.mode = next;
                     }
                     return $"tanks → {next}";
+                }
+                case "hatch_toggle":
+                {
+                    bool anyOpen = false;
+                    int count = 0;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) { count++; if (dh.hatchOpen) anyOpen = true; }
+                    if (count == 0) return "no drop hatch";
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) dh.SetHatchOpen(!anyOpen);
+                    return anyOpen ? "hatch closing" : "hatch opening";
+                }
+                case "hatch_filter_1":
+                case "hatch_filter_2":
+                case "hatch_filter_3":
+                case "hatch_filter_4":
+                {
+                    int targetIdx = actionId switch
+                    {
+                        "hatch_filter_1" => 0,
+                        "hatch_filter_2" => 1,
+                        "hatch_filter_3" => 2,
+                        _ => 3
+                    };
+                    GridCargoDropHatch first = null;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) { first = dh; break; }
+                    if (first == null) return "no drop hatch";
+                    int nextFilter = first.activeFilterIndex == targetIdx ? -1 : targetIdx;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) dh.SetActiveFilter(nextFilter);
+                    return nextFilter >= 0
+                        ? $"Filter {nextFilter + 1} ({first.GetFilter(nextFilter).label}) ACTIVE"
+                        : "all drop filters OFF";
+                }
+                case "hatch_filter_cycle":
+                {
+                    GridCargoDropHatch first = null;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) { first = dh; break; }
+                    if (first == null) return "no drop hatch";
+                    int nextFilter = first.activeFilterIndex + 1;
+                    if (nextFilter >= GridCargoDropHatch.FilterCount) nextFilter = -1;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) dh.SetActiveFilter(nextFilter);
+                    return nextFilter >= 0
+                        ? $"Filter {nextFilter + 1} ({first.GetFilter(nextFilter).label}) ACTIVE"
+                        : "all drop filters OFF";
+                }
+                case "hatch_filter_off":
+                {
+                    int count = 0;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) { count++; dh.SetActiveFilter(-1); }
+                    return count > 0 ? "all drop filters OFF" : "no drop hatch";
                 }
             }
             return null;

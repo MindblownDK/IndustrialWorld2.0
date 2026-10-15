@@ -237,7 +237,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Build station life support", () => IndustrialWorld.EditorTools.StationLifeSupportSetup.RunStep90()),
                 Setup("Build the warp-coil resonator", BuildWarpCoilResonance),
                 Setup("Build paired warp gates", BuildWarpGateContent),
-                Setup("Build named and coded portals", BuildPortalContent));
+                Setup("Build named and coded portals", BuildPortalContent),
+                Setup("Build grid cargo drop hatch and large receiving chutes", () => VoxelEngine.EditorTools.DropHatchLogisticsSetup.RunStep116()));
 
             AddSetupGroup(parent, ref number, "Storage & Logistics",
                 "Storage tiers, network logistics, freight and automated crafting.", false,
@@ -7543,6 +7544,7 @@ root =>
             }
 
             EnsureItemPersistenceCatalog();
+            VoxelEngine.EditorTools.DropHatchLogisticsSetup.RunSilent();
             if (registry != null) EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -10696,6 +10698,7 @@ root =>
             registry.recipes.RemoveAll(recipe => recipe == null);
             EditorUtility.SetDirty(registry);
             VoxelEngine.EditorTools.OreWashingSetup.RunSilent();
+            VoxelEngine.EditorTools.DropHatchLogisticsSetup.RunSilent();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 

@@ -547,7 +547,9 @@ namespace VoxelEngine.UI
         public static VisualElement SlotCard(string label, VisualElement slot)
         {
             var card = new VisualElement();
-            card.style.alignItems = Align.Center;
+            card.style.alignItems   = Align.Center;
+            card.style.flexShrink   = 0;
+            card.style.marginBottom = 6;
 
             var l = new Label(label.ToUpper());
             l.style.color                   = new StyleColor(TextMuted);
@@ -559,6 +561,7 @@ namespace VoxelEngine.UI
             card.Add(l);
 
             var bg = new VisualElement();
+            bg.style.flexShrink    = 0;
             bg.style.paddingTop    = 5;
             bg.style.paddingBottom = 5;
             bg.style.paddingLeft   = 5;
@@ -566,7 +569,11 @@ namespace VoxelEngine.UI
             bg.style.backgroundColor = new StyleColor(BgCard);
             Radius(bg, CardRadius);
             Border(bg, 1, BorderDim);
-            bg.Add(slot);
+            if (slot != null)
+            {
+                slot.style.flexShrink = 0;
+                bg.Add(slot);
+            }
             card.Add(bg);
 
             return card;

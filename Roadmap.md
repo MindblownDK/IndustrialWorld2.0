@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.23.2-dev`
-**Roadmap Version:** `17.23.2-dev`
+**Current Version:** `17.24.0-dev`
+**Roadmap Version:** `17.24.0-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.24.0-dev - Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
+- Added `GridCargoDropHatch` (Small & Large Grid) with multi-stage clam-shell bay door animation, auto-pull from grid containers, and 4 mutually exclusive multi-item export filters toggleable from both the block UI and the cockpit hotbar (`GridControlHud`)
+- Added `ReceivingChute` (`3x2x3` stationary flared catch hopper) and `GridReceivingChute` (Small & Large Grid catch hopper) that capture falling `DroppedItem`s in a wide overhead funnel zone and route them to connected belts/chutes/chests or grid cargo containers
+- Fixed machine UI scroll reset across live rebuilds, `SlotCard`/`SlotGrid` border overflow, item tooltips while machine panels are open, Right-Click half-stack to cursor, Shift+Right-Click half-stack transfer, and removed bottom machine hint blurbs
+
 ### 17.23.2-dev / 17.23.1-dev / 17.23.0-dev - Two-Stage Metallurgical Coking, Steel & Brass Alloying Chain, and OreWasher Fluid Store Fix
 - Added `MetallurgicalFoundry` (`FoundryTier.CokeKiln` solid-fuel Beehive Coke & Alloy Kiln with auto-self-fueling and `FoundryTier.ArcFoundry` 3-Phase Electric Arc Foundry with 1.75x speed and 3 upgrade slots) plus `MetallurgicalFoundryAnimator`
 - Authored `Metallurgical Coke` (`18s` fuel), `Zinc Calamine`, `Foundry Slag`, and automatable coking, carburized/washed-ore Steel, calamine/concentrate Brass, and byproduct recycling recipes across Coke Kiln, Arc Foundry, Ore Washer, Crusher, and Furnaces
@@ -48,11 +53,6 @@
 - The Ghoul arm-pose cache is explicitly nonserialized and rebuilt at bind time, so Editor and player type layouts agree
 - Release builds no longer carry an unused private `infiniteHealth` copy; the development Inspector toggle is preserved
 - No gameplay, save, prefab, chunk or wire changes; no Setup rerun
-
-### 17.20.3-dev - Ghoul Attacks Swing Clearly; Paused Orbits Stay Put
-- The Ghoul's sibling-mesh shoulders, arms, hands and claws now share a shoulder-rooted pull-back, forward swipe and eased recovery; other hostile rigs are unchanged
-- Cosmic-clock watchdog follows scaled game time like `CosmicRegistry.Update`, so pausing cannot falsely advance the orbital phase or trigger a deep-space frame handoff
-- No prefab, biome data, save schema, chunk format or wire change; no Setup rerun
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

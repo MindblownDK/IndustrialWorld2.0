@@ -1849,6 +1849,15 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            var receivingChute = go.GetComponentInChildren<VoxelEngine.Simulation.ReceivingChute>(true);
+            if (receivingChute != null)
+            {
+                receivingChute.EnsureContainers();
+                var sc = SerializeMulti(receivingChute.buffer);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
             if (assembler != null)
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
@@ -5018,6 +5027,15 @@ namespace VoxelEngine.Persistence
             {
                 foundry.EnsureContainers();
                 DeserializeMulti(sc, foundry.inputC, foundry.fuelC, foundry.outputC, foundry.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var receivingChute = go.GetComponentInChildren<VoxelEngine.Simulation.ReceivingChute>(true);
+            if (receivingChute != null)
+            {
+                receivingChute.EnsureContainers();
+                DeserializeMulti(sc, receivingChute.buffer);
                 RestorePortSnapshot(go, sc);
                 return;
             }

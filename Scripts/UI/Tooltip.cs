@@ -23,9 +23,13 @@ namespace VoxelEngine.UI
         private static Label         _name, _category, _desc, _stats;
         private static VisualElement _statsCard;
 
-        private static VisualElement _lastHovered;
-        private static float         _hoverStart;
-        private const  float         HOVER_DELAY = 0.25f;
+        private static VisualElement  _lastHovered;
+        private static ItemDefinition _lastHoveredItem;
+        private static ItemStack      _lastValidStack;
+        private static float          _lastValidProbeTime;
+        private static Vector2        _lastValidPanelPos;
+        private static float          _hoverStart;
+        private const  float          HOVER_DELAY = 0.15f;
 
         // Sticky mode (14.40.0): a panel (e.g. the storage terminal grid) can
         // pin the tooltip itself. While pinned, the per-frame Tick does not
@@ -157,19 +161,45 @@ namespace VoxelEngine.UI
             }
 
             ItemStack stack = slotProbe?.Invoke(panelPos);
-            if (stack == null || stack.IsEmpty)
+            if (stack == null || stack.IsEmpty || stack.item == null)
             {
                 if (_sticky) return;   // a panel pinned the tooltip - leave it
-                Hide();
-                return;
+
+                // Live-refreshed machine panels rebuild their VisualElements every 0.25s;
+                // on that exact frame, UI Toolkit has not run its layout pass yet so
+                // panel.Pick(panelPos) returns null for one frame. Preserve the hover
+                // state across that layout frame if the cursor has not moved away.
+                if (_lastValidStack != null && !_lastValidStack.IsEmpty && _lastValidStack.item != null
+                    && Time.unscaledTime - _lastValidProbeTime < 0.09f
+                    && Vector2.Distance(panelPos, _lastValidPanelPos) < 14f)
+                {
+                    stack = _lastValidStack;
+                }
+                else
+                {
+                    Hide();
+                    return;
+                }
+            }
+            else
+            {
+                _lastValidStack     = stack;
+                _lastValidProbeTime = Time.unscaledTime;
+                _lastValidPanelPos  = panelPos;
             }
             _sticky = false;           // a real slot hover takes over again
 
-            // Hover timer — only show after HOVER_DELAY.
-            if (walked != _lastHovered)
+            // Hover timer — track by ItemDefinition rather than VisualElement identity so
+            // 0.25s live-machine UI refreshes do not reset the hover timer.
+            if (stack.item != _lastHoveredItem)
+            {
+                _lastHoveredItem = stack.item;
+                _lastHovered     = walked;
+                _hoverStart      = Time.unscaledTime;
+            }
+            else
             {
                 _lastHovered = walked;
-                _hoverStart  = Time.unscaledTime;
             }
             if (Time.unscaledTime - _hoverStart < HOVER_DELAY)
             {
@@ -195,8 +225,11 @@ namespace VoxelEngine.UI
 
         public static void Hide()
         {
-            _lastHovered = null;
-            _sticky      = false;
+            _lastHovered        = null;
+            _lastHoveredItem    = null;
+            _lastValidStack     = null;
+            _lastValidProbeTime = 0f;
+            _sticky             = false;
             if (_panel != null) _panel.style.display = DisplayStyle.None;
         }
 

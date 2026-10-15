@@ -142,6 +142,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Simulation.MetallurgicalFoundry _openFoundry;
         private VoxelEngine.Simulation.Assembler _openAssembler;
         private VoxelEngine.Simulation.Funnel _openFunnel;
+        private VoxelEngine.Simulation.ReceivingChute _openReceivingChute;
         private VoxelEngine.Simulation.ConveyorSplitter _openSplitter;
         private IVoltageStation _openVoltageStation;
         private bool _productionStatsOpen;
@@ -182,7 +183,8 @@ namespace VoxelEngine.UI
             public IItemContainer container;
             public int            slotIndex;
             public ItemStack      stack;
-            public bool active;
+            public int            partialCount;
+            public bool           active;
         }
 
         // ============================================================
@@ -455,7 +457,7 @@ namespace VoxelEngine.UI
                 _openPortReactor != null || _openProcessor != null || _openReprocessor != null ||
                 _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null || _openWaterPump != null || _openWindTurbine != null ||
                 _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null ||
-                _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null ||
+                _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openReceivingChute != null ||
                 _openGridBlock != null || _openGridTerminal != null || _openWaterTower != null || _openRadarBeacon != null ||
                 _openSteamEngine != null || _openSchedule != null;
 
@@ -672,7 +674,7 @@ namespace VoxelEngine.UI
             _openImporter        = null; _openExporter        = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS             = null;
             _openPowerstation = null; _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
 
             // Normalize + auto-refuel equipped jetpacks BEFORE building the UI:
             // pulling H₂/charge from portable containers mutates the inventory and
@@ -699,7 +701,7 @@ namespace VoxelEngine.UI
             _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
-            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             UnlockCursor();
             Refresh();
         }
@@ -833,7 +835,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             UnwatchAllContainers();
@@ -874,7 +876,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openStation    = f.GetComponent<CraftingStation>();
@@ -900,7 +902,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openStation    = ef.GetComponent<CraftingStation>();
@@ -925,7 +927,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _inventoryOpen  = true;
@@ -946,7 +948,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _inventoryOpen  = true;
@@ -971,7 +973,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null; _openDronePort = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openPortalController = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openVoltageStation = null;
             _openDefense = null;
             _openPowerBattery = null;
@@ -1030,6 +1032,11 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Simulation.Funnel funnel:
                     _openFunnel = funnel;
                     break;
+                case VoxelEngine.Simulation.ReceivingChute receivingChute:
+                    _openReceivingChute = receivingChute;
+                    receivingChute.EnsureContainers();
+                    WatchContainer(receivingChute.buffer);
+                    break;
                 case VoxelEngine.Simulation.ConveyorSplitter splitter:
                     _openSplitter = splitter;
                     break;
@@ -1084,6 +1091,8 @@ namespace VoxelEngine.UI
                     VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(gb);
                     // Watch the container(s) the block exposes so the panel auto-refreshes.
                     if (gb is VoxelEngine.GridSystem.GridCargoContainer gcc) { if (gcc.container == null) gcc.OnPlaced(); WatchContainer(gcc.container); }
+                    else if (gb is VoxelEngine.GridSystem.GridCargoDropHatch gdh) { gdh.EnsureContainers(); WatchContainer(gdh.container); }
+                    else if (gb is VoxelEngine.GridSystem.GridReceivingChute grc) { grc.EnsureContainers(); WatchContainer(grc.container); }
                     else if (gb is VoxelEngine.GridSystem.GridH2O2Generator gh2) { if (gh2.iceInput == null) gh2.OnPlaced(); WatchContainer(gh2.iceInput); }
                     else if (gb is VoxelEngine.GridSystem.GridBiofarm gbf) { if (gbf.biomassInput == null) gbf.OnPlaced(); WatchContainer(gbf.biomassInput); }
                     else if (gb is VoxelEngine.GridSystem.GridWeapon gw) { if (gw.ammo == null) gw.OnPlaced(); WatchContainer(gw.ammo); }
@@ -1159,7 +1168,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openGridTerminal = grid; _terminalTab = -1;
@@ -1214,7 +1223,7 @@ namespace VoxelEngine.UI
             _openCraftTerminal = null; _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null; _openPowerBattery = null; _openVoltageStation = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -1257,7 +1266,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openVoltageStation = null;
@@ -1299,7 +1308,7 @@ namespace VoxelEngine.UI
             _openPowerstation= null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openVoltageStation = null;
@@ -1555,7 +1564,7 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
-                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
+                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openReceivingChute != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
@@ -1574,7 +1583,7 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
-                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
+                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openReceivingChute != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 // The station pane has its own filtered list on the right; keep the
@@ -1659,6 +1668,7 @@ namespace VoxelEngine.UI
                 else if (_openFoundry          != null) { var mp = MachineUIs.FoundryPanel(_openFoundry, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openFoundry); }
                 else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openAssembler); }
                 else if (_openFunnel           != null) _contentLayer.Add(MachineUIs.FunnelPanel(_openFunnel));
+                else if (_openReceivingChute   != null) { var mp = MachineUIs.ReceivingChutePanel(_openReceivingChute, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openReceivingChute); }
                 else if (_openSplitter         != null) _contentLayer.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
                 else if (_openVoltageStation   != null) _contentLayer.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
                 else if (_openDefense != null) BuildDefensePanel(_contentLayer, _openDefense);
@@ -1860,6 +1870,12 @@ namespace VoxelEngine.UI
             if (_openFurnace != null) return _openFurnace;
             if (_openElectric != null) return _openElectric;
             if (_openCoalGen != null) return _openCoalGen;
+            if (_openCrusher != null) return _openCrusher;
+            if (_openAssembler != null) return _openAssembler;
+            if (_openFunnel != null) return _openFunnel;
+            if (_openReceivingChute != null) return _openReceivingChute;
+            if (_openSplitter != null) return _openSplitter;
+            if (_openCarbonHarvester != null) return _openCarbonHarvester;
             if (_openGridBlock != null) return _openGridBlock;
             if (_openOilRefinery != null) return _openOilRefinery;
             if (_openDistillationPlant != null) return _openDistillationPlant;
@@ -1883,10 +1899,13 @@ namespace VoxelEngine.UI
                 // Never attribute those offsets to the machine that is about to be built.
                 return;
             }
-            foreach (var sv in _contentLayer.Query<ScrollView>().ToList())
+            var list = _contentLayer.Query<ScrollView>().ToList();
+            for (int i = 0; i < list.Count; i++)
             {
-                if (sv == null || string.IsNullOrEmpty(sv.name)) continue;
-                s_panelScrollOffsets[sv.name] = sv.scrollOffset.y;
+                var sv = list[i];
+                if (sv == null) continue;
+                string key = !string.IsNullOrEmpty(sv.name) ? sv.name : $"__auto_scroll_{i}";
+                s_panelScrollOffsets[key] = sv.scrollOffset.y;
             }
         }
 
@@ -1894,19 +1913,31 @@ namespace VoxelEngine.UI
         {
             if (_contentLayer == null || s_panelScrollOffsets.Count == 0) return;
             if (!System.Object.ReferenceEquals(s_panelScrollOwner, CurrentPanelScrollOwner())) return;
-            foreach (var sv in _contentLayer.Query<ScrollView>().ToList())
+            var list = _contentLayer.Query<ScrollView>().ToList();
+            for (int i = 0; i < list.Count; i++)
             {
-                if (sv == null || string.IsNullOrEmpty(sv.name) || !s_panelScrollOffsets.ContainsKey(sv.name)) continue;
-                float y = s_panelScrollOffsets[sv.name];
-                if (y <= 0.5f) continue;
+                var sv = list[i];
+                if (sv == null) continue;
+                string key = !string.IsNullOrEmpty(sv.name) ? sv.name : $"__auto_scroll_{i}";
+                if (!s_panelScrollOffsets.TryGetValue(key, out float y) || y <= 0.5f) continue;
+
                 sv.scrollOffset = new Vector2(sv.scrollOffset.x, y);
                 // Layout is resolved after the add, so the real content height only exists
-                // from the next tick: restate the offset once the numbers are known.
+                // once geometry settles: restate the offset both on the next tick and on
+                // the first GeometryChangedEvent of the contentContainer.
                 sv.schedule.Execute(() =>
                 {
                     if (sv.panel == null) return;
                     sv.scrollOffset = new Vector2(sv.scrollOffset.x, y);
                 });
+                EventCallback<GeometryChangedEvent> onGeo = null;
+                onGeo = evt =>
+                {
+                    sv.contentContainer.UnregisterCallback(onGeo);
+                    if (sv.panel == null) return;
+                    sv.scrollOffset = new Vector2(sv.scrollOffset.x, y);
+                };
+                sv.contentContainer.RegisterCallback(onGeo);
             }
         }
 
@@ -2823,7 +2854,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _openQuarry = null; _openReactor = null; _openStation = null; _recipeBrowserOpen = false;
             _productionStatsOpen = false; _openChest = null; _openGridTerminal = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
             _openDefense = d;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -3174,7 +3205,7 @@ namespace VoxelEngine.UI
                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                    _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null || _openDrawerController != null ||
                    _openDronePort != null || _openItemDisplay != null || _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null ||
-                   _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
+                   _openFunnel != null || _openReceivingChute != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null || _openStation != null ||
                    _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null ||
                    _openPortalController != null;
@@ -5066,6 +5097,21 @@ namespace VoxelEngine.UI
                 slot.style.borderLeftColor = slot.style.borderRightColor = bColor;
             }
 
+            // When a half-stack / partial drag is active from this slot, display the
+            // remaining portion in the slot while the split half sits on the cursor.
+            if (_dragSource.active && _dragSource.partialCount > 0
+                && ReferenceEquals(_dragSource.container, container) && _dragSource.slotIndex == index
+                && stack != null && !stack.IsEmpty)
+            {
+                int rem = Mathf.Max(0, stack.count - _dragSource.partialCount);
+                if (rem <= 0) stack = new ItemStack();
+                else
+                {
+                    stack = stack.Clone();
+                    stack.count = rem;
+                }
+            }
+
             if (!stack.IsEmpty)
             {
                 // Icon
@@ -5330,12 +5376,23 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         // ============================================================
         //                     DRAG & DROP
         // ============================================================
-        private void BeginDrag(IItemContainer c, int idx)
+        private void BeginDrag(IItemContainer c, int idx, int partialCount = 0)
         {
             var st = c.GetSlot(idx);
             if (st.IsEmpty) return;
-            _dragSource = new DragSource { container = c, slotIndex = idx, stack = st.Clone(), active = true };
+            int clampedPartial = partialCount > 0 ? Mathf.Clamp(partialCount, 1, st.count) : 0;
+            var dragStack = st.Clone();
+            if (clampedPartial > 0) dragStack.count = clampedPartial;
+            _dragSource = new DragSource
+            {
+                container    = c,
+                slotIndex    = idx,
+                stack        = dragStack,
+                partialCount = clampedPartial,
+                active       = true
+            };
 
+            if (_dragGhost != null) { _dragGhost.RemoveFromHierarchy(); _dragGhost = null; }
             _dragGhost = new VisualElement();
             _dragGhost.style.position = Position.Absolute;
             _dragGhost.style.width = 48; _dragGhost.style.height = 48;
@@ -5360,17 +5417,22 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 box.pickingMode = PickingMode.Ignore;
                 _dragGhost.Add(box);
             }
-            if (st.count > 1)
+            int ghostCount = dragStack.count;
+            if (ghostCount > 1 || clampedPartial > 0)
             {
-                var l = new Label(st.count.ToString());
+                var l = new Label(ghostCount.ToString());
                 l.style.position = Position.Absolute;
                 l.style.bottom = 2; l.style.right = 4;
                 l.style.color = Color.white;
+                l.style.unityFontStyleAndWeight = FontStyle.Bold;
                 l.pickingMode = PickingMode.Ignore;
                 _dragGhost.Add(l);
             }
             _root.Add(_dragGhost);
             _dragGhost.BringToFront();
+
+            if (clampedPartial > 0)
+                Refresh();
         }
 
         private void EndDrag(IItemContainer destC, int destIdx)
@@ -5378,13 +5440,36 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             if (!_dragSource.active) return;
             var srcC = _dragSource.container;
             int srcIdx = _dragSource.slotIndex;
+            int partial = _dragSource.partialCount;
 
             // Take FRESH copies so list-element references can't double-count.
-            var srcStack = srcC.GetSlot(srcIdx).Clone();
+            var fullSrcStack = srcC.GetSlot(srcIdx).Clone();
             var dstStack = destC.GetSlot(destIdx).Clone();
 
-            // Same slot — cancel.
-            if (srcC == destC && srcIdx == destIdx) { CancelDrag(); return; }
+            // Same slot — cancel (and refresh so a partial-drag source slot shows full count again).
+            if (srcC == destC && srcIdx == destIdx)
+            {
+                bool wasPartial = partial > 0;
+                CancelDrag();
+                if (wasPartial) Refresh();
+                return;
+            }
+
+            if (fullSrcStack.IsEmpty)
+            {
+                CancelDrag();
+                Refresh();
+                return;
+            }
+
+            bool isPartialSplit = partial > 0 && partial < fullSrcStack.count;
+            var srcStack = fullSrcStack.Clone();
+            int remainingAtSource = 0;
+            if (isPartialSplit)
+            {
+                srcStack.count = partial;
+                remainingAtSource = fullSrcStack.count - partial;
+            }
 
             // UI-only filter slots record the item type without consuming the dragged stack.
             if (destC is VoxelEngine.Storage.IItemFilterSlot filterSlot)
@@ -5404,8 +5489,9 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     if (srcC is VoxelEngine.Storage.StorageDrawer srcDrawer) srcDrawer.Remove(srcStack.item, accepted);
                     else
                     {
-                        if (accepted >= srcStack.count) srcC.SetSlot(srcIdx, new ItemStack());
-                        else { srcStack.count -= accepted; srcC.SetSlot(srcIdx, srcStack); }
+                        int leftTotal = fullSrcStack.count - accepted;
+                        if (leftTotal <= 0) srcC.SetSlot(srcIdx, new ItemStack());
+                        else { fullSrcStack.count = leftTotal; srcC.SetSlot(srcIdx, fullSrcStack); }
                     }
                 }
                 CancelDrag();
@@ -5425,7 +5511,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             bool sameContainer = srcC == destC;
 
-            // Stack merge.
+            // Stack merge onto matching item.
             if (!srcStack.IsEmpty && !dstStack.IsEmpty &&
                 dstStack.item == srcStack.item && srcStack.item.IsStackable)
             {
@@ -5436,12 +5522,53 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 if (move <= 0)
                 {
                     CancelDrag();
+                    if (isPartialSplit) Refresh();
                     return;
                 }
                 dstStack.count += move;
-                srcStack.count -= move;
+                int leftTotal = fullSrcStack.count - move;
                 destC.SetSlot(destIdx, dstStack);
-                srcC.SetSlot(srcIdx, srcStack.count > 0 ? srcStack : new ItemStack());
+                if (leftTotal > 0)
+                {
+                    fullSrcStack.count = leftTotal;
+                    srcC.SetSlot(srcIdx, fullSrcStack);
+                }
+                else
+                {
+                    srcC.SetSlot(srcIdx, new ItemStack());
+                }
+            }
+            else if (isPartialSplit)
+            {
+                // Partial / half-stack placement: can only place into an empty slot
+                // (merging onto a matching stack is handled above).
+                if (!dstStack.IsEmpty)
+                {
+                    CancelDrag();
+                    Refresh();
+                    return;
+                }
+                int move = sameContainer ? srcStack.count : MaxDirectAdd(destC, srcStack.item, srcStack.count);
+                if (move <= 0)
+                {
+                    CancelDrag();
+                    Refresh();
+                    return;
+                }
+                var placed = srcStack.Clone();
+                placed.count = move;
+                destC.SetSlot(destIdx, placed);
+
+                int leftTotal = fullSrcStack.count - move;
+                if (leftTotal > 0)
+                {
+                    fullSrcStack.count = leftTotal;
+                    srcC.SetSlot(srcIdx, fullSrcStack);
+                }
+                else
+                {
+                    srcC.SetSlot(srcIdx, new ItemStack());
+                }
             }
             else
             {
@@ -5494,47 +5621,22 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         private void CancelDrag()
         {
             _dragSource.active = false;
+            _dragSource.partialCount = 0;
             ResetQuickTransferDrag();
             if (_dragGhost != null) { _dragGhost.RemoveFromHierarchy(); _dragGhost = null; }
         }
 
         private void SplitOrMove(IItemContainer c, int idx)
         {
+            if (c == null) return;
             var st = c.GetSlot(idx);
-            if (st.IsEmpty) return;
+            if (st == null || st.IsEmpty) return;
 
-            // RMB = SPLIT: take half the stack into an empty slot.
-            if (st.count > 1)
-            {
-                int half = st.count / 2;
-                // Find an empty slot in the same container.
-                int emptyIdx = -1;
-                for (int i = 0; i < c.Slots.Count; i++)
-                {
-                    if (i == idx) continue;
-                    if (c.GetSlot(i).IsEmpty) { emptyIdx = i; break; }
-                }
-                if (emptyIdx >= 0)
-                {
-                    var splitStack = new ItemStack(st.item, half);
-                    splitStack.durability = st.durability;
-                    c.SetSlot(emptyIdx, splitStack);
-                    st.count -= half;
-                    c.SetSlot(idx, st);
-                    return;
-                }
-            }
-
-            // Fallback: quick-move to the other side.
-            IItemContainer target = null;
-            if (c == inventory.container && _rightContainer != null) target = _rightContainer;
-            else if (c != inventory.container) target = inventory.container;
-            if (target == null) return;
-            var leftover = target.Insert(st.Clone());
-            if (leftover == null || leftover.count == 0)
-                c.SetSlot(idx, new ItemStack());
-            else
-                c.SetSlot(idx, leftover);
+            // RMB = SPLIT TO CURSOR: pick up half of the stack onto the mouse cursor
+            // while keeping the remaining half in the source slot so the player can
+            // place the picked-up half in whichever slot they choose.
+            int half = st.count > 1 ? (st.count + 1) / 2 : 1;
+            BeginDrag(c, idx, half);
         }
 
         /// <summary>
@@ -6532,8 +6634,36 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 return;
             }
 
-            if (rmbPressed && slotRef != null)
-                SplitOrMove(slotRef.container, slotRef.index);
+            if (rmbPressed)
+            {
+                ResetQuickTransferDrag();
+                if (shiftHeld)
+                {
+                    if (_dragSource.active)
+                    {
+                        CancelDrag();
+                        Refresh();
+                    }
+                    if (slotRef != null)
+                        QuickTransfer(slotRef.container, slotRef.index, halfOnly: true);
+                    return;
+                }
+
+                if (_dragSource.active)
+                {
+                    if (slotRef != null)
+                        EndDrag(slotRef.container, slotRef.index);
+                    else
+                    {
+                        CancelDrag();
+                        Refresh();
+                    }
+                    return;
+                }
+
+                if (slotRef != null)
+                    SplitOrMove(slotRef.container, slotRef.index);
+            }
         }
 
         private void BeginQuickTransferDrag(SlotRef slotRef)
@@ -6566,16 +6696,47 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         // slot with the corresponding hotbar slot. Implements the "press 1 to swap with
         // your active hotbar slot" quick-access inventory pattern.
 
-        /// <summary>Shift-click: send the whole stack at (sourceC, sourceIdx) to the "other side".
-        /// Smart routing: from player inventory, fuel items go to fuel slot, anything else goes to input.
-        /// From any furnace slot back to player.
-        ///
-        /// Order matters here: an *explicit* container (chest / furnace / server rack / disk
-        /// manipulator) ALWAYS wins over the wireless-storage-terminal proxy that
-        /// OpenInventory() creates automatically. Without that ordering, shift-clicking coal
-        /// while a furnace was open would route it into the wireless network instead of the
-        /// furnace's fuel slot.</summary>
-        private void QuickTransfer(IItemContainer sourceC, int sourceIdx)
+        /// <summary>Shift-click: send the whole stack (or half when <paramref name="halfOnly"/> is true)
+        /// at (sourceC, sourceIdx) to the "other side".</summary>
+        private void QuickTransfer(IItemContainer sourceC, int sourceIdx, bool halfOnly = false)
+        {
+            if (inventory == null || sourceC == null) return;
+            var fullStack = sourceC.GetSlot(sourceIdx);
+            if (fullStack == null || fullStack.IsEmpty) return;
+
+            if (halfOnly && fullStack.count > 1 && sourceC is not VoxelEngine.Storage.StorageDrawer)
+            {
+                int transferAmount = Mathf.Max(1, fullStack.count / 2);
+                int keepAmount     = fullStack.count - transferAmount;
+                var originalTemplate = fullStack.Clone();
+
+                var halfStack = fullStack.Clone();
+                halfStack.count = transferAmount;
+                sourceC.SetSlot(sourceIdx, halfStack);
+
+                QuickTransferInternal(sourceC, sourceIdx);
+
+                var after = sourceC.GetSlot(sourceIdx);
+                if (after == null || after.IsEmpty)
+                {
+                    var kept = originalTemplate.Clone();
+                    kept.count = keepAmount;
+                    sourceC.SetSlot(sourceIdx, kept);
+                }
+                else if (after.item == originalTemplate.item)
+                {
+                    var kept = after.Clone();
+                    kept.count += keepAmount;
+                    sourceC.SetSlot(sourceIdx, kept);
+                }
+                Refresh();
+                return;
+            }
+
+            QuickTransferInternal(sourceC, sourceIdx);
+        }
+
+        private void QuickTransferInternal(IItemContainer sourceC, int sourceIdx)
         {
             if (inventory == null) return;
             var srcStack = sourceC.GetSlot(sourceIdx);
@@ -6924,6 +7085,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     bool isUpgrade = item is FurnaceUpgradeItem;
                     return isUpgrade ? _openAssembler.upgradeC : _openAssembler.inputC;
                 }
+                if (_openReceivingChute != null)
+                {
+                    _openReceivingChute.EnsureContainers();
+                    return _openReceivingChute.buffer;
+                }
                 // Coal Generator: only fuel items go in.
                 if (_openCoalGen != null)
                 {
@@ -6986,6 +7152,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             {
                 case VoxelEngine.GridSystem.GridCargoContainer cargo:
                     return cargo.container;
+                case VoxelEngine.GridSystem.GridCargoDropHatch dropHatch:
+                    dropHatch.EnsureContainers();
+                    return dropHatch.container;
+                case VoxelEngine.GridSystem.GridReceivingChute gridChute:
+                    gridChute.EnsureContainers();
+                    return gridChute.container;
                 case VoxelEngine.GridSystem.GridDockingPort dock:
                     return dock.container;
                 case VoxelEngine.GridSystem.GridDrill drill:

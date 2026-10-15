@@ -1,9 +1,41 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.23.2-dev`
+**Current Version:** `17.24.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.24.0-dev] Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
+
+**Type:** MINOR - adds `GridCargoDropHatch` (with animated clam-shell bay doors, auto-pull from grid containers, and 4 cockpit-toggleable multi-item filters where only one filter can be active at once), `GridReceivingChute` (wide flared grid catch hopper), and stationary `ReceivingChute` (`3x2x3` flared ground catch hopper), plus fixes machine UI scroll reset, slot card overflow, item tooltips while machine panels are open, Right-Click / Shift+Right-Click half-stack interactions, and removes bottom machine UI hint blurbs. Save-compatible.
+
+**GitHub title:** `[17.24.0-dev] Add grid cargo drop hatch, large receiving chutes, half-stack split and machine UI fixes`
+
+#### Added
+- **Grid Cargo Drop Hatch (`Scripts/GridSystem/GridCargoDropHatch.cs`, `Scripts/GridSystem/UI/GridBlockUI.cs`, `Scripts/GridSystem/UI/GridControlHud.cs`).**
+  - New grid block (`Small Cargo Drop Hatch` for small grids and `Large Cargo Drop Hatch` for large grids) implementing `IGridItemStore`, `IGridDataProvider`, and `IMachineProcessState`.
+  - Features a multi-stage procedural opening animation: retractable front/rear locking latches slide open, hydraulic actuator rods extend, and twin clam-shell bomb-bay doors swing downward to `78 degrees` with status beacon telemetry before ejecting physical `DroppedItem` stacks downward (`-transform.up`).
+  - Auto-pulls matching items from all containers on the same `GridEntity` (`GridItemNetwork` stores, `GridCargoContainer`, `GridDrill`, `GridElectricFurnace` outputs) into the hatch's internal buffer container.
+  - Provides **4 toggleable multi-item filter presets (`Filter 1..4`)** configurable via `ItemFilterDialog.OpenList` (or `All Items` mode) with custom names. Enforces mutual exclusion so **only one filter can be active at once** (`activeFilterIndex`: `-1` = Off, `0..3` = Filter 1..4).
+  - Full cockpit hotbar integration in `GridControlHud`: exposes `FILTER 1..4 TOGGLE`, `CYCLE FILTER (1-4 / OFF)`, `ALL FILTERS OFF`, and `OPEN / CLOSE HATCH` actions with live `ACTIVE` / `OFF` / `OPEN` / `SHUT` status chips, and auto-binds free cockpit hotbar slots `1..5` when a `GridCargoDropHatch` is present on the grid.
+- **Large Receiving Chutes — Stationary & Grid (`Scripts/Simulation/ReceivingChute.cs`, `Scripts/GridSystem/GridReceivingChute.cs`, `Scripts/Items/DroppedItem.cs`).**
+  - **Stationary `Large Receiving Chute` (`ReceivingChute.cs`, `3x2x3` footprint):** Wide flared industrial catch hopper with a generous overhead capture box (`3.9m x 3.7m x 3.9m`), 16-slot internal buffer, `ItemPortRouting` support, and automatic export to adjacent `ConveyorBelt`s, `ConveyorChute`s, `Funnel`s, and `Chest`s.
+  - **Grid `Grid Receiving Chute` (`GridReceivingChute.cs`, Small & Large Grid):** Wide flared catch hopper mounted on ships, barges, rovers, or stations that catches falling `DroppedItem`s into its 16/24-slot buffer and automatically forwards captured cargo into the grid's `GridCargoContainer`s.
+  - Added `DroppedItem.ConsumeCount(int)` and contact hooks in `DroppedItem.TryCollectOnContact` so falling world drops are cleanly absorbed into stationary or grid receiving chutes while maintaining accurate `ActivePhysicalItemCount` and `DropSync` replication.
+- **Setup Wizard Integration (`Scripts/Editor/GridSystem/DropHatchLogisticsSetup.cs`, `Scripts/Editor/Core/VoxelEngineSetupWindow.cs`).**
+  - Added non-destructive `Build grid cargo drop hatch and large receiving chutes` setup action in `Tools -> Voxel Engine -> Setup Wizard` (under `Grids, Ships & Navigation` and chained into `BuildGridSystemContent` and `BuildFactoryFoundationsContent`).
+
+#### Fixed
+- **Machine panel scroll auto-reset (`Scripts/UI/MachineUIs.cs`, `Scripts/UI/GameUIController.cs`).** Named all outer content and inner recipe `ScrollView`s in `FoundryPanel`, `OreWasherPanel`, `ProcessingMachinePanel` (`Crusher` / `Assembler`), and `ReceivingChutePanel`; added `_openCrusher`, `_openAssembler`, `_openFunnel`, `_openReceivingChute`, `_openSplitter`, and `_openCarbonHarvester` to `CurrentPanelScrollOwner()`; and added index-keyed fallback + `GeometryChangedEvent` restoration in `SavePanelScrollOffsets()` / `RestorePanelScrollOffsets()` so 0.25s live refreshes never yank the scroll position back to the top.
+- **Slot box border overflow in machine UIs (`Scripts/UI/UITheme.cs`, `Scripts/UI/MachineUIs.cs`).** Set `flexShrink = 0` on `UITheme.SlotCard` and its background container, removed the duplicate inner border box in `MachineUIs.SlotGrid`, and arranged machine slots into explicit non-wrapping rows of up to 4 slots (`Wrap.NoWrap`, `flexShrink = 0`) so 4-slot output cards never wrap a 4th slot outside the bottom of the card border.
+- **Item tooltips not appearing while a machine UI is open (`Scripts/UI/Tooltip.cs`).** Tracked hovered item identity (`_lastHoveredItem`) instead of `VisualElement` reference equality and preserved hover state across the single unlaid-out rebuild frame during 0.25s live machine refreshes.
+- **Right-Click and Shift+Right-Click half-stack slot controls (`Scripts/UI/GameUIController.cs`).**
+  - Plain **Right-Click** on a stack splits half onto the mouse cursor (`BeginDrag(c, idx, half)`) while displaying the remaining half in the source slot so the player can place the picked-up half into any target slot.
+  - **Shift + Right-Click** on a stack transfers half of the stack to the player's inventory (or open machine/container) while keeping the other half in the source slot.
+- **Bottom description text removal (`Scripts/UI/MachineUIs.cs`).** Removed the bottom `T.Muted(...)` description blurbs from `FoundryPanel`, `OreWasherPanel`, and `ProcessingMachinePanel`.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.24.0-dev`, MINOR over `17.23.2-dev`. Save-compatible.
 
 ### [17.23.2-dev] Fix OreWashingSetup Editor Script Field & Tuple Array Types
 

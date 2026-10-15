@@ -1510,6 +1510,8 @@ namespace VoxelEngine.Player
                 if (assembler != null) { UI.GameUIController.Instance?.OpenMachine(assembler); return; }
                 var funnel = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Funnel>();
                 if (funnel != null) { UI.GameUIController.Instance?.OpenMachine(funnel); return; }
+                var receivingChute = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ReceivingChute>();
+                if (receivingChute != null) { UI.GameUIController.Instance?.OpenMachine(receivingChute); return; }
                 var splitter = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorSplitter>();
                 if (splitter != null) { UI.GameUIController.Instance?.OpenMachine(splitter); return; }
 
@@ -3447,6 +3449,8 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridCryobed
                 || b is VoxelEngine.GridSystem.GridBattery
                 || b is VoxelEngine.GridSystem.GridCargoContainer
+                || b is VoxelEngine.GridSystem.GridCargoDropHatch
+                || b is VoxelEngine.GridSystem.GridReceivingChute
                 || b is VoxelEngine.GridSystem.GridWeapon
                 || b is VoxelEngine.GridSystem.GridRefinery
                 || b is VoxelEngine.GridSystem.GridChemicalPlant
