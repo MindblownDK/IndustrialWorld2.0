@@ -9,6 +9,7 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Environment;
+using VoxelEngine.Farming;
 using VoxelEngine.Gas;
 using VoxelEngine.Items;
 using VoxelEngine.Nuclear;
@@ -545,6 +546,275 @@ namespace VoxelEngine.UI
             return p;
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        //  BIOMASS PRESS & BIO-REFINERY
+        // ════════════════════════════════════════════════════════════════════
+
+        public static VisualElement BiomassPressPanel(BiomassPress press, SlotBuilder slot)
+        {
+            press.EnsureContainers();
+            press.EnsureTanks();
+
+            var p = T.MachinePanel();
+            Color accent = new Color(0.52f, 0.86f, 0.22f, 1f);
+            bool active = press.IsOnline && (press.CurrentRecipe != null || press.Progress01 > 0f);
+            string status = !press.UserEnabled ? "DISABLED" : (active ? "PRESSING" : (press.IsOnline ? "STANDBY" : "NO POWER"));
+            Color statusColor = !press.UserEnabled ? T.AccentRed : (active ? accent : (press.IsOnline ? T.AccentCyan : T.AccentAmber));
+
+            p.Add(T.MachineHeader("🌿", "Biomass Press & Bio-Refinery", accent, status, statusColor));
+            p.Add(T.AccentBar(accent));
+
+            var content = T.PanelContent();
+            p.Add(content);
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            top.style.justifyContent = Justify.SpaceBetween;
+            top.style.marginBottom = 8;
+
+            var toggleBtn = T.SmallButton(press.UserEnabled ? "Enabled" : "Disabled", () =>
+            {
+                press.SetUserEnabled(!press.UserEnabled);
+                GameUIController.Instance?.RequestRefresh();
+            }, press.UserEnabled ? T.AccentGreen : T.AccentRed);
+            toggleBtn.style.marginRight = 8;
+            top.Add(toggleBtn);
+            top.Add(T.StatRow("⚡", "Power", $"{press.CurrentWattage:0} W", press.IsOnline ? T.AccentGold : T.TextMuted));
+            content.Add(top);
+
+            content.Add(T.StatRow("⚙", "Mode", press.ActiveModeLabel, active ? accent : T.TextSecondary));
+            content.Add(T.StatRow("🛢", "Biofuel Refined", $"{press.TotalBiofuelLitresProduced:0.#} L ({press.TotalBatchesCompleted:N0} batches)", accent));
+            var (progressBar, _) = T.ProgressBar(press.Progress01, accent, 9, false);
+            content.Add(progressBar);
+            content.Add(T.Divider());
+
+            // ── Fluid Tanks (Water In + Biofuel Out) ─────────────────────────
+            content.Add(T.Subtitle("Fluid Reservoirs"));
+            var fluidCard = T.Card();
+            fluidCard.style.flexDirection = FlexDirection.Row;
+            fluidCard.style.alignItems = Align.Center;
+            fluidCard.style.justifyContent = Justify.SpaceAround;
+            fluidCard.style.marginBottom = 8;
+
+            // Water Tank Column
+            var waterCol = new VisualElement();
+            waterCol.style.alignItems = Align.Center;
+            waterCol.style.marginRight = 14;
+            var waterGauge = T.TankGaugeWithParts("Water In", press.waterTank.Fill01,
+                LiquidType.Water.Color(),
+                $"{press.waterTank.stored:0}/{press.waterTank.capacity:0} L", 64f, 84f);
+            waterCol.Add(waterGauge.column);
+
+            var waterBtns = new VisualElement();
+            waterBtns.style.flexDirection = FlexDirection.Row;
+            waterBtns.style.marginTop = 3;
+            var wPour = T.SmallButton("▲", () => GameUIController.Instance?.MachineTankSwap(press.waterTank, true), T.AccentGreen);
+            wPour.tooltip = "Pour Water from canister in hand into Water In tank.";
+            var wDraw = T.SmallButton("▼", () => GameUIController.Instance?.MachineTankSwap(press.waterTank, false), T.AccentCyan);
+            wDraw.tooltip = "Draw Water from tank into canister in hand.";
+            var wDrain = T.SmallButton("⊘", () => { press.waterTank.Drain(); GameUIController.Instance?.RefreshCurrentPanel(); }, T.AccentRed);
+            wDrain.tooltip = "Drain Water In tank.";
+            waterBtns.Add(wPour);
+            waterBtns.Add(wDraw);
+            waterBtns.Add(wDrain);
+            waterCol.Add(waterBtns);
+            fluidCard.Add(waterCol);
+
+            // Biofuel Tank Column
+            var bioCol = new VisualElement();
+            bioCol.style.alignItems = Align.Center;
+            bioCol.style.marginRight = 14;
+            var bioGauge = T.TankGaugeWithParts("Biofuel Out", press.biofuelTank.Fill01,
+                LiquidType.Biofuel.Color(),
+                $"{press.biofuelTank.stored:0}/{press.biofuelTank.capacity:0} L", 64f, 84f);
+            bioCol.Add(bioGauge.column);
+
+            var bioBtns = new VisualElement();
+            bioBtns.style.flexDirection = FlexDirection.Row;
+            bioBtns.style.marginTop = 3;
+            var bPour = T.SmallButton("▲", () => GameUIController.Instance?.MachineTankSwap(press.biofuelTank, true), T.AccentGreen);
+            bPour.tooltip = "Pour Biofuel from canister in hand into Biofuel Out tank.";
+            var bDraw = T.SmallButton("▼", () => GameUIController.Instance?.MachineTankSwap(press.biofuelTank, false), accent);
+            bDraw.tooltip = "Draw refined Biofuel into a canister in your hand.";
+            var bDrain = T.SmallButton("⊘", () => { press.biofuelTank.Drain(); GameUIController.Instance?.RefreshCurrentPanel(); }, T.AccentRed);
+            bDrain.tooltip = "Drain Biofuel Out tank.";
+            bioBtns.Add(bPour);
+            bioBtns.Add(bDraw);
+            bioBtns.Add(bDrain);
+            bioCol.Add(bioBtns);
+            fluidCard.Add(bioCol);
+
+            var infoCol = new VisualElement();
+            infoCol.style.flexGrow = 1;
+            infoCol.Add(T.Muted("• Crops / Seeds → Biomass + Biofuel\n• Wood Logs → Wood Chips + Biomass + Biofuel\n• Biomass (+Water) → Biofuel + Biofuel Briquettes\n• Biofuel pipes directly into Fluid Tanks & Generators."));
+            fluidCard.Add(infoCol);
+
+            content.Add(fluidCard);
+            content.Add(T.Divider());
+
+            if (press.knownRecipes != null && press.knownRecipes.Count > 0)
+            {
+                content.Add(T.Subtitle("Recipe Selection (or Auto-Detect)"));
+                var recipeList = new ScrollView(ScrollViewMode.Vertical) { name = "BiomassPressRecipeScroll" };
+                recipeList.style.maxHeight = 148;
+                recipeList.style.marginBottom = 8;
+                T.StyleScroller(recipeList);
+                var selectedRecipe = press.CurrentRecipe;
+                foreach (var recipe in press.knownRecipes)
+                {
+                    if (recipe == null) continue;
+                    recipeList.Add(MachineRecipeCard(recipe, recipe == selectedRecipe, accent, () =>
+                    {
+                        press.SelectRecipe(recipe == press.selectedRecipe ? null : recipe);
+                        GameUIController.Instance?.RequestRefresh();
+                    }));
+                }
+                content.Add(recipeList);
+            }
+
+            content.Add(T.Subtitle("Inventory"));
+            var slotRow = new VisualElement();
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.flexWrap = Wrap.Wrap;
+            slotRow.style.justifyContent = Justify.Center;
+            slotRow.style.marginTop = 5;
+            slotRow.Add(T.SlotCard("Organic Inputs", SlotGrid(press.inputC, slot)));
+            slotRow.Add(T.Spacer(10));
+            slotRow.Add(T.SlotCard("Pressed Outputs", SlotGrid(press.outputC, slot)));
+            if (press.upgradeC != null && press.upgradeC.Size > 0)
+            {
+                slotRow.Add(T.Spacer(10));
+                slotRow.Add(T.SlotCard("Upgrades", SlotGrid(press.upgradeC, slot)));
+            }
+            content.Add(slotRow);
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        //  AUTOMATIC TREE FARM & FORESTRY GANTRY
+        // ════════════════════════════════════════════════════════════════════
+
+        public static VisualElement AutoTreeFarmPanel(AutoTreeFarm farm, SlotBuilder slot)
+        {
+            farm.EnsureContainers();
+            farm.EnsureTanks();
+
+            var p = T.MachinePanel();
+            Color accent = new Color(0.28f, 0.78f, 0.36f, 1f);
+            string status = !farm.UserEnabled ? "DISABLED" : (farm.IsOnline ? "GROWING / HARVESTING" : "NO POWER");
+            Color statusColor = !farm.UserEnabled ? T.AccentRed : (farm.IsOnline ? accent : T.AccentAmber);
+
+            p.Add(T.MachineHeader("🌲", "Automatic Tree Farm & Forestry Gantry", accent, status, statusColor));
+            p.Add(T.AccentBar(accent));
+
+            var content = T.PanelContent();
+            p.Add(content);
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            top.style.justifyContent = Justify.SpaceBetween;
+            top.style.marginBottom = 8;
+
+            var toggleBtn = T.SmallButton(farm.UserEnabled ? "Enabled" : "Disabled", () =>
+            {
+                farm.SetUserEnabled(!farm.UserEnabled);
+                GameUIController.Instance?.RequestRefresh();
+            }, farm.UserEnabled ? T.AccentGreen : T.AccentRed);
+            toggleBtn.style.marginRight = 8;
+            top.Add(toggleBtn);
+            top.Add(T.StatRow("⚡", "Power", $"{farm.CurrentWattage:0} W", farm.IsOnline ? T.AccentGold : T.TextMuted));
+            content.Add(top);
+
+            content.Add(T.StatRow("🌱", "Cycle Stage",
+                $"{farm.GrowthStageLabel} ({farm.GrowthProgress01 * 100f:0}% — {farm.EffectiveCycleSeconds:0.#}s cycle)",
+                accent));
+            content.Add(T.StatRow("💧", "Irrigation",
+                farm.IsIrrigated ? "Irrigated (2.0x Growth Speed)" : "Dry (1.0x Growth Speed — Add Water)",
+                farm.IsIrrigated ? T.AccentCyan : T.AccentAmber));
+            content.Add(T.StatRow("🧪", "Soil Nutrients",
+                farm.IsFertilized ? "Fertilized (1.5x Speed + Bonus Yield)" : "Standard Soil (Add Fertilizer / Biomass for 1.5x)",
+                farm.IsFertilized ? T.AccentGreen : T.TextSecondary));
+            content.Add(T.StatRow("🪵", "Trees Harvested", $"{farm.TotalTreesHarvested:N0}", T.AccentGold));
+
+            var (progressBar, _) = T.ProgressBar(farm.GrowthProgress01, accent, 9, false);
+            content.Add(progressBar);
+            content.Add(T.Divider());
+
+            // ── Irrigation Water Tank & Controls ─────────────────────────────
+            content.Add(T.Subtitle("Irrigation Reservoir & Options"));
+            var waterCard = T.Card();
+            waterCard.style.flexDirection = FlexDirection.Row;
+            waterCard.style.alignItems = Align.Center;
+            waterCard.style.marginBottom = 8;
+
+            var tankCol = new VisualElement();
+            tankCol.style.alignItems = Align.Center;
+            tankCol.style.marginRight = 14;
+            var gauge = T.TankGaugeWithParts("Irrigation", farm.waterTank.Fill01,
+                LiquidType.Water.Color(),
+                $"{farm.waterTank.stored:0}/{farm.waterTank.capacity:0} L", 64f, 84f);
+            tankCol.Add(gauge.column);
+
+            var btnRow = new VisualElement();
+            btnRow.style.flexDirection = FlexDirection.Row;
+            btnRow.style.marginTop = 3;
+            var pourBtn = T.SmallButton("▲", () => GameUIController.Instance?.MachineTankSwap(farm.waterTank, true), T.AccentGreen);
+            pourBtn.tooltip = "Pour Water from canister in hand into irrigation tank.";
+            var drawBtn = T.SmallButton("▼", () => GameUIController.Instance?.MachineTankSwap(farm.waterTank, false), T.AccentCyan);
+            drawBtn.tooltip = "Draw Water from irrigation tank into canister in hand.";
+            var drainBtn = T.SmallButton("⊘", () => { farm.waterTank.Drain(); GameUIController.Instance?.RefreshCurrentPanel(); }, T.AccentRed);
+            drainBtn.tooltip = "Drain irrigation tank.";
+            btnRow.Add(pourBtn);
+            btnRow.Add(drawBtn);
+            btnRow.Add(drainBtn);
+            tankCol.Add(btnRow);
+            waterCard.Add(tankCol);
+
+            var optCol = new VisualElement();
+            optCol.style.flexGrow = 1;
+            var pushBtn = T.SmallButton(farm.autoPushOutputs ? "Auto-Export to Belts/Chutes: ON" : "Auto-Export to Belts/Chutes: OFF", () =>
+            {
+                farm.autoPushOutputs = !farm.autoPushOutputs;
+                GameUIController.Instance?.RequestRefresh();
+            }, farm.autoPushOutputs ? T.AccentCyan : T.BgSlot);
+            pushBtn.style.marginBottom = 6;
+            optCol.Add(pushBtn);
+
+            var extBtn = T.SmallButton(farm.harvestNearbyTreePlots ? "Tend Nearby Tree Plots (10m): ON" : "Tend Nearby Tree Plots (10m): OFF", () =>
+            {
+                farm.harvestNearbyTreePlots = !farm.harvestNearbyTreePlots;
+                GameUIController.Instance?.RequestRefresh();
+            }, farm.harvestNearbyTreePlots ? T.AccentGreen : T.BgSlot);
+            extBtn.style.marginBottom = 6;
+            optCol.Add(extBtn);
+
+            optCol.Add(T.Muted("Self-sustaining arboriculture: automatically replants Tree Saplings and outputs Wood Logs, Biomass, Wood Chips, and surplus Saplings to adjacent belts or chutes."));
+            waterCard.Add(optCol);
+            content.Add(waterCard);
+            content.Add(T.Divider());
+
+            content.Add(T.Subtitle("Inventory"));
+            var slotRow = new VisualElement();
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.flexWrap = Wrap.Wrap;
+            slotRow.style.justifyContent = Justify.Center;
+            slotRow.style.marginTop = 5;
+            slotRow.Add(T.SlotCard("Saplings & Nutrients", SlotGrid(farm.inputC, slot)));
+            slotRow.Add(T.Spacer(10));
+            slotRow.Add(T.SlotCard("Timber & Biomass Output", SlotGrid(farm.outputC, slot)));
+            if (farm.upgradeC != null && farm.upgradeC.Size > 0)
+            {
+                slotRow.Add(T.Spacer(10));
+                slotRow.Add(T.SlotCard("Upgrades", SlotGrid(farm.upgradeC, slot)));
+            }
+            content.Add(slotRow);
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
         public static VisualElement SplitterPanel(ConveyorSplitter splitter, SlotBuilder slot)
         {
             var p = T.MachinePanel();
@@ -888,6 +1158,136 @@ namespace VoxelEngine.UI
             if (recipe.byproductItem != null && recipe.byproductCount > 0)
                 text += $" + {recipe.byproductCount}x {recipe.byproductItem.displayName}";
             return text;
+        }
+
+        private static VisualElement MachineRecipeCard(VoxelEngine.Crafting.ProcessingRecipe recipe, bool selected, Color accent, System.Action onClick)
+        {
+            var card = T.Card();
+            card.style.marginBottom = 5;
+            card.style.flexDirection = FlexDirection.Row;
+            card.style.alignItems = Align.Center;
+            if (selected) T.Border(card, 1, accent);
+
+            var iconSlot = new VisualElement();
+            iconSlot.style.width = 34; iconSlot.style.height = 34;
+            iconSlot.style.marginRight = 8;
+            iconSlot.style.alignItems = Align.Center;
+            iconSlot.style.justifyContent = Justify.Center;
+            iconSlot.style.backgroundColor = new StyleColor(T.BgSlot);
+            T.Radius(iconSlot, 5);
+            iconSlot.pickingMode = PickingMode.Ignore;
+
+            Sprite recipeIcon = (recipe.outputs != null && recipe.outputs.Length > 0 && recipe.outputs[0].item != null)
+                ? recipe.outputs[0].item.icon : null;
+            if (recipeIcon != null)
+            {
+                var rImg = new Image { sprite = recipeIcon };
+                rImg.scaleMode = ScaleMode.ScaleToFit;
+                rImg.style.width = 30; rImg.style.height = 30;
+                rImg.pickingMode = PickingMode.Ignore;
+                iconSlot.Add(rImg);
+            }
+            else
+            {
+                var tintChip = new VisualElement();
+                tintChip.style.width = 22; tintChip.style.height = 22;
+                Color chipCol = (recipe.outputs != null && recipe.outputs.Length > 0 && recipe.outputs[0].item != null)
+                    ? recipe.outputs[0].item.iconTint : accent;
+                tintChip.style.backgroundColor = new StyleColor(chipCol);
+                T.Radius(tintChip, 4);
+                tintChip.pickingMode = PickingMode.Ignore;
+                iconSlot.Add(tintChip);
+            }
+            card.Add(iconSlot);
+
+            var column = new VisualElement();
+            column.style.flexGrow = 1;
+            column.pickingMode = PickingMode.Ignore;
+            var name = new Label(recipe.GetDisplayName());
+            name.style.color = new StyleColor(selected ? T.TextAccent : T.TextPrimary);
+            name.style.fontSize = 12;
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            name.pickingMode = PickingMode.Ignore;
+            column.Add(name);
+            var inputs = new Label($"In: {ProcessingRecipeInputs(recipe)}") { pickingMode = PickingMode.Ignore };
+            inputs.style.color = new StyleColor(T.TextSecondary);
+            inputs.style.fontSize = 10;
+            column.Add(inputs);
+            var outputs = new Label($"Out: {ProcessingRecipeOutputs(recipe)}") { pickingMode = PickingMode.Ignore };
+            outputs.style.color = new StyleColor(T.TextMuted);
+            outputs.style.fontSize = 10;
+            column.Add(outputs);
+            card.Add(column);
+
+            var time = new Label($"{recipe.secondsPerBatch:0.#}s");
+            time.style.color = new StyleColor(T.TextMuted);
+            time.style.fontSize = 10;
+            time.style.unityFontStyleAndWeight = FontStyle.Bold;
+            time.pickingMode = PickingMode.Ignore;
+            card.Add(time);
+
+            card.RegisterCallback<ClickEvent>(_ =>
+            {
+                onClick?.Invoke();
+                GameUIController.Instance?.RequestRefresh();
+            });
+            card.RegisterCallback<PointerEnterEvent>(_ => card.style.backgroundColor = new StyleColor(T.BgHover));
+            card.RegisterCallback<PointerLeaveEvent>(_ => card.style.backgroundColor = new StyleColor(T.BgCard));
+            return card;
+        }
+
+        private static string ProcessingRecipeInputs(VoxelEngine.Crafting.ProcessingRecipe recipe)
+        {
+            if (recipe == null) return "—";
+            var sb = new System.Text.StringBuilder();
+            if (recipe.inputs != null)
+            {
+                for (int i = 0; i < recipe.inputs.Length; i++)
+                {
+                    var req = recipe.inputs[i];
+                    if (req.item == null || req.count <= 0) continue;
+                    if (sb.Length > 0) sb.Append(" + ");
+                    sb.Append($"{req.count}x {req.item.displayName}");
+                }
+            }
+            if (recipe.fluidInputs != null)
+            {
+                for (int i = 0; i < recipe.fluidInputs.Length; i++)
+                {
+                    var f = recipe.fluidInputs[i];
+                    if (f.litres <= 0f) continue;
+                    if (sb.Length > 0) sb.Append(" + ");
+                    sb.Append($"{f.litres:0.#}L {f.liquid.DisplayName()}");
+                }
+            }
+            return sb.Length > 0 ? sb.ToString() : "—";
+        }
+
+        private static string ProcessingRecipeOutputs(VoxelEngine.Crafting.ProcessingRecipe recipe)
+        {
+            if (recipe == null) return "—";
+            var sb = new System.Text.StringBuilder();
+            if (recipe.outputs != null)
+            {
+                for (int i = 0; i < recipe.outputs.Length; i++)
+                {
+                    var prod = recipe.outputs[i];
+                    if (prod.item == null || prod.count <= 0) continue;
+                    if (sb.Length > 0) sb.Append(" + ");
+                    sb.Append($"{prod.count}x {prod.item.displayName}");
+                }
+            }
+            if (recipe.fluidOutputs != null)
+            {
+                for (int i = 0; i < recipe.fluidOutputs.Length; i++)
+                {
+                    var f = recipe.fluidOutputs[i];
+                    if (f.litres <= 0f) continue;
+                    if (sb.Length > 0) sb.Append(" + ");
+                    sb.Append($"{f.litres:0.#}L {f.liquid.DisplayName()}");
+                }
+            }
+            return sb.Length > 0 ? sb.ToString() : "—";
         }
 
         // ════════════════════════════════════════════════════════════

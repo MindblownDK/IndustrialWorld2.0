@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.4-dev`
-**Roadmap Version:** `17.24.4-dev`
+**Current Version:** `17.25.0-dev`
+**Roadmap Version:** `17.25.0-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,7 +29,12 @@
 
 ## 0. Recently Done
 
-### 17.24.4-dev / 17.24.3-dev / 17.24.2-dev / 17.24.1-dev / 17.24.0-dev - Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
+### 17.25.0-dev - Biofuel Chain, Biomass Press & Automatic Tree Farm
+- Added `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `Tree Sapling` drops from wild trees, `Wood Chips` (`12s` fuel), `Biofuel Briquette` (`65s` fuel), and `Organic Fertilizer`, plus `CoalGeneratorFuel` liquid Biofuel sipping from adjacent `BiomassPress` or `WaterTank` networks
+- Added `TreeFarmPlot` (`3x1x3` arboricultural timber planter with 3-tier growing tree, irrigation `2x` and fertilizer `1.5x` bonuses) and `AutoTreeFarm` (`4x3x4` automated forestry plot & gantry saw-harvester with `500 L` irrigation tank, `10m` nearby plot tending, and belt/chute export), and extended `Harvester` to tend `TreeFarmPlot`s
+- Added `BiomassPress` (`2x2x2` industrial screw-press & bio-refinery with `1000 L` water tank, `1500 L` biofuel tank, `ProcessingRecipe` + universal crop/wood/biomass/chip auto-modes), UI panels, persistence, and non-destructive Setup Wizard authoring (`BiofuelAndTreeFarmSetup`)
+
+### 17.24.5-dev / 17.24.4-dev / 17.24.3-dev / 17.24.2-dev / 17.24.1-dev / 17.24.0-dev - Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
 - Added `GridCargoDropHatch` (Small & Large Grid) with multi-stage clam-shell bay door animation, auto-pull from grid containers, and 4 mutually exclusive multi-item export filters toggleable from both the block UI and the cockpit hotbar (`GridControlHud`)
 - Added `ReceivingChute` (`3x2x3` stationary flared catch hopper) and `GridReceivingChute` (Small & Large Grid catch hopper) that capture falling `DroppedItem`s in a wide overhead funnel zone and route them to connected belts/chutes/chests or grid cargo containers
 - Fixed machine UI scroll reset across live rebuilds, `SlotCard`/`SlotGrid` border overflow, item tooltips while machine panels are open, Right-Click half-stack to cursor, Shift+Right-Click half-stack transfer, and removed bottom machine hint blurbs
@@ -48,11 +53,6 @@
 - Research gains a toggleable 5-slot queue and Team Shared Research across World Settings, Server Admin, and `server_config.json`, plus drag-to-pan canvas, Space-to-research, Green/Blue/Purple `I`/`II`/`III` science pack dots, hidden `0/N` costs on completed nodes, non-Assembler Research Lab tier, and unblocked Lab UI interaction
 - Trees and non-mob scatter persist across save/load via deterministic per-cell RNG and `ScatterHarvestTracker` and regrow only on an in-game timer when unpolluted and away from structures; `GameVersion` matches `17.21.0-dev`; weather debug hotkeys are Editor-only; `SettingsUI.InterfaceTab` live-updates active button state
 - Movement in dug holes avoids corner upward push via ankle-level floor recovery and shin-wall slope checks; enemy attacks and projectiles enforce line-of-sight; wind and pollution advection follow a predictable planet-tangent direction; `CodeLock` spans both sides of single doors; crafting required ingredients show recipe tooltips
-
-### 17.20.4-dev - Keep Runtime Enemy Pose Data Out of Player Serialization
-- The Ghoul arm-pose cache is explicitly nonserialized and rebuilt at bind time, so Editor and player type layouts agree
-- Release builds no longer carry an unused private `infiniteHealth` copy; the development Inspector toggle is preserved
-- No gameplay, save, prefab, chunk or wire changes; no Setup rerun
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -1388,9 +1388,9 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Store power for vehicles and machines.
    - Charge/discharge visual feedback.
 
-3. **Biofuel Chain**
-   - Farm crops → biomass press → biofuel.
-   - Links farming into industry.
+3. ~~**Biofuel Chain & Automatic Tree Farm**~~ *(17.25.0-dev — `BiomassPress`, `TreeFarmPlot`, `AutoTreeFarm`, `LiquidType.Biofuel`, `Biofuel Briquette`, `Wood Chips`, `Tree Sapling`; authored via `BiofuelAndTreeFarmSetup` in `VoxelEngineSetupWindow`)*
+   - Farm crops / Tree Farm timber → `Biomass` / `Wood Chips` → `Biomass Press` → `LiquidType.Biofuel` + `Biofuel Briquette`.
+   - Links farming and sustainable forestry directly into industrial power and fuel networks.
 
 4. **Vehicle Bay / Dock**
    - Recharges rover batteries and refuels engines.

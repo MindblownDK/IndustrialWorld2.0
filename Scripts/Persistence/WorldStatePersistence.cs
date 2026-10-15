@@ -1858,6 +1858,32 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            var biomassPress = go.GetComponentInChildren<VoxelEngine.Simulation.BiomassPress>(true);
+            if (biomassPress != null)
+            {
+                biomassPress.EnsureContainers();
+                var sc = SerializeMulti(biomassPress.inputC, biomassPress.outputC, biomassPress.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var autoTreeFarm = go.GetComponentInChildren<VoxelEngine.Farming.AutoTreeFarm>(true);
+            if (autoTreeFarm != null)
+            {
+                autoTreeFarm.EnsureContainers();
+                var sc = SerializeMulti(autoTreeFarm.inputC, autoTreeFarm.outputC, autoTreeFarm.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var cropHarvester = go.GetComponentInChildren<VoxelEngine.Farming.Harvester>(true);
+            if (cropHarvester != null)
+            {
+                if (cropHarvester.outputBuffer == null)
+                    cropHarvester.outputBuffer = new ItemContainer("Harvester Output", 8);
+                return SerializeMulti(cropHarvester.outputBuffer);
+            }
+
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
             if (assembler != null)
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
@@ -5037,6 +5063,33 @@ namespace VoxelEngine.Persistence
                 receivingChute.EnsureContainers();
                 DeserializeMulti(sc, receivingChute.buffer);
                 RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var biomassPress = go.GetComponentInChildren<VoxelEngine.Simulation.BiomassPress>(true);
+            if (biomassPress != null)
+            {
+                biomassPress.EnsureContainers();
+                DeserializeMulti(sc, biomassPress.inputC, biomassPress.outputC, biomassPress.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var autoTreeFarm = go.GetComponentInChildren<VoxelEngine.Farming.AutoTreeFarm>(true);
+            if (autoTreeFarm != null)
+            {
+                autoTreeFarm.EnsureContainers();
+                DeserializeMulti(sc, autoTreeFarm.inputC, autoTreeFarm.outputC, autoTreeFarm.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var cropHarvester = go.GetComponentInChildren<VoxelEngine.Farming.Harvester>(true);
+            if (cropHarvester != null)
+            {
+                if (cropHarvester.outputBuffer == null)
+                    cropHarvester.outputBuffer = new ItemContainer("Harvester Output", 8);
+                DeserializeMulti(sc, cropHarvester.outputBuffer);
                 return;
             }
 

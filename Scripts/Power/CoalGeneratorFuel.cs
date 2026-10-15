@@ -173,7 +173,9 @@ namespace VoxelEngine.Power
             else
             {
                 _gen.isOn = false;
-                // Try consume another fuel item.
+                if (IsPausedByFullBattery) return;
+
+                // 1) Try consume a solid fuel item (Coal, Metallurgical Coke, Biofuel Briquette, Biomass, Wood Chips, Wood Log).
                 var s = fuelC.GetSlot(0);
                 if (!s.IsEmpty && s.item is ResourceItem ri && ri.fuelSeconds > 0f)
                 {
@@ -182,7 +184,57 @@ namespace VoxelEngine.Power
                     fuelC.Remove(ri, 1);
                     _gen.isOn = true;
                 }
+                // 2) Or sip piped Liquid Biofuel from an adjacent BiomassPress or Biofuel tank network (10 L = 18s burn).
+                else if (TryDrawLiquidBiofuel(10f, out float bioBurnSec))
+                {
+                    fuelRemaining = bioBurnSec;
+                    fuelMaxDuration = bioBurnSec;
+                    _gen.isOn = true;
+                }
             }
+        }
+
+        private static readonly Collider[] s_bioProbe = new Collider[24];
+
+        private bool TryDrawLiquidBiofuel(float litresWanted, out float burnSeconds)
+        {
+            burnSeconds = 0f;
+            int hits = Physics.OverlapSphereNonAlloc(transform.position, 2.8f, s_bioProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hits; i++)
+            {
+                var col = s_bioProbe[i];
+                s_bioProbe[i] = null;
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+
+                var press = col.GetComponentInParent<VoxelEngine.Simulation.BiomassPress>();
+                if (press != null && press.Available(LiquidType.Biofuel) >= litresWanted)
+                {
+                    float drawn = press.Draw(LiquidType.Biofuel, litresWanted);
+                    if (drawn > 0f)
+                    {
+                        burnSeconds = drawn * 1.8f;
+                        return true;
+                    }
+                }
+
+                var node = col.GetComponentInParent<VoxelEngine.Fluids.FluidNode>();
+                if (node != null && node.network != null)
+                {
+                    foreach (var n in node.network.nodes)
+                    {
+                        if (n is VoxelEngine.Fluids.WaterTank wt && wt.liquidType == LiquidType.Biofuel && wt.water >= litresWanted)
+                        {
+                            float drawn = wt.TakeSome(litresWanted);
+                            if (drawn > 0f)
+                            {
+                                burnSeconds = drawn * 1.8f;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
         }
     }
 }

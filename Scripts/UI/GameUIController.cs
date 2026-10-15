@@ -143,6 +143,8 @@ namespace VoxelEngine.UI
         private VoxelEngine.Simulation.Assembler _openAssembler;
         private VoxelEngine.Simulation.Funnel _openFunnel;
         private VoxelEngine.Simulation.ReceivingChute _openReceivingChute;
+        private VoxelEngine.Simulation.BiomassPress _openBiomassPress;
+        private VoxelEngine.Farming.AutoTreeFarm _openAutoTreeFarm;
         private VoxelEngine.Simulation.ConveyorSplitter _openSplitter;
         private IVoltageStation _openVoltageStation;
         private bool _productionStatsOpen;
@@ -458,6 +460,7 @@ namespace VoxelEngine.UI
                 _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null || _openWaterPump != null || _openWindTurbine != null ||
                 _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null ||
                 _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openReceivingChute != null ||
+                _openBiomassPress != null || _openAutoTreeFarm != null ||
                 _openGridBlock != null || _openGridTerminal != null || _openWaterTower != null || _openRadarBeacon != null ||
                 _openSteamEngine != null || _openSchedule != null;
 
@@ -674,7 +677,7 @@ namespace VoxelEngine.UI
             _openImporter        = null; _openExporter        = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS             = null;
             _openPowerstation = null; _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
 
             // Normalize + auto-refuel equipped jetpacks BEFORE building the UI:
             // pulling H₂/charge from portable containers mutates the inventory and
@@ -701,7 +704,7 @@ namespace VoxelEngine.UI
             _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
-            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             UnlockCursor();
             Refresh();
         }
@@ -835,7 +838,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             UnwatchAllContainers();
@@ -876,7 +879,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openStation    = f.GetComponent<CraftingStation>();
@@ -902,7 +905,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openStation    = ef.GetComponent<CraftingStation>();
@@ -927,7 +930,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _inventoryOpen  = true;
@@ -948,7 +951,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _inventoryOpen  = true;
@@ -973,7 +976,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null; _openDronePort = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openPortalController = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openVoltageStation = null;
             _openDefense = null;
             _openPowerBattery = null;
@@ -1036,6 +1039,22 @@ namespace VoxelEngine.UI
                     _openReceivingChute = receivingChute;
                     receivingChute.EnsureContainers();
                     WatchContainer(receivingChute.buffer);
+                    break;
+                case VoxelEngine.Simulation.BiomassPress biomassPress:
+                    _openBiomassPress = biomassPress;
+                    biomassPress.EnsureContainers();
+                    biomassPress.EnsureTanks();
+                    WatchContainer(biomassPress.inputC);
+                    WatchContainer(biomassPress.outputC);
+                    WatchContainer(biomassPress.upgradeC);
+                    break;
+                case VoxelEngine.Farming.AutoTreeFarm autoTreeFarm:
+                    _openAutoTreeFarm = autoTreeFarm;
+                    autoTreeFarm.EnsureContainers();
+                    autoTreeFarm.EnsureTanks();
+                    WatchContainer(autoTreeFarm.inputC);
+                    WatchContainer(autoTreeFarm.outputC);
+                    WatchContainer(autoTreeFarm.upgradeC);
                     break;
                 case VoxelEngine.Simulation.ConveyorSplitter splitter:
                     _openSplitter = splitter;
@@ -1168,7 +1187,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openGridTerminal = grid; _terminalTab = -1;
@@ -1223,7 +1242,7 @@ namespace VoxelEngine.UI
             _openCraftTerminal = null; _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null; _openPowerBattery = null; _openVoltageStation = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -1266,7 +1285,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openVoltageStation = null;
@@ -1308,7 +1327,7 @@ namespace VoxelEngine.UI
             _openPowerstation= null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openVoltageStation = null;
@@ -1564,7 +1583,7 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
-                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openReceivingChute != null || _openSplitter != null ||
+                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openReceivingChute != null || _openBiomassPress != null || _openAutoTreeFarm != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
@@ -1583,7 +1602,7 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
-                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openReceivingChute != null || _openSplitter != null ||
+                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openReceivingChute != null || _openBiomassPress != null || _openAutoTreeFarm != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 // The station pane has its own filtered list on the right; keep the
@@ -1669,6 +1688,8 @@ namespace VoxelEngine.UI
                 else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openAssembler); }
                 else if (_openFunnel           != null) _contentLayer.Add(MachineUIs.FunnelPanel(_openFunnel));
                 else if (_openReceivingChute   != null) { var mp = MachineUIs.ReceivingChutePanel(_openReceivingChute, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openReceivingChute); }
+                else if (_openBiomassPress     != null) { var mp = MachineUIs.BiomassPressPanel(_openBiomassPress, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openBiomassPress); }
+                else if (_openAutoTreeFarm     != null) { var mp = MachineUIs.AutoTreeFarmPanel(_openAutoTreeFarm, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openAutoTreeFarm); }
                 else if (_openSplitter         != null) _contentLayer.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
                 else if (_openVoltageStation   != null) _contentLayer.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
                 else if (_openDefense != null) BuildDefensePanel(_contentLayer, _openDefense);
@@ -1874,6 +1895,8 @@ namespace VoxelEngine.UI
             if (_openAssembler != null) return _openAssembler;
             if (_openFunnel != null) return _openFunnel;
             if (_openReceivingChute != null) return _openReceivingChute;
+            if (_openBiomassPress != null) return _openBiomassPress;
+            if (_openAutoTreeFarm != null) return _openAutoTreeFarm;
             if (_openSplitter != null) return _openSplitter;
             if (_openCarbonHarvester != null) return _openCarbonHarvester;
             if (_openGridBlock != null) return _openGridBlock;
@@ -2854,7 +2877,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _openQuarry = null; _openReactor = null; _openStation = null; _recipeBrowserOpen = false;
             _productionStatsOpen = false; _openChest = null; _openGridTerminal = null;
-            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openReceivingChute = null; _openBiomassPress = null; _openAutoTreeFarm = null; _openSplitter = null;
             _openDefense = d;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -3205,7 +3228,7 @@ namespace VoxelEngine.UI
                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                    _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null || _openDrawerController != null ||
                    _openDronePort != null || _openItemDisplay != null || _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null ||
-                   _openFunnel != null || _openReceivingChute != null || _openSplitter != null || _openGridBlock != null ||
+                   _openFunnel != null || _openReceivingChute != null || _openBiomassPress != null || _openAutoTreeFarm != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null || _openStation != null ||
                    _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null ||
                    _openPortalController != null;
@@ -7089,6 +7112,18 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 {
                     _openReceivingChute.EnsureContainers();
                     return _openReceivingChute.buffer;
+                }
+                if (_openBiomassPress != null)
+                {
+                    _openBiomassPress.EnsureContainers();
+                    bool isUpgrade = item is FurnaceUpgradeItem;
+                    return isUpgrade ? _openBiomassPress.upgradeC : _openBiomassPress.inputC;
+                }
+                if (_openAutoTreeFarm != null)
+                {
+                    _openAutoTreeFarm.EnsureContainers();
+                    bool isUpgrade = item is FurnaceUpgradeItem;
+                    return isUpgrade ? _openAutoTreeFarm.upgradeC : _openAutoTreeFarm.inputC;
                 }
                 // Coal Generator: only fuel items go in.
                 if (_openCoalGen != null)

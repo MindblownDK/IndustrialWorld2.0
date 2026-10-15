@@ -91,24 +91,49 @@ namespace VoxelEngine.Farming
                     plot.plantedCrop = null;
                 }
             }
+
+            // Also scan and auto-harvest any standalone TreeFarmPlots within scanRadius.
+            var treePlots = FindObjectsByType<TreeFarmPlot>(FindObjectsInactive.Exclude);
+            foreach (var tPlot in treePlots)
+            {
+                if (tPlot == null || !tPlot.IsMature) continue;
+                if (Vector3.SqrMagnitude(tPlot.transform.position - transform.position)
+                    > scanRadius * scanRadius) continue;
+
+                if (tPlot.TryAutomatedHarvest(
+                    out var logIt, out int logCnt,
+                    out var bioIt, out int bioCnt,
+                    out var sapIt, out int sapCnt,
+                    autoReplant: autoReplant))
+                {
+                    if (logIt != null && logCnt > 0) OutputItems(logIt, logCnt);
+                    if (bioIt != null && bioCnt > 0) OutputItems(bioIt, bioCnt);
+                    if (sapIt != null && sapCnt > 0) OutputItems(sapIt, sapCnt);
+                }
+            }
         }
 
         private void OutputItems(ItemDefinition item, int count)
         {
+            if (item == null || count <= 0) return;
             int remaining = count;
 
-            // Try pipes first.
-            var hits = Physics.OverlapSphere(transform.position, 1.6f);
+            // Try belts, chutes, funnels, or item pipes first.
+            var hits = Physics.OverlapSphere(transform.position, 1.8f);
             foreach (var col in hits)
             {
                 if (col.gameObject == gameObject) continue;
-                var pipe = col.GetComponent<ItemPipe>();
-                if (pipe == null) continue;
-                int cap = pipe.GetInputCapacity(item);
-                if (cap <= 0) continue;
-                int accepted = pipe.TryInsert(item, Mathf.Min(cap, remaining));
-                remaining -= accepted;
-                if (remaining <= 0) return;
+                var consumer = col.GetComponentInParent<IItemConsumer>();
+                if (consumer != null)
+                {
+                    int cap = consumer.GetInputCapacity(item);
+                    if (cap > 0)
+                    {
+                        int accepted = consumer.TryInsert(item, Mathf.Min(cap, remaining));
+                        remaining -= accepted;
+                        if (remaining <= 0) return;
+                    }
+                }
             }
 
             // Overflow to internal buffer.

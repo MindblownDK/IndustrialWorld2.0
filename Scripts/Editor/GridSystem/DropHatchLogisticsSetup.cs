@@ -259,7 +259,7 @@ namespace VoxelEngine.EditorTools
                 hatch.slots = slots;
                 hatch.maxMassKg = maxMassKg;
                 hatch.autoPullFromGrid = true;
-                hatch.autoOpenWithFilter = true;
+                hatch.autoOpenWithFilter = false;
                 hatch.EnsureFilters();
                 hatch.RebuildVisuals();
                 AssignLogisticsMaterials(root);

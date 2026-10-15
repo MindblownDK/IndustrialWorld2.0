@@ -13,9 +13,12 @@ namespace VoxelEngine.Trees
     {
         public int   maxHp = 80;
         public ItemDefinition logItem;          // assign a "Wood Log" ItemDefinition asset
+        public ItemDefinition saplingItem;      // optional "Tree Sapling" ItemDefinition asset
         public int   minLogs = 2, maxLogs = 4;
         [Tooltip("Required tool tier to harvest faster (axe). Hands work but slower.")]
         public ToolType preferredTool = ToolType.Axe;
+
+        private static ItemDefinition _cachedSaplingItem;
 
         [HideInInspector] public int hp;
         [HideInInspector] public string scatterPersistencePath;
@@ -89,14 +92,37 @@ namespace VoxelEngine.Trees
             {
                 RecordHarvestPersistence();
                 int yield = Random.Range(minLogs, maxLogs + 1);
-                if (logItem != null)
+                var inv = Object.FindAnyObjectByType<Inventory>();
+                if (inv != null)
                 {
-                    var inv = Object.FindAnyObjectByType<Inventory>();
-                    if (inv != null) inv.Add(logItem, yield);
+                    if (logItem != null) inv.Add(logItem, yield);
+                    var sapling = saplingItem != null ? saplingItem : ResolveSaplingItem();
+                    if (sapling != null)
+                    {
+                        int saplings = Random.Range(1, 3);
+                        inv.Add(sapling, saplings);
+                    }
                 }
                 Destroy(ResolveScatterRoot());
             }
             return dealt;
+        }
+
+        private static ItemDefinition ResolveSaplingItem()
+        {
+            if (_cachedSaplingItem != null) return _cachedSaplingItem;
+            var all = Resources.FindObjectsOfTypeAll<ItemDefinition>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                var it = all[i];
+                if (it == null) continue;
+                if (it.itemId == "seed_tree_sapling" || it.itemId == "item_tree_sapling" || it.displayName == "Tree Sapling")
+                {
+                    _cachedSaplingItem = it;
+                    return it;
+                }
+            }
+            return null;
         }
 
         public void RecordHarvestPersistence()

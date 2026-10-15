@@ -197,6 +197,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build wind-power content", BuildWindmillContent),
                 Setup("Build factory foundations, conveyors and high-voltage grid", BuildFactoryFoundationsContent),
                 Setup("Build ore washing, tailings and metallurgical foundry loop", () => VoxelEngine.EditorTools.OreWashingSetup.RunStep115()),
+                Setup("Build biofuel chain, biomass press and automatic tree farm", () => VoxelEngine.EditorTools.BiofuelAndTreeFarmSetup.RunStep117()),
                 Setup("Add or repair factory prefab visuals", () => VoxelEngine.EditorTools.FactoryPrefabVisualsBuilder.BuildAll()),
                 Setup("Build geological prospecting and ore detection", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59()),
                 Setup("Author the distillation plant", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69()),
@@ -5261,6 +5262,9 @@ namespace VoxelEngine.EditorTools
                 new Color(0.35f, 0.85f, 0.45f), biofarmPrefab, "Life Support", hp: 380, miningTier: 2);
             AddRecipe(STORE_RECIPES, "Recipe_Biofarm", "Biofarm", blockBiofarm, 1, VoxelEngine.Crafting.StationTier.Assembler, false,
                 ((VoxelEngine.Items.ItemDefinition)steelPlate, 8), ((VoxelEngine.Items.ItemDefinition)glass, 6), ((VoxelEngine.Items.ItemDefinition)circuit, 3), ((VoxelEngine.Items.ItemDefinition)copperWire, 6), ((VoxelEngine.Items.ItemDefinition)plastic, 2));
+
+            // ── Biofuel Chain, Biomass Press & Automatic Tree Farm (17.25.0-dev) ──
+            VoxelEngine.EditorTools.BiofuelAndTreeFarmSetup.RunSilent();
 
             // ── Ruins & Blueprint Data Cores (4.9.0 — exploration rewards) ──
             // Blueprint cores are FOUND in ruins, not crafted. Unlock wind turbine sub-recipes etc.
@@ -10699,6 +10703,7 @@ root =>
             EditorUtility.SetDirty(registry);
             VoxelEngine.EditorTools.OreWashingSetup.RunSilent();
             VoxelEngine.EditorTools.DropHatchLogisticsSetup.RunSilent();
+            VoxelEngine.EditorTools.BiofuelAndTreeFarmSetup.RunSilent();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 

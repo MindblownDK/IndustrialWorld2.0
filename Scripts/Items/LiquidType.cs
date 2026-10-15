@@ -23,6 +23,8 @@ namespace VoxelEngine.Items
         Kerosene = 9,
         Diesel = 10,
         Gasoline = 11,
+        // 17.25.0-dev: renewable liquid biofuel pressed from crops, wood chips, and biomass.
+        Biofuel = 12,
     }
 
     public static class LiquidTypeExt
@@ -41,6 +43,7 @@ namespace VoxelEngine.Items
             LiquidType.Kerosene            => "Kerosene",
             LiquidType.Diesel              => "Diesel",
             LiquidType.Gasoline            => "Gasoline",
+            LiquidType.Biofuel             => "Biofuel",
             _                              => t.ToString(),
         };
 
@@ -59,6 +62,7 @@ namespace VoxelEngine.Items
             LiquidType.Kerosene            => new Color(0.96f, 0.70f, 0.30f),
             LiquidType.Diesel              => new Color(0.80f, 0.48f, 0.14f),
             LiquidType.Gasoline            => new Color(0.98f, 0.74f, 0.16f),
+            LiquidType.Biofuel             => new Color(0.52f, 0.86f, 0.22f),
             _                              => new Color(0.5f, 0.5f, 0.5f),
         };
 
@@ -77,6 +81,7 @@ namespace VoxelEngine.Items
             LiquidType.Kerosene            => 0.80f,
             LiquidType.Diesel              => 0.85f,
             LiquidType.Gasoline            => 0.74f,
+            LiquidType.Biofuel             => 0.84f,
             _                              => 1.0f,
         };
 
@@ -90,6 +95,7 @@ namespace VoxelEngine.Items
             LiquidType.CrudeOil            => 37.0f,
             LiquidType.Diesel              => 36.5f,
             LiquidType.Kerosene            => 35.0f,
+            LiquidType.Biofuel             => 34.5f,
             LiquidType.Gasoline            => 32.5f,
             LiquidType.Naphtha             => 31.5f,
             LiquidType.Lpg                 => 26.0f,
@@ -105,6 +111,7 @@ namespace VoxelEngine.Items
             LiquidType.Diesel              => -12f,
             LiquidType.RefinedOil          => -15f,
             LiquidType.MarineGasOil        => -20f,
+            LiquidType.Biofuel             => -25f,
             LiquidType.Naphtha             => -35f,
             LiquidType.MarineEngineCoolant => -40f,
             LiquidType.Gasoline            => -45f,
@@ -119,7 +126,7 @@ namespace VoxelEngine.Items
             LiquidType.HeavyFuelOil or LiquidType.MarineGasOil or LiquidType.RefinedOil
             or LiquidType.LiquidFuel or LiquidType.CrudeOil or LiquidType.Diesel
             or LiquidType.Kerosene or LiquidType.Gasoline or LiquidType.Naphtha
-            or LiquidType.Lpg => true,
+            or LiquidType.Lpg or LiquidType.Biofuel => true,
             _ => false,
         };
     }

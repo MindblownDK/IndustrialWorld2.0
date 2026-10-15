@@ -140,8 +140,8 @@ namespace VoxelEngine.GridSystem
 
         [Header("Hatch Door & Drop Settings")]
         public bool hatchOpen;
-        [Tooltip("Automatically opens the hatch bay doors when a filter (1..4) is toggled ON, and closes them when toggled OFF.")]
-        public bool autoOpenWithFilter = true;
+        [Tooltip("When enabled, choosing one of the 4 filters automatically opens the hatch bay doors (and turning filters off closes them). Default is OFF.")]
+        public bool autoOpenWithFilter = false;
         [Tooltip("When true, only drops items that match the active filter (if a filter is active). When false, drops any item in the hatch buffer while open.")]
         public bool dropOnlyMatchingWhenFiltered = true;
         public float pullInterval = 0.25f;
@@ -283,6 +283,18 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(this);
             VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
         }
+
+        public void SetAutoOpenWithFilter(bool enable)
+        {
+            autoOpenWithFilter = enable;
+            if (autoOpenWithFilter && activeFilterIndex >= 0)
+                hatchOpen = true;
+
+            VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(this);
+            VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
+        }
+
+        public void ToggleAutoOpenWithFilter() => SetAutoOpenWithFilter(!autoOpenWithFilter);
 
         public void CycleActiveFilter()
         {
@@ -647,7 +659,7 @@ namespace VoxelEngine.GridSystem
             if (state == null) return;
             EnsureFilters();
             hatchOpen = state.GetExtra("hatchOpen", hatchOpen ? 1f : 0f) >= 0.5f;
-            autoOpenWithFilter = state.GetExtra("autoOpenWithFilter", autoOpenWithFilter ? 1f : 0f) >= 0.5f;
+            autoOpenWithFilter = state.GetExtra("autoOpenWithFilter", 0f) >= 0.5f;
             autoPullFromGrid = state.GetExtra("autoPullFromGrid", autoPullFromGrid ? 1f : 0f) >= 0.5f;
             dropOnlyMatchingWhenFiltered = state.GetExtra("dropOnlyMatching", dropOnlyMatchingWhenFiltered ? 1f : 0f) >= 0.5f;
             activeFilterIndex = Mathf.Clamp(Mathf.RoundToInt(state.GetExtra("activeFilterIndex", -1f)), -1, FilterCount - 1);
@@ -692,7 +704,7 @@ namespace VoxelEngine.GridSystem
             string activeLabel = activeFilterIndex >= 0
                 ? $"F{activeFilterIndex + 1} ({GetFilter(activeFilterIndex).label})"
                 : "OFF";
-            return $"DROP HATCH\nDoor: {(hatchOpen ? "OPEN" : "CLOSED")} ({_open01 * 100f:0}%)\nFilter: {activeLabel}\nDropped: {_totalDroppedCount:N0}";
+            return $"DROP HATCH\nDoor: {(hatchOpen ? "OPEN" : "CLOSED")} (Auto-Open: {(autoOpenWithFilter ? "ON" : "OFF")})\nFilter: {activeLabel}\nDropped: {_totalDroppedCount:N0}";
         }
     }
 }

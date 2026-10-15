@@ -374,6 +374,7 @@ namespace VoxelEngine.GridSystem.UI
                 return a.actionId switch
                 {
                     "hatch_toggle"       => hatch.hatchOpen ? "OPEN" : "SHUT",
+                    "hatch_auto_open"    => hatch.autoOpenWithFilter ? "ON" : "OFF",
                     "hatch_filter_1"     => hatch.activeFilterIndex == 0 ? "ACTIVE" : "OFF",
                     "hatch_filter_2"     => hatch.activeFilterIndex == 1 ? "ACTIVE" : "OFF",
                     "hatch_filter_3"     => hatch.activeFilterIndex == 2 ? "ACTIVE" : "OFF",
@@ -462,6 +463,7 @@ namespace VoxelEngine.GridSystem.UI
             if (dropHatch)
             {
                 actions.Add(new ActionDef("hatch_toggle", "OPEN / CLOSE HATCH"));
+                actions.Add(new ActionDef("hatch_auto_open", "AUTO-OPEN HATCH ON FILTER"));
                 actions.Add(new ActionDef("hatch_filter_1", "FILTER 1 TOGGLE"));
                 actions.Add(new ActionDef("hatch_filter_2", "FILTER 2 TOGGLE"));
                 actions.Add(new ActionDef("hatch_filter_3", "FILTER 3 TOGGLE"));
@@ -497,10 +499,10 @@ namespace VoxelEngine.GridSystem.UI
             }
             if (firstHatch == null) return;
 
-            // Auto-populate up to 5 free hotbar slots with Filter 1..4 + Hatch Open/Close
-            // so the pilot can toggle the 4 filters directly from the cockpit hotbar keys.
-            string[] defaultIds = { "hatch_filter_1", "hatch_filter_2", "hatch_filter_3", "hatch_filter_4", "hatch_toggle" };
-            string[] defaultLabels = { "FILTER 1 TOGGLE", "FILTER 2 TOGGLE", "FILTER 3 TOGGLE", "FILTER 4 TOGGLE", "OPEN / CLOSE HATCH" };
+            // Auto-populate up to 6 free hotbar slots with Filter 1..4 + Hatch Open/Close + Auto-Open on Filter
+            // so the pilot can toggle the 4 filters and auto-open mode directly from the cockpit hotbar keys.
+            string[] defaultIds = { "hatch_filter_1", "hatch_filter_2", "hatch_filter_3", "hatch_filter_4", "hatch_toggle", "hatch_auto_open" };
+            string[] defaultLabels = { "FILTER 1 TOGGLE", "FILTER 2 TOGGLE", "FILTER 3 TOGGLE", "FILTER 4 TOGGLE", "OPEN / CLOSE HATCH", "AUTO-OPEN HATCH ON FILTER" };
             int nextDefault = 0;
             for (int i = 0; i < slots.Length && nextDefault < defaultIds.Length; i++)
             {
@@ -634,6 +636,17 @@ namespace VoxelEngine.GridSystem.UI
                     foreach (var b in members)
                         if (b is GridCargoDropHatch dh) dh.SetHatchOpen(!anyOpen);
                     return anyOpen ? "hatch closing" : "hatch opening";
+                }
+                case "hatch_auto_open":
+                {
+                    bool anyAuto = false;
+                    int count = 0;
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) { count++; if (dh.autoOpenWithFilter) anyAuto = true; }
+                    if (count == 0) return "no drop hatch";
+                    foreach (var b in members)
+                        if (b is GridCargoDropHatch dh) dh.SetAutoOpenWithFilter(!anyAuto);
+                    return anyAuto ? "auto-open on filter OFF" : "auto-open on filter ON";
                 }
                 case "hatch_filter_1":
                 case "hatch_filter_2":

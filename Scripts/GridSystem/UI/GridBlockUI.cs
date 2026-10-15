@@ -3944,12 +3944,10 @@ namespace VoxelEngine.GridSystem.UI
             pullBtn.style.marginBottom = 4;
             ctrlRow.Add(pullBtn);
 
-            var autoDoorBtn = T.SmallButton(dh.autoOpenWithFilter ? "Auto-Door: ON" : "Auto-Door: OFF", () =>
-            {
-                dh.autoOpenWithFilter = !dh.autoOpenWithFilter;
-                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(dh);
-                VoxelEngine.UI.GameUIController.Instance?.RequestRefresh();
-            }, dh.autoOpenWithFilter ? T.AccentGold : T.BgSlot);
+            var autoDoorBtn = T.SmallButton(
+                dh.autoOpenWithFilter ? "Auto-Open Hatch on Filter: ON" : "Auto-Open Hatch on Filter: OFF",
+                () => dh.ToggleAutoOpenWithFilter(),
+                dh.autoOpenWithFilter ? T.AccentGold : T.BgSlot);
             autoDoorBtn.style.marginBottom = 4;
             ctrlRow.Add(autoDoorBtn);
             p.Add(ctrlRow);

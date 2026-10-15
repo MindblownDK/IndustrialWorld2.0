@@ -1016,6 +1016,64 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Tree farm plot (3x3 arboricultural timber planter): harvest, plant sapling, fertilize, or inspect.
+                var treeFarmPlot = hit.collider.GetComponentInParent<VoxelEngine.Farming.TreeFarmPlot>();
+                if (treeFarmPlot != null)
+                {
+                    if (treeFarmPlot.IsMature)
+                    {
+                        if (treeFarmPlot.TryHarvest(inventory, out int logs, out int saps, out int bio))
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Timber Harvested",
+                                $"+{logs} Wood Log, +{saps} Sapling{(bio > 0 ? $", +{bio} Biomass" : "")}",
+                                treeFarmPlot.woodLogItem != null ? treeFarmPlot.woodLogItem.icon : null,
+                                new Color(0.32f, 0.78f, 0.36f));
+                        }
+                        return;
+                    }
+
+                    var held = inventory.ActiveStack;
+                    if (!held.IsEmpty && held.item != null)
+                    {
+                        if (!treeFarmPlot.HasTree && VoxelEngine.Farming.TreeFarmPlot.IsSaplingOrTreeSeed(held.item))
+                        {
+                            if (treeFarmPlot.TryPlant(held.item))
+                            {
+                                inventory.container.Remove(held.item, 1);
+                                VoxelEngine.UI.BuildFeedbackHud.Show(
+                                    "Planted Tree Sapling",
+                                    treeFarmPlot.IsIrrigated ? "Irrigated (2.0x growth speed)" : "Growing (irrigate for 2.0x speed)",
+                                    held.item.icon,
+                                    new Color(0.32f, 0.78f, 0.36f));
+                            }
+                            return;
+                        }
+                        if (VoxelEngine.Farming.TreeFarmPlot.IsFertilizerOrBiomass(held.item) && !treeFarmPlot.isFertilized)
+                        {
+                            if (treeFarmPlot.TryApplyFertilizer(held.item))
+                            {
+                                inventory.container.Remove(held.item, 1);
+                                VoxelEngine.UI.BuildFeedbackHud.Show(
+                                    "Fertilized Tree Plot",
+                                    "1.5x growth speed + bonus timber & biomass yield",
+                                    held.item.icon,
+                                    new Color(0.45f, 0.85f, 0.30f));
+                            }
+                            return;
+                        }
+                    }
+
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        "Tree Farming Plot",
+                        treeFarmPlot.HasTree
+                            ? $"{treeFarmPlot.GrowthStageLabel} ({treeFarmPlot.growthProgress * 100f:0}%) • {(treeFarmPlot.IsIrrigated ? "Irrigated" : "Dry")} • {(treeFarmPlot.isFertilized ? "Fertilized" : "Standard Soil")}"
+                            : "Right-click with a Tree Sapling to plant timber",
+                        treeFarmPlot.saplingItem != null ? treeFarmPlot.saplingItem.icon : null,
+                        new Color(0.38f, 0.72f, 0.36f));
+                    return;
+                }
+
                 // Remember which block the local player is working with, so container
                 // sync treats this client's edits here as player-driven (14.10.0).
                 var interactedBlock = hit.collider.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
@@ -1512,6 +1570,18 @@ namespace VoxelEngine.Player
                 if (funnel != null) { UI.GameUIController.Instance?.OpenMachine(funnel); return; }
                 var receivingChute = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ReceivingChute>();
                 if (receivingChute != null) { UI.GameUIController.Instance?.OpenMachine(receivingChute); return; }
+                var biomassPress = hit.collider.GetComponentInParent<VoxelEngine.Simulation.BiomassPress>();
+                if (biomassPress != null) { UI.GameUIController.Instance?.OpenMachine(biomassPress); return; }
+                var autoTreeFarm = hit.collider.GetComponentInParent<VoxelEngine.Farming.AutoTreeFarm>();
+                if (autoTreeFarm != null) { UI.GameUIController.Instance?.OpenMachine(autoTreeFarm); return; }
+                var cropHarvester = hit.collider.GetComponentInParent<VoxelEngine.Farming.Harvester>();
+                if (cropHarvester != null)
+                {
+                    if (cropHarvester.outputBuffer == null)
+                        cropHarvester.outputBuffer = new VoxelEngine.Items.ItemContainer("Harvester Output", 8);
+                    UI.GameUIController.Instance?.OpenContainer(cropHarvester.outputBuffer);
+                    return;
+                }
                 var splitter = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorSplitter>();
                 if (splitter != null) { UI.GameUIController.Instance?.OpenMachine(splitter); return; }
 

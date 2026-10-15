@@ -1,9 +1,44 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.4-dev`
+**Current Version:** `17.25.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.25.0-dev] Biofuel Chain, Biomass Press & Automatic Tree Farm
+
+**Type:** MINOR - adds `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `TreeFarmPlot` (`3x1x3` arboricultural timber planter), `AutoTreeFarm` (`4x3x4` automated forestry plot & gantry harvester), `BiomassPress` (`2x2x2` industrial screw-press & bio-refinery), `Tree Sapling`, `Wood Chips`, `Biofuel Briquette` (`65s` solid fuel), and `Organic Fertilizer`, plus `Harvester` tree-plot tending, `CoalGeneratorFuel` liquid Biofuel sipping, UI panels, persistence, and non-destructive Setup Wizard authoring. Save-compatible.
+
+**GitHub title:** `[17.25.0-dev] Add Biofuel Chain, Biomass Press and Automatic Tree Farm`
+
+#### Added
+- **Combustible Liquid Biofuel (`Scripts/Items/LiquidType.cs`).** Appended `LiquidType.Biofuel = 12` (`DisplayName = "Biofuel"`, `Color = (0.52, 0.86, 0.22)`, `DensityKgPerL = 0.84f`, `BurnEnergyMJPerL = 34.5f`, `FreezingPointC = -25f`, `IsCombustible = true`). Compatible with `LiquidCanister`, `WaterTank`, and `MachineFluidTank`.
+- **Tree Farming Plot (`Scripts/Farming/TreeFarmPlot.cs`).** New `3x1x3` wide reinforced timber & loam planter bed engineered for full-sized growing timber trees with a multi-stage procedural trunk and 3-tier canopy visual. Supports manual RMB planting with a `Tree Sapling`, irrigation (`2.0x` growth speed from adjacent `Sprinkler`, `WaterPipe`, or water tank), `Organic Fertilizer` / `Biomass` soil enrichment (`1.5x` growth speed + bonus timber/biomass yield), manual RMB harvesting, automated harvesting (`TryAutomatedHarvest`), and `IMachineProcessState` persistence.
+- **Automatic Tree Farm & Forestry Gantry (`Scripts/Farming/AutoTreeFarm.cs`).** New `4x3x4` self-contained automated forestry plot and overhead gantry saw-harvester (`IMachine`, `ITickable`, `IItemConsumer`, `IItemProvider`, `IItemPortHost`, `IFluidStore`, `IMachineProcessState`). Features a central irrigated tree bed with animated growing tree and traveling saw-carriage, `inputC` (4 slots for Saplings & Fertilizer), `outputC` (8 slots for Wood Logs, Biomass, Wood Chips, and surplus Saplings), `upgradeC` (2 slots), a `500 L` internal `Irrigation Water` tank with piped `FluidNode` auto-refill, optional automatic tending of nearby `TreeFarmPlot`s within `10 m`, and automatic export to adjacent belts, chutes, funnels, or item pipes.
+- **Biomass Press & Bio-Refinery (`Scripts/Simulation/BiomassPress.cs`).** New `2x2x2` industrial screw-press and bio-refinery (`IMachine`, `ITickable`, `IItemConsumer`, `IItemProvider`, `IItemPortHost`, `IFluidStore`, `IMachineProcessState`). Features an animated press ram and expeller wheel, `inputC` (3 slots), `outputC` (4 slots), `upgradeC` (2 slots), a `1000 L` `Water In` tank, and a `1500 L` `Biofuel Out` tank with bidirectional `FluidNode` network exchange. Runs authored `ProcessingRecipe`s or built-in universal auto-modes converting any crop/seed (`2x -> 3x Biomass + 20 L Biofuel`), `Wood Log` (`1x -> 2x Wood Chips + 2x Biomass + 15 L Biofuel`), `Biomass` (`2x + Water -> 40 L Biofuel + 1x Biofuel Briquette`), or `Wood Chips` (`2x + Water -> 35 L Biofuel + 1x Biomass`).
+- **Setup Wizard Step (`Scripts/Editor/Farming/BiofuelAndTreeFarmSetup.cs`, `Scripts/Editor/Core/VoxelEngineSetupWindow.cs`).** Non-destructively authors `Seed_TreeSapling`, `Item_WoodChips` (`12s` fuel), `Item_BiofuelBriquette` (`65s` fuel), `Item_OrganicFertilizer`, `TreeFarmPlot.prefab`, `AutoTreeFarm.prefab`, `BiomassPress.prefab`, shared `.mat` assets in `Assets/VoxelEngineAssets/Materials/Forestry`, `ProcessingRecipe`s, crafting recipes, `Research_BiofuelAndForestry`, and `ItemPersistenceCatalog` registrations.
+
+#### Changed
+- **Wild Tree Sapling Drops (`Scripts/Trees/Tree.cs`).** Chopping down wild scatter trees now awards `1-2` `Tree Sapling` items in addition to `Wood Log`s so players can immediately establish sustainable `TreeFarmPlot`s and `AutoTreeFarm`s.
+- **Harvester Tree-Plot Support & Belt Push (`Scripts/Farming/Harvester.cs`).** `Harvester` now also scans and auto-harvests mature `TreeFarmPlot`s within `scanRadius` (with automatic replanting) and pushes outputs to any adjacent `IItemConsumer` (belts, chutes, funnels, item pipes) before buffering internally.
+- **Generator Solid & Liquid Biofuel Support (`Scripts/Power/CoalGeneratorFuel.cs`).** Generators accept solid `Biofuel Briquette`, `Biomass`, and `Wood Chips` in their fuel slot and, when the solid slot is empty, automatically sip `10 L` of `LiquidType.Biofuel` (`18s` burn) from an adjacent `BiomassPress` or `WaterTank` (`LiquidType.Biofuel`) on an adjacent `FluidNode` network.
+- **Machine UI, Player Interaction & World Persistence (`Scripts/UI/MachineUIs.cs`, `Scripts/UI/GameUIController.cs`, `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/Persistence/WorldStatePersistence.cs`).** Added `BiomassPressPanel`, `AutoTreeFarmPanel`, `MachineRecipeCard(ProcessingRecipe)`, RMB interaction for `TreeFarmPlot` / `AutoTreeFarm` / `BiomassPress` / `Harvester`, and full container + port + fluid tank persistence.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.25.0-dev`, MINOR over `17.24.5-dev`. Save-compatible.
+
+### [17.24.5-dev] Default Auto-Open Hatch on Filter to OFF & Add Toggle Button + Hotbar Action
+
+**Type:** PATCH - defaults `GridCargoDropHatch.autoOpenWithFilter` to `false` (OFF), adds `SetAutoOpenWithFilter` / `ToggleAutoOpenWithFilter`, exposes an explicit `"Auto-Open Hatch on Filter: ON / OFF"` toggle button in the Drop Hatch UI, and adds `"hatch_auto_open"` to the cockpit hotbar (`GridControlHud`). Save-compatible.
+
+**GitHub title:** `[17.24.5-dev] Default Auto-Open Hatch on Filter to OFF and add toggle button`
+
+#### Changed
+- **Default `autoOpenWithFilter = false` (`Scripts/GridSystem/GridCargoDropHatch.cs`, `Scripts/Editor/GridSystem/DropHatchLogisticsSetup.cs`).** Changed the default value of `autoOpenWithFilter` to `false` (both on new/restored runtime instances and on authored Small/Large Grid Cargo Drop Hatch prefabs) so choosing one of the 4 filters does not open the hatch bay doors unless the player enables Auto-Open.
+- **Auto-Open Hatch on Filter UI button & Cockpit Hotbar action (`Scripts/GridSystem/UI/GridBlockUI.cs`, `Scripts/GridSystem/UI/GridControlHud.cs`).** Added `ToggleAutoOpenWithFilter()` / `SetAutoOpenWithFilter(bool)`, updated the Drop Hatch panel toggle button to `"Auto-Open Hatch on Filter: ON / OFF"`, and added the `"hatch_auto_open"` (`"AUTO-OPEN HATCH ON FILTER"`) cockpit hotbar action.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.24.5-dev`, PATCH over `17.24.4-dev`. Save-compatible.
 
 ### [17.24.4-dev] Fix EnsureFolder Call in DropHatchLogisticsSetup
 
