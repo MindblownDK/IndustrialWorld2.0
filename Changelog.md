@@ -1,9 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.4-dev`
+**Current Version:** `17.27.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.27.5-dev] The Drag-Into-Storage Flag (Build Fix)
+
+**Type:** PATCH - one line of the hand-carried-drag rework did not compile: an inline `out` variable sat behind a short-circuiting `&&`. The flag is declared before the test. No behaviour change.
+
+**GitHub title:** `[17.27.5-dev] Fix the drag-into-storage compile error (unassigned flag behind a short-circuit)`
+
+#### Fixed
+- **`GameUIController.cs(6751,54): error CS0165: Use of unassigned local variable 'networkReached'`.** The drag-onto-empty handler asked two questions in one `if`: "is the drag coming from the inventory" `&&` "did storage accept it". C#'s `&&` stops at the first false, so when the drag came from anywhere else the call never ran - and the `else` branch then read a flag that had never been assigned. The flag is now declared and initialised before the test and filled in by the call when it happens to run, which also keeps the intent readable: "did the network take it" defaults to NO, so a drag from a chest or a machine lands on the ground exactly as before. The three other `out` variables behind the same kind of test in the quarry (the model-bounds probe) were checked and are safe: each is only read INSIDE the branch that requires the call to have run.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.27.5-dev`, PATCH over `17.27.4-dev` - a build fix, no behaviour change. Save-compatible and schema-compatible (`CurrentSchemaVersion` stays `2`); no save field, item, recipe, prefab or setup step is touched, and everything the previous entry describes stands as written: whole-cell excavation, the pit outline across a load, the job progress bar, the lowered instrument cluster, the cutter-wheel lookup and the hand-carried drag all behave exactly as described.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. The file was re-checked with the string- and comment-aware brace, bracket and parenthesis scanner, and the pattern that caused the error was searched for across every file this round touched - the one instance found was the one reported.
+
+#### What to run
+1. Nothing new. No setup step, no prefab and no world change: the play-test list in the `17.27.4-dev` entry below is the one to work through, and the quarry machine's lower instrument cluster still needs one pass of `Tools > Voxel Engine > Voxel Engine Setup > Factory, Industry & Power > "Rebuild the Quarry machine with a spinning cutter wheel and a fitted name plate (17.27.3-dev)"` if it has not been run since then.
 
 ### [17.27.4-dev] Whole-Cell Excavation, the Pit Outline Across a Load, a Real Job Bar & Items Carried in Hand
 

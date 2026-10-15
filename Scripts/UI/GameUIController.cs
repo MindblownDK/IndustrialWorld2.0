@@ -6737,8 +6737,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         // ground. Dragging onto truly empty UI still drops to world,
                         // because some players use that as a quick discard gesture
                         // when no storage panel is open.
+                        // The flag is declared OUT here on purpose: `&&` short-circuits, so
+                        // when the first test is false the call never runs and an inline
+                        // `out` variable would be read unassigned on the else path.
+                        bool insertedIntoNetwork = false;
                         if (_dragSource.container == inventory?.container &&
-                            TryInsertDraggedIntoNetwork(out bool networkReached))
+                            TryInsertDraggedIntoNetwork(out insertedIntoNetwork))
                         {
                             // The network took everything: the hand is empty.
                             CancelDrag();
@@ -6748,7 +6752,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                             // Nowhere to put it: a stack that is still in the player's hand
                             // goes on the ground (and a partly-accepted one, back where it
                             // came from, so storage can never eat the remainder).
-                            CancelDrag(dropToWorld: !networkReached);
+                            CancelDrag(dropToWorld: !insertedIntoNetwork);
                         }
                     }
                     return;

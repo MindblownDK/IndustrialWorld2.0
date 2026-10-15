@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.4-dev`
-**Roadmap Version:** `17.27.4-dev`
+**Current Version:** `17.27.5-dev`
+**Roadmap Version:** `17.27.5-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,10 +29,10 @@
 
 ## 0. Recently Done
 
-### 17.27.4-dev - Whole-Cell Excavation, Outline Across a Load, Job Bar & Hand-Carried Drags
+### 17.27.5-dev / 17.27.4-dev - Whole-Cell Excavation, Outline Across a Load, Job Bar & Hand-Carried Drags
 - `Quarry` cuts every voxel a cell's footprint covers (rasterised from the cell's eight corners in voxel space, clamped to a 3-voxel cube) instead of the voxel its centre rounds to, checks output room before each cut, rebuilds the tape and pit frame from `RestoreState`, finds the cutter pivot anywhere in the machine and warns once when a prefab has none
 - The machine panel shows `Quarry.JobProgress01` / `JobProgressLabel` (survey, frame, then pit depth) rather than one cell's bite, and the rear instrument cluster with its name band sits 28 cm lower on the machine
-- `GameUIController` carries a dragged stack in hand: `BeginDrag` takes it out of the container (drawer capacity released, split leaves the remainder), a refused drop returns it, a partial drop returns the remainder, and closing a window drops it on the ground through the normal drop path
+- `GameUIController` carries a dragged stack in hand: `BeginDrag` takes it out of the container (drawer capacity released, split leaves the remainder), a refused drop returns it, a partial drop returns the remainder, and closing a window drops it on the ground through the normal drop path (17.27.5-dev declares that handler's `out` flag before its short-circuiting test)
 
 ### 17.27.3-dev / 17.27.2-dev - Cutter Wheel Motion, Surface-Started Pit, Rear Instrument Display, Branch Filter Return
 - The cutter wheel, hub, teeth and spokes hang under `CutterWheelPivot`, which `Quarry.SpinCutter` turns about its axle (165 deg/s cutting, 26 while surveying and framing, coasting down, still when unpowered or complete); the pit's column scan covers 24 m up / 32 m down in two passes, so every column starts at its own highest solid voxel, and the machine's labels and readout are sized from measured text width
