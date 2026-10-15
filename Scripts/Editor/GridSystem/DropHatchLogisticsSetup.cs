@@ -145,18 +145,17 @@ namespace VoxelEngine.EditorTools
                 $"{PrefabsFolder}/ReceivingChute.prefab",
                 out var stationaryChuteBlock);
 
-            var stationaryChuteDef = EnsureMachineDefinition(
+            EnsureMachineDefinition(
                 $"{MachinesFolder}/MachineDef_ReceivingChute.asset",
                 "receiving_chute",
                 "Large Receiving Chute",
                 "Wide 3x2x3 flared industrial receiving hopper that catches items dropped from hovering ships above and feeds connected conveyor belts, chutes, funnels, or chests.",
                 MachineCategory.Custom,
-                stationaryChutePrefab,
-                stationaryChuteBlock);
+                stationaryChutePrefab);
 
             if (stationaryChuteBlock != null)
             {
-                stationaryChuteBlock.placePrefab = stationaryChutePrefab;
+                stationaryChuteBlock.placedPrefab = stationaryChutePrefab;
                 EditorUtility.SetDirty(stationaryChuteBlock);
             }
 
@@ -165,7 +164,6 @@ namespace VoxelEngine.EditorTools
 
             var recSmallHatch = EnsureCraftRecipe(
                 $"{GridRecipesFolder}/Recipe_SmallCargoDropHatch.asset",
-                "recipe_small_cargo_drop_hatch",
                 "Small Cargo Drop Hatch",
                 smallHatchItem, 1, 2.5f,
                 StationTier.CraftingBench, true,
@@ -174,7 +172,6 @@ namespace VoxelEngine.EditorTools
 
             var recLargeHatch = EnsureCraftRecipe(
                 $"{GridRecipesFolder}/Recipe_LargeCargoDropHatch.asset",
-                "recipe_large_cargo_drop_hatch",
                 "Large Cargo Drop Hatch",
                 largeHatchItem, 1, 4.0f,
                 StationTier.CraftingBench, true,
@@ -183,7 +180,6 @@ namespace VoxelEngine.EditorTools
 
             var recSmallGridChute = EnsureCraftRecipe(
                 $"{GridRecipesFolder}/Recipe_SmallReceivingChute.asset",
-                "recipe_small_receiving_chute",
                 "Small Grid Receiving Chute",
                 smallGridChuteItem, 1, 2.5f,
                 StationTier.CraftingBench, true,
@@ -192,7 +188,6 @@ namespace VoxelEngine.EditorTools
 
             var recLargeGridChute = EnsureCraftRecipe(
                 $"{GridRecipesFolder}/Recipe_LargeReceivingChute.asset",
-                "recipe_large_receiving_chute",
                 "Large Grid Receiving Chute",
                 largeGridChuteItem, 1, 4.0f,
                 StationTier.CraftingBench, true,
@@ -201,7 +196,6 @@ namespace VoxelEngine.EditorTools
 
             var recStationaryChute = EnsureCraftRecipe(
                 $"{RecipesFolder}/Recipe_ReceivingChute.asset",
-                "recipe_receiving_chute",
                 "Large Receiving Chute",
                 stationaryChuteBlock, 1, 3.0f,
                 StationTier.CraftingBench, true,
@@ -337,7 +331,7 @@ namespace VoxelEngine.EditorTools
                 "Wide 3x2x3 flared industrial receiving hopper that catches items dropped from hovering ships above and feeds connected conveyor belts, chutes, funnels, or chests.",
                 new Color(0.22f, 0.78f, 0.92f),
                 new Vector3Int(3, 2, 3),
-                maxHp: 420f);
+                maxHp: 420);
 
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             var root = new GameObject("ReceivingChute");
@@ -348,16 +342,19 @@ namespace VoxelEngine.EditorTools
                 box.size = new Vector3(2.9f, 1.95f, 2.9f);
 
                 var pb = root.AddComponent<PlacedBlock>();
-                pb.sourceItem = blockItem;
-                pb.maxHealth = 420f;
-                pb.currentHealth = 420f;
+                pb.Item = blockItem;
+                pb.Hp = 420;
+
+                var ports = root.AddComponent<PortConfig>();
+                ports.EnsureAllFaces();
 
                 var chute = root.AddComponent<ReceivingChute>();
                 chute.bufferSlots = 16;
                 chute.maxMassKg = 100_000f;
                 chute.EnsureVisuals();
 
-                root.AddComponent<ItemPortRouting>();
+                if (root.GetComponent<ItemPortRouting>() == null)
+                    root.AddComponent<ItemPortRouting>();
 
                 if (existing != null)
                 {
@@ -410,7 +407,7 @@ namespace VoxelEngine.EditorTools
 
         private static BlockItem EnsureBlockItem(
             string path, string id, string displayName, string description,
-            Color tint, Vector3Int footprint, float maxHp)
+            Color tint, Vector3Int footprint, int maxHp)
         {
             var item = AssetDatabase.LoadAssetAtPath<BlockItem>(path);
             bool created = item == null;
@@ -438,7 +435,7 @@ namespace VoxelEngine.EditorTools
 
         private static MachineDefinition EnsureMachineDefinition(
             string path, string id, string displayName, string description,
-            MachineCategory cat, GameObject prefab, BlockItem blockItem)
+            MachineCategory cat, GameObject prefab)
         {
             var def = AssetDatabase.LoadAssetAtPath<MachineDefinition>(path);
             bool created = def == null;
@@ -452,13 +449,12 @@ namespace VoxelEngine.EditorTools
             def.description = description;
             def.category = cat;
             def.prefab = prefab;
-            def.machineBlockItem = blockItem;
             EditorUtility.SetDirty(def);
             return def;
         }
 
         private static RecipeDefinition EnsureCraftRecipe(
-            string path, string id, string name, ItemDefinition output, int outCount, float craftSec,
+            string path, string name, ItemDefinition output, int outCount, float craftSec,
             StationTier tier, bool unlockedByDefault, (ItemDefinition item, int count)[] inputs,
             RecipeRegistry registry)
         {
@@ -469,7 +465,6 @@ namespace VoxelEngine.EditorTools
                 rec = ScriptableObject.CreateInstance<RecipeDefinition>();
                 AssetDatabase.CreateAsset(rec, path);
             }
-            if (created || string.IsNullOrEmpty(rec.recipeId)) rec.recipeId = id;
             if (created || string.IsNullOrEmpty(rec.displayName)) rec.displayName = name;
             rec.outputItem = output;
             if (created)

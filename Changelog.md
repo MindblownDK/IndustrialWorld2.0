@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.0-dev`
+**Current Version:** `17.24.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.24.1-dev] Fix Interface Signatures on GridCargoDropHatch, GridReceivingChute & ReceivingChute
+
+**Type:** PATCH - aligns `IMachineProcessState` (`VoxelEngine.Crafting`), `IGridItemStore.StoreLabel`, `IGridDataProvider` (`SourceName`, `DataCategory`, `string GetDisplayData()`), `IMachine.SimulationTick(float)`, `IItemProvider` (`PeekOutput`, `TryExtract`), `IItemPortHost` (`PortConfig`, `GetPortContainers()`), and `DropHatchLogisticsSetup.cs` asset fields. Save-compatible.
+
+**GitHub title:** `[17.24.1-dev] Fix interface signatures on GridCargoDropHatch, GridReceivingChute and ReceivingChute`
+
+#### Fixed
+- **`GridCargoDropHatch` and `GridReceivingChute` interface members (`Scripts/GridSystem/GridCargoDropHatch.cs`, `Scripts/GridSystem/GridReceivingChute.cs`).** Imported `VoxelEngine.Crafting` for `IMachineProcessState`/`MachineProcessState`; implemented `IGridItemStore.StoreLabel`, `IGridDataProvider.SourceName`, `IGridDataProvider.DataCategory`, and `string IGridDataProvider.GetDisplayData()`; and used `new ItemContainer(name, size)` + `OverrideMaxWeightKg` and `MassUtil.ContainerMass(container)`.
+- **`ReceivingChute` interface members (`Scripts/Simulation/ReceivingChute.cs`).** Imported `VoxelEngine.Crafting` for `IMachineProcessState`; implemented `IMachine.SimulationTick(float)` with `SimulationTickManager` registration, `IItemProvider.PeekOutput(out int)` and `IItemProvider.TryExtract(ItemDefinition, int)`, and `IItemPortHost.PortConfig` + `IItemPortHost.GetPortContainers()`.
+- **`DropHatchLogisticsSetup` Editor field alignment (`Scripts/Editor/GridSystem/DropHatchLogisticsSetup.cs`).** Aligned `PlacedBlock` (`Item`, `Hp`), `BlockItem` (`placedPrefab`, `int blockHealth`), `MachineDefinition` (`prefab`), and `RecipeDefinition` (`displayName`, `outputItem`).
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.24.1-dev`, PATCH over `17.24.0-dev`. Save-compatible.
 
 ### [17.24.0-dev] Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
 

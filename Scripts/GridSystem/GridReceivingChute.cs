@@ -9,8 +9,8 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Crafting;
 using VoxelEngine.Items;
-using VoxelEngine.Persistence;
 
 namespace VoxelEngine.GridSystem
 {
@@ -35,21 +35,27 @@ namespace VoxelEngine.GridSystem
         private static readonly int ColorId = Shader.PropertyToID("_Color");
 
         public ItemContainer ItemStore => container;
+        public string StoreLabel => string.IsNullOrWhiteSpace(blockName) || blockName == "Armor Block"
+            ? "Grid Receiving Chute"
+            : blockName;
         public int TotalCapturedCount => _totalCapturedCount;
-        public float CurrentMassKg => container != null ? container.CurrentWeightKg : 0f;
+        public float CurrentMassKg => MassUtil.ContainerMass(container);
         public float Fill01 => maxMassKg > 0.001f ? Mathf.Clamp01(CurrentMassKg / maxMassKg) : 0f;
+        public override float ContentMass => CurrentMassKg;
 
         public void EnsureContainers()
         {
             if (container == null)
             {
-                container = new ItemContainer(Mathf.Max(1, slots), maxMassKg);
+                container = new ItemContainer("Receiving Chute", Mathf.Max(1, slots));
                 container.OnChanged += OnContainerChanged;
             }
-            else
+            else if (container.Size != Mathf.Max(1, slots))
             {
-                container.MaxWeightKg = maxMassKg;
+                container.Resize(Mathf.Max(1, slots));
             }
+            container.OverrideMaxWeightKg = maxMassKg;
+            container.allowContainment = false;
         }
 
         private void Awake()
@@ -163,7 +169,7 @@ namespace VoxelEngine.GridSystem
                 {
                     var destCargo = cargoList[c];
                     if (destCargo == null || !destCargo.Enabled || destCargo.container == null) continue;
-                    if (!destCargo.MatchesFilter(st.item)) continue;
+                    if (!destCargo.CanAcceptMass(st.item, 1)) continue;
 
                     int toMove = Mathf.Min(st.count, 16);
                     var attempt = st.Clone();
@@ -195,18 +201,13 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── IGridDataProvider ───────────────────────────────────────────────────
-        public string GetDisplayCategory() => "Logistics";
+        public string SourceName => StoreLabel;
+        public string DataCategory => "Logistics";
 
-        public List<KeyValuePair<string, string>> GetDisplayData()
+        public string GetDisplayData()
         {
             EnsureContainers();
-            return new List<KeyValuePair<string, string>>
-            {
-                new("Status", Enabled ? "CATCHING" : "DISABLED"),
-                new("Auto-Push Cargo", autoPushToGridCargo ? "ON" : "OFF"),
-                new("Buffered Mass", $"{CurrentMassKg:0.#} / {maxMassKg:0} kg"),
-                new("Total Captured", _totalCapturedCount.ToString("N0"))
-            };
+            return $"RECEIVING CHUTE\n{(Enabled ? "CATCHING" : "DISABLED")}\n{Fill01 * 100f:0}% full\nCaptured: {_totalCapturedCount:N0}";
         }
 
         // ── Procedural Wide Hopper Visuals & Trigger ────────────────────────────

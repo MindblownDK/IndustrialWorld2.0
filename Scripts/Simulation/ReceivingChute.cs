@@ -10,12 +10,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
+using VoxelEngine.Crafting;
 using VoxelEngine.Items;
-using VoxelEngine.Persistence;
 using VoxelEngine.Transport;
 
 namespace VoxelEngine.Simulation
 {
+    [RequireComponent(typeof(PortConfig))]
+    [RequireComponent(typeof(ItemPortRouting))]
     public class ReceivingChute : MonoBehaviour, IMachine, IItemProvider, IItemConsumer, IItemPortHost, IMachineProcessState
     {
         [Header("Hopper Buffer & Capture")]
@@ -33,7 +35,8 @@ namespace VoxelEngine.Simulation
         private float _scanTimer;
         private float _exportTimer;
         private int _totalCapturedCount;
-        private ItemPortRouting _routing;
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
         private static readonly Collider[] OverlapBuf = new Collider[64];
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -84,7 +87,10 @@ namespace VoxelEngine.Simulation
         public void EnsureContainers()
         {
             if (buffer == null)
-                buffer = new ItemContainer(Mathf.Max(1, bufferSlots), maxMassKg);
+                buffer = new ItemContainer("Captured Items", Mathf.Max(1, bufferSlots));
+            else if (buffer.Size != Mathf.Max(1, bufferSlots))
+                buffer.Resize(Mathf.Max(1, bufferSlots));
+            buffer.OverrideMaxWeightKg = maxMassKg;
         }
 
         private void Awake()
@@ -92,7 +98,9 @@ namespace VoxelEngine.Simulation
             EnsureContainers();
             EnsureVisuals();
             EnsureCaptureTrigger();
-            _routing = ItemPortRouting.Ensure(gameObject);
+            var ports = GetComponent<PortConfig>();
+            if (ports != null) ports.EnsureAllFaces();
+            SimulationTickManager.EnsureInstance();
         }
 
         private void OnEnable()
@@ -100,16 +108,15 @@ namespace VoxelEngine.Simulation
             EnsureContainers();
             EnsureVisuals();
             EnsureCaptureTrigger();
-            _routing = ItemPortRouting.Ensure(gameObject);
-            MachineRegistry.Register(this);
+            SimulationTickManager.Instance?.Register(this, this);
         }
 
         private void OnDisable()
         {
-            MachineRegistry.Unregister(this);
+            SimulationTickManager.Instance?.Unregister(this);
         }
 
-        public void Tick(float dt)
+        public void SimulationTick(float dt)
         {
             if (!_userEnabled) return;
             EnsureContainers();
@@ -280,34 +287,50 @@ namespace VoxelEngine.Simulation
             return inserted;
         }
 
-        public bool TryExtract(out ItemDefinition item, int maxCount = 1)
+        public ItemDefinition PeekOutput(out int count)
         {
-            item = null;
             EnsureContainers();
             for (int i = 0; i < buffer.Size; i++)
             {
                 var st = buffer.GetSlot(i);
-                if (st == null || st.IsEmpty || st.item == null) continue;
-                item = st.item;
-                int take = Mathf.Clamp(maxCount, 1, st.count);
-                st.count -= take;
-                buffer.SetSlot(i, st.count > 0 ? st : new ItemStack());
-                return true;
+                if (st != null && !st.IsEmpty && st.item != null)
+                {
+                    count = st.count;
+                    return st.item;
+                }
             }
-            return false;
+            count = 0;
+            return null;
+        }
+
+        public int TryExtract(ItemDefinition item, int count)
+        {
+            EnsureContainers();
+            return buffer.Remove(item, count);
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────────
-        public ItemContainer GetInputContainerForFace(PortFace face)
+        public PortConfig PortConfig
         {
-            EnsureContainers();
-            return _routing == null || _routing.AllowsInput(face) ? buffer : null;
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
         }
 
-        public ItemContainer GetOutputContainerForFace(PortFace face)
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
         {
             EnsureContainers();
-            return _routing == null || _routing.AllowsOutput(face) ? buffer : null;
+            if (_portContainers == null || _portContainers.Length != 1)
+                _portContainers = new ItemPortContainer[1];
+            _portContainers[0] = new ItemPortContainer("Captured Items", buffer, canInput: true, canOutput: true);
+            return _portContainers;
         }
 
         // ── Persistence (IMachineProcessState) ──────────────────────────────────

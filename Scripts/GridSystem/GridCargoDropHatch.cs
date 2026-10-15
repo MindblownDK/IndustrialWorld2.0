@@ -13,8 +13,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Crafting;
 using VoxelEngine.Items;
-using VoxelEngine.Persistence;
 
 namespace VoxelEngine.GridSystem
 {
@@ -170,10 +170,14 @@ namespace VoxelEngine.GridSystem
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
         public ItemContainer ItemStore => container;
+        public string StoreLabel => string.IsNullOrWhiteSpace(blockName) || blockName == "Armor Block"
+            ? "Cargo Drop Hatch"
+            : blockName;
         public float Open01 => _open01;
         public int TotalDroppedCount => _totalDroppedCount;
-        public float CurrentMassKg => container != null ? container.CurrentWeightKg : 0f;
+        public float CurrentMassKg => MassUtil.ContainerMass(container);
         public float Fill01 => maxMassKg > 0.001f ? Mathf.Clamp01(CurrentMassKg / maxMassKg) : 0f;
+        public override float ContentMass => CurrentMassKg;
 
         public DropHatchFilterPreset ActiveFilter
             => activeFilterIndex >= 0 && activeFilterIndex < FilterCount ? GetFilter(activeFilterIndex) : null;
@@ -211,13 +215,15 @@ namespace VoxelEngine.GridSystem
             EnsureFilters();
             if (container == null)
             {
-                container = new ItemContainer(Mathf.Max(1, slots), maxMassKg);
+                container = new ItemContainer("Drop Hatch", Mathf.Max(1, slots));
                 container.OnChanged += OnContainerChanged;
             }
-            else
+            else if (container.Size != Mathf.Max(1, slots))
             {
-                container.MaxWeightKg = maxMassKg;
+                container.Resize(Mathf.Max(1, slots));
             }
+            container.OverrideMaxWeightKg = maxMassKg;
+            container.allowContainment = false;
         }
 
         private void Awake()
@@ -610,7 +616,7 @@ namespace VoxelEngine.GridSystem
             state.SetExtra("activeFilterIndex", activeFilterIndex);
             state.SetExtra("totalDropped", _totalDroppedCount);
 
-            // Encode the 4 filter presets into state.lockedRecipeId as compact pipe-delimited string
+            // Encode the 4 filter presets into state.recipeName as compact pipe-delimited string
             // so all item IDs and labels persist cleanly alongside numeric extras.
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < FilterCount; i++)
@@ -624,7 +630,7 @@ namespace VoxelEngine.GridSystem
                 sb.Append(';');
                 sb.Append(string.Join(",", f.savedItemIds));
             }
-            state.lockedRecipeId = sb.ToString();
+            state.recipeName = sb.ToString();
         }
 
         public void RestoreProcessState(MachineProcessState state)
@@ -638,9 +644,9 @@ namespace VoxelEngine.GridSystem
             activeFilterIndex = Mathf.Clamp(Mathf.RoundToInt(state.GetExtra("activeFilterIndex", -1f)), -1, FilterCount - 1);
             _totalDroppedCount = Mathf.Max(0, Mathf.RoundToInt(state.GetExtra("totalDropped", 0f)));
 
-            if (!string.IsNullOrEmpty(state.lockedRecipeId))
+            if (!string.IsNullOrEmpty(state.recipeName))
             {
-                string[] parts = state.lockedRecipeId.Split(new[] { "||" }, StringSplitOptions.None);
+                string[] parts = state.recipeName.Split(new[] { "||" }, StringSplitOptions.None);
                 for (int i = 0; i < Mathf.Min(FilterCount, parts.Length); i++)
                 {
                     string[] fields = parts[i].Split(';');
@@ -668,22 +674,16 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── IGridDataProvider ───────────────────────────────────────────────────
-        public string GetDisplayCategory() => "Logistics";
+        public string SourceName => StoreLabel;
+        public string DataCategory => "Logistics";
 
-        public List<KeyValuePair<string, string>> GetDisplayData()
+        public string GetDisplayData()
         {
             EnsureContainers();
             string activeLabel = activeFilterIndex >= 0
-                ? $"Filter {activeFilterIndex + 1} ({GetFilter(activeFilterIndex).label})"
+                ? $"F{activeFilterIndex + 1} ({GetFilter(activeFilterIndex).label})"
                 : "OFF";
-            return new List<KeyValuePair<string, string>>
-            {
-                new("Hatch Door", hatchOpen ? $"OPEN ({_open01 * 100f:0}%)" : "CLOSED"),
-                new("Active Filter", activeLabel),
-                new("Auto-Pull", autoPullFromGrid ? "ON" : "OFF"),
-                new("Buffered Mass", $"{CurrentMassKg:0.#} / {maxMassKg:0} kg"),
-                new("Total Dropped", _totalDroppedCount.ToString("N0"))
-            };
+            return $"DROP HATCH\nDoor: {(hatchOpen ? "OPEN" : "CLOSED")} ({_open01 * 100f:0}%)\nFilter: {activeLabel}\nDropped: {_totalDroppedCount:N0}";
         }
     }
 }
