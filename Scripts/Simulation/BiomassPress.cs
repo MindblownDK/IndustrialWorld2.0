@@ -304,7 +304,7 @@ namespace VoxelEngine.Simulation
                 {
                     var req = r.inputs[i];
                     if (req.item == null || req.count <= 0) continue;
-                    if (inputC.Count(req.item) < req.count) return false;
+                    if (inputC.CountOf(req.item) < req.count) return false;
                 }
             }
 
@@ -504,7 +504,7 @@ namespace VoxelEngine.Simulation
             {
                 var st = inputC.GetSlot(i);
                 if (st == null || st.IsEmpty || st.item == null) continue;
-                if (pred(st.item) && inputC.Count(st.item) >= minCount)
+                if (pred(st.item) && inputC.CountOf(st.item) >= minCount)
                     return st.item;
             }
             return null;
@@ -570,7 +570,7 @@ namespace VoxelEngine.Simulation
                         else if (biofuelTank.stored > 0.1f && (wt.liquidType == LiquidType.Biofuel || wt.water <= 0.01f))
                         {
                             if (wt.water <= 0.01f) wt.liquidType = LiquidType.Biofuel;
-                            float space = Mathf.Max(0f, wt.capacity - wt.water);
+                            float space = Mathf.Max(0f, wt.capacityLitres - wt.water);
                             float push = Mathf.Min(biofuelTank.stored, Mathf.Min(space, maxStep));
                             if (push > 0f)
                             {
@@ -637,7 +637,7 @@ namespace VoxelEngine.Simulation
                     if (st.item is FurnaceUpgradeItem upg)
                     {
                         if (upg.speedMultiplier > 0f) speed *= upg.speedMultiplier;
-                        if (upg.powerMultiplier > 0f) eff *= upg.powerMultiplier;
+                        if (upg.efficiencyMultiplier > 0f) eff *= upg.efficiencyMultiplier;
                     }
                 }
             }

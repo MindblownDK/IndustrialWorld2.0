@@ -10,7 +10,6 @@ using VoxelEngine.Power;
 using VoxelEngine.Research;
 using VoxelEngine.Simulation;
 using VoxelEngine.Transport;
-using VoxelEngine.Trees;
 
 namespace VoxelEngine.EditorTools
 {
@@ -139,9 +138,6 @@ namespace VoxelEngine.EditorTools
                 "Farming",
                 maxStack: 200,
                 fuelSeconds: 0f);
-
-            // Wire saplingItem onto wild scatter Tree prefabs non-destructively
-            WireScatterTreesWithSapling(treeSapling, woodLog);
 
             // ── 2. ProcessingRecipes for BiomassPress ───────────────────────────
             var prCrops = EnsureProcessingRecipe(
@@ -773,25 +769,6 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(registry);
             }
             return rec;
-        }
-
-        private static void WireScatterTreesWithSapling(ItemDefinition sapling, ItemDefinition woodLog)
-        {
-            if (sapling == null) return;
-            string[] guids = AssetDatabase.FindAssets("t:Prefab");
-            for (int i = 0; i < guids.Length; i++)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
-                if (!path.StartsWith("Assets/VoxelEngineAssets")) continue;
-                var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                if (go == null) continue;
-                var tree = go.GetComponent<VoxelEngine.Trees.Tree>();
-                if (tree == null) continue;
-                bool dirty = false;
-                if (tree.saplingItem == null) { tree.saplingItem = sapling; dirty = true; }
-                if (tree.logItem == null && woodLog != null) { tree.logItem = woodLog; dirty = true; }
-                if (dirty) EditorUtility.SetDirty(go);
-            }
         }
 
         private static void EnsureBiofuelResearchNode(

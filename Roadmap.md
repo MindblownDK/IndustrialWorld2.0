@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.25.0-dev`
-**Roadmap Version:** `17.25.0-dev`
+**Current Version:** `17.25.1-dev`
+**Roadmap Version:** `17.25.1-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,8 +29,8 @@
 
 ## 0. Recently Done
 
-### 17.25.0-dev - Biofuel Chain, Biomass Press & Automatic Tree Farm
-- Added `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `Tree Sapling` drops from wild trees, `Wood Chips` (`12s` fuel), `Biofuel Briquette` (`65s` fuel), and `Organic Fertilizer`, plus `CoalGeneratorFuel` liquid Biofuel sipping from adjacent `BiomassPress` or `WaterTank` networks
+### 17.25.1-dev / 17.25.0-dev - Biofuel Chain, Biomass Press & Automatic Tree Farm
+- Added `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `WildTreeSaplingDrop` (`1-2` `Tree Sapling` drops from wild trees without touching `Tree.cs`), `Wood Chips` (`12s` fuel), `Biofuel Briquette` (`65s` fuel), and `Organic Fertilizer`, plus `CoalGeneratorFuel` liquid Biofuel sipping from adjacent `BiomassPress` or `WaterTank` networks
 - Added `TreeFarmPlot` (`3x1x3` arboricultural timber planter with 3-tier growing tree, irrigation `2x` and fertilizer `1.5x` bonuses) and `AutoTreeFarm` (`4x3x4` automated forestry plot & gantry saw-harvester with `500 L` irrigation tank, `10m` nearby plot tending, and belt/chute export), and extended `Harvester` to tend `TreeFarmPlot`s
 - Added `BiomassPress` (`2x2x2` industrial screw-press & bio-refinery with `1000 L` water tank, `1500 L` biofuel tank, `ProcessingRecipe` + universal crop/wood/biomass/chip auto-modes), UI panels, persistence, and non-destructive Setup Wizard authoring (`BiofuelAndTreeFarmSetup`)
 

@@ -561,10 +561,14 @@ namespace VoxelEngine.UI
             string status = !press.UserEnabled ? "DISABLED" : (active ? "PRESSING" : (press.IsOnline ? "STANDBY" : "NO POWER"));
             Color statusColor = !press.UserEnabled ? T.AccentRed : (active ? accent : (press.IsOnline ? T.AccentCyan : T.AccentAmber));
 
-            p.Add(T.MachineHeader("🌿", "Biomass Press & Bio-Refinery", accent, status, statusColor));
-            p.Add(T.AccentBar(accent));
+            p.Add(BuildHeader("🌿", "Biomass Press & Bio-Refinery", status, statusColor, accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!press.UserEnabled || !press.IsOnline ? 0 : active ? 2 : 1));
 
-            var content = T.PanelContent();
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "BiomassPressContentScroll" };
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
             p.Add(content);
 
             var top = new VisualElement();
@@ -706,10 +710,14 @@ namespace VoxelEngine.UI
             string status = !farm.UserEnabled ? "DISABLED" : (farm.IsOnline ? "GROWING / HARVESTING" : "NO POWER");
             Color statusColor = !farm.UserEnabled ? T.AccentRed : (farm.IsOnline ? accent : T.AccentAmber);
 
-            p.Add(T.MachineHeader("🌲", "Automatic Tree Farm & Forestry Gantry", accent, status, statusColor));
-            p.Add(T.AccentBar(accent));
+            p.Add(BuildHeader("🌲", "Automatic Tree Farm & Forestry Gantry", status, statusColor, accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!farm.UserEnabled || !farm.IsOnline ? 0 : 2));
 
-            var content = T.PanelContent();
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "AutoTreeFarmContentScroll" };
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
             p.Add(content);
 
             var top = new VisualElement();

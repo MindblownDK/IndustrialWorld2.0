@@ -1577,9 +1577,8 @@ namespace VoxelEngine.Player
                 var cropHarvester = hit.collider.GetComponentInParent<VoxelEngine.Farming.Harvester>();
                 if (cropHarvester != null)
                 {
-                    if (cropHarvester.outputBuffer == null)
-                        cropHarvester.outputBuffer = new VoxelEngine.Items.ItemContainer("Harvester Output", 8);
-                    UI.GameUIController.Instance?.OpenContainer(cropHarvester.outputBuffer);
+                    cropHarvester.EnsureOutputPublic();
+                    UI.GameUIController.Instance?.OpenContainer(cropHarvester.Output);
                     return;
                 }
                 var splitter = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorSplitter>();
@@ -2052,9 +2051,12 @@ namespace VoxelEngine.Player
                 rate = t.fireRate;
                 ConsumeDurability(stack);
             }
+            bool wasAlive = tree != null && tree.hp > 0;
             int dealt = tree.Hit(damage, used);
             if (dealt > 0)
             {
+                if (wasAlive && tree.hp <= 0)
+                    VoxelEngine.Farming.WildTreeSaplingDrop.AwardSaplings(inventory);
                 _feedback?.Trigger(tree.transform.position + Vector3.up * 1.2f, -shootCamera.transform.forward, new Color(0.45f, 0.30f, 0.16f));
                 _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
             }

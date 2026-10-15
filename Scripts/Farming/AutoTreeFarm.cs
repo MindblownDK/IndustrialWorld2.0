@@ -356,7 +356,8 @@ namespace VoxelEngine.Farming
                 var st = inputC.GetSlot(i);
                 if (st == null || st.IsEmpty || st.item == null) continue;
                 string id = st.item.itemId?.ToLowerInvariant() ?? "";
-                if (id.Contains("biomass") || id.Contains("compost") || st.item.displayName == "Biomass")
+                if (id.Contains("biomass") || id.Contains("compost") || id.Contains("fertilizer")
+                    || st.item.displayName == "Biomass" || st.item.displayName == "Organic Fertilizer")
                 {
                     if (inputC.Remove(st.item, 1) > 0)
                     {
@@ -455,7 +456,7 @@ namespace VoxelEngine.Farming
                     if (st.item is FurnaceUpgradeItem upg)
                     {
                         if (upg.speedMultiplier > 0f) speed *= upg.speedMultiplier;
-                        if (upg.powerMultiplier > 0f) eff *= upg.powerMultiplier;
+                        if (upg.efficiencyMultiplier > 0f) eff *= upg.efficiencyMultiplier;
                     }
                 }
             }

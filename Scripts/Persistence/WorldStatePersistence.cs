@@ -1879,9 +1879,8 @@ namespace VoxelEngine.Persistence
             var cropHarvester = go.GetComponentInChildren<VoxelEngine.Farming.Harvester>(true);
             if (cropHarvester != null)
             {
-                if (cropHarvester.outputBuffer == null)
-                    cropHarvester.outputBuffer = new ItemContainer("Harvester Output", 8);
-                return SerializeMulti(cropHarvester.outputBuffer);
+                cropHarvester.EnsureOutputPublic();
+                return SerializeMulti(cropHarvester.Output);
             }
 
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
@@ -5087,9 +5086,8 @@ namespace VoxelEngine.Persistence
             var cropHarvester = go.GetComponentInChildren<VoxelEngine.Farming.Harvester>(true);
             if (cropHarvester != null)
             {
-                if (cropHarvester.outputBuffer == null)
-                    cropHarvester.outputBuffer = new ItemContainer("Harvester Output", 8);
-                DeserializeMulti(sc, cropHarvester.outputBuffer);
+                cropHarvester.EnsureOutputPublic();
+                DeserializeMulti(sc, cropHarvester.Output);
                 return;
             }
 

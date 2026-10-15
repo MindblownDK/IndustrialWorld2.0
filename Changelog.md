@@ -1,9 +1,26 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.25.0-dev`
+**Current Version:** `17.25.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.25.1-dev] Fix Biofuel & Tree Farm API References and Move Sapling Drop Out of Tree.cs
+
+**Type:** PATCH - resolves compiler errors in `AutoTreeFarm`, `BiomassPress`, `Harvester`, `MachineUIs`, `PlayerInteractionTool`, and `WorldStatePersistence`, and moves wild scatter tree sapling drops into `WildTreeSaplingDrop.cs` so `Scripts/Trees/Tree.cs` remains untouched. Save-compatible.
+
+**GitHub title:** `[17.25.1-dev] Fix Biofuel and Tree Farm API references and move sapling drop to WildTreeSaplingDrop`
+
+#### Fixed
+- **Move wild tree sapling drop out of `Tree.cs` (`Scripts/Farming/WildTreeSaplingDrop.cs`, `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/Editor/Farming/BiofuelAndTreeFarmSetup.cs`).** Reverted `Scripts/Trees/Tree.cs` to its original state so existing scatter tree prefabs and Unity `Tree` references cannot conflict or break, and moved the `1-2` `Tree Sapling` harvest award into `WildTreeSaplingDrop.AwardSaplings(inventory)` invoked from `PlayerInteractionTool.HitTree`.
+- **Upgrade module, container, fluid tank, and UI header API alignment (`Scripts/Farming/AutoTreeFarm.cs`, `Scripts/Simulation/BiomassPress.cs`, `Scripts/Farming/Harvester.cs`, `Scripts/Persistence/WorldStatePersistence.cs`, `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/UI/MachineUIs.cs`).**
+  - Replaced `FurnaceUpgradeItem.powerMultiplier` with `FurnaceUpgradeItem.efficiencyMultiplier` in `AutoTreeFarm.cs` and `BiomassPress.cs`.
+  - Added `using VoxelEngine.Simulation;` in `Harvester.cs` for `IItemConsumer`, and updated `WorldStatePersistence.cs` and `PlayerInteractionTool.cs` to use `cropHarvester.EnsureOutputPublic()` and `cropHarvester.Output`.
+  - Replaced `inputC.Count(...)` with `inputC.CountOf(...)` and `wt.capacity` with `wt.capacityLitres` in `BiomassPress.cs`.
+  - Updated `BiomassPressPanel` and `AutoTreeFarmPanel` in `MachineUIs.cs` to use `BuildHeader(...)`, `IndustrialTheme.HazardDivider()`, `IndustrialTheme.Lamps(...)`, and `ScrollView` content containers.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.25.1-dev`, PATCH over `17.25.0-dev`. Save-compatible.
 
 ### [17.25.0-dev] Biofuel Chain, Biomass Press & Automatic Tree Farm
 
