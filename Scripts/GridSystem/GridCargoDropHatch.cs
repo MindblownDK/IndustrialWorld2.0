@@ -253,7 +253,7 @@ namespace VoxelEngine.GridSystem
 
         private void OnContainerChanged()
         {
-            if (Grid != null) Grid.MarkDirty();
+            if (Grid != null) Grid.RecalculateMass();
         }
 
         /// <summary>
@@ -366,9 +366,8 @@ namespace VoxelEngine.GridSystem
             }
 
             // Also scan GridDrill / GridElectricFurnace outputs on the same grid if not registered in stores.
-            foreach (var kv in Grid.AllBlocks)
+            foreach (var b in Grid.AllBlocks)
             {
-                var b = kv.Value;
                 if (b == null || ReferenceEquals(b, this)) continue;
                 if (b is GridDrill drill && drill.buffer != null && PullFromContainer(drill.buffer, filter)) return;
                 if (b is GridElectricFurnace ef && ef.outputC != null && PullFromContainer(ef.outputC, filter)) return;

@@ -84,7 +84,7 @@ namespace VoxelEngine.GridSystem
 
         private void OnContainerChanged()
         {
-            if (Grid != null) Grid.MarkDirty();
+            if (Grid != null) Grid.RecalculateMass();
         }
 
         private void Update()

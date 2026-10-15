@@ -270,6 +270,16 @@ namespace VoxelEngine.Items
             return removed;
         }
 
+        public bool IsEmpty()
+        {
+            EnsureValid();
+            for (int i = 0; i < _slots.Count; i++)
+            {
+                if (_slots[i] != null && !_slots[i].IsEmpty) return false;
+            }
+            return true;
+        }
+
         public bool HasSpace(ItemDefinition item, int count)
         {
             EnsureValid();

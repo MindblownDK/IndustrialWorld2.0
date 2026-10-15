@@ -1,9 +1,22 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.1-dev`
+**Current Version:** `17.24.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.24.2-dev] Add ItemContainer.IsEmpty() & Fix GridEntity Mass/Block Iteration on Drop Hatch and Chutes
+
+**Type:** PATCH - adds `ItemContainer.IsEmpty()` helper and aligns `GridEntity.RecalculateMass()` and `Grid.AllBlocks` iteration in `GridCargoDropHatch` and `GridReceivingChute`. Save-compatible.
+
+**GitHub title:** `[17.24.2-dev] Add ItemContainer.IsEmpty and fix GridEntity calls on Drop Hatch and Chutes`
+
+#### Fixed
+- **`ItemContainer.IsEmpty()` helper (`Scripts/Items/ItemContainer.cs`).** Added `public bool IsEmpty()` on `ItemContainer` so `ReceivingChute`, `GridCargoDropHatch`, `GridReceivingChute`, and `GridBlockUI` can query empty-container state directly.
+- **`GridCargoDropHatch` and `GridReceivingChute` grid mass & block iteration (`Scripts/GridSystem/GridCargoDropHatch.cs`, `Scripts/GridSystem/GridReceivingChute.cs`).** Replaced `Grid.MarkDirty()` with `Grid.RecalculateMass()` in `OnContainerChanged()`, and iterated `Grid.AllBlocks` directly as `IEnumerable<GridBlock>`.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.24.2-dev`, PATCH over `17.24.1-dev`. Save-compatible.
 
 ### [17.24.1-dev] Fix Interface Signatures on GridCargoDropHatch, GridReceivingChute & ReceivingChute
 
