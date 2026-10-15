@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.1-dev`
-**Roadmap Version:** `17.27.1-dev`
+**Current Version:** `17.27.2-dev`
+**Roadmap Version:** `17.27.2-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,9 +29,14 @@
 
 ## 0. Recently Done
 
-### 17.27.1-dev / 17.27.0-dev - Quarry Machine & Front Multimeter, Static Placement Verdict, Mob Spawn Surfaces, Standing Bob Second Pass
-- Quarry rebuilt as a large industrial machine (`QuarryMachineSetup`, wizard step) with tracks, gantry, cutter wheel, conveyor, cab and stacks; the root is the ground contact plane (`PlacementPivotAnchor`) and collision is split body / blade / inlet / cutter wheel so the front meter and POWER IN socket stay walkable
-- `QuarryMultimeter` prints live draw / maximum draw / depth on the machine's face with a needle dial and a state lamp; `Quarry.PowerState` separates NO CABLE from NO SUPPLY and `PowerNetworkManager` bonds a cable to any part of a machine's bounds; the meter script declares its `VoxelEngine.Power` dependency (17.27.1-dev)
+### 17.27.2-dev - Rear Instrument Display, Readable & Occluded World Text, Right-Click One-Item Fix
+- The quarry's instruments sit on its REAR face (screen, needle dial, power socket, state lamp) because the pit is dug on the front; the labelled glowing power plate is gone, the port declares `NegZ` Input/Power, and the collider set follows the socket
+- Machine labels are authored with the yaw their face needs (`TextMesh` reads from local -Z) and swapped onto the depth-tested font material at runtime by `WorldTextMaterial.ApplyToHierarchy`, so readouts face the player and no text draws through the hull or terrain
+- `GameUIController` fills an EMPTY slot from a stack on the cursor with a one-item copy of that stack instead of writing a count with no item, and the wizard step is renamed "Rebuild the Quarry machine and its rear instrument display (17.27.2-dev)"
+
+### 17.27.1-dev / 17.27.0-dev - Quarry Machine & Instrument Cluster, Static Placement Verdict, Mob Spawn Surfaces, Standing Bob Second Pass
+- Quarry rebuilt as a large industrial machine (`QuarryMachineSetup`, wizard step) with tracks, gantry, cutter wheel, conveyor, cab and stacks; the root is the ground contact plane (`PlacementPivotAnchor`) and collision is split body / blade / socket / cutter wheel so the instrument panel stays walkable
+- `QuarryMultimeter` prints live draw / maximum draw / depth with a needle dial and a state lamp; `Quarry.PowerState` separates NO CABLE from NO SUPPLY and `PowerNetworkManager` bonds a cable to any part of a machine's bounds; the meter script declares its `VoxelEngine.Power` dependency (17.27.1-dev)
 - `BuildSystem` shows an amber "no target" preview (with the surface followed far past reach) instead of a red floating machine, and only structures refuse a static placement; `CreatureSpawnGround` gives hostiles and herds one surface solve that cannot bury them; a planted player now sits inside a centimetre footing band
 
 ### 17.26.1-dev - Grid Ground Placement, Teardown Save Interlock, Standing Bob & Taller Player
@@ -48,16 +53,6 @@
 - Added `LiquidType.Biofuel = 12` (`34.5 MJ/L`), `WildTreeSaplingDrop` (`1-2` `Tree Sapling` drops from wild trees without touching `Tree.cs`), `Wood Chips` (`12s` fuel), `Biofuel Briquette` (`65s` fuel), and `Organic Fertilizer`, plus `CoalGeneratorFuel` liquid Biofuel sipping from adjacent `BiomassPress` or `WaterTank` networks
 - Added `TreeFarmPlot` (`3x1x3` arboricultural timber planter with 3-tier growing tree, irrigation `2x` and fertilizer `1.5x` bonuses) and `AutoTreeFarm` (`4x3x4` automated forestry plot & gantry saw-harvester with `500 L` irrigation tank, `10m` nearby plot tending, and belt/chute export), and extended `Harvester` to tend `TreeFarmPlot`s
 - Added `BiomassPress` (`2x2x2` industrial screw-press & bio-refinery with `1000 L` water tank, `1500 L` biofuel tank, `ProcessingRecipe` + universal crop/wood/biomass/chip auto-modes), UI panels, persistence, and non-destructive Setup Wizard authoring (`BiofuelAndTreeFarmSetup`)
-
-### 17.24.5-dev / 17.24.4-dev / 17.24.3-dev / 17.24.2-dev / 17.24.1-dev / 17.24.0-dev - Grid Cargo Drop Hatch, Large Receiving Chutes, Half-Stack Split & Machine UI Fixes
-- Added `GridCargoDropHatch` (Small & Large Grid) with multi-stage clam-shell bay door animation, auto-pull from grid containers, and 4 mutually exclusive multi-item export filters toggleable from both the block UI and the cockpit hotbar (`GridControlHud`)
-- Added `ReceivingChute` (`3x2x3` stationary flared catch hopper) and `GridReceivingChute` (Small & Large Grid catch hopper) that capture falling `DroppedItem`s in a wide overhead funnel zone and route them to connected belts/chutes/chests or grid cargo containers
-- Fixed machine UI scroll reset across live rebuilds, `SlotCard`/`SlotGrid` border overflow, item tooltips while machine panels are open, Right-Click half-stack to cursor, Shift+Right-Click half-stack transfer, and removed bottom machine hint blurbs
-
-### 17.23.2-dev / 17.23.1-dev / 17.23.0-dev - Two-Stage Metallurgical Coking, Steel & Brass Alloying Chain, and OreWasher Fluid Store Fix
-- Added `MetallurgicalFoundry` (`FoundryTier.CokeKiln` solid-fuel Beehive Coke & Alloy Kiln with auto-self-fueling and `FoundryTier.ArcFoundry` 3-Phase Electric Arc Foundry with 1.75x speed and 3 upgrade slots) plus `MetallurgicalFoundryAnimator`
-- Authored `Metallurgical Coke` (`18s` fuel), `Zinc Calamine`, `Foundry Slag`, and automatable coking, carburized/washed-ore Steel, calamine/concentrate Brass, and byproduct recycling recipes across Coke Kiln, Arc Foundry, Ore Washer, Crusher, and Furnaces
-- Fixed `IFluidStore` implementation in `OreWasher.cs` and kept all setup actions exclusively inside `Tools > Voxel Engine > Setup Wizard`
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

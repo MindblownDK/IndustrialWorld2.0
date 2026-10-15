@@ -208,7 +208,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Author universal machine upgrade modules", () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75()),
                 Setup("Convert the jack pump to tank-only crude output", () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76()),
                 Setup("Build the deep-core programme", () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86()),
-                Setup("Rebuild the Quarry machine and its front multimeter (17.27.0-dev)", () => VoxelEngine.EditorTools.QuarryMachineSetup.RunStep121()));
+                Setup("Rebuild the Quarry machine and its rear instrument display (17.27.2-dev)", () => VoxelEngine.EditorTools.QuarryMachineSetup.RunStep121()));
 
             AddSetupGroup(parent, ref number, "Fluids, Atmosphere & Environment",
                 "Water, liquids, weather, pressure, thermal hazards and pollution. The duplicate spherical-water action was removed; one action now owns that setup.", false,

@@ -9,11 +9,15 @@
 // tracks, painted chassis, gantry, cutter wheel with teeth, spoil conveyor, cab, stacks,
 // floodlights, hazard stripes - and it carries two things the player asked for:
 //
-//   * a POWER INLET on the front-left with its own labelled, glowing socket, so a cable
-//     laid against the face has an obvious place to bond, and
-//   * a front MULTIMETER (screen + needle dial + state lamp) driven by
-//     QuarryMultimeter: live draw, maximum draw, current depth and the reason there is
-//     no power (no cable / no supply).
+//   * an INSTRUMENT CLUSTER on the REAR face - display, needle dial, power socket and
+//     state lamp - driven by QuarryMultimeter: live draw, maximum draw, current depth and
+//     the reason there is no power (no cable / no supply).
+//
+// The cluster is on the REAR on purpose. The pit is dug in FRONT of the machine, so the
+// front is the one face the player can never stand in front of: a meter mounted there was
+// a meter nobody could read. The rear also carries the service door, the vents and the
+// copper power spine, and the socket sits in the panel itself - no label and no lit plate,
+// because the lamp beside it already says what the socket is doing.
 //
 // The root pivot is the machine's ground contact plane and the prefab declares it
 // (PlacementPivotAnchor), so the machine seats on the surface the ghost showed and its
@@ -29,7 +33,7 @@
 // and the component wiring are authored here.
 //
 // Run: Tools > Voxel Engine > Voxel Engine Setup > Factory, Industry & Power >
-//      "Rebuild the Quarry machine and its front multimeter (17.27.0-dev)".
+//      "Rebuild the Quarry machine and its rear instrument display (17.27.2-dev)".
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -69,7 +73,8 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("[QuarryMachineSetup] Rebuilt the quarry machine at '" + path +
-                      "' with tracks, cutter wheel, conveyor, cab, front power inlet and front multimeter. " +
+                      "' with tracks, cutter wheel, conveyor, cab and a REAR instrument display " +
+                      "(screen, needle dial, power socket, state lamp). " +
                       "Placed quarries pick the new body up on the next load.");
         }
 
@@ -108,7 +113,6 @@ namespace VoxelEngine.EditorTools
             var screenMat = Mat("Screen", new Color(0.015f, 0.03f, 0.04f), 0.10f, 0.60f);
             var dialFace  = Mat("Dial",   new Color(0.90f, 0.88f, 0.80f), 0.05f, 0.30f);
             var lampWarm  = Mat("LampWarm", new Color(1f, 0.86f, 0.60f), 0f, 0.40f, new Color(1f, 0.72f, 0.35f));
-            var lampCyan  = Mat("LampCyan", new Color(0.35f, 0.92f, 1f), 0f, 0.40f, new Color(0.30f, 0.85f, 1f));
 
             var t = root.transform;
 
@@ -225,81 +229,91 @@ namespace VoxelEngine.EditorTools
             }
             Box(t, "LightBar", steel, new Vector3(0f, 6.50f, 1.70f), new Vector3(2.10f, 0.16f, 0.16f));
 
-            // ═══ FRONT: TOW BLADE, POWER INLET, MULTIMETER ═════════════
+            // ═══ FRONT (THE PIT SIDE): TOW BLADE ═══════════════════════
             Box(t, "Blade", paint, new Vector3(0f, 1.05f, 2.95f), new Vector3(7.80f, 0.80f, 0.40f), new Vector3(16f, 0f, 0f));
             Box(t, "BladeEdge", steel, new Vector3(0f, 0.72f, 3.10f), new Vector3(7.80f, 0.18f, 0.44f), new Vector3(16f, 0f, 0f));
             for (int i = 0; i < 8; i++)
                 Box(t, "BladeStripe" + i, (i % 2 == 0) ? hazard : dark,
                     new Vector3(-3.15f + i * 0.90f, 1.05f, 3.20f), new Vector3(0.90f, 0.62f, 0.10f), new Vector3(16f, 0f, 0f));
 
-            // -- power inlet: a protruding, labelled, lit socket on the front-left --
-            var inlet = new Vector3(-3.15f, 2.55f, 1.95f);
-            Box(t, "PowerInletHousing", steel, inlet, new Vector3(1.10f, 1.10f, 0.80f));
-            Box(t, "PowerInletCollar", hazard, new Vector3(inlet.x, inlet.y + 0.66f, inlet.z), new Vector3(1.26f, 0.18f, 0.94f));
-            Box(t, "PowerInletSocket", lampCyan, new Vector3(inlet.x, inlet.y, inlet.z + 0.44f), new Vector3(0.62f, 0.62f, 0.06f));
-            Box(t, "PowerInletRimTop", dark, new Vector3(inlet.x, inlet.y + 0.38f, inlet.z + 0.46f), new Vector3(0.78f, 0.10f, 0.10f));
-            Box(t, "PowerInletRimBottom", dark, new Vector3(inlet.x, inlet.y - 0.38f, inlet.z + 0.46f), new Vector3(0.78f, 0.10f, 0.10f));
-            Box(t, "PowerInletRimLeft", dark, new Vector3(inlet.x - 0.38f, inlet.y, inlet.z + 0.46f), new Vector3(0.10f, 0.78f, 0.10f));
-            Box(t, "PowerInletRimRight", dark, new Vector3(inlet.x + 0.38f, inlet.y, inlet.z + 0.46f), new Vector3(0.10f, 0.78f, 0.10f));
-            Box(t, "BusBar", copper, new Vector3(0.60f, 2.30f, 1.72f), new Vector3(6.30f, 0.14f, 0.14f));
-            Text(t, "InletLabel", new Vector3(inlet.x - 0.62f, inlet.y + 0.78f, inlet.z - 0.10f), "POWER IN",
-                0.28f, TextAnchor.LowerLeft, Color.white);
+            // ═══ REAR INSTRUMENT CLUSTER: DISPLAY, DIAL, SOCKET, LAMP ═══
+            // Mounted on the rear face, where the player stands. See the file header: the
+            // front of this machine faces a hole in the ground.
+            Box(t, "MeterCabinet", dark, new Vector3(2.35f, 2.90f, -2.80f), new Vector3(2.90f, 2.10f, 0.36f));
+            Box(t, "MeterBezel", steel, new Vector3(2.35f, 3.28f, -2.99f), new Vector3(2.52f, 1.24f, 0.10f));
+            Box(t, "ScreenGlass", screenMat, new Vector3(2.35f, 3.28f, -3.04f), new Vector3(2.30f, 1.04f, 0.05f));
+            Box(t, "ScreenLipTop", steel, new Vector3(2.35f, 3.86f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
+            Box(t, "ScreenLipBottom", steel, new Vector3(2.35f, 2.70f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
+            Box(t, "MeterStrip", steel, new Vector3(2.35f, 2.28f, -2.99f), new Vector3(2.52f, 0.62f, 0.10f));
 
-            // -- multimeter panel: screen + needle dial + state lamp --
-            Box(t, "MeterCabinet", dark, new Vector3(1.05f, 3.45f, 1.58f), new Vector3(3.10f, 2.10f, 0.30f));
-            Box(t, "MeterBezel", body, new Vector3(1.05f, 3.45f, 1.76f), new Vector3(2.80f, 1.80f, 0.12f));
-            Box(t, "MeterScreenBack", screenMat, new Vector3(1.55f, 3.55f, 1.84f), new Vector3(1.75f, 1.15f, 0.06f));
-            Box(t, "MeterScreenLipTop", steel, new Vector3(1.55f, 4.14f, 1.86f), new Vector3(1.85f, 0.08f, 0.10f));
-            Box(t, "MeterScreenLipBottom", steel, new Vector3(1.55f, 2.96f, 1.86f), new Vector3(1.85f, 0.08f, 0.10f));
-
-            var dialCentre = new Vector3(0.05f, 3.42f, 1.88f);
-            Cyl(t, "MeterDial", dark, dialCentre, 0.72f, 0.10f, new Vector3(90f, 0f, 0f));
-            Cyl(t, "MeterDialFace", dialFace, new Vector3(dialCentre.x, dialCentre.y, dialCentre.z + 0.04f), 0.62f, 0.06f, new Vector3(90f, 0f, 0f));
+            // -- needle dial, left end of the strip --
+            var dialCentre = new Vector3(1.78f, 2.28f, -3.05f);
+            Cyl(t, "MeterDial", dark, dialCentre, 0.58f, 0.10f, new Vector3(90f, 0f, 0f));
+            Cyl(t, "MeterDialFace", dialFace, new Vector3(dialCentre.x, dialCentre.y, dialCentre.z - 0.04f), 0.50f, 0.06f, new Vector3(90f, 0f, 0f));
             for (int i = -1; i <= 1; i++)
             {
                 float a = i * 52f * Mathf.Deg2Rad;
                 Box(t, "MeterTick" + i, dark,
-                    new Vector3(dialCentre.x + Mathf.Sin(a) * 0.25f, dialCentre.y + Mathf.Cos(a) * 0.25f, dialCentre.z + 0.06f),
-                    new Vector3(0.035f, 0.09f, 0.02f), new Vector3(0f, 0f, -i * 52f));
+                    new Vector3(dialCentre.x + Mathf.Sin(a) * 0.20f, dialCentre.y + Mathf.Cos(a) * 0.20f, dialCentre.z - 0.09f),
+                    new Vector3(0.030f, 0.08f, 0.02f), new Vector3(0f, 0f, -i * 52f));
             }
             var needlePivot = new GameObject("MeterNeedlePivot");
             needlePivot.transform.SetParent(t, false);
-            needlePivot.transform.localPosition = new Vector3(dialCentre.x, dialCentre.y, dialCentre.z + 0.06f);
-            Box(needlePivot.transform, "MeterNeedle", paint, new Vector3(0f, 0.16f, 0f), new Vector3(0.05f, 0.30f, 0.03f));
-            Sphere(needlePivot.transform, "MeterNeedleHub", dark, Vector3.zero, 0.10f);
+            needlePivot.transform.localPosition = new Vector3(dialCentre.x, dialCentre.y, dialCentre.z - 0.12f);
+            Box(needlePivot.transform, "MeterNeedle", paint, new Vector3(0f, 0.13f, 0f), new Vector3(0.045f, 0.24f, 0.03f));
+            Sphere(needlePivot.transform, "MeterNeedleHub", dark, Vector3.zero, 0.09f);
 
-            var lampGo = Sphere(t, "MeterStateLamp", lampWarm, new Vector3(0.05f, 3.95f, 1.92f), 0.26f);
-            Box(t, "MeterLampHood", steel, new Vector3(0.05f, 4.10f, 1.94f), new Vector3(0.34f, 0.12f, 0.16f));
+            // -- power socket, middle of the strip. No text and no lit plate: the state
+            //    lamp beside it is the only thing that needs to speak --
+            Box(t, "PowerSocketHousing", steel, new Vector3(2.72f, 2.28f, -3.10f), new Vector3(0.72f, 0.58f, 0.22f));
+            Box(t, "PowerSocketPlate", dark, new Vector3(2.72f, 2.28f, -3.24f), new Vector3(0.54f, 0.44f, 0.08f));
+            Box(t, "PowerSocketLugA", copper, new Vector3(2.58f, 2.28f, -3.28f), new Vector3(0.10f, 0.26f, 0.10f));
+            Box(t, "PowerSocketLugB", copper, new Vector3(2.86f, 2.28f, -3.28f), new Vector3(0.10f, 0.26f, 0.10f));
+            Box(t, "PowerSocketHazardL", hazard, new Vector3(2.28f, 2.28f, -3.10f), new Vector3(0.10f, 0.62f, 0.24f));
+            Box(t, "PowerSocketHazardR", hazard, new Vector3(3.16f, 2.28f, -3.10f), new Vector3(0.10f, 0.62f, 0.24f));
 
-            var textScreen = Text(t, "MeterReadout", new Vector3(0.72f, 4.02f, 1.90f), "QUARRY DRILL  IDLE",
-                0.16f, TextAnchor.UpperLeft, new Color(0.82f, 1f, 0.88f));
+            // -- state lamp, right end of the strip --
+            var lampGo = Sphere(t, "MeterStateLamp", lampWarm, new Vector3(3.44f, 2.28f, -3.02f), 0.22f);
+            Box(t, "MeterLampHood", steel, new Vector3(3.44f, 2.42f, -3.04f), new Vector3(0.30f, 0.10f, 0.16f));
+
+            // The readout is authored with no yaw: TextMesh glyphs read from their local
+            // -Z, and this one is mounted on the machine's -Z face.
+            var textScreen = Text(t, "MeterReadout", new Vector3(1.44f, 3.68f, -3.10f), "QUARRY DRILL  IDLE",
+                0.15f, TextAnchor.UpperLeft, new Color(0.62f, 1f, 0.78f));
             textScreen.lineSpacing = 1.12f;
 
             // ═══ NAME PLATE + REAR SERVICE DOOR ════════════════════════
             Box(t, "NamePlate", steel, new Vector3(-1.30f, 4.42f, 1.66f), new Vector3(2.10f, 0.46f, 0.06f));
+            // 180 degree yaw: the plate is on the +Z face, so the glyphs have to be turned
+            // to face the way the machine does (see the Text helper).
             Text(t, "NamePlateText", new Vector3(-2.28f, 4.24f, 1.72f), "QUARRY DRILL Mk III",
-                0.20f, TextAnchor.LowerLeft, new Color(0.10f, 0.10f, 0.11f));
-            Box(t, "RearDoor", steel, new Vector3(0f, 2.95f, -2.72f), new Vector3(3.00f, 2.20f, 0.14f));
-            Box(t, "RearDoorFrame", paint, new Vector3(0f, 4.12f, -2.72f), new Vector3(3.40f, 0.22f, 0.18f));
-            Box(t, "RearHandle", dark, new Vector3(1.30f, 2.60f, -2.84f), new Vector3(0.30f, 0.10f, 0.10f));
-            for (int i = 0; i < 6; i++)
-                Box(t, "RearVent" + i, dark, new Vector3(-2.60f, 3.70f - i * 0.30f, -2.76f), new Vector3(1.40f, 0.16f, 0.10f));
+                0.20f, TextAnchor.LowerLeft, new Color(0.10f, 0.10f, 0.11f), 180f);
+            Box(t, "RearDoor", steel, new Vector3(-1.70f, 2.95f, -2.72f), new Vector3(2.40f, 2.20f, 0.14f));
+            Box(t, "RearDoorFrame", paint, new Vector3(-1.70f, 4.12f, -2.72f), new Vector3(2.80f, 0.22f, 0.18f));
+            Box(t, "RearHandle", dark, new Vector3(-2.60f, 2.60f, -2.84f), new Vector3(0.30f, 0.10f, 0.10f));
+            for (int i = 0; i < 4; i++)
+                Box(t, "RearVent" + i, dark, new Vector3(-1.70f, 4.44f + i * 0.24f, -2.76f), new Vector3(2.20f, 0.14f, 0.10f));
+            // Copper power spine along the rear sill, from the socket into the hull.
+            Box(t, "BusBar", copper, new Vector3(0.55f, 1.72f, -2.86f), new Vector3(6.60f, 0.14f, 0.14f));
 
             // ═══ RIGGING ═══════════════════════════════════════════════
-            // One solid collider on the root: the body the player walks into, the volume
-            // a cable bonds to and the volume the tape/frame is measured from.
+            // Four solid volumes on the root: the hull the player walks into, the volume a
+            // cable bonds to, the volume the tape/frame is measured from, and the fittings
+            // (blade, cutter wheel, rear socket) that are solid on their own so the places
+            // between them stay walkable.
             var collider = root.AddComponent<BoxCollider>();
-            collider.center = new Vector3(0f, 2.60f, -0.55f);
-            collider.size = new Vector3(8.60f, 5.20f, 4.30f);
-            // The front fittings are solid on their own, so the space between the body,
-            // the inlet and the meter stays walkable and the readouts are readable from
-            // arm's length instead of through an invisible wall.
+            collider.center = new Vector3(0f, 2.60f, -0.70f);
+            collider.size = new Vector3(8.60f, 5.20f, 4.60f);
+            // The front fittings are solid on their own, so the space between the body and
+            // the blade stays walkable instead of being one invisible wall.
             var bladeCollider = root.AddComponent<BoxCollider>();
             bladeCollider.center = new Vector3(0f, 1.05f, 2.95f);
             bladeCollider.size = new Vector3(7.80f, 0.86f, 0.60f);
+            // The rear socket is solid too, so a cable bonding to it does not walk through
+            // the panel and the cluster stays reachable from behind.
             var inletCollider = root.AddComponent<BoxCollider>();
-            inletCollider.center = new Vector3(-3.15f, 2.55f, 1.95f);
-            inletCollider.size = new Vector3(1.10f, 1.16f, 0.86f);
+            inletCollider.center = new Vector3(2.72f, 2.28f, -3.18f);
+            inletCollider.size = new Vector3(0.90f, 0.90f, 0.58f);
             // The root IS the ground contact plane, so the build system may seat this
             // prefab by its pivot instead of guessing from collider bounds.
             root.AddComponent<VoxelEngine.Building.PlacementPivotAnchor>();
@@ -324,9 +338,10 @@ namespace VoxelEngine.EditorTools
                 new PortConfig.FacePort { face = CubeFace.NegX, direction = PortDirection.None,   networkType = PortNetworkType.Any,   enabled = true },
                 new PortConfig.FacePort { face = CubeFace.PosY, direction = PortDirection.None,   networkType = PortNetworkType.Any,   enabled = true },
                 new PortConfig.FacePort { face = CubeFace.NegY, direction = PortDirection.None,   networkType = PortNetworkType.Any,   enabled = true },
-                new PortConfig.FacePort { face = CubeFace.NegZ, direction = PortDirection.None,   networkType = PortNetworkType.Any,   enabled = true },
-                // Power comes in at the front, where the lit inlet and the meter are.
-                new PortConfig.FacePort { face = CubeFace.PosZ, direction = PortDirection.Input,  networkType = PortNetworkType.Power, enabled = true },
+                new PortConfig.FacePort { face = CubeFace.PosZ, direction = PortDirection.None,   networkType = PortNetworkType.Any,   enabled = true },
+                // Power comes in at the REAR, where the socket and the display are; the
+                // front is the pit face and nothing docks there.
+                new PortConfig.FacePort { face = CubeFace.NegZ, direction = PortDirection.Input,  networkType = PortNetworkType.Power, enabled = true },
             };
 
             var quarry = root.AddComponent<Quarry>();
@@ -397,12 +412,22 @@ namespace VoxelEngine.EditorTools
             return go;
         }
 
+        /// <summary>Legacy TextMesh label. TextMesh glyphs are readable from their LOCAL
+        /// -Z, so the yaw matters: a label mounted on the machine's +Z face needs 180
+        /// degrees to face outwards, and one on its -Z face needs none. Get it wrong and
+        /// the sign reads correctly from inside the hull and mirrored from outside - which
+        /// is exactly how the first version of this machine shipped.
+        ///
+        /// The depth-tested font material is NOT applied here: a material made at edit time
+        /// cannot survive the prefab save, so QuarryMultimeter swaps every label onto it at
+        /// runtime instead (WorldTextMaterial.ApplyToHierarchy).</summary>
         private static TextMesh Text(Transform parent, string name, Vector3 pos, string content,
-            float glyphHeight, TextAnchor anchor, Color color)
+            float glyphHeight, TextAnchor anchor, Color color, float yaw = 0f)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.transform.localPosition = pos;
+            go.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
             var tm = go.AddComponent<TextMesh>();
             tm.text = content;
             tm.fontSize = 48;
@@ -414,7 +439,6 @@ namespace VoxelEngine.EditorTools
             tm.color = color;
             var renderer = tm.GetComponent<MeshRenderer>();
             if (renderer != null) renderer.shadowCastingMode = ShadowCastingMode.Off;
-            VoxelEngine.Rendering.WorldTextMaterial.Apply(tm);
             return tm;
         }
 

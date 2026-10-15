@@ -5,9 +5,11 @@
 // The drill used to be a grey box that told the player nothing: whether it had power was
 // only visible inside its machine panel, and "NO POWER" never said which of the two
 // problems it was - no cable at all, or a network that cannot carry the load. This is a
-// real instrument panel on the machine's face: a printed readout (status, live draw,
-// maximum draw, current depth), a needle that swings across a dial as the load rises, and
-// a single lamp that goes amber (no cable), red (cable, no supply) or green (served).
+// real instrument cluster on the machine's REAR face - the one face the player can stand
+// in front of, because the pit is dug on the other side: a printed readout (status, live
+// draw, maximum draw, current depth), a needle that swings across a dial as the load
+// rises, a power socket and a single lamp that goes amber (no cable), red (cable, no
+// supply) or green (served).
 //
 // Everything it prints comes from the Quarry itself, so the meter, the machine panel and
 // the machine's behaviour can never disagree. It refreshes a few times a second - a meter
@@ -45,11 +47,11 @@ namespace VoxelEngine.Transport
         {
             _quarry = GetComponent<Quarry>();
             _power = GetComponent<PowerConsumer>();
-            if (screen != null)
-            {
-                // Depth-tested font material: the stock font shader draws through terrain.
-                VoxelEngine.Rendering.WorldTextMaterial.Apply(screen);
-            }
+            // The machine's labels are authored in the prefab, which cannot carry the
+            // depth-tested font material (it is made at runtime), so they are swapped in
+            // here: without this the stock font shader prints the readout and the name
+            // plate straight through the hull and through terrain.
+            VoxelEngine.Rendering.WorldTextMaterial.ApplyToHierarchy(gameObject);
         }
 
         private void Update()

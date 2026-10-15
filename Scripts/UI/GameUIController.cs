@@ -5694,8 +5694,23 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             // One item moves, and only one: the destination gains it, the source
             // container loses it, and the cursor carries one less.
-            dst.count += 1;
-            destC.SetSlot(destIdx, dst);
+            //
+            // An EMPTY slot holds no item to increment. Adding 1 to its count used to
+            // write a slot that said "one item" and named none, which the next refresh
+            // dropped on the floor - the item simply vanished. The destination now takes a
+            // one-item copy of the source stack, so per-instance state (durability, a
+            // storage disk's payload) rides along exactly as it does on a normal move.
+            if (dst.IsEmpty)
+            {
+                var moved = fullSrc.Clone();
+                moved.count = 1;
+                destC.SetSlot(destIdx, moved);
+            }
+            else
+            {
+                dst.count += 1;
+                destC.SetSlot(destIdx, dst);
+            }
 
             fullSrc.count -= 1;
             if (fullSrc.count <= 0) srcC.SetSlot(srcIdx, new ItemStack());

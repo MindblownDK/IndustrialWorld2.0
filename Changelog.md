@@ -1,9 +1,34 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.1-dev`
+**Current Version:** `17.27.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.27.2-dev] The Quarry's Rear Instrument Display, Readable World Text & the Right-Click That Ate an Item
+
+**Type:** PATCH - the quarry's instruments move off the pit face onto the machine's rear, where the player can actually stand, and become a display-grade cluster without the labelled power plate; world text on the machine is turned to face outwards and depth-tested at runtime so it can be read and no longer shines through the hull; and a right-click that moves one item into an empty slot no longer destroys it. No save field, schema or existing public member changed.
+
+**GitHub title:** `[17.27.2-dev] Move the quarry display to the rear, fix mirrored and see-through text, and stop right-click losing an item`
+
+#### Fixed
+- **The machine's labels read mirrored from outside, and showed through the machine and through terrain (`Scripts/Editor/Content/QuarryMachineSetup.cs`, `Scripts/Rendering/WorldTextMaterial.cs`, `Scripts/Transport/QuarryMultimeter.cs`).** Two separate faults, both visible in one screenshot. First, legacy `TextMesh` glyphs are readable from their **local -Z** - which is why the drawer tooling yaws its own face text by 180 degrees - and every label on this machine was authored with no yaw on the +Z face, so the signs read correctly from inside the hull and backwards from outside. The authoring helper now takes the yaw, the front name plate is turned 180 degrees to face the way the machine does, and the readout that moved to the rear is authored with none. Second, the depth-tested font material was swapped in while the prefab was being built - and a material created at edit time cannot survive a prefab save, so the saved machine carried the stock font shader, which is a screen-GUI shader with `ZTest Always`: the text was drawn through the hull, through the terrain and through the pit. The swap now happens at runtime, on wake, across the whole machine (`WorldTextMaterial.ApplyToHierarchy`, a new additive helper), so every label it owns is depth-tested, occluded and readable - and the prefab itself carries nothing that cannot be saved.
+- **A right-click that moved one item into an EMPTY slot destroyed the item (`Scripts/UI/GameUIController.cs`).** The one-item gesture added 1 to the destination slot's count, which is correct for topping up a stack but writes `count == 1` with `item == null` into an empty one - a slot that claims to hold an item and names none, which the next refresh drops. The destination now takes a one-item copy of the source stack, so per-instance state (durability, a storage disk's payload) rides along exactly as it does on any other move, and the slot is filled rather than emptied.
+
+#### Changed
+- **The quarry's instruments are on its REAR now (`Scripts/Editor/Content/QuarryMachineSetup.cs`).** The pit is dug in front of the machine, so the front is the one face the player can never stand in front of: a display mounted there was a display nobody could read. The rear face is now the service face - the screen, the needle dial, the power socket and the state lamp sit in one panel on it, the service door and the vents moved out of the panel's way, and a copper spine runs along the rear sill from the socket into the hull. The display itself is a display: a framed dark glass panel with the readout printed on it in phosphor green (status, `DRAW live / max W`, `DEPTH current / max m`), the dial to the left of it and the lamp to the right.
+- **The labelled, glowing power plate is gone.** No `POWER IN` text and no lit square: the socket is bare machined steel with copper lugs and hazard edges, sitting in the panel next to the lamp that already reports what it is doing. The machine's power port now declares the rear face (`NegZ`, Input/Power) and the pit face declares nothing, and the collider set follows the socket - so the panel is solid, the space in front of it is not, and the front of the machine is walkable right up to the blade.
+- **The wizard step is renamed to match:** `Tools > Voxel Engine > Voxel Engine Setup > Factory, Industry & Power > "Rebuild the Quarry machine and its rear instrument display (17.27.2-dev)"`. Its prefab path, GUID and wiring are unchanged; the full "Build survival and industrial logistics content" step authors the same machine.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.27.2-dev`, PATCH over `17.27.1-dev` - visual placement, text orientation and two interaction fixes, no save or schema change (`CurrentSchemaVersion` stays `2`). `WorldTextMaterial.ApplyToHierarchy` is a new additive static; no existing signature was altered. Readouts, the meters and the power socket are still the same components with the same fields, so placed quarries keep their saved progress, upgrade modules and output.
+- The power inlet moves, but nothing has to be re-laid: a cable bonds to the machine through its colliders and its 6 m connect radius, so a cable already running to the front of a working quarry keeps working, and a new one can now land on the rear socket as well.
+- Play-test confirmed on 17.27.1-dev, as reported: the quarry accepts power, mines and reads out correctly, and the `VoxelWaterURP` parse error is gone - the hyphen inside a property header was the fault, and the shader parses in Unity.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. Every edited file was checked with a string- and comment-aware brace/paren/bracket scanner (whole project: 952 scripts, all balanced) and every API the new code calls was read out of the repository's own declarations.
+
+#### What to run
+1. `Tools > Voxel Engine > Voxel Engine Setup > Factory, Industry & Power > "Rebuild the Quarry machine and its rear instrument display (17.27.2-dev)"`. It rebuilds `Quarry.prefab` in place, so existing placed quarries pick the new body up without losing anything.
+2. Play test: stand BEHIND a quarry and read the display from the ground - status, `DRAW`, `DEPTH`, needle and lamp, all facing you; confirm no text appears through the machine or through terrain; run a cable to the rear socket and watch the lamp go green; right-click a stack onto an empty inventory slot and confirm one item lands in it and nothing is lost.
 
 ### [17.27.1-dev] The Quarry Meter's Missing Namespace (Build Fix)
 

@@ -60,6 +60,21 @@ namespace VoxelEngine.Rendering
             renderer.sharedMaterial = depthTested;
         }
 
+        /// <summary>Depth-test every TextMesh in a hierarchy.
+        ///
+        /// Prefabs authored by the editor tools cannot carry the swapped-in material:
+        /// it is created at runtime, so a prefab that referenced it either lost the
+        /// reference or kept the stock font shader - which draws straight through
+        /// terrain and through the machine the text is bolted to. Anything whose text
+        /// is authored in the editor asks for this on wake instead, and every label it
+        /// owns becomes a real, occluded, readable sign.</summary>
+        public static void ApplyToHierarchy(GameObject root)
+        {
+            if (root == null) return;
+            var texts = root.GetComponentsInChildren<TextMesh>(true);
+            for (int i = 0; i < texts.Length; i++) Apply(texts[i]);
+        }
+
         private static void Hook()
         {
             if (_hooked) return;
