@@ -358,11 +358,12 @@ namespace VoxelEngine.Transport
         {
             yield return null;
             var col = GetComponentInChildren<BoxCollider>(true);
-            if (col != null && TryLocalYRange(col.bounds, out float b0, out float t0)) { _mbY = b0; _mtY = t0; yield break; }
+            if (col != null && TryLocalYRange(col.bounds, out float b0, out float t0)) { _mbY = b0; _mtY = t0; _boundsCaptured = true; yield break; }
             var r = GetComponentInChildren<MeshRenderer>(true);
-            if (r != null && TryLocalYRange(r.bounds, out float b1, out float t1)) { _mbY = b1; _mtY = t1; yield break; }
+            if (r != null && TryLocalYRange(r.bounds, out float b1, out float t1)) { _mbY = b1; _mtY = t1; _boundsCaptured = true; yield break; }
             var anyCol = GetComponentInChildren<Collider>(true);
             if (anyCol != null && TryLocalYRange(anyCol.bounds, out float b2, out float t2)) { _mbY = b2; _mtY = t2; }
+            _boundsCaptured = true;   // measured or not, the outline may stop waiting for it
         }
 
         /// <summary>World bounds -> local-Y range of the eight corners. The frame
@@ -404,6 +405,13 @@ namespace VoxelEngine.Transport
                 else if (Phase != QuarryPhase.Idle && Phase != QuarryPhase.Complete) { DA(); Phase = QuarryPhase.Idle; }
                 else CreateGhostIfUnpowered(); }
 
+            // 17.27.6-dev: complete a restore's outline request - but only after the size check
+            // above, because a machine whose area just changed has been reset to Idle and must
+            // not build an outline for a phase it no longer has. This is where the request
+            // actually lands on a machine that was spawned for the load, since - unlike
+            // RestoreState - Update runs after Start.
+            TryResumeOutline();
+
             SpinCutter(Time.deltaTime, hp);
 
             switch (Phase)
@@ -436,6 +444,13 @@ namespace VoxelEngine.Transport
         private Transform _cw;
         private bool _cwMissing;
         private float _cwSpeed;
+
+        // 17.27.6-dev: the tape and the pit frame are runtime objects - nothing about them is
+        // saved - so a machine restored mid-job has to put its own outline back. RestoreState
+        // raises the request; the rebuild happens on the first frame where the machine is LIVE
+        // and its measured height is known (the frame spans model bottom to model top).
+        private bool _outlineResumePending;
+        private bool _boundsCaptured;
         private const float CutterSpinMining = 165f;    // degrees/second while cutting
         private const float CutterSpinWorking = 26f;    // degrees/second while surveying/building
         private const float CutterSpinAccel = 240f;     // degrees/second per second
@@ -467,6 +482,40 @@ namespace VoxelEngine.Transport
 
             _cwSpeed = Mathf.MoveTowards(_cwSpeed, target, CutterSpinAccel * dt);
             if (_cwSpeed != 0f) _cw.Rotate(Vector3.right, _cwSpeed * dt, Space.Self);
+        }
+
+        /// <summary>PUT THE OUTLINE BACK (17.27.6-dev).
+        ///
+        /// The tape and the pit frame exist only in memory: they are spawned as the machine
+        /// works and none of them is saved, so a quarry restored mid-job comes back as a working
+        /// drill with an invisible mining area. This puts back exactly what the build phase put
+        /// there - the same PF() piece list, placed by the same PS() - and leaves the machine in
+        /// the phase it was saved in, with its depth and cursor untouched.
+        ///
+        /// It waits for two things, and that wait is the whole point of it existing: the machine
+        /// must be LIVE (Start has run, `_w` and the power node are bound) and its measured height
+        /// must be known, because the frame spans model bottom to model top. Rebuilding any
+        /// earlier - as the previous attempt did, inside RestoreState, which runs before Start on
+        /// a freshly spawned machine - built nothing at all.</summary>
+        void TryResumeOutline()
+        {
+            if (!_outlineResumePending || !_ok || !_boundsCaptured) return;
+            _outlineResumePending = false;
+
+            if (Phase == QuarryPhase.TapeFrame)
+            {
+                if (_ta == null) CTp();
+                return;
+            }
+            if (Phase != QuarryPhase.BuildingFrame && Phase != QuarryPhase.Mining) return;
+            if (_fs.Count > 0) return;                       // a frame is already standing
+
+            PF();
+            foreach (var piece in _fp) PS(piece);
+            // The build phase counts its own pieces out one at a time. A frame that is restored
+            // whole must not be laid down a second time on top of itself when that counter
+            // resumes, so the counter is moved to the end of the list.
+            _fi = _fp.Count;
         }
 
         /// <summary>Depth-first search for a child by name, for prefabs whose hierarchy
@@ -808,16 +857,18 @@ namespace VoxelEngine.Transport
             if(Phase==QuarryPhase.Mining && _ok && _dr==null) CDr();
             if(Phase==QuarryPhase.Complete){if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
             if(_ok){_ls=EffSize;RecomputeArea();CalculateMaxDepth();CreateGhostIfUnpowered();}
-            // 17.27.4-dev: the tape and the pit frame are runtime objects, so a reload used to
+            // 17.27.6-dev: the tape and the pit frame are runtime objects, so a reload used to
             // leave a working quarry with no outline at all - the mining area simply vanished
-            // from the world. The frame is rebuilt from the same pieces the build phase put
-            // there, and a machine still surveying gets its tape back.
-            if(_ok && _fs.Count==0 && (Phase==QuarryPhase.BuildingFrame || Phase==QuarryPhase.Mining))
-            {
-                PF();
-                foreach(var piece in _fp) PS(piece);
-            }
-            if(_ok && Phase==QuarryPhase.TapeFrame && _ta==null) CTp();
+            // from the world. Raising a REQUEST is what fixes it: this method is called on a
+            // machine that was just spawned for the load, so it runs before Start(), and the
+            // earlier version's rebuild - guarded by the machine-is-live flag - was skipped in
+            // silence every time. TryResumeOutline() completes the request once the machine is
+            // live and its own height has been measured. The immediate attempt below covers a
+            // restore that happens later in a session, when everything is already known.
+            _outlineResumePending = Phase == QuarryPhase.TapeFrame
+                || Phase == QuarryPhase.BuildingFrame
+                || Phase == QuarryPhase.Mining;
+            TryResumeOutline();
         }
         void OnDestroy(){DestroyGhost();DTp();HPP();foreach(var fb in _fs)if(fb)Destroy(fb);_fs.Clear();if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
         static Material ME(Color c,float es){var s=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(s);m.color=c;m.SetColor("_BaseColor",c);m.SetColor("_EmissionColor",c*es);m.EnableKeyword("_EMISSION");return m;}

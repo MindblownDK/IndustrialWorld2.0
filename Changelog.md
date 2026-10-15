@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.5-dev`
+**Current Version:** `17.27.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.27.6-dev] The Quarry's Tape and Pit Frame Come Back With the Machine
+
+**Type:** PATCH - a reloaded quarry now puts its own outline back: the tape and the pit frame are rebuilt once the machine is live and its height is measured. No save field, schema or public API change.
+
+**GitHub title:** `[17.27.6-dev] Rebuild the quarry's tape and pit frame when a machine is loaded`
+
+#### Fixed
+- **A loaded quarry came back with no tape and no pit frame (`Scripts/Transport/Quarry.cs`).** Both are runtime objects - they are spawned as the machine works and none of them is saved - so a drill restored mid-job appeared as a working machine with an invisible mining area. The previous round's attempt to rebuild them asked the wrong question: it ran inside `RestoreState`, which the persistence layer calls on a machine that was **just spawned for the load**, so the "is this machine live yet" flag it checked was still false and the rebuild was skipped in silence every single time. The rebuild is now a REQUEST raised by `RestoreState` and completed by `TryResumeOutline` on the first frame where two things are true: the machine is live (`Start` has run, so its world and power bindings exist) and its own measured height is known - the frame spans model bottom to model top, so rebuilding it earlier would size it from a placeholder. The frame is put back from the same piece list the build phase uses, the saved phase, depth and cursor are untouched, and the build phase's own piece counter is moved past the restored pieces so a frame that arrives whole is never laid down a second time on top of itself. A machine saved while surveying gets its tape back the same way.
+- **Ordering inside the frame loop was tightened with it.** The resume runs AFTER the mining-area size check, so a machine whose area is changed is reset to Idle by that check and does not then build an outline for a phase it no longer has.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.27.6-dev`, PATCH over `17.27.5-dev`. Save-compatible and schema-compatible (`CurrentSchemaVersion` stays `2`); no save field was added, removed or reinterpreted, and a world written by an earlier build loads with every quarry's depth, cursor, phase, upgrade levels and output exactly as saved - the outline is derived state, rebuilt on load rather than stored, so nothing about a save changes. Everything the two previous entries describe stands as written: whole-cell excavation, the job progress bar, the lower instrument cluster, the spinning cutter wheel and the hand-carried drag.
+- Nothing to re-run: this is code only. No prefab, item, recipe or setup step is touched, and the quarry machine's lower instrument cluster still needs the one pass of `Tools > Voxel Engine > Voxel Engine Setup > Factory, Industry & Power > "Rebuild the Quarry machine with a spinning cutter wheel and a fitted name plate (17.27.3-dev)"` if it has not been run since.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. The file was checked with a string- and comment-aware brace, bracket and parenthesis scanner, and the failure that produced this bug was traced in the repository itself - `WorldStatePersistence` line 1791 calls `RestoreState` on the restored machine, while `Quarry._ok` is only set at the end of `Start()`.
+
+#### What to run
+1. Nothing. Load a world with a quarry mid-pit and the tape and frame should be standing around it again, at the same depth and phase it was saved in.
 
 ### [17.27.5-dev] The Drag-Into-Storage Flag (Build Fix)
 
