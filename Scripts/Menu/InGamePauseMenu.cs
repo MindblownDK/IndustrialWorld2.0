@@ -724,6 +724,12 @@ namespace VoxelEngine.Menu
                 VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
                 VoxelEngine.Research.ResearchManager.Instance?.SaveToDisk();
             }
+            // 17.26.1-dev: every deliberate save above is now written. Everything
+            // after this point destroys the scene piece by piece - grids first, their
+            // blocks with them - so no further save may run: it would scan the
+            // half-destroyed scene and write "0 grids / 0 blocks" over the good file.
+            VoxelEngine.Persistence.WorldStatePersistence.MarkWorldTearingDown("quit to menu");
+
             try { SceneManager.LoadScene(mainMenuScene); }
             catch (Exception ex) { Debug.LogError("[PauseMenu] Scene load failed: " + ex.Message); }
         }

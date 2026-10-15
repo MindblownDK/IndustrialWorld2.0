@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.26.0-dev`
-**Roadmap Version:** `17.26.0-dev`
+**Current Version:** `17.26.1-dev`
+**Roadmap Version:** `17.26.1-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.26.1-dev - Grid Ground Placement, Teardown Save Interlock, Standing Bob & Taller Player
+- `GridBuilder.PlacementObstructed` keeps the static builder's allowance law: terrain, the builder's own body and scatter never block a grid cell, and a refusal names its blocker on screen and in the console
+- `WorldStatePersistence.WorldTearingDown` refuses any save raised after the world starts unloading, so the scene-teardown save can no longer overwrite the complete SAVE & QUIT one; `PlayerController` holds a planted player's radial velocity at zero (no stick, no gravity) instead of letting the ground solve fight gravity
+- Player body 1.85 -> 1.95 m and eye 1.65 -> 1.74 m, enforced as a shipped-height floor at wake so existing player objects grow without being re-made; `VoxelWaterURP` parses again (three property headers carried a dotted version tag, which ShaderLab rejects)
+
 ### 17.26.0-dev - Structure Reload Survival, Placement Seating, Quarry Front Face & Research Gating
 - `WorldStatePersistence` restores every world object through one guarded sequence that waits for the orbital clock, resolves tiered pieces through a new optional body anchor, and re-parks any queued block or tiered piece onto its settled anchor pose; save/load carry-count logging added
 - `BuildSystem` seats static blocks on the aimed surface whenever the target is not a placed block, tiered piece or grid; `PlayerController` returns the sideways creep a still player gets from the grounded stick; `Quarry` mines only in front of the machine (`forwardOffset` start, 8 m down-probe) and rebuilds its drill head when restored mid-mining
@@ -48,11 +53,6 @@
 - Added `MetallurgicalFoundry` (`FoundryTier.CokeKiln` solid-fuel Beehive Coke & Alloy Kiln with auto-self-fueling and `FoundryTier.ArcFoundry` 3-Phase Electric Arc Foundry with 1.75x speed and 3 upgrade slots) plus `MetallurgicalFoundryAnimator`
 - Authored `Metallurgical Coke` (`18s` fuel), `Zinc Calamine`, `Foundry Slag`, and automatable coking, carburized/washed-ore Steel, calamine/concentrate Brass, and byproduct recycling recipes across Coke Kiln, Arc Foundry, Ore Washer, Crusher, and Furnaces
 - Fixed `IFluidStore` implementation in `OreWasher.cs` and kept all setup actions exclusively inside `Tools > Voxel Engine > Setup Wizard`
-
-### 17.22.0-dev - Ore Washing, Enrichment & Tailings Loop (Section 6.2 / 4.6.0)
-- Shipped `OreWasher` (`2x2x2` hydro-rotary trommel + sluice classifier) with 500 L internal `Wash Water` tank, auto-refill from adjacent `WaterPipe` networks, `LiquidCanister` pour/draw, and `OreWasherMotionAnimator`
-- Authored `Washed Iron Ore`, `Washed Copper Ore`, and `Mineral Tailings`, plus bonus-yield smelting (`1x Washed Ore -> 2x Ingot`) and tailings reprocessing/crushing/vitrification loops
-- Added `Retain Tailings` vs. `Sluice Discharge` runoff modes wired into `PollutionEmitter` (`PollutionSource_OreWashing`) and `PollutionService`
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

@@ -360,11 +360,14 @@ namespace VoxelEngine.GridSystem
             }
 
             bool placementObstructed = PlacementObstructed(gbi, targetGrid, worldPos, rotation);
+            ReportObstructionBlocker(placementObstructed);
             if (placementObstructed && GameSettings.WasPressed(InputAction.Build))
             {
                 VoxelEngine.UI.BuildFeedbackHud.Show(
                     "Placement Blocked",
-                    "Blocked by terrain, a construct or yourself",
+                    _obstructionBlocker != null
+                        ? "Blocked by " + _obstructionBlocker
+                        : "Blocked by a construct or yourself",
                     gbi.icon,
                     Color.red);
             }
@@ -493,9 +496,16 @@ namespace VoxelEngine.GridSystem
         // ── Ground-clearance lift ─────────────────────────────────────
         private static readonly System.Collections.Generic.Dictionary<GridBlockItem, Bounds> s_prefabLocalBounds = new();
         private static readonly Collider[] s_obstructionProbe = new Collider[16];
+        /// <summary>What refused the last obstruction probe. Named on screen by the
+        /// refusal HUD and once in the console, so "Placement Blocked" is never a
+        /// silent verdict.</summary>
+        private string _obstructionBlocker;
+        /// <summary>Last blocker name already written to the console (null = clear).</summary>
+        private string _reportedBlocker;
 
         private bool PlacementObstructed(GridBlockItem item, GridEntity grid, Vector3 worldPos, Quaternion rotation)
         {
+            _obstructionBlocker = null;
             if (item == null) return false;
             Bounds local = GetPrefabLocalBounds(item);
             Vector3 center = worldPos + rotation * local.center;
@@ -506,14 +516,80 @@ namespace VoxelEngine.GridSystem
             {
                 var col = s_obstructionProbe[i];
                 if (col == null || !col.enabled) continue;
-                if (grid != null)
-                {
-                    var ownerGrid = col.GetComponentInParent<GridEntity>();
-                    if (ownerGrid == grid) continue;
-                }
+                if (IsPlacementObstructionIgnored(col, grid)) continue;
+                _obstructionBlocker = NameOfBlocker(col);
                 return true;
             }
             return false;
+        }
+
+        /// <summary>Who a grid block is NOT allowed to be built through.
+        /// 17.26.1-dev: this is the same law the static builder applies - the check
+        /// used to reject every collider that did not belong to the target grid,
+        /// which included the raw voxel terrain, the builder's own body and every
+        /// scatter prop. Aiming a grid block at natural ground therefore showed a
+        /// permanently red ghost and refused the click: the very first block of a
+        /// new base could never be placed. Only real structures block now.</summary>
+        private bool IsPlacementObstructionIgnored(Collider col, GridEntity grid)
+        {
+            if (col == null || !col.enabled || col.isTrigger) return true;
+
+            // The held ghost and the builder's own visuals live under this root.
+            var selfRoot = transform.root;
+            if (selfRoot != null && col.transform.IsChildOf(selfRoot)) return true;
+
+            // The builder's own capsule never blocks the cell he is aiming at - the
+            // block he is holding is usually held over his own feet on a downcast aim.
+            if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(col, transform)) return true;
+
+            // Biome scatter (trees, rocks, props) is decoration, never structure.
+            if (VoxelEngine.Scattering.ScatterClear.IsScatterCollider(col)) return true;
+
+            // Neighbours of the grid being extended are the lattice itself.
+            if (grid != null && col.GetComponentInParent<GridEntity>() == grid) return true;
+
+            // Another player is a body, not scenery (the builder's own was exempted above).
+            if (col.GetComponentInParent<VoxelEngine.Player.PlayerController>() != null) return false;
+
+            // Natural world geometry and static scenery carry no rigidbody and belong
+            // to no lattice host. The pose was already seated on the surface by
+            // LiftPoseOutOfGround and the lattice owns the layout, so raw terrain must
+            // never read as "obstructed". Static scenery (ruins, cliffs) is scenery for
+            // the same reason - it is not a construct, and a base built against it is
+            // meant to be buildable.
+            if (col.attachedRigidbody == null
+                && col.GetComponentInParent<GridEntity>() == null
+                && col.GetComponentInParent<VoxelEngine.Building.PlacedBlock>() == null
+                && col.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() == null)
+                return true;
+
+            return false;
+        }
+
+        /// <summary>One console line while a placement stays refused, naming the collider
+        /// that owns the refusal. The state lives outside the ghost tracer on purpose:
+        /// that tracer speaks once per ghost STATE, and a per-frame blocker line would
+        /// drown the log. Cleared as soon as the verdict clears, so a later refusal
+        /// reports again.</summary>
+        private void ReportObstructionBlocker(bool obstructed)
+        {
+            if (!obstructed)
+            {
+                _reportedBlocker = null;
+                return;
+            }
+            if (_reportedBlocker == _obstructionBlocker) return;
+            _reportedBlocker = _obstructionBlocker;
+            Debug.Log("[Grid] placement refused by " + (_obstructionBlocker ?? "an unnamed collider"));
+        }
+
+        private static string NameOfBlocker(Collider col)
+        {
+            if (col == null) return "unknown";
+            var root = col.transform.root;
+            if (root != null && root != col.transform)
+                return root.name + "/" + col.name;
+            return col.name;
         }
 
         private static void LiftPoseOutOfGround(GridBlockItem item, RaycastHit hit, ref Vector3 worldPos, Quaternion rotation)

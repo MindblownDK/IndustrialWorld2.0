@@ -133,9 +133,20 @@ namespace VoxelEngine.Player
         [Tooltip("Damage curve exponent. Higher values make small falls gentler and big falls harsher.")]
         public float fallDamageExponent = 1.35f;
 
+        // 17.26.1-dev - THE SHIPPED BODY.
+        //
+        // The player was a little short next to everything he builds, so the
+        // standing body is 10 cm taller and the camera rides 9 cm higher with it.
+        // These two numbers are the design value for the character: a scene or
+        // prefab that still carries the old serialized 1.85/1.65 is raised to them
+        // at wake (see Awake), because a stale copy of the previous body is the
+        // only reason a taller player would not show up after the update.
+        public const float ShippedStandHeight    = 1.95f;
+        public const float ShippedStandEyeHeight = 1.74f;
+
         [Header("Crouch / Slide (momentum-based)")]
-        [Tooltip("Stand-up height of the controller.")]
-        public float standHeight = 1.85f;
+        [Tooltip("Stand-up height of the controller (raised to the shipped body height at wake).")]
+        public float standHeight = ShippedStandHeight;
         [Tooltip("Crouched height of the controller (camera lowers proportionally).")]
         public float crouchHeight = 1.20f;
         [Tooltip("Initial slide boost added along the current momentum, limited by slideSpeedCap.")]
@@ -156,8 +167,8 @@ namespace VoxelEngine.Player
         public float flySprintMultiplier = 3f;
 
         [Header("Camera")]
-        [Tooltip("Local Y position of the camera while standing.")]
-        public float standEyeHeight  = 1.65f;
+        [Tooltip("Local Y position of the camera while standing (raised to the shipped eye height at wake).")]
+        public float standEyeHeight  = ShippedStandEyeHeight;
         [Tooltip("Local Y position of the camera while crouching/sliding.")]
         public float crouchEyeHeight = 0.9f;
         public Transform cameraPivot;
@@ -296,6 +307,11 @@ namespace VoxelEngine.Player
 #else
             InfiniteHealth = false;
 #endif
+            // 17.26.1-dev: the shipped body height is a floor, so the taller player
+            // reaches worlds whose prefab still holds the previous body. The camera
+            // eye follows a cowering serialized value the same way, but only upward.
+            standHeight = Mathf.Max(standHeight, ShippedStandHeight);
+            standEyeHeight = Mathf.Max(standEyeHeight, ShippedStandEyeHeight);
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
             // On spherical bodies the terrain has hills/mountains in every direction. The default
@@ -837,8 +853,32 @@ namespace VoxelEngine.Player
             }
             else
             {
+                // 17.26.1-dev - THE STANDING BOB.
+                //
+                // A planted player used to be a two-force fight. The ground stick pushed
+                // the capsule 2 m/s into the surface EVERY frame, while the footing solve
+                // lifted it back to its clearance; gravity slipped in on any frame the
+                // stick's velocity test missed (the stick only re-arms while the radial
+                // speed is negative, so a frame spent above zero sends the feet down a few
+                // millimetres again). The result was a per-frame up/down cycle - the fast
+                // bob the player saw both on natural ground and on placed foundations,
+                // because both are just "a surface underfoot".
+                //
+                // Neither force has any work to do when nobody is asking to move: contact
+                // is already established and the footing solve owns the clearance. So with
+                // no movement input, and nothing else driving the body (magnetic boots own
+                // their own attachment), the radial velocity is simply held at zero and the
+                // capsule stands perfectly still. Walking, jumping, water and the boots are
+                // all untouched.
+                bool planted = _grounded
+                    && wishDir.sqrMagnitude < 0.001f
+                    && (_boots == null || !_boots.Engaged);
+                if (planted)
+                {
+                    _velocity = Vector3.ProjectOnPlane(_velocity, up);
+                }
                 // Radial gravity: apply along `up`; small downward stick when grounded.
-                if (_grounded && VerticalSpeed(up) < 0f)
+                else if (_grounded && VerticalSpeed(up) < 0f)
                 {
                     _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * (-2f);
                 }

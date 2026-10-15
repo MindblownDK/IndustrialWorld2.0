@@ -281,6 +281,9 @@ namespace VoxelEngine.UI
             string menuScene = pause != null && !string.IsNullOrEmpty(pause.mainMenuScene)
                 ? pause.mainMenuScene : DefaultMenuScene;
 
+            // 17.26.1-dev: leaving the world - the teardown must not save.
+            VoxelEngine.Persistence.WorldStatePersistence.MarkWorldTearingDown("join aborted");
+
             try { SceneManager.LoadScene(menuScene); }
             catch (System.Exception ex)
             {

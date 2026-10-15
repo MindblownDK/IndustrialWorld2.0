@@ -44,15 +44,18 @@ Shader "VoxelEngine/VoxelWaterURP"
         _FlowNormalStrength ("Flow Normal Strength", Range(0, 2)) = 1.0
         _FlowFoamStrength   ("Flow Foam Strength", Range(0, 2)) = 0.8
 
-        [Header(Thin-Film Iridescence - 9.16.0)]
+        // 17.26.1-dev: a property header is a plain label. The version tag these three
+        // carried (" - 9.16.0") is not a valid ShaderLab attribute argument - the parser
+        // stopped on the dotted number and rejected the whole shader.
+        [Header(Thin-Film Iridescence)]
         _IridescenceStrength ("Iridescence Strength", Range(0, 1)) = 0.0
         _IridescenceScale    ("Iridescence Hue Cycle", Range(0, 4)) = 1.0
 
-        [Header(Emission - 9.16.0)]
+        [Header(Surface Emission)]
         _EmissionColor ("Emission Colour", Color) = (0, 0, 0, 1)
         _EmissionStrength    ("Emission Strength", Range(0, 4)) = 0.0
 
-        [Header(Surface Texture - 9.16.0)]
+        [Header(Surface Texture)]
         _Patchiness      ("Colour Patchiness", Range(0, 1)) = 0.3
         _DetailStrength  ("Fine Ripple Strength", Range(0, 2)) = 0.4
         _DetailScale     ("Fine Ripple Scale", Range(0.5, 12)) = 4.0

@@ -688,8 +688,25 @@ namespace VoxelEngine.Player
         {
             // Save while the player still owns a valid transform and Inventory. This
             // runs before scene teardown, unlike persistence-manager destruction.
-            if (ReadyForPlayerControl)
-                VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
+            if (!ReadyForPlayerControl) return;
+
+            // 17.26.1-dev - NOT MORE THAN THE WORLD IS WORTH.
+            //
+            // This save was written to catch an application quit, and it still does:
+            // on a plain quit the scene is intact when it runs. But a scene change
+            // away from the world also disables this component, and by then the
+            // unload is already gutting the scene - grids are destroyed before the
+            // player, so the scan saw "6 tiered + 0 blocks + 0 grids" and wrote that
+            // over the good save the quit path had just made. The next session then
+            // loaded exactly that hollow world.
+            //
+            // Two guards, in order of authority: the explicit teardown interlock the
+            // leaving path raises, and the scene's own loaded state (an unloaded
+            // scene cannot describe a world).
+            if (VoxelEngine.Persistence.WorldStatePersistence.WorldTearingDown) return;
+            if (!gameObject.scene.isLoaded) return;
+
+            VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
         }
 
         // ============================================================

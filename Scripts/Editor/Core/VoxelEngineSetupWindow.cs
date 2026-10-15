@@ -662,9 +662,12 @@ namespace VoxelEngine.EditorTools
 
             // CharacterController for collisions with the voxel mesh.
             var ccp = playerGo.AddComponent<CharacterController>();
-            ccp.height = 1.85f;
+            // 17.26.1-dev: authored at the shipped body height (1.95 m). An existing
+            // Player object keeps its own numbers - PlayerController raises a shorter
+            // serialized body to the shipped one at wake, so nothing has to be re-made.
+            ccp.height = VoxelEngine.Player.PlayerController.ShippedStandHeight;
             ccp.radius = 0.4f;
-            ccp.center = new Vector3(0, 0.925f, 0);
+            ccp.center = new Vector3(0, VoxelEngine.Player.PlayerController.ShippedStandHeight * 0.5f, 0);
             ccp.slopeLimit = 85f;
             ccp.stepOffset = 0.6f;
             ccp.skinWidth = 0.05f;
@@ -672,7 +675,7 @@ namespace VoxelEngine.EditorTools
 
             var pivotGo = new GameObject("CameraPivot");
             pivotGo.transform.SetParent(playerGo.transform, false);
-            pivotGo.transform.localPosition = new Vector3(0, 1.65f, 0);
+            pivotGo.transform.localPosition = new Vector3(0, VoxelEngine.Player.PlayerController.ShippedStandEyeHeight, 0);
 
             var camGo = new GameObject("PlayerCamera");
             camGo.transform.SetParent(pivotGo.transform, false);

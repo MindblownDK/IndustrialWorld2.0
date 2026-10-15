@@ -1514,6 +1514,10 @@ namespace VoxelEngine.Networking
             var pause = FindAnyObjectByType<VoxelEngine.Menu.InGamePauseMenu>(FindObjectsInactive.Include);
             if (pause != null && !string.IsNullOrEmpty(pause.mainMenuScene)) menuScene = pause.mainMenuScene;
 
+            // 17.26.1-dev: leaving the world - the teardown must not save (see
+            // WorldStatePersistence.WorldTearingDown).
+            VoxelEngine.Persistence.WorldStatePersistence.MarkWorldTearingDown("session returned to menu");
+
             try { UnityEngine.SceneManagement.SceneManager.LoadScene(menuScene); }
             catch (System.Exception ex) { Debug.LogError("[Join] could not load the menu scene: " + ex.Message); }
         }

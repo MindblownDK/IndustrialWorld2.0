@@ -34,6 +34,36 @@ namespace VoxelEngine.Persistence
     {
         public static WorldStatePersistence Instance { get; private set; }
 
+        /// <summary>17.26.1-dev - THE WORLD IS BEING TORN DOWN.
+        ///
+        /// A scene change away from the world (SAVE &amp; QUIT, a failed join, a dropped
+        /// session) destroys scene objects in an arbitrary order. Grids take their
+        /// blocks down with them, so a save that runs after the unload has begun
+        /// scans a half-empty world and writes those counts over the real file -
+        /// which is exactly how a base that survived the player's own SAVE &amp; QUIT
+        /// came back as "0 grids + 0 blocks" the next session. The paths that decide
+        /// to leave the world raise this flag after they have written their own full
+        /// save, so the teardown that follows can never write a hollow one.
+        ///
+        /// An application quit does NOT raise it: there the scene is still standing
+        /// when the last save runs, and that save is the one the player needs.</summary>
+        public static bool WorldTearingDown { get; private set; }
+
+        /// <summary>Stop accepting saves: the world is on its way out of memory.</summary>
+        public static void MarkWorldTearingDown(string reason)
+        {
+            if (WorldTearingDown) return;
+            WorldTearingDown = true;
+            Debug.Log("[WorldState] World teardown started (" + reason +
+                      "); the last full save stands and no teardown snapshot will overwrite it.");
+        }
+
+        /// <summary>A world session is loading - saves are welcome again.</summary>
+        public static void ClearWorldTearingDown()
+        {
+            WorldTearingDown = false;
+        }
+
         // Item lookup cache for restore.
         private Dictionary<string, ItemDefinition>            _itemById   = new();
         private Dictionary<string, BlockItem>                 _blockById  = new();
@@ -114,6 +144,9 @@ namespace VoxelEngine.Persistence
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
+            // 17.26.1-dev: a live persistence component means a live world, so any
+            // teardown interlock left over from the session that just ended is stale.
+            ClearWorldTearingDown();
         }
 
         private void Start()
@@ -145,7 +178,19 @@ namespace VoxelEngine.Persistence
             if (_saveTimer >= interval) { _saveTimer = 0f; SaveAll(writeAutosaveSlot: true); }
         }
 
-        private void OnApplicationQuit() => SaveAll();
+        private void OnApplicationQuit()
+        {
+            // This is the last save of a real session - the scene is still standing
+            // when quit handlers run.
+            SaveAll();
+
+            // 17.26.1-dev - and it is the LAST one. Everything Unity does after this
+            // point destroys the scene piece by piece, and a save raised from one of
+            // those objects would scan the ruins and write them over the world that
+            // was just written in full. The interlock is what makes "the last save
+            // wins" true for an application quit exactly as it is for SAVE & QUIT.
+            MarkWorldTearingDown("application quit");
+        }
         private void OnDestroy()
         {
             // Do not write during scene teardown: Unity may already have destroyed
@@ -399,6 +444,14 @@ namespace VoxelEngine.Persistence
         public void SaveAll(bool writeAutosaveSlot = false)
         {
             if (Menu.WorldSession.Instance == null) return;
+
+            // 17.26.1-dev - a teardown save is never a valid save.
+            if (WorldTearingDown)
+            {
+                Debug.Log("[WorldState] Save skipped: the world is being torn down; " +
+                          "the last full save stands.");
+                return;
+            }
 
             // 14.21.1 - THE HOST OWNS THE WORLD.
             //
@@ -2247,6 +2300,10 @@ namespace VoxelEngine.Persistence
         // ============================================================
         public void LoadAll()
         {
+            // 17.26.1-dev: a world is coming up, so the teardown interlock from the
+            // previous session must not survive into this one.
+            ClearWorldTearingDown();
+
             if (_loaded) return;
 
             // Guest records are independent of the world file: a world can have
