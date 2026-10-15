@@ -365,9 +365,30 @@ namespace VoxelEngine.Simulation
             }
         }
 
+        public void RebuildVisuals()
+        {
+            var existing = transform.Find("Generated_ChuteVisuals");
+            if (existing != null)
+            {
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
+            EnsureVisuals();
+        }
+
         public void EnsureVisuals()
         {
-            if (transform.Find("Generated_ChuteVisuals") != null) return;
+            var existing = transform.Find("Generated_ChuteVisuals");
+            if (existing != null)
+            {
+                // Self-heal any prefab/instance built with inverted slope angles or missing corner gussets.
+                var slopeN = existing.Find("Slope_North");
+                var cornerNE = existing.Find("Slope_NE");
+                if (slopeN != null && cornerNE != null && slopeN.localEulerAngles.x < 90f && slopeN.localEulerAngles.x > 1f)
+                    return;
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
 
             var rootMr = GetComponent<MeshRenderer>();
             if (rootMr != null) rootMr.enabled = false;
@@ -384,24 +405,34 @@ namespace VoxelEngine.Simulation
             Color hazardYellow = new Color(0.94f, 0.70f, 0.14f);
             Color accentCyan = new Color(0.18f, 0.78f, 0.92f);
 
-            // Base discharge housing (1.8m x 0.75m x 1.8m)
-            MakeBox(root, "BasePlinth", new Vector3(0f, -0.62f, 0f), new Vector3(2.2f, 0.72f, 2.2f), Vector3.zero, baseSteel);
-            MakeBox(root, "DischargePort_N", new Vector3(0f, -0.65f, 1.12f), new Vector3(0.75f, 0.55f, 0.14f), Vector3.zero, throatDark);
-            MakeBox(root, "DischargePort_S", new Vector3(0f, -0.65f, -1.12f), new Vector3(0.75f, 0.55f, 0.14f), Vector3.zero, throatDark);
-            MakeBox(root, "DischargePort_E", new Vector3(1.12f, -0.65f, 0f), new Vector3(0.14f, 0.55f, 0.75f), Vector3.zero, throatDark);
-            MakeBox(root, "DischargePort_W", new Vector3(-1.12f, -0.65f, 0f), new Vector3(0.14f, 0.55f, 0.75f), Vector3.zero, throatDark);
+            // Base discharge housing (y = -0.98 to -0.26)
+            MakeBox(root, "BasePlinth", new Vector3(0f, -0.62f, 0f), new Vector3(2.10f, 0.72f, 2.10f), Vector3.zero, baseSteel);
+            MakeBox(root, "DischargePort_N", new Vector3(0f, -0.65f, 1.08f), new Vector3(0.75f, 0.55f, 0.14f), Vector3.zero, throatDark);
+            MakeBox(root, "DischargePort_S", new Vector3(0f, -0.65f, -1.08f), new Vector3(0.75f, 0.55f, 0.14f), Vector3.zero, throatDark);
+            MakeBox(root, "DischargePort_E", new Vector3(1.08f, -0.65f, 0f), new Vector3(0.14f, 0.55f, 0.75f), Vector3.zero, throatDark);
+            MakeBox(root, "DischargePort_W", new Vector3(-1.08f, -0.65f, 0f), new Vector3(0.14f, 0.55f, 0.75f), Vector3.zero, throatDark);
 
-            // Corner support stanchions
-            MakeBox(root, "Leg_NE", new Vector3(1.22f, -0.15f, 1.22f), new Vector3(0.22f, 1.65f, 0.22f), Vector3.zero, baseSteel);
-            MakeBox(root, "Leg_NW", new Vector3(-1.22f, -0.15f, 1.22f), new Vector3(0.22f, 1.65f, 0.22f), Vector3.zero, baseSteel);
-            MakeBox(root, "Leg_SE", new Vector3(1.22f, -0.15f, -1.22f), new Vector3(0.22f, 1.65f, 0.22f), Vector3.zero, baseSteel);
-            MakeBox(root, "Leg_SW", new Vector3(-1.22f, -0.15f, -1.22f), new Vector3(0.22f, 1.65f, 0.22f), Vector3.zero, baseSteel);
+            // Vertical outer corner support stanchions (under the 3m x 3m top rim down to y = -0.98)
+            MakeBox(root, "Leg_NE", new Vector3(1.34f, -0.08f, 1.34f), new Vector3(0.20f, 1.80f, 0.20f), Vector3.zero, baseSteel);
+            MakeBox(root, "Leg_NW", new Vector3(-1.34f, -0.08f, 1.34f), new Vector3(0.20f, 1.80f, 0.20f), Vector3.zero, baseSteel);
+            MakeBox(root, "Leg_SE", new Vector3(1.34f, -0.08f, -1.34f), new Vector3(0.20f, 1.80f, 0.20f), Vector3.zero, baseSteel);
+            MakeBox(root, "Leg_SW", new Vector3(-1.34f, -0.08f, -1.34f), new Vector3(0.20f, 1.80f, 0.20f), Vector3.zero, baseSteel);
 
-            // Wide Flared Hopper Sloped Walls (3m x 3m top opening funneling down into the base)
-            MakeBox(root, "Slope_North", new Vector3(0f, 0.30f, 1.08f), new Vector3(2.85f, 1.15f, 0.14f), new Vector3(-28f, 0f, 0f), hopperSteel);
-            MakeBox(root, "Slope_South", new Vector3(0f, 0.30f, -1.08f), new Vector3(2.85f, 1.15f, 0.14f), new Vector3(28f, 0f, 0f), hopperSteel);
-            MakeBox(root, "Slope_East", new Vector3(1.08f, 0.30f, 0f), new Vector3(0.14f, 1.15f, 2.85f), new Vector3(0f, 0f, 28f), hopperSteel);
-            MakeBox(root, "Slope_West", new Vector3(-1.08f, 0.30f, 0f), new Vector3(0.14f, 1.15f, 2.85f), new Vector3(0f, 0f, -28f), hopperSteel);
+            // Wide Flared Hopper Sloped Walls:
+            // Top edge flares OUTWARD to ±1.42m at y = +0.86m; bottom edge funnels INWARD to ±0.78m at y = -0.26m.
+            // In Unity's left-handed coords:
+            //   +X rot tilts +Y toward +Z (North), -X rot tilts +Y toward -Z (South)
+            //   -Z rot tilts +Y toward +X (East),  +Z rot tilts +Y toward -X (West)
+            MakeBox(root, "Slope_North", new Vector3(0f, 0.30f, 1.10f), new Vector3(2.24f, 1.30f, 0.12f), new Vector3(30f, 0f, 0f), hopperSteel);
+            MakeBox(root, "Slope_South", new Vector3(0f, 0.30f, -1.10f), new Vector3(2.24f, 1.30f, 0.12f), new Vector3(-30f, 0f, 0f), hopperSteel);
+            MakeBox(root, "Slope_East", new Vector3(1.10f, 0.30f, 0f), new Vector3(0.12f, 1.30f, 2.24f), new Vector3(0f, 0f, -30f), hopperSteel);
+            MakeBox(root, "Slope_West", new Vector3(-1.10f, 0.30f, 0f), new Vector3(0.12f, 1.30f, 2.24f), new Vector3(0f, 0f, 30f), hopperSteel);
+
+            // 4 Angled Corner Hopper Valley Gussets (seal the 4 corners of the funnel cleanly)
+            MakeBox(root, "Slope_NE", new Vector3(0.96f, 0.30f, 0.96f), new Vector3(0.76f, 1.28f, 0.10f), new Vector3(30f, 45f, 0f), hopperSteel);
+            MakeBox(root, "Slope_NW", new Vector3(-0.96f, 0.30f, 0.96f), new Vector3(0.76f, 1.28f, 0.10f), new Vector3(30f, -45f, 0f), hopperSteel);
+            MakeBox(root, "Slope_SE", new Vector3(0.96f, 0.30f, -0.96f), new Vector3(0.76f, 1.28f, 0.10f), new Vector3(30f, 135f, 0f), hopperSteel);
+            MakeBox(root, "Slope_SW", new Vector3(-0.96f, 0.30f, -0.96f), new Vector3(0.76f, 1.28f, 0.10f), new Vector3(30f, -135f, 0f), hopperSteel);
 
             // Top Hazard Rim (easy-to-spot target from hovering ships!)
             MakeBox(root, "Rim_North", new Vector3(0f, 0.86f, 1.42f), new Vector3(2.96f, 0.14f, 0.18f), Vector3.zero, hazardYellow);
@@ -416,9 +447,9 @@ namespace VoxelEngine.Simulation
             MakeBox(root, "Guide_W", new Vector3(-1.42f, 0.94f, 0f), new Vector3(0.06f, 0.04f, 1.6f), Vector3.zero, accentCyan);
 
             // Interior dark throat & cushion grid bars
-            MakeBox(root, "ThroatFloor", new Vector3(0f, -0.18f, 0f), new Vector3(1.55f, 0.08f, 1.55f), Vector3.zero, throatDark);
-            MakeBox(root, "Baffle_1", new Vector3(-0.45f, 0.35f, 0f), new Vector3(0.08f, 0.08f, 2.1f), Vector3.zero, baseSteel);
-            MakeBox(root, "Baffle_2", new Vector3(0.45f, 0.35f, 0f), new Vector3(0.08f, 0.08f, 2.1f), Vector3.zero, baseSteel);
+            MakeBox(root, "ThroatFloor", new Vector3(0f, -0.22f, 0f), new Vector3(1.64f, 0.08f, 1.64f), Vector3.zero, throatDark);
+            MakeBox(root, "Baffle_1", new Vector3(-0.45f, 0.22f, 0f), new Vector3(0.08f, 0.08f, 1.85f), Vector3.zero, baseSteel);
+            MakeBox(root, "Baffle_2", new Vector3(0.45f, 0.22f, 0f), new Vector3(0.08f, 0.08f, 1.85f), Vector3.zero, baseSteel);
         }
 
         private static void MakeBox(Transform parent, string name, Vector3 pos, Vector3 scale, Vector3 euler, Color color)
@@ -437,11 +468,8 @@ namespace VoxelEngine.Simulation
             go.transform.localScale = scale;
 
             var mr = go.GetComponent<MeshRenderer>();
-            if (mr != null)
+            if (mr != null && Application.isPlaying)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                if (shader != null && mr.sharedMaterial == null)
-                    mr.sharedMaterial = new Material(shader);
                 var mpb = new MaterialPropertyBlock();
                 mpb.SetColor(BaseColorId, color);
                 mpb.SetColor(ColorId, color);

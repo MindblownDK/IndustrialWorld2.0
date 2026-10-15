@@ -222,9 +222,30 @@ namespace VoxelEngine.GridSystem
             bc.size = captureHalfExtents * 2f;
         }
 
+        public void RebuildVisuals()
+        {
+            var existing = transform.Find("Generated_GridChuteVisuals");
+            if (existing != null)
+            {
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
+            EnsureVisuals();
+        }
+
         public void EnsureVisuals()
         {
-            if (transform.Find("Generated_GridChuteVisuals") != null) return;
+            var existing = transform.Find("Generated_GridChuteVisuals");
+            if (existing != null)
+            {
+                // Self-heal any prefab/instance built with inverted slope angles or missing corner gussets.
+                var slopeN = existing.Find("Slope_North");
+                var cornerNE = existing.Find("Slope_NE");
+                if (slopeN != null && cornerNE != null && slopeN.localEulerAngles.x < 90f && slopeN.localEulerAngles.x > 1f)
+                    return;
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
 
             var rootMr = GetComponent<MeshRenderer>();
             if (rootMr != null) rootMr.enabled = false;
@@ -243,13 +264,20 @@ namespace VoxelEngine.GridSystem
 
             // Base mounting block (fits cleanly on the grid cell while the flared funnel widens above)
             MakeBox(root, "MountBase", new Vector3(0f, -0.26f, 0f), new Vector3(0.96f, 0.46f, 0.96f), Vector3.zero, baseSteel);
-            MakeBox(root, "ThroatCenter", new Vector3(0f, -0.02f, 0f), new Vector3(0.76f, 0.08f, 0.76f), Vector3.zero, throatDark);
+            MakeBox(root, "ThroatCenter", new Vector3(0f, -0.02f, 0f), new Vector3(0.78f, 0.08f, 0.78f), Vector3.zero, throatDark);
 
-            // Wide Flared Hopper Wings (flares out to 1.85x cell width so it's a big, easy-to-hit target)
-            MakeBox(root, "Slope_North", new Vector3(0f, 0.22f, 0.62f), new Vector3(1.76f, 0.62f, 0.08f), new Vector3(-32f, 0f, 0f), hopperSteel);
-            MakeBox(root, "Slope_South", new Vector3(0f, 0.22f, -0.62f), new Vector3(1.76f, 0.62f, 0.08f), new Vector3(32f, 0f, 0f), hopperSteel);
-            MakeBox(root, "Slope_East", new Vector3(0.62f, 0.22f, 0f), new Vector3(0.08f, 0.62f, 1.76f), new Vector3(0f, 0f, 32f), hopperSteel);
-            MakeBox(root, "Slope_West", new Vector3(-0.62f, 0.22f, 0f), new Vector3(0.08f, 0.62f, 1.76f), new Vector3(0f, 0f, -32f), hopperSteel);
+            // Wide Flared Hopper Wings:
+            // Top edge flares OUTWARD to ±0.84m at y = +0.50m; bottom edge funnels INWARD to ±0.38m at y = -0.04m.
+            MakeBox(root, "Slope_North", new Vector3(0f, 0.23f, 0.61f), new Vector3(1.24f, 0.71f, 0.07f), new Vector3(40f, 0f, 0f), hopperSteel);
+            MakeBox(root, "Slope_South", new Vector3(0f, 0.23f, -0.61f), new Vector3(1.24f, 0.71f, 0.07f), new Vector3(-40f, 0f, 0f), hopperSteel);
+            MakeBox(root, "Slope_East", new Vector3(0.61f, 0.23f, 0f), new Vector3(0.07f, 0.71f, 1.24f), new Vector3(0f, 0f, -40f), hopperSteel);
+            MakeBox(root, "Slope_West", new Vector3(-0.61f, 0.23f, 0f), new Vector3(0.07f, 0.71f, 1.24f), new Vector3(0f, 0f, 40f), hopperSteel);
+
+            // 4 Angled Corner Hopper Valley Gussets
+            MakeBox(root, "Slope_NE", new Vector3(0.52f, 0.23f, 0.52f), new Vector3(0.46f, 0.70f, 0.06f), new Vector3(40f, 45f, 0f), hopperSteel);
+            MakeBox(root, "Slope_NW", new Vector3(-0.52f, 0.23f, 0.52f), new Vector3(0.46f, 0.70f, 0.06f), new Vector3(40f, -45f, 0f), hopperSteel);
+            MakeBox(root, "Slope_SE", new Vector3(0.52f, 0.23f, -0.52f), new Vector3(0.46f, 0.70f, 0.06f), new Vector3(40f, 135f, 0f), hopperSteel);
+            MakeBox(root, "Slope_SW", new Vector3(-0.52f, 0.23f, -0.52f), new Vector3(0.46f, 0.70f, 0.06f), new Vector3(40f, -135f, 0f), hopperSteel);
 
             // Top Hazard Rim & Guidance Strips
             MakeBox(root, "Rim_North", new Vector3(0f, 0.50f, 0.84f), new Vector3(1.82f, 0.08f, 0.10f), Vector3.zero, hazardYellow);
@@ -279,11 +307,8 @@ namespace VoxelEngine.GridSystem
             go.transform.localScale = scale;
 
             var mr = go.GetComponent<MeshRenderer>();
-            if (mr != null)
+            if (mr != null && Application.isPlaying)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                if (shader != null && mr.sharedMaterial == null)
-                    mr.sharedMaterial = new Material(shader);
                 var mpb = new MaterialPropertyBlock();
                 mpb.SetColor(BaseColorId, color);
                 mpb.SetColor(ColorId, color);

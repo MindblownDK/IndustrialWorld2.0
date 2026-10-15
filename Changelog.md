@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.24.2-dev`
+**Current Version:** `17.24.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.24.3-dev] Fix Receiving Chute Hopper Slope Orientation, Corner Gussets & Persistent Prefab Materials
+
+**Type:** PATCH - corrects inward-funneling slope rotations and corner valley gussets on `ReceivingChute` and `GridReceivingChute`, fixes downward clam-shell door rotation on `GridCargoDropHatch`, and saves shared `.mat` assets in `DropHatchLogisticsSetup` to avoid transient shader material warnings. Save-compatible.
+
+**GitHub title:** `[17.24.3-dev] Fix Receiving Chute hopper slope angles, corner gussets and prefab materials`
+
+#### Fixed
+- **Inward-funneling hopper slope angles (`Scripts/Simulation/ReceivingChute.cs`, `Scripts/GridSystem/GridReceivingChute.cs`).** Inverted the X/Z Euler angles on `Slope_North` (`+30`/`+40` deg X), `Slope_South` (`-30`/`-40` deg X), `Slope_East` (`-30`/`-40` deg Z), and `Slope_West` (`+30`/`+40` deg Z) so all four hopper walls flare outward at the top rim and funnel inward into the center throat. Added four angled corner valley gussets (`Slope_NE`, `Slope_NW`, `Slope_SE`, `Slope_SW`), aligned the outer corner support legs under the top rim, and added automatic self-healing in `EnsureVisuals()` + `RebuildVisuals()`.
+- **Downward clam-shell door swing (`Scripts/GridSystem/GridCargoDropHatch.cs`).** Inverted the Z hinge rotation sign in `ApplyDoorPose` so the left and right clam-shell bay doors swing downward beneath the hull.
+- **Persistent prefab materials (`Scripts/Editor/GridSystem/DropHatchLogisticsSetup.cs`).** Replaced transient in-memory `new Material(shader)` calls during prefab generation with saved `.mat` assets in `Assets/VoxelEngineAssets/Materials/Logistics/`, preventing `Local keyword space index cache out of sync` Editor warnings and giving the prefabs authored industrial steel, hazard yellow, and cyan beacon materials.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.24.3-dev`, PATCH over `17.24.2-dev`. Save-compatible.
 
 ### [17.24.2-dev] Add ItemContainer.IsEmpty() & Fix GridEntity Mass/Block Iteration on Drop Hatch and Chutes
 

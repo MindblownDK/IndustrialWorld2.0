@@ -516,6 +516,17 @@ namespace VoxelEngine.GridSystem
             _rightDoorPivot = rightPivot;
         }
 
+        public void RebuildVisuals()
+        {
+            var existing = transform.Find("Generated_HatchVisuals");
+            if (existing != null)
+            {
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
+            EnsureVisuals();
+        }
+
         private static Transform CreatePart(Transform parent, string name, Vector3 localPos, Vector3 localScale, Color color)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -532,11 +543,8 @@ namespace VoxelEngine.GridSystem
             go.transform.localScale = localScale;
 
             var mr = go.GetComponent<MeshRenderer>();
-            if (mr != null)
+            if (mr != null && Application.isPlaying)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                if (shader != null && mr.sharedMaterial == null)
-                    mr.sharedMaterial = new Material(shader);
                 var mpb = new MaterialPropertyBlock();
                 mpb.SetColor(BaseColorId, color);
                 mpb.SetColor(ColorId, color);
@@ -572,12 +580,14 @@ namespace VoxelEngine.GridSystem
                 _rearLatch.localPosition = new Vector3(0f, -0.15f, Mathf.Lerp(-0.24f, -0.36f, latchT));
 
             // Stage 2 (0.15..1.0): twin clam-shell bay doors swing downward & outward to 78 degrees.
+            // In Unity left-handed coords: left leaf (+X from hinge) swings downward (-Y) with -Z rotation;
+            // right leaf (-X from hinge) swings downward (-Y) with +Z rotation.
             float doorT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((clamped - 0.15f) / 0.85f));
             float angle = doorT * 78f;
             if (_leftDoorPivot != null)
-                _leftDoorPivot.localRotation = Quaternion.Euler(0f, 0f, angle);
+                _leftDoorPivot.localRotation = Quaternion.Euler(0f, 0f, -angle);
             if (_rightDoorPivot != null)
-                _rightDoorPivot.localRotation = Quaternion.Euler(0f, 0f, -angle);
+                _rightDoorPivot.localRotation = Quaternion.Euler(0f, 0f, angle);
 
             // Hydraulic pistons extend downward as doors open.
             if (_leftPiston != null)

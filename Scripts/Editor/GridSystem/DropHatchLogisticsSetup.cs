@@ -261,7 +261,8 @@ namespace VoxelEngine.EditorTools
                 hatch.autoPullFromGrid = true;
                 hatch.autoOpenWithFilter = true;
                 hatch.EnsureFilters();
-                hatch.EnsureVisuals();
+                hatch.RebuildVisuals();
+                AssignLogisticsMaterials(root);
 
                 if (existing != null)
                 {
@@ -301,7 +302,8 @@ namespace VoxelEngine.EditorTools
                 chute.slots = slots;
                 chute.maxMassKg = maxMassKg;
                 chute.autoPushToGridCargo = true;
-                chute.EnsureVisuals();
+                chute.RebuildVisuals();
+                AssignLogisticsMaterials(root);
 
                 if (existing != null)
                 {
@@ -351,7 +353,8 @@ namespace VoxelEngine.EditorTools
                 var chute = root.AddComponent<ReceivingChute>();
                 chute.bufferSlots = 16;
                 chute.maxMassKg = 100_000f;
-                chute.EnsureVisuals();
+                chute.RebuildVisuals();
+                AssignLogisticsMaterials(root);
 
                 if (root.GetComponent<ItemPortRouting>() == null)
                     root.AddComponent<ItemPortRouting>();
@@ -372,6 +375,61 @@ namespace VoxelEngine.EditorTools
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        private static void AssignLogisticsMaterials(GameObject root)
+        {
+            if (root == null) return;
+            string matFolder = $"{AssetRoot}/Materials/Logistics";
+            EnsureFolder(matFolder);
+
+            var baseSteel   = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsBaseSteel.mat",   new Color(0.20f, 0.23f, 0.27f));
+            var hopperSteel = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsHopperSteel.mat", new Color(0.28f, 0.32f, 0.37f));
+            var throatDark  = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsThroatDark.mat",  new Color(0.09f, 0.10f, 0.12f));
+            var hazardYel   = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsHazardYellow.mat",new Color(0.94f, 0.70f, 0.14f));
+            var guideCyan   = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsGuideCyan.mat",   new Color(0.18f, 0.78f, 0.92f), emissive: true);
+            var doorSteel   = GetOrCreateMaterial($"{matFolder}/Mat_LogisticsDoorSteel.mat",   new Color(0.30f, 0.34f, 0.39f));
+
+            var renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (r == null) continue;
+                string n = r.gameObject.name;
+                if (n.StartsWith("Rim_") || n.Contains("Latch") || n.Contains("Lip") || n.StartsWith("Hazard_"))
+                    r.sharedMaterial = hazardYel;
+                else if (n.StartsWith("Guide_") || n.Contains("Beacon"))
+                    r.sharedMaterial = guideCyan;
+                else if (n.StartsWith("Throat") || n.StartsWith("DischargePort") || n.Contains("ChuteInner"))
+                    r.sharedMaterial = throatDark;
+                else if (n.StartsWith("Slope_") || n.StartsWith("Funnel_"))
+                    r.sharedMaterial = hopperSteel;
+                else if (n.Contains("DoorLeaf") || n.Contains("Piston"))
+                    r.sharedMaterial = doorSteel;
+                else
+                    r.sharedMaterial = baseSteel;
+            }
+        }
+
+        private static Material GetOrCreateMaterial(string path, Color color, bool emissive = false)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Standard")
+                         ?? Shader.Find("Sprites/Default");
+            mat = new Material(shader) { name = System.IO.Path.GetFileNameWithoutExtension(path) };
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+            if (mat.HasProperty("_Color"))     mat.SetColor("_Color", color);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.35f);
+            if (emissive)
+            {
+                mat.EnableKeyword("_EMISSION");
+                if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", color * 1.3f);
+            }
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
         }
 
         private static GridBlockItem EnsureGridItem(
