@@ -346,11 +346,12 @@ namespace VoxelEngine.Weather
         }
 
         /// <summary>
-        /// Developer hotkeys (Ctrl+Alt): W steps through every weather state and then back to
-        /// the automatic cycle, R jumps straight to a full storm.
+        /// Developer hotkeys (Editor-only): steps through weather states or jumps to a storm.
+        /// Disabled in built players.
         /// </summary>
         private void HandleDebugHotkeys()
         {
+#if UNITY_EDITOR
             // 14.46.0: a client's sky belongs to the host - forcing it
             // locally would just desync until the next keepalive.
             if (RemoteDriven) return;
@@ -397,6 +398,7 @@ namespace VoxelEngine.Weather
 
             Debug.Log($"[Weather] DEBUG: held {TargetState} (Ctrl+Alt+W). " +
                       $"active={IsWeatherActive} intensity={Intensity:F2} snow={IsSnowBiome}");
+#endif
         }
 
         /// <summary>

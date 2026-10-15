@@ -49,21 +49,17 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Continuous wind sample at time t. Two drifting simplex taps (slightly offset) form
-        /// the horizontal+vertical base; a Perlin-driven gust envelope modulates magnitude.
+        /// Continuous wind sample at time t. Uses the planet-locked prevailing wind direction
+        /// (shared with WindSystem and PollutionService) with only a subtle ±2.5° micro-sway
+        /// so visual wind lines, grass, and pollution spread always match and stay predictable.
         /// </summary>
         private Vector3 Sample(float t)
         {
-            // Very slow drift through the noise field -> smooth, never instant.
-            float3 p = new float3(t * 0.035f, t * 0.029f, t * 0.041f);
-
-            float x = noise.snoise(p);
-            float z = noise.snoise(p + new float3(31.7f, 0f, 0f));
-            // Keep vertical component gentle — real surface wind is mostly horizontal.
-            float y = noise.snoise(p + new float3(0f, 19.3f, 0f)) * 0.35f;
-
-            Vector3 baseDir = new Vector3(x, y, z);
-            if (baseDir.sqrMagnitude < 1e-5f) baseDir = _dir;   // guard against dead spots
+            Vector3 refPos = Camera.main != null ? Camera.main.transform.position : transform.position;
+            Vector3 prevailing = VoxelEngine.Power.Wind.WindSystem.GetPrevailingWorldDirection(refPos, out Vector3 surfaceUp);
+            float microSway = Mathf.Sin(t * 0.22f) * 2.5f;
+            Vector3 baseDir = Quaternion.AngleAxis(microSway, surfaceUp) * prevailing;
+            if (baseDir.sqrMagnitude < 1e-5f) baseDir = _dir;
             _dir = baseDir.normalized;
 
             // Gust envelope: a slow swell plus a faster flutter, eased so it's organic.

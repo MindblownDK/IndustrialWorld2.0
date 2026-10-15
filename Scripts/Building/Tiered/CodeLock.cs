@@ -87,9 +87,17 @@ namespace VoxelEngine.Building.Tiered
         public void RefreshLed()
         {
             if (_led == null) return;
-            _led.material.color = HasCode && isLocked
+            Color c = HasCode && isLocked
                 ? new Color(0.82f, 0.16f, 0.10f)
                 : new Color(0.28f, 0.78f, 0.30f);
+            var mat = _led.material;
+            mat.color = c;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
+            if (mat.HasProperty("_EmissionColor"))
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", c * 0.65f);
+            }
         }
 
         /// <summary>Detach the lock and hand the item back (authorized players only).</summary>
@@ -136,31 +144,38 @@ namespace VoxelEngine.Building.Tiered
             {
                 case BuildFamily.Gate:
                     parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
-                    pos = new Vector3(2.05f, 1.85f, 0.40f);
+                    pos = new Vector3(2.05f, 1.85f, 0.04f);
                     scale = 1.35f;   // gates are big; the lock reads from a distance
                     break;
                 case BuildFamily.BigGate:
                     parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
-                    pos = new Vector3(5.40f, 2.05f, 0.55f);
+                    pos = new Vector3(5.40f, 2.05f, 0.05f);
                     scale = 1.7f;
                     break;
                 case BuildFamily.GarageDoor:
                     // On the side of the opening so it does not float in the
                     // gap once the shutter has rolled up into its drum.
-                    pos = new Vector3(3.16f, 1.45f, 0.40f);
+                    pos = new Vector3(3.16f, 1.45f, 0f);
+                    scale = 1.15f;
                     break;
                 case BuildFamily.DoubleDoor:
                     parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
-                    pos = new Vector3(2.72f, 1.55f, 0.28f);
+                    pos = new Vector3(2.72f, 1.55f, 0f);
                     break;
                 case BuildFamily.HatchLid:
                     parent = FindChild(pieceRoot, "Generated_HatchPivot") ?? parent;
-                    pos = new Vector3(0.72f, 0.26f, 1.85f);
+                    pos = new Vector3(0.72f, 0.12f, 1.85f);
                     euler = new Vector3(-90f, 0f, 0f);   // keypad face up, flat on the lid
                     break;
                 default:   // Door and anything door-like
                     parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
-                    pos = new Vector3(2.02f, 1.95f, 0.26f);
+                    // Centered at z = 0 so the double-sided housing protrudes through
+                    // both faces of the single door leaf, and offset slightly above/inward
+                    // from the latch handle so it never clips or hides behind the door.
+                    bool legacyPanel = parent.Find("Generated_DoorPanel") != null;
+                    pos = legacyPanel
+                        ? new Vector3(1.62f, 1.55f, 0f)
+                        : new Vector3(1.92f, 2.05f, 0f);
                     break;
             }
 
@@ -200,10 +215,12 @@ namespace VoxelEngine.Building.Tiered
             _visualBuilt = true;
 
             // Dark case; its collider doubles as the interaction target.
+            // Thickness 0.36 spans through the door leaf (-0.18..+0.18) so the
+            // housing is clearly visible from both sides of a single door.
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "LockBody";
             body.transform.SetParent(transform, false);
-            body.transform.localScale = new Vector3(0.46f, 0.62f, 0.17f);
+            body.transform.localScale = new Vector3(0.46f, 0.62f, 0.36f);
             Paint(body, new Color(0.145f, 0.175f, 0.15f));
 
             // Keypad studs on both faces so the lock reads from either side.
@@ -215,7 +232,7 @@ namespace VoxelEngine.Building.Tiered
                         key.name = "LockKey";
                         key.transform.SetParent(transform, false);
                         key.transform.localPosition = new Vector3(
-                            (col - 1) * 0.125f, 0.05f - row * 0.135f, side * 0.096f);
+                            (col - 1) * 0.125f, 0.05f - row * 0.135f, side * 0.192f);
                         key.transform.localScale = new Vector3(0.095f, 0.10f, 0.03f);
                         Destroy(key.GetComponent<Collider>());
                         Paint(key, new Color(0.72f, 0.75f, 0.70f));
@@ -225,7 +242,7 @@ namespace VoxelEngine.Building.Tiered
             led.name = "LockLight";
             led.transform.SetParent(transform, false);
             led.transform.localPosition = new Vector3(0f, 0.245f, 0f);
-            led.transform.localScale = new Vector3(0.34f, 0.075f, 0.185f);
+            led.transform.localScale = new Vector3(0.34f, 0.075f, 0.385f);
             Destroy(led.GetComponent<Collider>());
             _led = led.GetComponent<Renderer>();
         }
@@ -233,7 +250,10 @@ namespace VoxelEngine.Building.Tiered
         private static void Paint(GameObject target, Color color)
         {
             var renderer = target.GetComponent<Renderer>();
-            if (renderer != null) renderer.material.color = color;
+            if (renderer == null) return;
+            var mat = renderer.material;
+            mat.color = color;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
         }
     }
 }

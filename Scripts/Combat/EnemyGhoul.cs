@@ -261,7 +261,9 @@ namespace VoxelEngine.Combat
                 _anim?.Strike();
                 if (pending == 1)
                 {
-                    if (_player != null && Vector3.Distance(_player.position, pos) <= attackRange + 1.6f)
+                    if (_player != null
+                        && Vector3.Distance(_player.position, pos) <= attackRange + 1.6f
+                        && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.1f))
                         AttackPlayer();
                 }
                 else if (pending == 2 && _logisticsTarget != null) AttackLogistics();
@@ -272,14 +274,16 @@ namespace VoxelEngine.Combat
             float spd;
             if (chasingPlayer)
             {
+                bool hasLos = VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.1f);
                 moveDir = flatToPlayer.sqrMagnitude > 0.0001f ? flatToPlayer.normalized
                                                               : Vector3.ProjectOnPlane(transform.forward, up).normalized;
-                spd = distP > attackRange ? chaseSpeed : 0f;
+                spd = (distP > attackRange || !hasLos) ? chaseSpeed : 0f;
                 // The bite needs TRUE range, not the tangent-plane projection: distP ignores
                 // height, so a player hovering far above must not read as in reach.
                 float trueDist = Vector3.Distance(_player.position, pos);
                 if (_pendingAttack == 0
                     && distP <= attackRange && trueDist <= attackRange + 0.8f
+                    && hasLos
                     && Time.time >= _nextAttackAt)
                 {
                     _nextAttackAt = Time.time + attackCooldown;

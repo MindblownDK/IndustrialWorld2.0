@@ -269,6 +269,14 @@ namespace VoxelEngine.Modification
                 result.drops = drops; // hand the full breakdown back to the caller
             }
 
+            if (result.changed && subtract)
+            {
+                VoxelEngine.Scattering.ScatterClear.ClearInBox(
+                    dropPosition,
+                    Vector3.one * Mathf.Max(0.75f, radius * 0.65f),
+                    Quaternion.identity);
+            }
+
             // Multiplayer: every brush that changed terrain replicates (14.7.0).
             if (announce && result.changed)
                 VoxelEngine.Networking.TerrainSync.AnnounceBrush(world, center, radius,

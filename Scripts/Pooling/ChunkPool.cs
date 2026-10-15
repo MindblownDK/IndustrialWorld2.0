@@ -77,11 +77,17 @@ namespace VoxelEngine.Pooling
             // Destroy scatter children (trees/rocks from previous use of this pooled chunk).
             // 17.17.2-dev: stamp the trees first so their deferred OnDestroy reads as
             // streaming teardown, never as a player harvest.
-            var scatter = c.go.transform.Find("__scatter");
+            var scatter = c.go.transform.Find("Scatter");
             if (scatter != null)
             {
                 VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(scatter);
                 Object.Destroy(scatter.gameObject);
+            }
+            var legacyScatter = c.go.transform.Find("__scatter");
+            if (legacyScatter != null)
+            {
+                VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(legacyScatter);
+                Object.Destroy(legacyScatter.gameObject);
             }
             // 17.20.2-dev: detached creatures left the holder on Awake, so the
             // destroy above never reached them; end them with the chunk or the
@@ -126,9 +132,7 @@ namespace VoxelEngine.Pooling
                 // suspension) runs while the world is ALIVE, so the global teardown
                 // flag alone cannot cover this path, and deferred destroys may even
                 // execute after the next body's first scatter pass cleared it.
-                var scatter = c.go.transform.Find("__scatter");
-                if (scatter != null)
-                    VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(scatter);
+                VoxelEngine.Scattering.ChunkScatter.MarkScatterTeardown(c.go);
                 // 17.20.2-dev: detached creatures survive even the chunk root's
                 // destroy - end them with the chunk (ridden mounts are kept).
                 VoxelEngine.Scattering.ChunkScatter.DestroyChunkCreatures(c);

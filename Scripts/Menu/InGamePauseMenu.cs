@@ -593,7 +593,18 @@ namespace VoxelEngine.Menu
             if (_hasSavedScroll && _tab == STab.Interface)
             {
                 float y = _savedScrollY;
-                scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0, y)).ExecuteLater(20);
+                bool applied = false;
+                EventCallback<GeometryChangedEvent> onGeo = null;
+                onGeo = _ =>
+                {
+                    if (applied) return;
+                    if (scroll.contentContainer.layout.height <= 0f) return;
+                    applied = true;
+                    scroll.UnregisterCallback(onGeo);
+                    scroll.scrollOffset = new Vector2(0, y);
+                };
+                scroll.RegisterCallback(onGeo);
+                scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0, y)).ExecuteLater(25);
             }
             _hasSavedScroll = false;
 

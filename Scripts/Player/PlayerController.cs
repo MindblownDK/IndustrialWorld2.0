@@ -188,6 +188,7 @@ namespace VoxelEngine.Player
         private bool   _sliding;
         private bool   _sprinting;
         private float  _smoothedEyeHeight;
+        private float  _cameraStepOffset;
         private float  _jetpackBoostCharge;
 
         // Spawn/respawn fall-damage immunity window (set by PlayerSpawner at handover).
@@ -857,8 +858,8 @@ namespace VoxelEngine.Player
             // Probe slightly ahead before the horizontal move. This gives the
             // CharacterController a controlled lift onto natural mountain terrain
             // instead of allowing its downward stick velocity to push into a slope.
-            if (!inWater && wishDir.sqrMagnitude > 0.001f)
-                AssistTerrainAscent(up, wishDir, Mathf.Max(0.25f, horiz.magnitude * dt));
+            if (!inWater && _grounded && VerticalSpeed(up) <= 0.05f && wishDir.sqrMagnitude > 0.001f)
+                AssistTerrainAscent(up, wishDir, Mathf.Max(0.04f, horiz.magnitude * dt));
 
             // ── Re-entry / terrain-clip safety ──────────────────────────
             // Cap the INWARD radial speed near the active body. Without this, a player
@@ -1283,7 +1284,9 @@ namespace VoxelEngine.Player
             float transitionSpeed = _sliding ? 12f : 6f;
             _smoothedEyeHeight = Mathf.MoveTowards(
                 _smoothedEyeHeight, target, transitionSpeed * Time.deltaTime);
-            cameraPivot.localPosition = new Vector3(0, _smoothedEyeHeight, 0);
+            _cameraStepOffset = Mathf.Lerp(_cameraStepOffset, 0f, 1f - Mathf.Exp(-14f * Time.deltaTime));
+            if (Mathf.Abs(_cameraStepOffset) < 0.0005f) _cameraStepOffset = 0f;
+            cameraPivot.localPosition = new Vector3(0, _smoothedEyeHeight + _cameraStepOffset, 0);
         }
 
         // ============================================================
@@ -1349,19 +1352,57 @@ namespace VoxelEngine.Player
             float footClearance = Mathf.Clamp(terrainFootClearance, 0.01f, 0.20f);
             float maxRise = Mathf.Max(0.20f, maxUphillAssistRise);
             float maxProbe = Mathf.Max(0.25f, uphillProbeDistance);
+            Vector3 dir = wishDirection.normalized;
             float probeDistance = Mathf.Clamp(
-                Mathf.Max(travelDistance * 1.5f, _cc.radius * 0.85f),
-                0.25f,
+                travelDistance + _cc.radius * 0.45f,
+                0.18f,
                 maxProbe);
-            Vector3 ahead = transform.position + wishDirection.normalized * probeDistance;
-            if (!TryGetWalkableGround(ahead, up, maxRise + footClearance, out var hit)) return;
+
+            // Do not lift the player upward when walking into a steep hole wall or corner.
+            float wallCheckHeight = Mathf.Clamp(_cc.stepOffset + 0.14f, 0.42f, 0.62f);
+            Vector3 wallOrigin = transform.position + up * wallCheckHeight;
+            float wallCheckDist = _cc.radius + probeDistance + 0.06f;
+            int wallHits = Physics.RaycastNonAlloc(wallOrigin, dir, _terrainProbeHits, wallCheckDist, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < wallHits; i++)
+            {
+                var wh = _terrainProbeHits[i];
+                if (wh.collider == null) continue;
+                if (wh.collider.transform == transform || wh.collider.transform.IsChildOf(transform) || transform.IsChildOf(wh.collider.transform)) continue;
+                if (IsLiquidSurfaceCollider(wh.collider)) continue;
+                if (Vector3.Dot(wh.normal, up) < 0.48f)
+                    return;
+            }
+
+            Vector3 ahead = transform.position + dir * probeDistance;
+            if (!TryGetWalkableGround(ahead, up, maxRise + 0.08f, maxRise + footClearance, out var hit)) return;
 
             float rise = Vector3.Dot(hit.point - transform.position, up) + footClearance;
             if (rise <= footClearance * 0.5f || rise > maxRise) return;
 
-            _cc.Move(up * rise);
+            // Ensure the rise corresponds to a walkable slope or low step rather than an upper hole rim.
+            float horizDist = Vector3.ProjectOnPlane(hit.point - transform.position, up).magnitude;
+            if (rise > horizDist * 1.35f + 0.14f) return;
+
+            // Proportionally lift by the fraction of the probe distance covered this frame
+            // so the capsule never snaps into the air before reaching a slope.
+            float stepFraction = Mathf.Clamp01((travelDistance * 1.15f) / Mathf.Max(0.18f, probeDistance));
+            float maxFrameLift = Mathf.Min(rise, Mathf.Max(rise * stepFraction, 4.2f * Time.deltaTime));
+            maxFrameLift = Mathf.Min(maxFrameLift, 0.10f);
+            if (maxFrameLift <= 0.001f) return;
+
+            AddSmoothLift(up, maxFrameLift);
             if (VerticalSpeed(up) < 0f)
                 _velocity = Vector3.ProjectOnPlane(_velocity, up);
+        }
+
+        private void AddSmoothLift(Vector3 up, float lift)
+        {
+            if (lift <= 0.0001f || _cc == null) return;
+            Vector3 before = transform.position;
+            _cc.Move(up * lift);
+            float movedUp = Vector3.Dot(transform.position - before, up);
+            if (movedUp > 0.002f)
+                _cameraStepOffset = Mathf.Clamp(_cameraStepOffset - movedUp, -0.35f, 0.35f);
         }
 
         /// <summary>
@@ -1381,20 +1422,24 @@ namespace VoxelEngine.Player
         private void RecoverTerrainFooting(Vector3 up)
         {
             if (_cc == null) return;
+            if (!_grounded && VerticalSpeed(up) > 0.05f) return;
+
             float footClearance = Mathf.Clamp(terrainFootClearance, 0.01f, 0.20f);
             float maxRise = Mathf.Max(0.20f, maxUphillAssistRise);
             float recoveryBelow = Mathf.Max(0.35f, maxRise);
-            if (!TryGetWalkableGround(transform.position, up, recoveryBelow, out var hit)) return;
+            // Probe only from ankle height (0.20 m above feet) so concave hole corners
+            // or ledges above the feet are never mistaken for underfoot ground.
+            if (!TryGetWalkableGround(transform.position, up, 0.20f, recoveryBelow, out var hit)) return;
 
             float feetAboveGround = Vector3.Dot(transform.position - hit.point, up);
             float correction = footClearance - feetAboveGround;   // + lift, - settle
 
             if (correction > 0.001f)
             {
-                // Recover a bad overlap over a few frames rather than teleporting up
-                // a cliff in one frame.
-                correction = Mathf.Min(correction, maxRise);
-                _cc.Move(up * correction);
+                // Recover a bad overlap smoothly rather than snapping up in a single frame.
+                float maxStepUp = Mathf.Max(0.02f, 5.0f * Time.deltaTime);
+                float applied = Mathf.Min(correction, Mathf.Min(0.18f, maxStepUp));
+                AddSmoothLift(up, applied);
 
                 // Only a REAL recovery cancels the fall. A sub-centimetre maintenance
                 // nudge used to wipe the downward stick velocity too, which meant the
@@ -1418,17 +1463,29 @@ namespace VoxelEngine.Player
             // Rate-capped so stepping off a low ledge still reads as a step down
             // rather than a snap, but the target it converges to is absolute.
             float step = Mathf.Max(FootSettleDeadband, FootSettleSpeed * Time.deltaTime);
-            _cc.Move(-up * Mathf.Min(hover, step));
+            float settleAmount = Mathf.Min(hover, step);
+            Vector3 beforeSettle = transform.position;
+            _cc.Move(-up * settleAmount);
+            float movedDown = Vector3.Dot(beforeSettle - transform.position, up);
+            if (movedDown > 0.002f)
+                _cameraStepOffset = Mathf.Clamp(_cameraStepOffset + movedDown, -0.35f, 0.35f);
             _grounded = true;
         }
 
         private bool TryGetWalkableGround(Vector3 feetPosition, Vector3 up, float belowFeet, out RaycastHit bestHit)
         {
+            float maxRise = Mathf.Max(0.20f, maxUphillAssistRise);
+            float probeHeight = Mathf.Min(maxRise + 0.10f, Mathf.Max(0.45f, _cc != null ? _cc.height * 0.42f : 0.65f));
+            return TryGetWalkableGround(feetPosition, up, probeHeight, belowFeet, out bestHit);
+        }
+
+        private bool TryGetWalkableGround(Vector3 feetPosition, Vector3 up, float aboveFeet, float belowFeet, out RaycastHit bestHit)
+        {
             bestHit = default;
             if (_cc == null || up.sqrMagnitude < 0.0001f) return false;
 
             up.Normalize();
-            float probeHeight = Mathf.Max(_cc.height + 0.35f, 2.25f);
+            float probeHeight = Mathf.Max(0.08f, aboveFeet);
             Vector3 origin = feetPosition + up * probeHeight;
             float distance = probeHeight + Mathf.Max(0.1f, belowFeet);
             int count = Physics.RaycastNonAlloc(origin, -up, _terrainProbeHits, distance, ~0, QueryTriggerInteraction.Ignore);
@@ -1442,6 +1499,8 @@ namespace VoxelEngine.Player
                 if (collider.transform == transform || collider.transform.IsChildOf(transform) || transform.IsChildOf(collider.transform)) continue;
                 if (IsLiquidSurfaceCollider(collider)) continue;
                 if (Vector3.Dot(hit.normal, up) < Mathf.Clamp(walkableGroundNormalMin, 0.05f, 0.95f)) continue;
+                float heightRelFeet = Vector3.Dot(hit.point - feetPosition, up);
+                if (heightRelFeet > probeHeight - 0.02f) continue;
                 if (hit.distance >= bestDistance) continue;
 
                 bestDistance = hit.distance;
@@ -1506,13 +1565,25 @@ namespace VoxelEngine.Player
         private bool CheckRadialGround(Vector3 up)
         {
             if (_cc == null) return false;
-            // Start the ray slightly above the capsule base (along up) to avoid self-collision.
-            Vector3 origin = transform.position + up * 0.05f;
-            // Keep this a foot-contact probe, not a capsule-height search: a long
-            // radial ray reports the player grounded throughout a jump and can
-            // re-arm coyote time before the actual landing.
-            float checkDist = Mathf.Max(0.30f, terrainFootClearance + 0.22f);
-            return Physics.Raycast(origin, -up, checkDist);
+            float checkDist = Mathf.Max(0.32f, terrainFootClearance + 0.24f);
+            Vector3 rayOrigin = transform.position + up * 0.08f;
+            if (Physics.Raycast(rayOrigin, -up, checkDist + 0.03f, ~0, QueryTriggerInteraction.Ignore))
+                return true;
+
+            float sphereRadius = Mathf.Max(0.12f, _cc.radius * 0.72f);
+            Vector3 sphereOrigin = transform.position + up * (sphereRadius + 0.12f);
+            int count = Physics.SphereCastNonAlloc(
+                sphereOrigin, sphereRadius, -up, _terrainProbeHits, checkDist, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var col = _terrainProbeHits[i].collider;
+                if (col == null) continue;
+                if (col.transform == transform || col.transform.IsChildOf(transform) || transform.IsChildOf(col.transform))
+                    continue;
+                if (IsLiquidSurfaceCollider(col)) continue;
+                return true;
+            }
+            return false;
         }
     }
 }

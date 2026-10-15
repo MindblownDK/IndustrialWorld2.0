@@ -109,11 +109,14 @@ namespace VoxelEngine.Combat
                 {
                     _biteWindup = 0f;
                     _anim?.Strike();
-                    if (_player != null && Vector3.Distance(_player.position, pos) <= biteRange + 1.4f)
+                    if (_player != null
+                        && Vector3.Distance(_player.position, pos) <= biteRange + 1.4f
+                        && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.1f))
                         VenomBite();
                 }
                 else if (_biteWindup <= 0f
                     && distP <= biteRange && Vector3.Distance(_player.position, pos) <= biteRange + 0.8f
+                    && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.1f)
                     && Time.time >= _nextBiteAt)
                 {
                     _nextBiteAt = Time.time + biteCooldown;
@@ -161,7 +164,8 @@ namespace VoxelEngine.Combat
             Vector3 toP = Vector3.ProjectOnPlane(_player.position - pos, up);
             float dist = toP.magnitude;
             if (dist > gazeRange || dist < 0.001f) return false;
-            return Vector3.Dot(forward.normalized, toP.normalized) >= Mathf.Cos(gazeHalfAngle * Mathf.Deg2Rad);
+            if (Vector3.Dot(forward.normalized, toP.normalized) < Mathf.Cos(gazeHalfAngle * Mathf.Deg2Rad)) return false;
+            return VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.2f);
         }
 
         private void PetrifyingGaze(Vector3 pos, Vector3 up)
@@ -172,6 +176,7 @@ namespace VoxelEngine.Combat
             float dist = toP.magnitude;
             if (dist > gazeRange) return;
             if (Vector3.Dot(forward, toP.normalized) < Mathf.Cos(gazeHalfAngle * Mathf.Deg2Rad)) return;
+            if (!VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.2f)) return;
 
             // 14.55.0 - petrify through the strike funnel: the victim's
             // own machine slows the victim, local or remote.

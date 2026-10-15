@@ -76,14 +76,24 @@ namespace VoxelEngine.Combat
             {
                 if (_diving)
                 {
-                    // Swoop down to the player's level and strike on contact.
-                    desiredPos = _player.position + up * 1.6f;
-                    spd = diveSpeed;
-                    if (Vector3.Distance(pos, _player.position) < meleeRange)
+                    if (!VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.0f))
                     {
-                        Attack();
                         _diving = false;
-                        _nextDiveAt = Time.time + diveCooldown;
+                        _nextDiveAt = Time.time + diveCooldown * 0.5f;
+                        desiredPos = _player.position + up * hoverHeight;
+                        spd = engageSpeed;
+                    }
+                    else
+                    {
+                        // Swoop down to the player's level and strike on contact.
+                        desiredPos = _player.position + up * 1.6f;
+                        spd = diveSpeed;
+                        if (Vector3.Distance(pos, _player.position) < meleeRange)
+                        {
+                            Attack();
+                            _diving = false;
+                            _nextDiveAt = Time.time + diveCooldown;
+                        }
                     }
                 }
                 else
@@ -98,7 +108,8 @@ namespace VoxelEngine.Combat
                     Vector3 circleOffset = (fwd * Mathf.Cos(a) + right * Mathf.Sin(a)) * orbitRadius;
                     desiredPos = _player.position + up * hoverHeight + circleOffset;
                     spd = engageSpeed;
-                    if (Time.time >= _nextDiveAt) _diving = true;
+                    if (Time.time >= _nextDiveAt && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.0f))
+                        _diving = true;
                 }
             }
             else

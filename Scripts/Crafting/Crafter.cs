@@ -88,9 +88,9 @@ namespace VoxelEngine.Crafting
         }
 
         /// <summary>
-        /// Research Labs are an all-science-pack crafting facility regardless of a stale
-        /// or legacy serialized CraftingStation tier. Their recipes still consume inputs
-        /// from the player's source container and deliver outputs to player inventory.
+        /// Research Labs are dedicated research facilities, not Assembler-tier
+        /// crafting stations. Even if an older prefab carries a stale CraftingStation
+        /// tier, EffectiveStationTier clamps Research Labs to StationTier.None.
         /// </summary>
         public static bool IsResearchLabStation(CraftingStation station)
         {
@@ -102,7 +102,7 @@ namespace VoxelEngine.Crafting
         public static StationTier EffectiveStationTier(CraftingStation station)
         {
             if (station == null) return StationTier.None;
-            return IsResearchLabStation(station) ? StationTier.Assembler : station.tier;
+            return IsResearchLabStation(station) ? StationTier.None : station.tier;
         }
 
         /// <summary>

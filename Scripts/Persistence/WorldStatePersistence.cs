@@ -647,7 +647,8 @@ namespace VoxelEngine.Persistence
                 // module tiers, so this preserves the exact upgraded armor piece.
                 armorSlots = equipment != null ? SerializeContainer(equipment.ArmorSlots) : null,
                 instrumentSlots = equipment != null ? SerializeContainer(equipment.InstrumentSlots) : null,
-                activeHotbarIndex = inv.activeHotbarIndex
+                activeHotbarIndex = inv.activeHotbarIndex,
+                researchRanks = ResearchManager.Instance != null ? ResearchManager.Instance.ExportRankEntries() : null
             };
 
             // The claimed bed/linked spawn is per-player state (14.38.0): it
@@ -735,12 +736,67 @@ namespace VoxelEngine.Persistence
                     session.bedSpawnIsOrdinaryBed = record.hasBedSpawn && record.bedSpawnIsOrdinaryBed;
                 }
 
+                if (record.researchRanks != null && record.researchRanks.Count > 0)
+                    ResearchManager.Instance?.MergeRankEntries(record.researchRanks, replaceExisting: true);
+
                 return TryResolveSavedPlayerPosition(record, out restoredPosition, out _);
             }
             catch (Exception ex)
             {
                 Debug.LogWarning("[WorldState] ApplyNetworkPlayerRecord: " + ex.Message);
                 return false;
+            }
+        }
+
+        public static List<ResearchRankEntry> ExtractPlayerResearchRanks(string playerRecordJson)
+        {
+            if (string.IsNullOrEmpty(playerRecordJson)) return new List<ResearchRankEntry>();
+            try
+            {
+                var record = JsonUtility.FromJson<SavedPlayer>(playerRecordJson);
+                return record?.researchRanks ?? new List<ResearchRankEntry>();
+            }
+            catch
+            {
+                return new List<ResearchRankEntry>();
+            }
+        }
+
+        public static string MergeResearchIntoPlayerRecordJson(string playerRecordJson, IEnumerable<ResearchRankEntry> incoming)
+        {
+            if (string.IsNullOrEmpty(playerRecordJson) || incoming == null) return playerRecordJson;
+            try
+            {
+                var record = JsonUtility.FromJson<SavedPlayer>(playerRecordJson);
+                if (record == null) return playerRecordJson;
+                var map = new Dictionary<string, int>(StringComparer.Ordinal);
+                if (record.researchRanks != null)
+                {
+                    foreach (var r in record.researchRanks)
+                    {
+                        if (r != null && !string.IsNullOrWhiteSpace(r.nodeId) && r.rank > 0)
+                            map[r.nodeId] = r.rank;
+                    }
+                }
+                bool changed = false;
+                foreach (var r in incoming)
+                {
+                    if (r == null || string.IsNullOrWhiteSpace(r.nodeId) || r.rank <= 0) continue;
+                    if (!map.TryGetValue(r.nodeId, out int cur) || r.rank > cur)
+                    {
+                        map[r.nodeId] = r.rank;
+                        changed = true;
+                    }
+                }
+                if (!changed) return playerRecordJson;
+                record.researchRanks = new List<ResearchRankEntry>(map.Count);
+                foreach (var kv in map)
+                    record.researchRanks.Add(new ResearchRankEntry(kv.Key, kv.Value));
+                return JsonUtility.ToJson(record);
+            }
+            catch
+            {
+                return playerRecordJson;
             }
         }
 
@@ -5574,6 +5630,9 @@ namespace VoxelEngine.Persistence
             // Additive linked-spawn kind. Legacy records default to false so
             // cryobed-specific wake paths keep their prior behavior.
             public bool bedSpawnIsOrdinaryBed;
+            // Additive 17.21.0-dev: per-player research ranks so guest research
+            // persists across sessions and merges when Team Shared Research is enabled.
+            public List<ResearchRankEntry> researchRanks;
         }
         [Serializable] private class SavedPlacedBlock
         {

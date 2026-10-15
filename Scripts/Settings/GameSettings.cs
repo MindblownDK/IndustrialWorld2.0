@@ -79,6 +79,8 @@ namespace VoxelEngine.Settings
         private const string K_LAST_HOST    = "ve.lastHostAddress";
         private const string K_VOICE_MUTED  = "ve.voiceMuted";
         private const string K_WIND_LINES   = "ve.windLines";
+        private const string K_RESEARCH_QUEUE = "ve.researchQueue";
+        private const string K_TEAM_SHARED_RESEARCH = "ve.teamSharedResearch";
         private const string K_VERSION      = "ve.settingsVersion";
 
         // Bump this when default keybinds change to force a one-time migration
@@ -218,6 +220,52 @@ namespace VoxelEngine.Settings
         {
             get => PlayerPrefs.GetInt(K_WIND_LINES, 1) != 0;
             set { PlayerPrefs.SetInt(K_WIND_LINES, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>17.21.0-dev: enables the 5-slot research queue. Syncs with
+        /// WorldSession and ServerAdminRegistry when in a solo/host session.</summary>
+        public static bool ResearchQueueEnabled
+        {
+            get => PlayerPrefs.GetInt(K_RESEARCH_QUEUE, 1) != 0;
+            set
+            {
+                PlayerPrefs.SetInt(K_RESEARCH_QUEUE, value ? 1 : 0);
+                PlayerPrefs.Save();
+                if (VoxelEngine.Menu.WorldSession.Instance != null
+                    && VoxelEngine.Networking.NetworkSession.Mode != VoxelEngine.Networking.SessionMode.Client)
+                {
+                    VoxelEngine.Menu.WorldSession.Instance.researchQueueEnabled = value;
+                    VoxelEngine.Menu.WorldSession.Instance.SaveWorldSettings();
+                    if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Host)
+                        VoxelEngine.Networking.ServerAdminRegistry.Route(
+                            VoxelEngine.Networking.ServerAdminRegistry.OpSetRule,
+                            "researchQueueEnabled", value ? "1" : "0", 0);
+                }
+                VoxelEngine.Research.ResearchManager.Instance?.OnResearchSettingsChanged();
+            }
+        }
+
+        /// <summary>17.21.0-dev: when enabled, teammates share and sync research
+        /// progress. Enabling mid-game immediately merges and syncs team research.</summary>
+        public static bool TeamSharedResearch
+        {
+            get => PlayerPrefs.GetInt(K_TEAM_SHARED_RESEARCH, 1) != 0;
+            set
+            {
+                PlayerPrefs.SetInt(K_TEAM_SHARED_RESEARCH, value ? 1 : 0);
+                PlayerPrefs.Save();
+                if (VoxelEngine.Menu.WorldSession.Instance != null
+                    && VoxelEngine.Networking.NetworkSession.Mode != VoxelEngine.Networking.SessionMode.Client)
+                {
+                    VoxelEngine.Menu.WorldSession.Instance.teamSharedResearch = value;
+                    VoxelEngine.Menu.WorldSession.Instance.SaveWorldSettings();
+                    if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Host)
+                        VoxelEngine.Networking.ServerAdminRegistry.Route(
+                            VoxelEngine.Networking.ServerAdminRegistry.OpSetRule,
+                            "teamSharedResearch", value ? "1" : "0", 0);
+                }
+                VoxelEngine.Research.ResearchManager.Instance?.OnResearchSettingsChanged();
+            }
         }
         /// <summary>Developer-only damage bypass. Release players cannot read or set it.</summary>
         public static bool InfiniteHealth

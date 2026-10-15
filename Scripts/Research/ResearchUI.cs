@@ -68,9 +68,13 @@ namespace VoxelEngine.Research
         private VisualElement _root;
         private VisualElement _panel;
         private VisualElement _canvas;          // the zoomable/pannable tree surface
+        private VisualElement _canvasSizer;     // layout sizer that scales with zoom inside ScrollView
         private VisualElement _gridLayer;        // subtle technical graph paper behind the tree
         private VisualElement _connectors;      // draws bezier prereq lines
         private VisualElement _detailsPanel;
+        private VisualElement _queueBar;
+        private VisualElement _labBar;
+        private VisualElement _queueActiveFill;
         private ScrollView    _canvasScroll;    // the scroll container
 
         private Label   _zoomLabel;
@@ -81,8 +85,21 @@ namespace VoxelEngine.Research
         private bool             _open;
         private bool             _searchHasFocus;
         private ResearchNode     _selected;
+        private ResearchLab      _activeLab;
         private ResearchSubCategory? _activeSub = null;
         private string           _searchQuery = string.Empty;
+
+        // Drag-to-pan state
+        private bool    _panCandidate;
+        private bool    _isPanning;
+        private int     _panPointerId = -1;
+        private Vector2 _panStartMouse;
+        private Vector2 _panStartScroll;
+        private float   _baseCanvasW = 640f;
+        private float   _baseCanvasH = 320f;
+        private int     _lastSpaceTriggeredFrame = -1;
+
+        public bool IsOpen => _open;
 
         /// <summary>True while the Research search field owns keyboard input.</summary>
         public static bool IsSearchFocused => Instance != null && Instance._open && Instance._searchHasFocus;
@@ -107,11 +124,47 @@ namespace VoxelEngine.Research
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             _doc = GetComponent<UIDocument>();
+            _doc.sortingOrder = 600;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            if (_doc.panelSettings != null)
+                GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
+            _root.RegisterCallback<KeyDownEvent>(evt =>
+            {
+                if (!_open || _searchHasFocus) return;
+                if (evt.keyCode == KeyCode.Space)
+                {
+                    evt.StopPropagation();
+                    TriggerSpaceResearch();
+                }
+            }, TrickleDown.TrickleDown);
             HideUI();
+        }
+
+        private void OnDestroy()
+        {
+            if (ResearchManager.Instance != null)
+                ResearchManager.Instance.OnChanged -= HandleResearchChanged;
+            if (Instance == this) Instance = null;
+        }
+
+        private void HandleResearchChanged()
+        {
+            if (!_open) return;
+            RebuildQueueBar();
+            RebuildLabBar();
+            RebuildCanvas();
+            RebuildDetails();
+            UpdateEraLabel();
+        }
+
+        private void TriggerSpaceResearch()
+        {
+            if (_lastSpaceTriggeredFrame == Time.frameCount) return;
+            _lastSpaceTriggeredFrame = Time.frameCount;
+            TryResearchSelected();
         }
 
         private void Update()
@@ -129,39 +182,99 @@ namespace VoxelEngine.Research
             }
 
             // Live progress
-            if (_open && _selected != null && ResearchManager.Instance?.ActiveResearch == _selected)
+            if (_open && ResearchManager.Instance?.ActiveResearch != null)
             {
-                if (_progressFill != null)
-                    _progressFill.style.width = new StyleLength(
-                        new Length(Mathf.Clamp01(ResearchManager.Instance.ActiveProgress01) * 100, LengthUnit.Percent));
-                if (_progressLabel != null)
-                    _progressLabel.text = ResearchManager.Instance.ActiveHasCost
-                        ? $"{ResearchManager.Instance.ActiveProgress01 * 100:0}%"
-                        : "Awaiting Lab…";
+                float pct = Mathf.Clamp01(ResearchManager.Instance.ActiveProgress01) * 100f;
+                if (_queueActiveFill != null)
+                    _queueActiveFill.style.width = new StyleLength(new Length(pct, LengthUnit.Percent));
+                if (_selected != null && ResearchManager.Instance.ActiveResearch == _selected)
+                {
+                    if (_progressFill != null)
+                        _progressFill.style.width = new StyleLength(new Length(pct, LengthUnit.Percent));
+                    if (_progressLabel != null)
+                        _progressLabel.text = ResearchManager.Instance.ActiveHasCost
+                            ? $"{pct:0}%"
+                            : "Awaiting Lab…";
+                }
             }
 
-            // Spacebar to research selected node
-            if (_open && _selected != null && GameSettings.WasPressed(InputAction.Build))
-                TryResearchSelected();
+            // Spacebar to research or queue selected node
+            if (_open && !_searchHasFocus && _selected != null)
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if ((kb != null && kb.spaceKey.wasPressedThisFrame)
+                    || GameSettings.WasPressed(InputAction.Jump))
+                {
+                    TriggerSpaceResearch();
+                }
+            }
         }
 
         // ── Open / Close ────────────────────────────────────────────────
-        public void Open()
+        public void Open(ResearchLab lab = null)
         {
             if (ResearchManager.Instance == null || ResearchManager.Instance.tree == null) return;
             if (inventoryRef == null) inventoryRef = FindAnyObjectByType<Inventory>();
-            _open = true;
-            _zoom = 1.0f;
-            VoxelEngine.UI.UIState.PushBlock();
+
+            // Ensure no other container/inventory modal is stacked underneath or on top.
+            if (VoxelEngine.UI.GameUIController.Instance != null
+                && VoxelEngine.UI.GameUIController.Instance.IsInventoryOpen)
+            {
+                VoxelEngine.UI.GameUIController.Instance.CloseAll();
+            }
+
+            _activeLab = lab != null ? lab : FindNearestResearchLab();
+            if (_activeLab != null) _activeLab.EnsureContainers();
+
+            if (!_open)
+            {
+                _open = true;
+                _zoom = 1.0f;
+                VoxelEngine.UI.UIState.PushBlock();
+                if (ResearchManager.Instance != null)
+                {
+                    ResearchManager.Instance.OnChanged -= HandleResearchChanged;
+                    ResearchManager.Instance.OnChanged += HandleResearchChanged;
+                }
+            }
+
+            UnityEngine.Cursor.lockState = CursorLockMode.None;
+            UnityEngine.Cursor.visible = true;
+
             Build();
             AnimateOpen();
+        }
+
+        private ResearchLab FindNearestResearchLab()
+        {
+            if (inventoryRef == null) return null;
+            Vector3 pos = inventoryRef.transform.position;
+            float bestDistSq = 64f; // 8m interaction range
+            ResearchLab best = null;
+            var labs = FindObjectsByType<ResearchLab>(FindObjectsInactive.Exclude);
+            foreach (var l in labs)
+            {
+                if (l == null) continue;
+                float dSq = (l.transform.position - pos).sqrMagnitude;
+                if (dSq <= bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    best = l;
+                }
+            }
+            return best;
         }
 
         public void Close()
         {
             if (!_open) return;
             _open = false;
+            _activeLab = null;
             _searchHasFocus = false;
+            _panCandidate = false;
+            _isPanning = false;
+            if (ResearchManager.Instance != null)
+                ResearchManager.Instance.OnChanged -= HandleResearchChanged;
             VoxelEngine.UI.UIState.TextInputActive = false;
             VoxelEngine.UI.UIState.PopBlock();
             HideUI();
@@ -173,8 +286,10 @@ namespace VoxelEngine.Research
             _root.pickingMode = PickingMode.Ignore;
             _root.style.backgroundColor = new StyleColor(Color.clear);
             _nodeRects.Clear();
-            _detailsPanel = _progressFill = _progressLabel = null;
-            _canvas = _gridLayer = _connectors = _canvasScroll = null;
+            _detailsPanel = _progressFill = _queueBar = _labBar = _queueActiveFill = null;
+            _progressLabel = null;
+            _canvas = _canvasSizer = _gridLayer = _connectors = null;
+            _canvasScroll = null;
         }
 
         private void AnimateOpen()
@@ -224,6 +339,7 @@ namespace VoxelEngine.Research
             _panel.Add(flexCol);
 
             BuildHeader(flexCol);
+            BuildQueueAndLabSection(flexCol);
             var bodyRow = new VisualElement();
             bodyRow.style.flexDirection = FlexDirection.Row;
             bodyRow.style.flexGrow = 1;
@@ -232,6 +348,287 @@ namespace VoxelEngine.Research
             BuildTabsColumn(bodyRow);
             BuildCanvasColumn(bodyRow);
             BuildDetailsPanel(flexCol);
+        }
+
+        private void BuildQueueAndLabSection(VisualElement parent)
+        {
+            _queueBar = new VisualElement();
+            _queueBar.style.flexDirection = FlexDirection.Row;
+            _queueBar.style.alignItems = Align.Center;
+            _queueBar.style.marginBottom = 6;
+            _queueBar.style.flexShrink = 0;
+            parent.Add(_queueBar);
+
+            _labBar = new VisualElement();
+            _labBar.style.flexDirection = FlexDirection.Row;
+            _labBar.style.alignItems = Align.Center;
+            _labBar.style.marginBottom = 6;
+            _labBar.style.flexShrink = 0;
+            parent.Add(_labBar);
+
+            RebuildQueueBar();
+            RebuildLabBar();
+        }
+
+        private void RebuildQueueBar()
+        {
+            if (_queueBar == null) return;
+            _queueBar.Clear();
+            _queueActiveFill = null;
+
+            var rm = ResearchManager.Instance;
+            if (rm == null || !rm.IsResearchQueueEnabled)
+            {
+                _queueBar.style.display = DisplayStyle.None;
+                return;
+            }
+            _queueBar.style.display = DisplayStyle.Flex;
+
+            var label = new Label($"RESEARCH QUEUE ({rm.TotalQueuedCount}/{ResearchManager.MaxQueueSlots})");
+            label.style.color = new Color(0.68f, 0.86f, 0.92f);
+            label.style.fontSize = 10;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.letterSpacing = 1.5f;
+            label.style.marginRight = 10;
+            label.style.flexShrink = 0;
+            _queueBar.Add(label);
+
+            for (int slot = 0; slot < ResearchManager.MaxQueueSlots; slot++)
+            {
+                int capturedSlot = slot;
+                var node = rm.GetQueueSlotNode(slot);
+                bool isActiveSlot = (slot == 0 && node != null);
+
+                var slotBox = new VisualElement();
+                slotBox.style.flexDirection = FlexDirection.Column;
+                slotBox.style.flexGrow = 1;
+                slotBox.style.flexBasis = 0;
+                slotBox.style.minHeight = 32;
+                slotBox.style.marginRight = slot < ResearchManager.MaxQueueSlots - 1 ? 6 : 0;
+                slotBox.style.paddingLeft = 8;
+                slotBox.style.paddingRight = 6;
+                slotBox.style.paddingTop = 4;
+                slotBox.style.paddingBottom = 4;
+                slotBox.style.backgroundColor = new StyleColor(node != null
+                    ? (isActiveSlot ? new Color(0.08f, 0.20f, 0.28f) : new Color(0.08f, 0.12f, 0.16f))
+                    : new Color(0.04f, 0.055f, 0.075f, 0.75f));
+                slotBox.style.borderTopWidth = slotBox.style.borderBottomWidth =
+                slotBox.style.borderLeftWidth = slotBox.style.borderRightWidth = 1;
+                var borderCol = new StyleColor(node != null
+                    ? (isActiveSlot ? BORDER_ACTIVE : new Color(0.22f, 0.36f, 0.44f))
+                    : new Color(0.12f, 0.17f, 0.22f));
+                slotBox.style.borderTopColor = slotBox.style.borderBottomColor =
+                slotBox.style.borderLeftColor = slotBox.style.borderRightColor = borderCol;
+                SetRadius(slotBox, 5);
+
+                var top = new VisualElement();
+                top.style.flexDirection = FlexDirection.Row;
+                top.style.alignItems = Align.Center;
+                slotBox.Add(top);
+
+                var numLbl = new Label($"#{slot + 1}");
+                numLbl.style.color = isActiveSlot ? ACCENT_BLUE : TextMuted;
+                numLbl.style.fontSize = 9;
+                numLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                numLbl.style.marginRight = 5;
+                top.Add(numLbl);
+
+                var nameLbl = new Label(node != null ? node.displayName : "Empty Slot");
+                nameLbl.style.color = node != null ? TextPrimary : new Color(0.42f, 0.50f, 0.56f);
+                nameLbl.style.fontSize = 10;
+                nameLbl.style.unityFontStyleAndWeight = node != null ? FontStyle.Bold : FontStyle.Normal;
+                nameLbl.style.flexGrow = 1;
+                nameLbl.style.overflow = Overflow.Hidden;
+                nameLbl.style.whiteSpace = WhiteSpace.NoWrap;
+                top.Add(nameLbl);
+
+                if (node != null)
+                {
+                    slotBox.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button != 0) return;
+                        _selected = node;
+                        RebuildCanvas();
+                        RebuildDetails();
+                    });
+
+                    var removeBtn = new Button(() =>
+                    {
+                        rm.RemoveQueueSlotAt(capturedSlot);
+                        RebuildQueueBar();
+                        RebuildCanvas();
+                        RebuildDetails();
+                    }) { text = "✕" };
+                    removeBtn.style.fontSize = 9;
+                    removeBtn.style.color = new Color(0.95f, 0.55f, 0.55f);
+                    removeBtn.style.backgroundColor = new StyleColor(Color.clear);
+                    removeBtn.style.minWidth = 18;
+                    removeBtn.style.minHeight = 18;
+                    removeBtn.style.paddingLeft = 2; removeBtn.style.paddingRight = 2;
+                    removeBtn.style.paddingTop = 0; removeBtn.style.paddingBottom = 0;
+                    ZeroBorder(removeBtn);
+                    top.Add(removeBtn);
+
+                    if (isActiveSlot)
+                    {
+                        var barBg = new VisualElement();
+                        barBg.style.height = 3;
+                        barBg.style.marginTop = 3;
+                        barBg.style.backgroundColor = new StyleColor(new Color(0.03f, 0.04f, 0.06f));
+                        SetRadius(barBg, 2);
+                        slotBox.Add(barBg);
+
+                        _queueActiveFill = new VisualElement();
+                        _queueActiveFill.style.height = 3;
+                        _queueActiveFill.style.width = new StyleLength(new Length(Mathf.Clamp01(rm.ActiveProgress01) * 100f, LengthUnit.Percent));
+                        _queueActiveFill.style.backgroundColor = new StyleColor(ACCENT_BLUE);
+                        SetRadius(_queueActiveFill, 2);
+                        barBg.Add(_queueActiveFill);
+                    }
+                }
+
+                _queueBar.Add(slotBox);
+            }
+        }
+
+        private void RebuildLabBar()
+        {
+            if (_labBar == null) return;
+            _labBar.Clear();
+
+            if (_activeLab == null || _activeLab.scienceInput == null)
+            {
+                _labBar.style.display = DisplayStyle.None;
+                return;
+            }
+            _labBar.style.display = DisplayStyle.Flex;
+            _labBar.style.paddingLeft = 10;
+            _labBar.style.paddingRight = 10;
+            _labBar.style.paddingTop = 5;
+            _labBar.style.paddingBottom = 5;
+            _labBar.style.backgroundColor = new StyleColor(new Color(0.06f, 0.085f, 0.115f, 0.96f));
+            _labBar.style.borderTopWidth = _labBar.style.borderBottomWidth =
+            _labBar.style.borderLeftWidth = _labBar.style.borderRightWidth = 1;
+            var bCol = new StyleColor(new Color(0.18f, 0.34f, 0.42f));
+            _labBar.style.borderTopColor = _labBar.style.borderBottomColor =
+            _labBar.style.borderLeftColor = _labBar.style.borderRightColor = bCol;
+            SetRadius(_labBar, 5);
+
+            var title = new Label("RESEARCH LAB INPUT:");
+            title.style.color = new Color(0.68f, 0.88f, 0.94f);
+            title.style.fontSize = 10;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.2f;
+            title.style.marginRight = 12;
+            _labBar.Add(title);
+
+            for (int tier = 1; tier <= 3; tier++)
+            {
+                string id = $"item_sciencet{tier}";
+                int inLab = _activeLab.scienceInput.CountOfId(id);
+                int inBag = inventoryRef != null && inventoryRef.container != null
+                    ? inventoryRef.container.CountOfId(id)
+                    : 0;
+
+                var packGroup = new VisualElement();
+                packGroup.style.flexDirection = FlexDirection.Row;
+                packGroup.style.alignItems = Align.Center;
+                packGroup.style.marginRight = 12;
+                _labBar.Add(packGroup);
+
+                var dot = BuildTierDot(ScienceItem.GetTierColor(tier), ScienceItem.GetTierRomanNumeral(tier), 16);
+                dot.style.marginRight = 5;
+                packGroup.Add(dot);
+
+                var countLbl = new Label($"Lab: {inLab}  (Bag: {inBag})");
+                countLbl.style.color = inLab > 0 ? TextPrimary : TextMuted;
+                countLbl.style.fontSize = 10;
+                countLbl.style.marginRight = 6;
+                packGroup.Add(countLbl);
+
+                int capturedTier = tier;
+                var loadBtn = StyledButton("+Load", new Color(0.16f, 0.32f, 0.40f), () =>
+                {
+                    TransferSciencePackToLab(capturedTier, 10);
+                    RebuildLabBar();
+                    RebuildCanvas();
+                    RebuildDetails();
+                });
+                loadBtn.style.minHeight = 22;
+                loadBtn.style.fontSize = 9;
+                loadBtn.style.paddingLeft = 7;
+                loadBtn.style.paddingRight = 7;
+                loadBtn.SetEnabled(inBag > 0);
+                packGroup.Add(loadBtn);
+            }
+
+            _labBar.Add(new VisualElement { style = { flexGrow = 1 } });
+
+            var loadNeededBtn = StyledButton("LOAD NEEDED FOR SELECTED", new Color(0.20f, 0.46f, 0.34f), () =>
+            {
+                AutoLoadSelectedNodePacksToLab(_selected ?? ResearchManager.Instance?.ActiveResearch);
+                RebuildLabBar();
+                RebuildCanvas();
+                RebuildDetails();
+            });
+            loadNeededBtn.style.minHeight = 24;
+            loadNeededBtn.style.fontSize = 10;
+            loadNeededBtn.style.marginRight = 8;
+            _labBar.Add(loadNeededBtn);
+
+            var openSlotsBtn = StyledButton("OPEN LAB CONTAINER", new Color(0.22f, 0.26f, 0.34f), () =>
+            {
+                var labToOpen = _activeLab;
+                Close();
+                if (labToOpen != null)
+                    VoxelEngine.UI.GameUIController.Instance?.OpenContainer(labToOpen.scienceInput);
+            });
+            openSlotsBtn.style.minHeight = 24;
+            openSlotsBtn.style.fontSize = 10;
+            _labBar.Add(openSlotsBtn);
+        }
+
+        private void TransferSciencePackToLab(int tier, int maxCount)
+        {
+            if (_activeLab == null || _activeLab.scienceInput == null || inventoryRef == null || inventoryRef.container == null)
+                return;
+            string id = $"item_sciencet{tier}";
+            var bag = inventoryRef.container;
+            for (int i = 0; i < bag.Size && maxCount > 0; i++)
+            {
+                var st = bag.GetSlot(i);
+                if (st.IsEmpty || st.item == null) continue;
+                bool match = string.Equals(st.item.itemId, id, System.StringComparison.OrdinalIgnoreCase)
+                    || (st.item is ScienceItem sci && sci.EffectiveTier == tier);
+                if (!match) continue;
+                int move = Mathf.Min(st.count, maxCount);
+                var leftover = _activeLab.scienceInput.Insert(new ItemStack(st.item, move));
+                int rem = (leftover != null && !leftover.IsEmpty) ? leftover.count : 0;
+                int inserted = move - rem;
+                if (inserted > 0)
+                {
+                    bag.Remove(st.item, inserted);
+                    maxCount -= inserted;
+                }
+            }
+        }
+
+        private void AutoLoadSelectedNodePacksToLab(ResearchNode node)
+        {
+            if (node == null || node.cost == null || _activeLab == null || _activeLab.scienceInput == null) return;
+            if (inventoryRef == null || inventoryRef.container == null) return;
+            var rm = ResearchManager.Instance;
+            foreach (var c in node.cost)
+            {
+                if (c.pack == null || c.count <= 0) continue;
+                int need = rm != null ? rm.GetEffectiveCount(node, c.count) : c.count;
+                int haveInLab = string.IsNullOrEmpty(c.pack.itemId)
+                    ? _activeLab.scienceInput.CountOf(c.pack)
+                    : _activeLab.scienceInput.CountOfId(c.pack.itemId);
+                int deficit = need - haveInLab;
+                if (deficit > 0)
+                    TransferSciencePackToLab(c.pack.EffectiveTier, deficit);
+            }
         }
 
         // ── Header ──────────────────────────────────────────────────────
@@ -428,7 +825,7 @@ namespace VoxelEngine.Research
             mapTitle.style.letterSpacing = 2f;
             mapTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
             mapHeader.Add(mapTitle);
-            var mapHint = new Label("  PREREQUISITES  →  RESEARCH PATH");
+            var mapHint = new Label("  DRAG TO PAN  ·  PREREQUISITES  →  RESEARCH PATH");
             mapHint.style.color = TextMuted;
             mapHint.style.fontSize = 9;
             mapHint.style.flexGrow = 1;
@@ -440,7 +837,12 @@ namespace VoxelEngine.Research
             _canvasScroll.style.flexGrow = 1;
             col.Add(_canvasScroll);
 
+            _canvasSizer = new VisualElement();
+            _canvasSizer.style.flexShrink = 0;
+            _canvasScroll.Add(_canvasSizer);
+
             _canvas = new VisualElement();
+            _canvas.style.flexShrink = 0;
             _canvas.style.transformOrigin = new TransformOrigin(new Length(0, LengthUnit.Percent), new Length(0, LengthUnit.Percent));
             _canvas.style.translate = new StyleTranslate(new Translate(0, 0, 0));
             _canvas.style.scale = new StyleScale(new Scale(new Vector3(_zoom, _zoom, 1f)));
@@ -448,7 +850,9 @@ namespace VoxelEngine.Research
             _canvas.style.paddingBottom = TREE_PAD;
             _canvas.style.paddingLeft = TREE_PAD;
             _canvas.style.paddingRight = TREE_PAD;
-            _canvasScroll.Add(_canvas);
+            _canvasSizer.Add(_canvas);
+
+            RegisterCanvasDragPan(_canvasScroll);
 
             _gridLayer = new VisualElement();
             _gridLayer.style.position = Position.Absolute;
@@ -666,9 +1070,15 @@ namespace VoxelEngine.Research
                 maxBottom = Mathf.Max(maxBottom, y);
             }
 
-            float canvasWidth = (maxDepth + 1) * NODE_W + maxDepth * TIER_GAP_X + TREE_PAD * 2f;
-            _canvas.style.width = Mathf.Max(canvasWidth, 640f);
-            _canvas.style.height = Mathf.Max(maxBottom + TREE_PAD, 320f);
+            float canvasWidth = (maxDepth + 1) * NODE_W + maxDepth * TIER_GAP_X + TREE_PAD * 2f + 260f;
+            float canvasHeight = maxBottom + TREE_PAD + 180f;
+            _baseCanvasW = Mathf.Max(canvasWidth, 960f);
+            _baseCanvasH = Mathf.Max(canvasHeight, 560f);
+            _canvas.style.width = _baseCanvasW;
+            _canvas.style.height = _baseCanvasH;
+            _canvas.style.minWidth = _baseCanvasW;
+            _canvas.style.minHeight = _baseCanvasH;
+            UpdateCanvasSizerDimensions();
 
             // Animate glow on cards that became ready
             foreach (var n in nodes)
@@ -815,16 +1225,20 @@ namespace VoxelEngine.Research
             bool maxed = rank >= n.maxRanks;
             bool ready = rm != null && rm.ArePrerequisitesMet(n);
             bool active = rm != null && rm.ActiveResearch == n;
+            int queueSlot = rm != null && rm.IsResearchQueueEnabled ? rm.GetQueueSlotNumber(n) : 0;
+            bool queued = queueSlot > 1;
             bool sel = _selected == n;
 
             Color bg = maxed ? CARD_DONE
                      : active ? CARD_ACTIVE
+                     : queued ? new Color(0.07f, 0.16f, 0.24f, 1.00f)
                      : ready && rank > 0 ? CARD_READY
                      : ready ? CARD_READY
                      : CARD_LOCKED;
             Color borderC = sel ? BORDER_SELECT
                          : maxed ? BORDER_DONE
                          : active ? BORDER_ACTIVE
+                         : queued ? new Color(0.28f, 0.68f, 0.88f, 1.00f)
                          : BORDER_DEFAULT;
 
             var card = new VisualElement();
@@ -905,8 +1319,8 @@ namespace VoxelEngine.Research
             branchTag.pickingMode = PickingMode.Ignore;
             card.Add(branchTag);
 
-            // Cost row (compact)
-            if (n.cost != null && n.cost.Length > 0)
+            // Cost row (compact) — hidden once a node is fully researched
+            if (!maxed && n.cost != null && n.cost.Length > 0)
             {
                 var costRow = new VisualElement();
                 costRow.style.flexDirection = FlexDirection.Row;
@@ -917,7 +1331,7 @@ namespace VoxelEngine.Research
                 {
                     if (c.pack == null || c.count <= 0) continue;
                     int eff = rm != null ? rm.GetEffectiveCount(n, c.count) : c.count;
-                    int have = inventoryRef != null ? inventoryRef.container.CountOf(c.pack) : 0;
+                    int have = CountAvailableSciencePack(c.pack);
                     costRow.Add(SciencePackIcon(c.pack, eff, have));
                 }
             }
@@ -925,9 +1339,11 @@ namespace VoxelEngine.Research
             // Status line
             string statusLine;
             Color statusCol = TextMuted;
-            if (n.IsRepeatable) { statusLine = $"RANK {rank}/{n.maxRanks}"; statusCol = rank > 0 ? ACCENT_AMBER : TextMuted; }
+            if (n.IsRepeatable && maxed) { statusLine = $"COMPLETE (RANK {rank}/{n.maxRanks})"; statusCol = ACCENT_GREEN; }
+            else if (active) { statusLine = queueSlot > 0 ? $"RESEARCHING (#1)" : "RESEARCH IN PROGRESS"; statusCol = new Color(0.52f, 0.88f, 0.97f); }
+            else if (queued) { statusLine = $"QUEUED (#{queueSlot} IN QUEUE)"; statusCol = new Color(0.52f, 0.82f, 0.95f); }
+            else if (n.IsRepeatable) { statusLine = $"RANK {rank}/{n.maxRanks}"; statusCol = rank > 0 ? ACCENT_AMBER : TextMuted; }
             else if (maxed) { statusLine = "COMPLETE"; statusCol = ACCENT_GREEN; }
-            else if (active) { statusLine = "RESEARCH IN PROGRESS"; statusCol = new Color(0.52f, 0.88f, 0.97f); }
             else if (ready) { statusLine = "READY TO RESEARCH"; statusCol = TextPrimary; }
             else { statusLine = "LOCKED · PREREQUISITE REQUIRED"; statusCol = TextMuted; }
 
@@ -953,8 +1369,9 @@ namespace VoxelEngine.Research
                 card.style.scale = new StyleScale(new Scale(Vector3.one));
                 card.style.backgroundColor = new StyleColor(bg);
             });
-            card.RegisterCallback<MouseDownEvent>(e =>
+            card.RegisterCallback<PointerUpEvent>(e =>
             {
+                if (e.button != 0 || _isPanning) return;
                 _selected = n;
                 RebuildCanvas();
                 RebuildDetails();
@@ -963,20 +1380,62 @@ namespace VoxelEngine.Research
             return card;
         }
 
+        private int CountAvailableSciencePack(ScienceItem pack)
+        {
+            if (pack == null) return 0;
+            int total = 0;
+            if (inventoryRef != null && inventoryRef.container != null)
+            {
+                total += string.IsNullOrEmpty(pack.itemId)
+                    ? inventoryRef.container.CountOf(pack)
+                    : inventoryRef.container.CountOfId(pack.itemId);
+            }
+            if (_activeLab != null && _activeLab.scienceInput != null)
+            {
+                total += string.IsNullOrEmpty(pack.itemId)
+                    ? _activeLab.scienceInput.CountOf(pack)
+                    : _activeLab.scienceInput.CountOfId(pack.itemId);
+            }
+            return total;
+        }
+
+        private static VisualElement BuildTierDot(Color tierColor, string romanNumeral, int size = 16)
+        {
+            var icon = new VisualElement();
+            icon.style.width = size;
+            icon.style.height = size;
+            icon.style.flexShrink = 0;
+            icon.style.backgroundColor = new StyleColor(tierColor);
+            icon.style.alignItems = Align.Center;
+            icon.style.justifyContent = Justify.Center;
+            icon.pickingMode = PickingMode.Ignore;
+            SetRadius(icon, size * 0.5f);
+
+            var numeral = new Label(romanNumeral);
+            numeral.style.color = new Color(0.98f, 0.99f, 1f);
+            numeral.style.fontSize = size >= 16 ? 8 : 7;
+            numeral.style.unityFontStyleAndWeight = FontStyle.Bold;
+            numeral.style.unityTextAlign = TextAnchor.MiddleCenter;
+            numeral.style.paddingLeft = 0; numeral.style.paddingRight = 0;
+            numeral.style.paddingTop = 0; numeral.style.paddingBottom = 0;
+            numeral.style.marginLeft = 0; numeral.style.marginRight = 0;
+            numeral.style.marginTop = 0; numeral.style.marginBottom = 0;
+            numeral.pickingMode = PickingMode.Ignore;
+            icon.Add(numeral);
+            return icon;
+        }
+
         private VisualElement SciencePackIcon(ScienceItem pack, int need, int have)
         {
             var w = new VisualElement();
             w.style.flexDirection = FlexDirection.Row;
             w.style.alignItems = Align.Center;
-            w.style.marginRight = 5;
+            w.style.marginRight = 6;
             w.style.marginTop = 1;
             w.pickingMode = PickingMode.Ignore;
 
-            var icon = new VisualElement();
-            icon.style.width = 12; icon.style.height = 12;
-            icon.style.backgroundColor = new StyleColor(pack.iconTint);
-            icon.style.marginRight = 2;
-            SetRadius(icon, 6);
+            var icon = BuildTierDot(pack.GetTierColor(), pack.GetTierRomanNumeral(), 16);
+            icon.style.marginRight = 3;
             w.Add(icon);
 
             var lbl = new Label($"{Mathf.Min(have, need)}/{need}");
@@ -1080,14 +1539,14 @@ namespace VoxelEngine.Research
 
             topRow.Add(new VisualElement { style = { flexGrow = 1 } });
 
-            // Cost pills
-            if (n.cost != null)
+            // Cost pills — hidden once a node is researched
+            if (!maxed && n.cost != null)
             {
                 foreach (var c in n.cost)
                 {
                     if (c.pack == null) continue;
                     int eff = rm.GetEffectiveCount(n, c.count);
-                    int have = inventoryRef != null ? inventoryRef.container.CountOf(c.pack) : 0;
+                    int have = CountAvailableSciencePack(c.pack);
 
                     var pill = new VisualElement();
                     pill.style.flexDirection = FlexDirection.Row;
@@ -1099,11 +1558,8 @@ namespace VoxelEngine.Research
                     SetRadius(pill, 8);
                     topRow.Add(pill);
 
-                    var pIcon = new VisualElement();
-                    pIcon.style.width = 12; pIcon.style.height = 12;
-                    pIcon.style.backgroundColor = new StyleColor(c.pack.iconTint);
+                    var pIcon = BuildTierDot(c.pack.GetTierColor(), c.pack.GetTierRomanNumeral(), 16);
                     pIcon.style.marginRight = 4;
-                    SetRadius(pIcon, 6);
                     pill.Add(pIcon);
 
                     var ok = have >= eff;
@@ -1151,14 +1607,53 @@ namespace VoxelEngine.Research
                 var cancelBtn = StyledButton("CANCEL", new Color(0.55f, 0.22f, 0.22f), () =>
                 {
                     rm.CancelResearch();
+                    RebuildQueueBar();
                     RebuildDetails();
                     RebuildCanvas();
                 });
                 cancelBtn.style.minHeight = 28;
                 cancelBtn.style.fontSize = 11;
                 btnRow.Add(cancelBtn);
+
+                if (rm.IsResearchQueueEnabled && n.IsRepeatable && rm.CanEnqueue(n))
+                {
+                    var queueNextBtn = StyledButton("QUEUE NEXT RANK (SPACE)", new Color(0.20f, 0.44f, 0.56f), () =>
+                    {
+                        TryResearchSelected();
+                    });
+                    queueNextBtn.style.minHeight = 28;
+                    queueNextBtn.style.fontSize = 11;
+                    queueNextBtn.style.marginLeft = 8;
+                    btnRow.Add(queueNextBtn);
+                }
             }
-            else if (!rm.ArePrerequisitesMet(n))
+            else if (rm.IsResearchQueueEnabled && rm.IsQueued(n))
+            {
+                int slotNum = rm.GetQueueSlotNumber(n);
+                var removeQueueBtn = StyledButton($"REMOVE FROM QUEUE (#{slotNum})", new Color(0.50f, 0.26f, 0.20f), () =>
+                {
+                    rm.RemoveFromQueue(n);
+                    RebuildQueueBar();
+                    RebuildDetails();
+                    RebuildCanvas();
+                });
+                removeQueueBtn.style.minHeight = 28;
+                removeQueueBtn.style.fontSize = 11;
+                btnRow.Add(removeQueueBtn);
+
+                if (n.IsRepeatable && rm.CanEnqueue(n))
+                {
+                    var addMoreBtn = StyledButton("QUEUE ANOTHER RANK (SPACE)", new Color(0.20f, 0.44f, 0.56f), () =>
+                    {
+                        TryResearchSelected();
+                    });
+                    addMoreBtn.style.minHeight = 28;
+                    addMoreBtn.style.fontSize = 11;
+                    addMoreBtn.style.marginLeft = 8;
+                    btnRow.Add(addMoreBtn);
+                }
+            }
+            else if (!rm.ArePrerequisitesMet(n) && !(rm.IsResearchQueueEnabled && rm.ArePrerequisitesMetOrQueued(n)))
             {
                 var blocked = new Label("✗ Prerequisites not met");
                 blocked.style.color = new Color(0.92f, 0.45f, 0.45f);
@@ -1178,32 +1673,61 @@ namespace VoxelEngine.Research
             }
             else
             {
-                bool canInventory = n.researchSeconds <= 0f;
-                bool canPay = inventoryRef != null && AllAffordable(n);
+                bool canInventory = n.researchSeconds <= 0f && rm.ArePrerequisitesMet(n);
+                bool canPay = AllAffordable(n);
+                bool willQueue = rm.ActiveResearch != null && rm.IsResearchQueueEnabled;
+                bool canQueue = rm.CanEnqueue(n);
 
-                if (canInventory)
+                if (canInventory && !willQueue)
                 {
                     var nowBtn = StyledButton("RESEARCH NOW (SPACE)", canPay ? ACCENT_BLUE : new Color(0.30f, 0.30f, 0.34f), () =>
                     {
-                        if (rm.TryResearchFromInventory(n, inventoryRef.container))
-                        {
-                            RebuildCanvas();
-                            RebuildDetails();
-                            UpdateEraLabel();
-                        }
+                        TryResearchSelected();
                     });
                     nowBtn.style.minHeight = 28;
                     nowBtn.style.fontSize = 11;
                     nowBtn.SetEnabled(canPay);
                     btnRow.Add(nowBtn);
                 }
+                else if (willQueue)
+                {
+                    string qLabel = rm.TotalQueuedCount >= ResearchManager.MaxQueueSlots
+                        ? $"QUEUE FULL ({ResearchManager.MaxQueueSlots}/{ResearchManager.MaxQueueSlots})"
+                        : "ADD TO QUEUE (SPACE)";
+                    var queueBtn = StyledButton(qLabel, canQueue ? new Color(0.22f, 0.48f, 0.62f) : new Color(0.30f, 0.30f, 0.34f), () =>
+                    {
+                        TryResearchSelected();
+                    });
+                    queueBtn.style.minHeight = 28;
+                    queueBtn.style.fontSize = 11;
+                    queueBtn.style.marginRight = 8;
+                    queueBtn.SetEnabled(canQueue);
+                    btnRow.Add(queueBtn);
+
+                    if (rm.ArePrerequisitesMet(n))
+                    {
+                        var startNowBtn = StyledButton("START NOW", new Color(0.30f, 0.55f, 0.30f), () =>
+                        {
+                            AutoLoadSelectedNodePacksToLab(n);
+                            rm.StartResearch(n);
+                            if (_activeLab != null && !rm.ActiveHasCost && _activeLab.TryConsumeCost(n, inventoryRef?.container))
+                                rm.MarkCostPaid();
+                            RebuildQueueBar();
+                            RebuildLabBar();
+                            RebuildDetails();
+                            RebuildCanvas();
+                        });
+                        startNowBtn.style.minHeight = 28;
+                        startNowBtn.style.fontSize = 11;
+                        startNowBtn.style.marginRight = 8;
+                        btnRow.Add(startNowBtn);
+                    }
+                }
                 else
                 {
-                    var labBtn = StyledButton("START AT LAB", new Color(0.30f, 0.55f, 0.30f), () =>
+                    var labBtn = StyledButton("START AT LAB (SPACE)", new Color(0.30f, 0.55f, 0.30f), () =>
                     {
-                        rm.StartResearch(n);
-                        RebuildDetails();
-                        RebuildCanvas();
+                        TryResearchSelected();
                     });
                     labBtn.style.minHeight = 28;
                     labBtn.style.fontSize = 11;
@@ -1212,7 +1736,7 @@ namespace VoxelEngine.Research
                 }
 
                 // Space hint
-                var spaceHint = new Label("Press SPACE to research");
+                var spaceHint = new Label(willQueue ? "Press SPACE to queue research" : "Press SPACE to start research");
                 spaceHint.style.color = TextMuted;
                 spaceHint.style.fontSize = 10;
                 spaceHint.style.marginLeft = 8;
@@ -1273,23 +1797,111 @@ namespace VoxelEngine.Research
             if (rm == null) return;
             int rank = rm.GetRank(_selected);
             if (rank >= _selected.maxRanks) return;
-            if (!rm.ArePrerequisitesMet(_selected)) return;
 
-            if (_selected.researchSeconds <= 0f && inventoryRef != null)
+            if (_selected.researchSeconds <= 0f
+                && rm.ActiveResearch == null
+                && rm.ArePrerequisitesMet(_selected)
+                && inventoryRef != null)
             {
                 if (rm.TryResearchFromInventory(_selected, inventoryRef.container))
                 {
+                    RebuildQueueBar();
+                    RebuildLabBar();
                     RebuildCanvas();
                     RebuildDetails();
                     UpdateEraLabel();
+                    return;
                 }
             }
-            else if (rm.ActiveResearch != _selected)
+
+            if (rm.EnqueueOrStartResearch(_selected))
             {
-                rm.StartResearch(_selected);
+                if (rm.ActiveResearch == _selected)
+                {
+                    AutoLoadSelectedNodePacksToLab(_selected);
+                    if (_activeLab != null && !rm.ActiveHasCost && _activeLab.TryConsumeCost(_selected, inventoryRef?.container))
+                        rm.MarkCostPaid();
+                }
+                RebuildQueueBar();
+                RebuildLabBar();
                 RebuildDetails();
                 RebuildCanvas();
             }
+        }
+
+        private void RegisterCanvasDragPan(ScrollView scroll)
+        {
+            if (scroll == null) return;
+            scroll.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0 && evt.button != 1 && evt.button != 2) return;
+                if (evt.target is VisualElement ve && IsDescendantOfScroller(ve, scroll)) return;
+                _panCandidate = true;
+                _isPanning = false;
+                _panPointerId = evt.pointerId;
+                _panStartMouse = evt.position;
+                _panStartScroll = scroll.scrollOffset;
+            }, TrickleDown.TrickleDown);
+
+            scroll.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!_panCandidate || evt.pointerId != _panPointerId) return;
+                Vector2 delta = (Vector2)evt.position - _panStartMouse;
+                if (!_isPanning && delta.sqrMagnitude > 25f)
+                {
+                    _isPanning = true;
+                    scroll.CapturePointer(_panPointerId);
+                }
+                if (_isPanning)
+                {
+                    scroll.scrollOffset = new Vector2(
+                        Mathf.Max(0f, _panStartScroll.x - delta.x),
+                        Mathf.Max(0f, _panStartScroll.y - delta.y));
+                    evt.StopPropagation();
+                }
+            }, TrickleDown.TrickleDown);
+
+            scroll.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                if (evt.pointerId != _panPointerId) return;
+                if (scroll.HasPointerCapture(_panPointerId))
+                    scroll.ReleasePointer(_panPointerId);
+                _panCandidate = false;
+                // Clear _isPanning on next tick so node card PointerUp in this event pass sees it
+                scroll.schedule.Execute(() => _isPanning = false);
+            }, TrickleDown.TrickleDown);
+
+            scroll.RegisterCallback<PointerCancelEvent>(evt =>
+            {
+                if (evt.pointerId != _panPointerId) return;
+                if (scroll.HasPointerCapture(_panPointerId))
+                    scroll.ReleasePointer(_panPointerId);
+                _panCandidate = false;
+                _isPanning = false;
+            });
+        }
+
+        private static bool IsDescendantOfScroller(VisualElement target, ScrollView scroll)
+        {
+            if (target == null || scroll == null) return false;
+            var hBar = scroll.horizontalScroller;
+            var vBar = scroll.verticalScroller;
+            for (var cur = target; cur != null && cur != scroll; cur = cur.parent)
+            {
+                if (cur == hBar || cur == vBar) return true;
+            }
+            return false;
+        }
+
+        private void UpdateCanvasSizerDimensions()
+        {
+            if (_canvasSizer == null) return;
+            float w = _baseCanvasW * _zoom;
+            float h = _baseCanvasH * _zoom;
+            _canvasSizer.style.width = w;
+            _canvasSizer.style.height = h;
+            _canvasSizer.style.minWidth = w;
+            _canvasSizer.style.minHeight = h;
         }
 
         private void SetZoom(float z)
@@ -1297,18 +1909,19 @@ namespace VoxelEngine.Research
             _zoom = Mathf.Clamp(z, ZOOM_MIN, ZOOM_MAX);
             if (_canvas != null)
                 _canvas.style.scale = new StyleScale(new Scale(new Vector3(_zoom, _zoom, 1f)));
+            UpdateCanvasSizerDimensions();
             if (_zoomLabel != null)
                 _zoomLabel.text = $"{_zoom * 100:0}%";
         }
 
         private bool AllAffordable(ResearchNode n)
         {
-            if (inventoryRef == null) return false;
             var rm = ResearchManager.Instance;
+            if (rm == null || n == null || n.cost == null) return false;
             foreach (var c in n.cost)
             {
                 if (c.pack == null || c.count <= 0) continue;
-                if (inventoryRef.container.CountOf(c.pack) < rm.GetEffectiveCount(n, c.count)) return false;
+                if (CountAvailableSciencePack(c.pack) < rm.GetEffectiveCount(n, c.count)) return false;
             }
             return true;
         }

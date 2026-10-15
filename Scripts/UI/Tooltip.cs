@@ -41,8 +41,8 @@ namespace VoxelEngine.UI
 
             _panel = new VisualElement { name = "TooltipPanel" };
             _panel.style.position    = Position.Absolute;
-            _panel.style.maxWidth    = 290;
-            _panel.style.minWidth    = 160;
+            _panel.style.maxWidth    = 340;
+            _panel.style.minWidth    = 190;
             _panel.style.paddingTop  = 10;
             _panel.style.paddingBottom = 10;
             _panel.style.paddingLeft   = 12;
@@ -234,6 +234,201 @@ namespace VoxelEngine.UI
             if (!_sticky) return;
             _sticky = false;
             if (_panel != null) _panel.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>
+        /// Shows a detailed crafting-focused tooltip for a required ingredient row in the
+        /// crafting menu: item name at the top, what machine is needed to make it, the input
+        /// items, the output item, craft time, and current have/required counts.
+        /// </summary>
+        public static void ShowRequiredItemAt(ItemDefinition item, int have, int need, Vector2 panelPos)
+        {
+            if (_panel == null || _root == null || item == null) return;
+
+            var synthetic = new ItemStack(item, 1);
+            string extra = BuildRequiredItemCraftingInfo(item, have, need);
+            FillFor(synthetic, extra);
+            // Always show ONLY the item name at the top for required-item tooltips.
+            _name.text = item.displayName;
+
+            float tx   = panelPos.x + 12f;
+            float ty   = panelPos.y + 12f;
+            float maxX = _root.layout.width  - 350f;
+            float maxY = _root.layout.height - 280f;
+            if (maxX > 0) tx = Mathf.Min(tx, maxX);
+            if (maxY > 0) ty = Mathf.Min(ty, maxY);
+
+            _panel.style.left    = tx;
+            _panel.style.top     = ty;
+            _panel.style.display = DisplayStyle.Flex;
+            _panel.BringToFront();
+            _sticky = true;
+        }
+
+        private sealed class CachedProductionMethod
+        {
+            public string Machine;
+            public string Inputs;
+            public string Output;
+            public float Seconds;
+            public string RequiredResearch;
+        }
+
+        private static System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<CachedProductionMethod>> _productionCache;
+
+        private static string ItemLookupKey(ItemDefinition item)
+        {
+            if (item == null) return string.Empty;
+            if (!string.IsNullOrWhiteSpace(item.displayName)) return item.displayName.Trim().ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(item.itemId)) return item.itemId.Trim().ToLowerInvariant();
+            return item.name.Trim().ToLowerInvariant();
+        }
+
+        private static void EnsureProductionCache()
+        {
+            if (_productionCache != null) return;
+            _productionCache = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<CachedProductionMethod>>();
+
+            void AddMethod(ItemDefinition output, CachedProductionMethod m)
+            {
+                string key = ItemLookupKey(output);
+                if (string.IsNullOrEmpty(key)) return;
+                if (!_productionCache.TryGetValue(key, out var list))
+                {
+                    list = new System.Collections.Generic.List<CachedProductionMethod>();
+                    _productionCache[key] = list;
+                }
+                foreach (var existing in list)
+                {
+                    if (existing.Machine == m.Machine && existing.Inputs == m.Inputs && existing.Output == m.Output)
+                        return;
+                }
+                list.Add(m);
+            }
+
+            var researchByRecipe = new System.Collections.Generic.Dictionary<VoxelEngine.Crafting.RecipeDefinition, string>();
+            foreach (var node in Resources.FindObjectsOfTypeAll<VoxelEngine.Research.ResearchNode>())
+            {
+                if (node == null || node.unlocksRecipes == null || string.IsNullOrEmpty(node.displayName)) continue;
+                foreach (var unlocked in node.unlocksRecipes)
+                {
+                    if (unlocked != null && !researchByRecipe.ContainsKey(unlocked))
+                        researchByRecipe[unlocked] = node.displayName;
+                }
+            }
+
+            foreach (var r in Resources.FindObjectsOfTypeAll<VoxelEngine.Crafting.RecipeDefinition>())
+            {
+                if (r == null || r.outputItem == null) continue;
+                if (VoxelEngine.Crafting.Crafter.OutputsBuildToken(r)) continue;
+                var inSb = new System.Text.StringBuilder();
+                if (r.inputs != null)
+                {
+                    foreach (var ing in r.inputs)
+                    {
+                        if (ing.item == null || ing.count <= 0) continue;
+                        if (inSb.Length > 0) inSb.Append(", ");
+                        inSb.Append($"{ing.count}\u00D7 {ing.item.displayName}");
+                    }
+                }
+                string station = r.requiredStation switch
+                {
+                    VoxelEngine.Crafting.StationTier.None          => "Hand Crafting (Inventory)",
+                    VoxelEngine.Crafting.StationTier.CraftingBench => "Crafting Bench",
+                    VoxelEngine.Crafting.StationTier.Furnace       => "Furnace",
+                    VoxelEngine.Crafting.StationTier.Assembler     => "Assembler Station",
+                    VoxelEngine.Crafting.StationTier.ArmorStation  => "Armor Station",
+                    _                                              => r.requiredStation.ToString()
+                };
+                string resName = !r.unlockedByDefault && researchByRecipe.TryGetValue(r, out var rn) ? rn : null;
+                AddMethod(r.outputItem, new CachedProductionMethod
+                {
+                    Machine = station,
+                    Inputs  = inSb.Length > 0 ? inSb.ToString() : "None",
+                    Output  = $"{Mathf.Max(1, r.outputCount)}\u00D7 {r.outputItem.displayName}",
+                    Seconds = r.craftSeconds,
+                    RequiredResearch = resName
+                });
+            }
+
+            foreach (var sr in Resources.FindObjectsOfTypeAll<VoxelEngine.Crafting.SmeltingRecipe>())
+            {
+                if (sr == null || sr.output == null) continue;
+                string inp = sr.input != null ? $"{Mathf.Max(1, sr.inputCount)}\u00D7 {sr.input.displayName}" : "None";
+                AddMethod(sr.output, new CachedProductionMethod
+                {
+                    Machine = "Furnace / Smelter",
+                    Inputs  = inp,
+                    Output  = $"{Mathf.Max(1, sr.outputCount)}\u00D7 {sr.output.displayName}",
+                    Seconds = sr.smeltSeconds
+                });
+            }
+
+            foreach (var mr in Resources.FindObjectsOfTypeAll<VoxelEngine.Simulation.MachineRecipe>())
+            {
+                if (mr == null || mr.outputItem == null) continue;
+                var inSb = new System.Text.StringBuilder();
+                if (mr.inputs != null)
+                {
+                    foreach (var ing in mr.inputs)
+                    {
+                        if (ing.item == null || ing.count <= 0) continue;
+                        if (inSb.Length > 0) inSb.Append(", ");
+                        inSb.Append($"{ing.count}\u00D7 {ing.item.displayName}");
+                    }
+                }
+                string machine = mr.recipeType switch
+                {
+                    VoxelEngine.Simulation.MachineRecipeType.Smelting   => "Furnace / Smelter",
+                    VoxelEngine.Simulation.MachineRecipeType.Crushing   => "Crusher",
+                    VoxelEngine.Simulation.MachineRecipeType.Assembling => "Assembler",
+                    VoxelEngine.Simulation.MachineRecipeType.Chemical   => "Chemical Plant",
+                    VoxelEngine.Simulation.MachineRecipeType.Washing    => "Ore Washer",
+                    _                                                   => mr.recipeType.ToString()
+                };
+                AddMethod(mr.outputItem, new CachedProductionMethod
+                {
+                    Machine = machine,
+                    Inputs  = inSb.Length > 0 ? inSb.ToString() : "None",
+                    Output  = $"{Mathf.Max(1, mr.outputCount)}\u00D7 {mr.outputItem.displayName}",
+                    Seconds = mr.processSeconds
+                });
+            }
+        }
+
+        private static string BuildRequiredItemCraftingInfo(ItemDefinition item, int have, int need)
+        {
+            EnsureProductionCache();
+            var sb = new System.Text.StringBuilder();
+            string status = have >= need ? "Ready" : $"Missing {need - have}";
+            sb.Append($"Available:  {have} / {need} required ({status})");
+
+            string key = ItemLookupKey(item);
+            if (_productionCache != null && _productionCache.TryGetValue(key, out var methods) && methods.Count > 0)
+            {
+                int shown = Mathf.Min(methods.Count, 3);
+                for (int i = 0; i < shown; i++)
+                {
+                    var m = methods[i];
+                    sb.AppendLine();
+                    if (shown > 1)
+                        sb.AppendLine($"\u2500\u2500 Method {i + 1} \u2500\u2500");
+                    sb.AppendLine($"Machine:    {m.Machine}");
+                    sb.AppendLine($"Inputs:     {m.Inputs}");
+                    sb.Append($"Output:     {m.Output}");
+                    string timeTxt = m.Seconds > 0f ? $"{m.Seconds:0.#}s" : "Instant";
+                    sb.Append($"\nCraft Time: {timeTxt}");
+                    if (!string.IsNullOrEmpty(m.RequiredResearch))
+                        sb.Append($"\nResearch:   {m.RequiredResearch}");
+                }
+                if (methods.Count > shown)
+                    sb.Append($"\n(+{methods.Count - shown} more production method{(methods.Count - shown > 1 ? "s" : "")})");
+            }
+            else
+            {
+                sb.Append("\nMachine:    Raw resource (gathered / mined in world)");
+            }
+            return sb.ToString();
         }
 
         /// <summary>Legacy no-op stub — kept for compile compatibility.</summary>

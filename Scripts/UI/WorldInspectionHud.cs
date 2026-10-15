@@ -53,8 +53,12 @@ namespace VoxelEngine.UI
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (uiRoot == null) return;
-            bool cardComplete = _card != null && _title != null && _detail != null
-                && _status != null && _healthRow != null && _healthFill != null && _healthLabel != null;
+            bool cardComplete = _card != null && _title != null && _title.parent != null
+                && _detail != null && _detail.parent != null
+                && _status != null && _status.parent != null
+                && _healthRow != null && _healthRow.parent != null
+                && _healthFill != null && _healthFill.parent != null
+                && _healthLabel != null && _healthLabel.parent != null;
             if (_uiRoot == uiRoot && cardComplete && _card.parent == uiRoot) return;
             _uiRoot = uiRoot;
             if (_card != null && _card.parent != null) _card.RemoveFromHierarchy();
@@ -230,8 +234,11 @@ namespace VoxelEngine.UI
             // detached one of the HUD's child elements. The controller supplies its
             // current HUD layer before ticking; this also keeps reloads self-healing.
             if (_uiRoot != null && _uiRoot.panel != null
-                && (_card == null || _card.parent != _uiRoot || _title == null
-                    || _detail == null || _status == null || _healthFill == null))
+                && (_card == null || _card.parent != _uiRoot
+                    || _title == null || _title.parent == null
+                    || _detail == null || _detail.parent == null
+                    || _status == null || _status.parent == null
+                    || _healthFill == null || _healthFill.parent == null))
                 EnsureMounted(_uiRoot);
             if (_card == null || _card.parent == null) return;
             // 14.64.0 — closing a UI OVER a hovered item never fires PointerLeave,

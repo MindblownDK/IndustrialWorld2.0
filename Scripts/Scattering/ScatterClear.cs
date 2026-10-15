@@ -6,10 +6,9 @@
 // must not refuse placements, and a machine or quarry claiming ground removes
 // the props standing on it.
 //
-// Trees destroyed through this path die as GAMEPLAY deaths: they are not
-// stamped as streaming teardown, so their stumps are recorded by the Tree's
-// own OnDestroy (17.17.2-dev) and they stay gone across save/load. Rocks and
-// other props carry no persistence and simply go.
+// Trees and non-mob scatter props destroyed through this path record their
+// removal in TreeHarvestPersistence so they stay gone across save/load and
+// only regrow via the in-game timer when unblocked and unpolluted.
 
 using UnityEngine;
 
@@ -19,39 +18,59 @@ namespace VoxelEngine.Scattering
     {
         /// <summary>The holder name ChunkScatter parents every spawned prop under.</summary>
         public const string HolderName = "__scatter";
+        public const string LegacyHolderName = "Scatter";
+
+        private static bool IsScatterHolder(Transform t)
+        {
+            if (t == null) return false;
+            string n = t.name;
+            return n == HolderName || n == LegacyHolderName;
+        }
 
         /// <summary>True when the collider belongs to a biome scatter prop: a
-        /// tree (component check, also covers editor-placed trees) or anything
-        /// parented under a chunk's __scatter holder (rocks, plants, props).</summary>
+        /// tree, a tracked non-mob scatter prop, or anything parented under a
+        /// chunk's Scatter holder (rocks, plants, props).</summary>
         public static bool IsScatterCollider(Collider collider)
         {
             if (collider == null) return false;
             if (collider.GetComponentInParent<VoxelEngine.Trees.Tree>() != null) return true;
+            if (collider.GetComponentInParent<ScatterHarvestTracker>() != null) return true;
             for (var t = collider.transform; t != null; t = t.parent)
-                if (t.name == HolderName) return true;
+                if (IsScatterHolder(t)) return true;
             return false;
         }
 
         /// <summary>The prop root to destroy for this collider: the child of the
-        /// __scatter holder it hangs under, or the tree's own game object when
-        /// the tree was not scatter-spawned. Null when not a scatter collider.</summary>
+        /// Scatter holder it hangs under, or the tree's / tracker's own game object
+        /// when not under a holder. Null when not a scatter collider.</summary>
         public static GameObject PropRootOf(Collider collider)
         {
             if (collider == null) return null;
             for (var t = collider.transform; t != null; t = t.parent)
             {
-                if (t.parent != null && t.parent.name == HolderName) return t.gameObject;
+                if (IsScatterHolder(t.parent)) return t.gameObject;
             }
+            var tracker = collider.GetComponentInParent<ScatterHarvestTracker>();
+            if (tracker != null) return tracker.gameObject;
             var tree = collider.GetComponentInParent<VoxelEngine.Trees.Tree>();
             return tree != null ? tree.gameObject : null;
         }
 
-        /// <summary>Destroy the scatter prop this collider belongs to. Trees
-        /// record their harvest through their own OnDestroy.</summary>
+        private static void RecordPropRemoval(GameObject root)
+        {
+            if (root == null) return;
+            ScatterHarvestTracker.RecordHarvestOnRoot(root);
+            var tree = root.GetComponentInChildren<VoxelEngine.Trees.Tree>(true);
+            if (tree != null)
+                tree.RecordHarvestPersistence();
+        }
+
+        /// <summary>Destroy the scatter prop this collider belongs to and persist its removal.</summary>
         public static bool DestroyProp(Collider collider)
         {
             var root = PropRootOf(collider);
             if (root == null) return false;
+            RecordPropRemoval(root);
             Object.Destroy(root);
             return true;
         }
@@ -68,6 +87,7 @@ namespace VoxelEngine.Scattering
                 if (!IsScatterCollider(hits[i])) continue;
                 var root = PropRootOf(hits[i]);
                 if (root == null) continue;
+                RecordPropRemoval(root);
                 Object.Destroy(root);
                 destroyed++;
             }

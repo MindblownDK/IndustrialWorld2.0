@@ -43,7 +43,30 @@ namespace VoxelEngine.EditorTools
             var items = LoadAssets<ItemDefinition>();
             var packs = new ScienceItem[4];
             for (int tier = 1; tier <= 3; tier++)
+            {
                 packs[tier] = FindPack(items, tier);
+                if (packs[tier] != null)
+                {
+                    Color expected = ScienceItem.GetTierColor(tier);
+                    if (packs[tier].tier != tier || packs[tier].iconTint != expected)
+                    {
+                        packs[tier].tier = tier;
+                        packs[tier].iconTint = expected;
+                        EditorUtility.SetDirty(packs[tier]);
+                    }
+                }
+            }
+
+            var labPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(Root + "/Prefabs/ResearchLab.prefab");
+            if (labPrefab != null)
+            {
+                var station = labPrefab.GetComponent<CraftingStation>();
+                if (station != null && station.tier != StationTier.None)
+                {
+                    station.tier = StationTier.None;
+                    EditorUtility.SetDirty(labPrefab);
+                }
+            }
 
             var wood = FindItem(items, Root + "/Items/Item_WoodLog.asset", "wood_log", "Wood Log");
             var stone = FindItem(items, Root + "/Items/Item_Stone.asset", "stone", "Stone");

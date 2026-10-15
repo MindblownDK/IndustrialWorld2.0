@@ -496,13 +496,18 @@ namespace VoxelEngine.UI
                 labels.Add(UIThemeManager.Label(themes[i]));
                 if (themes[i] == UIThemeManager.Current) selected = i;
             }
-            // Theme switching is reactive via OnThemeChanged - no full UI rebuild needed to avoid scroll jump.
-            p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; }));
+            p.Add(Segmented(labels, selected, i =>
+            {
+                UIThemeManager.Current = themes[i];
+                rebuild?.Invoke();
+            }));
             var themeDescLabel = Hint(UIThemeManager.DescriptionFor(UIThemeManager.Current));
             p.Add(themeDescLabel);
             var previewHolder = new VisualElement();
             previewHolder.Add(ThemePreview());
             p.Add(previewHolder);
+
+            Label codeLabel = null;
 
             // Helper to refresh preview in-place without rebuilding whole settings tab (prevents scroll jump)
             void RefreshPreview()
@@ -510,6 +515,8 @@ namespace VoxelEngine.UI
                 previewHolder.Clear();
                 previewHolder.Add(ThemePreview());
                 themeDescLabel.text = UIThemeManager.DescriptionFor(UIThemeManager.Current);
+                if (codeLabel != null)
+                    codeLabel.text = $"Code: {UIThemeManager.ExportThemeCode()}";
             }
 
             // The preview is a live view, not a snapshot. Unsubscribe when its
@@ -554,9 +561,14 @@ namespace VoxelEngine.UI
                     chip.style.marginRight = 5; chip.style.marginBottom = 5;
                     chip.style.backgroundColor = new StyleColor(pc);
                     T.Radius(chip, 5);
-                    T.Border(chip, 1, new Color(1,1,1,0.12f));
+                    bool activeChip = Mathf.Abs(pc.r - c.r) < 0.02f && Mathf.Abs(pc.g - c.g) < 0.02f && Mathf.Abs(pc.b - c.b) < 0.02f;
+                    T.Border(chip, activeChip ? 2 : 1, activeChip ? T.TextPrimary : new Color(1,1,1,0.12f));
                     Color cap = pc;
-                    chip.RegisterCallback<ClickEvent>(_ => { UIThemeManager.CustomAccent = cap; RefreshPreview(); });
+                    chip.RegisterCallback<ClickEvent>(_ =>
+                    {
+                        UIThemeManager.CustomAccent = cap;
+                        rebuild?.Invoke();
+                    });
                     chipRow.Add(chip);
                 }
                 p.Add(chipRow);
@@ -588,12 +600,12 @@ namespace VoxelEngine.UI
             }, T.AccentRed));
             p.Add(toolRow);
 
-            var code = new Label($"Code: {UIThemeManager.ExportThemeCode()}");
-            code.style.color = new StyleColor(T.TextMuted);
-            code.style.fontSize = 8;
-            code.style.whiteSpace = WhiteSpace.Normal;
-            code.style.marginTop = 6;
-            p.Add(code);
+            codeLabel = new Label($"Code: {UIThemeManager.ExportThemeCode()}");
+            codeLabel.style.color = new StyleColor(T.TextMuted);
+            codeLabel.style.fontSize = 8;
+            codeLabel.style.whiteSpace = WhiteSpace.Normal;
+            codeLabel.style.marginTop = 6;
+            p.Add(codeLabel);
 
             p.Add(T.Divider());
             p.Add(SectionLabel("Production Panel Accent"));
@@ -840,9 +852,26 @@ namespace VoxelEngine.UI
             row.style.flexDirection = FlexDirection.Row;
             row.style.flexWrap      = Wrap.Wrap;
 
+            int currentSelected = selected;
+            var segments = new List<VisualElement>(options.Count);
+            var labels = new List<Label>(options.Count);
+
+            void ApplySegmentStyles()
+            {
+                Color activeBg = new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.20f);
+                for (int j = 0; j < segments.Count; j++)
+                {
+                    bool isAct = j == currentSelected;
+                    var s = segments[j];
+                    var lbl = labels[j];
+                    s.style.backgroundColor = new StyleColor(isAct ? activeBg : T.BgSlot);
+                    T.Border(s, isAct ? 2 : 1, isAct ? T.AccentCyan : T.BorderDim);
+                    lbl.style.color = new StyleColor(isAct ? T.TextPrimary : T.TextSecondary);
+                }
+            }
+
             for (int i = 0; i < options.Count; i++)
             {
-                bool active = i == selected;
                 int idx = i;
 
                 var seg = new VisualElement();
@@ -854,20 +883,17 @@ namespace VoxelEngine.UI
                 seg.style.marginBottom    = 4;
                 seg.style.alignItems      = Align.Center;
                 seg.style.justifyContent  = Justify.Center;
-                Color segBg = active
-                    ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.20f)
-                    : T.BgSlot;
-                seg.style.backgroundColor = new StyleColor(segBg);
                 T.Radius(seg, T.ButtonRadius);
-                T.Border(seg, active ? 2 : 1, active ? T.AccentCyan : T.BorderDim);
 
                 var l = new Label(Prettify(options[i]));
                 l.style.fontSize = 12;
                 l.style.unityFontStyleAndWeight = FontStyle.Bold;
                 l.style.letterSpacing = 0.4f;
-                l.style.color = new StyleColor(active ? T.TextPrimary : T.TextSecondary);
                 l.pickingMode = PickingMode.Ignore;
                 seg.Add(l);
+
+                segments.Add(seg);
+                labels.Add(l);
 
                 // micro-interaction
                 seg.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
@@ -875,18 +901,25 @@ namespace VoxelEngine.UI
                 seg.RegisterCallback<MouseEnterEvent>(_ =>
                 {
                     seg.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
-                    if (!active) { seg.style.backgroundColor = new StyleColor(T.BgHover); T.Border(seg, 1, T.BorderBright); }
+                    if (idx != currentSelected) { seg.style.backgroundColor = new StyleColor(T.BgHover); T.Border(seg, 1, T.BorderBright); }
                 });
                 seg.RegisterCallback<MouseLeaveEvent>(_ =>
                 {
                     seg.style.scale = new StyleScale(new Scale(Vector3.one));
-                    if (!active) { seg.style.backgroundColor = new StyleColor(segBg); T.Border(seg, 1, T.BorderDim); }
+                    if (idx != currentSelected) { seg.style.backgroundColor = new StyleColor(T.BgSlot); T.Border(seg, 1, T.BorderDim); }
                 });
                 VoxelEngine.FX.UiAudio.MarkClickable(seg);
-                seg.RegisterCallback<ClickEvent>(_ => onSelect?.Invoke(idx));
+                seg.RegisterCallback<ClickEvent>(_ =>
+                {
+                    currentSelected = idx;
+                    ApplySegmentStyles();
+                    onSelect?.Invoke(idx);
+                });
 
                 row.Add(seg);
             }
+
+            ApplySegmentStyles();
             return row;
         }
 

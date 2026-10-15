@@ -76,6 +76,12 @@ namespace VoxelEngine.Networking
         [Tooltip("-1 keep world value, 0 off, 1 on. Offline death stays on unless this or the world file turns it off.")]
         public int offlineDeath = -1;
 
+        [Tooltip("-1 keep world value, 0 off, 1 on. Enables the 5-slot research queue.")]
+        public int researchQueueEnabled = -1;
+
+        [Tooltip("-1 keep world value, 0 off, 1 on. Shares and syncs research across team members.")]
+        public int teamSharedResearch = -1;
+
         [Tooltip("-1 keep world value, 0 off, 1 on.")]
         public int showDropVoidWarning = -1;
 
@@ -228,6 +234,8 @@ namespace VoxelEngine.Networking
             cfg.allowRuinLootRespawn = session.allowRuinLootRespawn ? 1 : 0;
             cfg.allowBannerPainting = session.allowBannerPainting ? 1 : 0;
             cfg.offlineDeath = session.offlineDeath ? 1 : 0;
+            cfg.researchQueueEnabled = session.researchQueueEnabled ? 1 : 0;
+            cfg.teamSharedResearch = session.teamSharedResearch ? 1 : 0;
             cfg.showDropVoidWarning = session.showDropVoidWarning ? 1 : 0;
             cfg.maxDroppedItems = session.maxDroppedItems;
             cfg.inventoryWeightPercent = session.inventoryWeightPercent;
@@ -250,6 +258,8 @@ namespace VoxelEngine.Networking
             if (cfg.allowRuinLootRespawn >= 0) session.allowRuinLootRespawn = cfg.allowRuinLootRespawn == 1;
             if (cfg.allowBannerPainting >= 0) session.allowBannerPainting = cfg.allowBannerPainting == 1;
             if (cfg.offlineDeath >= 0) session.offlineDeath = cfg.offlineDeath == 1;
+            if (cfg.researchQueueEnabled >= 0) session.researchQueueEnabled = cfg.researchQueueEnabled == 1;
+            if (cfg.teamSharedResearch >= 0) session.teamSharedResearch = cfg.teamSharedResearch == 1;
             if (cfg.showDropVoidWarning >= 0) session.showDropVoidWarning = cfg.showDropVoidWarning == 1;
             if (cfg.maxDroppedItems >= 0) session.maxDroppedItems = Mathf.Clamp(cfg.maxDroppedItems, 50, 10000);
             if (cfg.inventoryWeightPercent >= 0)

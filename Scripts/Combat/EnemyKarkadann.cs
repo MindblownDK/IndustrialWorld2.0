@@ -112,7 +112,8 @@ namespace VoxelEngine.Combat
 
                 case State.Approach:
                     if (!aggro) { _state = State.Wander; break; }
-                    if (distP <= chargeRange && Time.time >= _nextChargeAt)
+                    if (distP <= chargeRange && Time.time >= _nextChargeAt
+                        && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.2f))
                     {
                         _state = State.Windup; _stateTimer = chargeWindup;
                         // 17.19.0-dev: the pawing windup now plays on the body -
@@ -130,6 +131,11 @@ namespace VoxelEngine.Combat
                     spd = 0f; faceDir = toPlayer;          // stand still, track the player, telegraph
                     if (_stateTimer <= 0f)
                     {
+                        if (_player == null || !VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.2f))
+                        {
+                            _state = State.Approach;
+                            break;
+                        }
                         _chargeDir = toPlayer;             // lock the charge line on the player's current position
                         _state = State.Charge; _stateTimer = chargeDuration;
                         _anim?.Strike();                   // 17.19.0-dev: the lunge snap
@@ -139,7 +145,12 @@ namespace VoxelEngine.Combat
                 case State.Charge:
                     _stateTimer -= dt;
                     moveDir = _chargeDir; spd = chargeSpeed; faceDir = _chargeDir;
-                    if (_player != null && distP < 2.7f && Vector3.Distance(_player.position, pos) < 3.5f)
+                    if (!VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, pos + _chargeDir * 1.9f + up * 1.0f, 1.2f))
+                    {
+                        _state = State.Recover; _stateTimer = recoverTime; _nextChargeAt = Time.time + chargeCooldown;
+                    }
+                    else if (_player != null && distP < 2.7f && Vector3.Distance(_player.position, pos) < 3.5f
+                        && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.2f))
                     {
                         ChargeHit(up);
                         _state = State.Recover; _stateTimer = recoverTime; _nextChargeAt = Time.time + chargeCooldown;

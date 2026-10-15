@@ -14,7 +14,7 @@ namespace VoxelEngine.UI
     {
         private const float ShowSeconds = 2.15f;
         private const float FadeSeconds = 0.38f;
-        private const int LayoutRevision = 5;
+        private const int LayoutRevision = 6;
 
         private static VisualElement _root;
         private static VisualElement _card;
@@ -24,13 +24,13 @@ namespace VoxelEngine.UI
         private static ItemDefinition _lastItem;
         private static bool _observed;
         private static float _shownAt = -999f;
-        private static float _nextDuplicateSweep;
         private static int _mountedRevision;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (uiRoot == null) return;
             if (_root == uiRoot && _card != null && _card.parent == uiRoot
+                && _name != null && _name.parent != null
                 && _mountedRevision == LayoutRevision) return;
 
             _root = uiRoot;
@@ -66,31 +66,24 @@ namespace VoxelEngine.UI
             _card.Add(_bezel);
 
             var screen = new VisualElement { name = "HeldItemLcdScreen" };
-            screen.style.minWidth = 220;
+            screen.style.minWidth = 180;
             screen.style.maxWidth = 440;
-            screen.style.height = 30;
-            screen.style.paddingLeft = 8;
-            screen.style.paddingRight = 8;
+            screen.style.height = 28;
+            screen.style.paddingLeft = 10;
+            screen.style.paddingRight = 10;
+            screen.style.alignItems = Align.Center;
+            screen.style.justifyContent = Justify.Center;
             screen.style.overflow = Overflow.Hidden;
             screen.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.88f), 1f);
             LcdHudTheme.AddScanlines(screen, 2, top: 8f, spacing: 12f);
             _bezel.Add(screen);
 
-            var caption = LcdHudTheme.CaptionLabel("HELD ITEM");
-            caption.style.position = Position.Absolute;
-            caption.style.left = 8;
-            caption.style.top = 3;
-            screen.Add(caption);
-
             _name = new Label { name = "HeldItemLcdName" };
-            _name.style.position = Position.Absolute;
-            _name.style.left = 8;
-            _name.style.right = 8;
-            _name.style.bottom = 2;
             _name.style.fontSize = 12;
             _name.style.letterSpacing = 0.45f;
             _name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _name.style.unityTextAlign = TextAnchor.MiddleCenter;
             _name.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _name.style.whiteSpace = WhiteSpace.NoWrap;
             _name.style.overflow = Overflow.Hidden;
@@ -157,12 +150,10 @@ namespace VoxelEngine.UI
                 _lastItem = item;
                 if (item != null)
                 {
-                    _name.text = item.displayName ?? string.Empty;
-                    RemoveLegacyItemIdLabels(item);
+                    _name.text = !string.IsNullOrEmpty(item.displayName) ? item.displayName : item.name;
                     _shownAt = Time.unscaledTime;
                     _card.style.display = DisplayStyle.Flex;
                     _card.style.opacity = 0f;
-                    ScheduleDuplicateLabelSweep(_name.text);
                 }
                 else
                 {
@@ -171,11 +162,6 @@ namespace VoxelEngine.UI
             }
 
             if (_card.style.display == DisplayStyle.None) return;
-            if (Time.unscaledTime >= _nextDuplicateSweep)
-            {
-                _nextDuplicateSweep = Time.unscaledTime + 0.25f;
-                RemoveLegacyItemIdLabels(_lastItem);
-            }
             float age = Time.unscaledTime - _shownAt;
             if (age >= ShowSeconds)
             {
@@ -189,64 +175,6 @@ namespace VoxelEngine.UI
                     ? 1f - Mathf.Clamp01((age - (ShowSeconds - FadeSeconds)) / FadeSeconds)
                     : 1f;
             _card.style.opacity = opacity;
-        }
-
-        /// <summary>
-        /// Pre-LCD HUD passes sometimes retained an unnamed raw asset-id label across a
-        /// no-domain-reload Play session (for example "dirt_item") behind the display name.
-        /// Remove only raw identifiers for the currently held item; slot counts/keys remain.
-        /// </summary>
-        private static void RemoveLegacyItemIdLabels(ItemDefinition item)
-        {
-            if (item == null || _root == null) return;
-            var documentRoot = _root;
-            while (documentRoot.parent != null) documentRoot = documentRoot.parent;
-            string itemId = item.itemId ?? string.Empty;
-            string assetName = item.name ?? string.Empty;
-            string displayName = item.displayName ?? string.Empty;
-            var labels = new System.Collections.Generic.List<Label>();
-            documentRoot.Query<Label>().ForEach(label => labels.Add(label));
-            foreach (var label in labels)
-            {
-                if (label == null || label == _name) continue;
-                string text = label.text?.Trim() ?? string.Empty;
-                bool rawId = (!string.IsNullOrEmpty(itemId) && text.Equals(itemId, System.StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrEmpty(assetName) && text.Equals(assetName, System.StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrEmpty(itemId) && text.Equals(itemId + "_item", System.StringComparison.OrdinalIgnoreCase));
-                bool duplicateName = !string.IsNullOrEmpty(displayName)
-                    && text.Equals(displayName, System.StringComparison.OrdinalIgnoreCase)
-                    && OverlapsNameReadout(label);
-                if (rawId || duplicateName) label.RemoveFromHierarchy();
-            }
-        }
-
-        private static bool OverlapsNameReadout(Label candidate)
-        {
-            if (_name == null || candidate == null || _name.panel == null || candidate.panel != _name.panel)
-                return false;
-            Rect target = _name.worldBound;
-            Rect other = candidate.worldBound;
-            if (target.width <= 0f || target.height <= 0f || other.width <= 0f || other.height <= 0f)
-                return false;
-
-            float overlapWidth = Mathf.Max(0f, Mathf.Min(target.xMax, other.xMax) - Mathf.Max(target.xMin, other.xMin));
-            float overlapHeight = Mathf.Max(0f, Mathf.Min(target.yMax, other.yMax) - Mathf.Max(target.yMin, other.yMin));
-            float overlapArea = overlapWidth * overlapHeight;
-            float smallerArea = Mathf.Min(target.width * target.height, other.width * other.height);
-            return smallerArea > 0f && overlapArea / smallerArea >= 0.45f;
-        }
-
-        private static void ScheduleDuplicateLabelSweep(string expectedText)
-        {
-            if (_root == null) return;
-            var root = _root;
-            void Sweep()
-            {
-                if (_root != root || _name == null || _name.text != expectedText || _lastItem == null) return;
-                RemoveLegacyItemIdLabels(_lastItem);
-            }
-            root.schedule.Execute(Sweep).StartingIn(1);
-            root.schedule.Execute(Sweep).StartingIn(100);
         }
 
         private static void Hide()

@@ -709,6 +709,24 @@ namespace VoxelEngine.Player
                     return;   // never carve the terrain through a creature
                 }
 
+                // 2d) Non-tree, non-crop biome scatter prop (bushes, shrubs, small rocks, reeds, etc.)?
+                var scatterProp = hit.collider.GetComponentInParent<VoxelEngine.Scattering.ScatterHarvestTracker>();
+                if (scatterProp != null && !scatterProp.isTree)
+                {
+                    int dmg = Mathf.Max(10, (int)handStrength);
+                    float rate = handFireRate;
+                    var sStack = inventory.ActiveStack;
+                    if (!sStack.IsEmpty && sStack.item is ToolItem st)
+                    {
+                        dmg = Mathf.Max(10, (int)st.strength);
+                        rate = st.fireRate;
+                    }
+                    GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                    scatterProp.HitProp(dmg);
+                    _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
+                    return;
+                }
+
                 // 3) Voxel terrain.
                 MineVoxel(ray, hit);
                 return;
@@ -1210,11 +1228,16 @@ namespace VoxelEngine.Player
                 if (bed != null) { bed.ClaimAsSpawn(); return; }
 
                 var lab = hit.collider.GetComponentInParent<VoxelEngine.Research.ResearchLab>();
+                if (lab == null)
+                {
+                    var placedLabBlock = hit.collider.GetComponentInParent<PlacedBlock>();
+                    if (placedLabBlock != null)
+                        lab = placedLabBlock.GetComponentInChildren<VoxelEngine.Research.ResearchLab>(true);
+                }
                 if (lab != null)
                 {
                     lab.EnsureContainers();
-                    UI.GameUIController.Instance?.OpenContainer(lab.scienceInput);
-                    VoxelEngine.Research.ResearchUI.Instance?.Open();
+                    VoxelEngine.Research.ResearchUI.Instance?.Open(lab);
                     return;
                 }
 

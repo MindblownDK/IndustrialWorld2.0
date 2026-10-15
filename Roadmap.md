@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.20.4-dev`
-**Roadmap Version:** `17.20.4-dev`
-**Date:** 2026-10-12
+**Current Version:** `17.21.0-dev`
+**Roadmap Version:** `17.21.0-dev`
+**Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.21.0-dev - Research Queue & Team Sync, Scatter Persistence & Timed Regrowth, Crafting Tooltips, Predictable Wind, LOS Combat, and Movement & UI Fixes
+- Research gains a toggleable 5-slot queue and Team Shared Research across World Settings, Server Admin, and `server_config.json`, plus drag-to-pan canvas, Space-to-research, Green/Blue/Purple `I`/`II`/`III` science pack dots, hidden `0/N` costs on completed nodes, non-Assembler Research Lab tier, and unblocked Lab UI interaction
+- Trees and non-mob scatter persist across save/load via deterministic per-cell RNG and `ScatterHarvestTracker` and regrow only on an in-game timer when unpolluted and away from structures; `GameVersion` matches `17.21.0-dev`; weather debug hotkeys are Editor-only; `SettingsUI.InterfaceTab` live-updates active button state
+- Movement in dug holes avoids corner upward push via ankle-level floor recovery and shin-wall slope checks; enemy attacks and projectiles enforce line-of-sight; wind and pollution advection follow a predictable planet-tangent direction; `CodeLock` spans both sides of single doors; crafting required ingredients show recipe tooltips
+
 ### 17.20.4-dev - Keep Runtime Enemy Pose Data Out of Player Serialization
 - The Ghoul arm-pose cache is explicitly nonserialized and rebuilt at bind time, so Editor and player type layouts agree
 - Release builds no longer carry an unused private `infiniteHealth` copy; the development Inspector toggle is preserved
@@ -49,12 +54,6 @@
 - Ctrl+B stopped blinking the grass: the preference setter fired `OnChanged`, which `QualityPresetApplier` answers by force-rebuilding the GPU grass - the setter now persists directly (the visual polls it per frame), no event, no rebuild
 - Settings - Keybinds binds modifier combos: holding Ctrl during capture stores `Ctrl+X`, enforced by both input backends, while modifier keys still bind plain for Sprint/Slide; captures write their row in place instead of rebuilding the tab, so the scroll position survives; the wind-lines default is now literally `Ctrl+B` (migration v26, custom binds preserved) and the build wheel still owns plain B
 - The "two enemy prefabs overlapping" report was investigated and every code path ruled out (single-rig builders, full guest-cull destroy, tint-only variants, pose-only animator); the prefab assets live outside the sparse clone, so reproduction details were requested before any speculative change - nothing touched on the enemy side this round
-
-### 17.20.0-dev - Surface Wind Lines on Ctrl+B, Plus a Frame-Time Cleanup Pass
-- Subtle Astroneer-style streaks drift through the air just above the ground, reading the game's own `WindField` projected on the surface tangent and gated by atmosphere sampling - no air, no lines; density, rate and streak length all scale with live wind, faint at a breeze, long and fast in a storm
-- One velocity-stretched particle system on the weather follow rig (self-healed like every weather subsystem, zero wiring, zero per-frame allocations); Ctrl+B toggles with a toast, the key half rebinds in Settings - Keybinds as "Ctrl + B", the preference persists and mirrors into a Settings - Display row; plain B still opens the build wheel - the wheel ignores its open edge while Ctrl is held
-- Perf pass after "laggy and chunky": wireless power transmitters stop scanning the whole scene and allocating every frame (staggered 2 Hz scans into a reused list, per-frame delivery semantics preserved); the per-frame all-chunk collider-window sweep with native mesh queries throttles to 5 Hz inside its 0.85-chunk margin; the 3-second SphereWorld diagnostics (double chunk walk + voxel sampling + stack-trace-carrying log) and the 10-second weather heartbeat become editor/dev-only
-- A full static audit of every Update/LateUpdate/FixedUpdate body verified the streaming, meshing, scatter, pollution, spawner, hostile-sync and audio paths are already jobified, budgeted or throttled; remaining chunky candidates (mesh-upload spikes, scatter bursts, GPU readback) need a live profiler and a report of exactly when they bite
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

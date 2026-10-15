@@ -586,7 +586,7 @@ namespace VoxelEngine.Environment
             var active = GravityProvider.ActiveBody;
             string activeName = active != null && active.settings != null ? active.settings.bodyName : string.Empty;
             var wind = WindSystem.Instance;
-            Vector3 windWorld = wind != null ? wind.GetWindDirection() * wind.GetWindSpeed() : Vector3.zero;
+            float windSpeed = wind != null ? wind.GetWindSpeed() : 11.5f;
             float rain = WeatherManager.Instance != null && WeatherManager.Instance.IsPlanetPrecipitating
                 ? WeatherManager.Instance.Intensity : 0f;
 
@@ -605,11 +605,9 @@ namespace VoxelEngine.Environment
 
                 bool isActive = !string.IsNullOrEmpty(activeName)
                     && string.Equals(bodyName, activeName, StringComparison.OrdinalIgnoreCase);
-                Vector3 localWind = isActive && active != null
-                    ? active.transform.InverseTransformVector(windWorld) : Vector3.zero;
-                Vector3Int windStep = DominantStep(localWind);
-                float moveShare = windStep == Vector3Int.zero ? 0f
-                    : Mathf.Clamp(localWind.magnitude * dt / CellSizeMetres, 0f, 0.22f);
+                float baseMoveShare = isActive
+                    ? Mathf.Clamp(windSpeed * dt / CellSizeMetres, 0f, 0.22f)
+                    : 0f;
 
                 float airRetention = Mathf.Exp(-0.00096f * dt);
                 float washShare = isActive && rain > 0f
@@ -632,6 +630,10 @@ namespace VoxelEngine.Environment
                         climateLoad = pair.Value.climateLoad * climateRetention,
                         orbitalDebris = pair.Value.orbitalDebris * debrisRetention,
                     };
+
+                    Vector3 localWindDir = WindSystem.GetPrevailingLocalDirection(CellCentre(pair.Key));
+                    Vector3Int windStep = DominantStep(localWindDir);
+                    float moveShare = windStep == Vector3Int.zero ? 0f : baseMoveShare;
 
                     float movedAir = retained.airborneSmog * moveShare;
                     retained.airborneSmog -= movedAir;

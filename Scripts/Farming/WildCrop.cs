@@ -47,6 +47,7 @@ namespace VoxelEngine.Farming
                         crop.icon,
                         new Color(0.50f, 0.80f, 0.30f));
                 }
+                VoxelEngine.Scattering.ScatterHarvestTracker.RecordHarvestOnRoot(gameObject);
                 Destroy(gameObject);
                 return true;
             }

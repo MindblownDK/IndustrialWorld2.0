@@ -41,7 +41,7 @@ namespace VoxelEngine.Trees
             if (_streamingTeardown) return;
             if (!gameObject.scene.isLoaded) return;
             if (ChunkScatter.WorldTeardownActive) return;
-            TreeHarvestPersistence.RecordHarvested(ResolveStorePath(), ResolveIdentity());
+            RecordHarvestPersistence();
         }
 
         /// <summary>The recorded store path, or the live world's when this instance
@@ -87,16 +87,52 @@ namespace VoxelEngine.Trees
             hp -= dealt;
             if (hp <= 0)
             {
-                TreeHarvestPersistence.RecordHarvested(scatterPersistencePath, stableScatterIdentity);
+                RecordHarvestPersistence();
                 int yield = Random.Range(minLogs, maxLogs + 1);
                 if (logItem != null)
                 {
                     var inv = Object.FindAnyObjectByType<Inventory>();
                     if (inv != null) inv.Add(logItem, yield);
                 }
-                Destroy(gameObject);
+                Destroy(ResolveScatterRoot());
             }
             return dealt;
+        }
+
+        public void RecordHarvestPersistence()
+        {
+            _streamingTeardown = true;
+            GameObject root = ResolveScatterRoot();
+            ScatterHarvestTracker.RecordHarvestOnRoot(root);
+
+            var sphere = GetComponentInParent<VoxelEngine.Cosmos.SphereWorld>()
+                ?? (VoxelEngine.Core.ActiveWorld.Current as VoxelEngine.Cosmos.SphereWorld);
+            string storePath = ResolveStorePath();
+
+            Transform bodyRoot = sphere != null && sphere.body != null ? sphere.body.transform : root.transform.root;
+            Vector3 localPos = bodyRoot != null ? bodyRoot.InverseTransformPoint(root.transform.position) : root.transform.position;
+
+            string identity = ResolveIdentity();
+            if (string.IsNullOrWhiteSpace(identity))
+            {
+                Vector3Int cell = new Vector3Int(
+                    Mathf.RoundToInt(localPos.x / VoxelEngine.Core.VoxelConstants.VOXEL_SIZE),
+                    Mathf.RoundToInt(localPos.y / VoxelEngine.Core.VoxelConstants.VOXEL_SIZE),
+                    Mathf.RoundToInt(localPos.z / VoxelEngine.Core.VoxelConstants.VOXEL_SIZE));
+                identity = TreeHarvestPersistence.MakeIdentity(cell);
+            }
+
+            TreeHarvestPersistence.RecordHarvested(storePath, identity, localPos, isTree: true);
+        }
+
+        private GameObject ResolveScatterRoot()
+        {
+            for (Transform t = transform; t != null; t = t.parent)
+            {
+                if (t.parent != null && (t.parent.name == "__scatter" || t.parent.name == "Scatter"))
+                    return t.gameObject;
+            }
+            return gameObject;
         }
     }
 }

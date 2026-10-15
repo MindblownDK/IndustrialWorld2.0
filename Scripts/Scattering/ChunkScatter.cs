@@ -11,6 +11,104 @@ using VoxelEngine.Materials;
 namespace VoxelEngine.Scattering
 {
     /// <summary>
+    /// Tracks a deterministic non-mob scatter instance (tree, wild crop, bush, rock,
+    /// crystal, reed, etc.) so harvesting or clearing it records its body-local
+    /// identity and starts its in-game regrowth timer in <see cref="TreeHarvestPersistence"/>.
+    /// Chunk pooling/unloading calls <see cref="ChunkScatter.MarkScatterTeardown(Transform)"/> first
+    /// so streaming teardown never records a false harvest.
+    /// </summary>
+    [DisallowMultipleComponent]
+    public sealed class ScatterHarvestTracker : MonoBehaviour
+    {
+        public string storePath;
+        public string scatterIdentity;
+        public Vector3 localSurface;
+        public bool isTree;
+        public int hp = 30;
+
+        [System.NonSerialized] public bool suppressDestroyRecord;
+
+        private static bool s_quitting;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void InitQuitHook()
+        {
+            s_quitting = false;
+            Application.quitting -= OnAppQuitting;
+            Application.quitting += OnAppQuitting;
+        }
+
+        private static void OnAppQuitting() => s_quitting = true;
+
+        private void OnApplicationQuit() => s_quitting = true;
+
+        public void MarkStreamingTeardown() => suppressDestroyRecord = true;
+
+        public void RecordHarvestNow()
+        {
+            suppressDestroyRecord = true;
+            if (string.IsNullOrWhiteSpace(storePath))
+            {
+                var sphere = GetComponentInParent<SphereWorld>()
+                    ?? (ActiveWorld.Current as SphereWorld);
+                storePath = TreeHarvestPersistence.GetStorePath(sphere);
+            }
+            if (string.IsNullOrWhiteSpace(scatterIdentity))
+            {
+                var sphere = GetComponentInParent<SphereWorld>()
+                    ?? (ActiveWorld.Current as SphereWorld);
+                Transform root = sphere != null && sphere.body != null ? sphere.body.transform : transform.root;
+                Vector3 local = root != null ? root.InverseTransformPoint(transform.position) : transform.position;
+                if (localSurface.sqrMagnitude < 0.0001f) localSurface = local;
+                Vector3Int cell = new Vector3Int(
+                    Mathf.RoundToInt(local.x / VoxelConstants.VOXEL_SIZE),
+                    Mathf.RoundToInt(local.y / VoxelConstants.VOXEL_SIZE),
+                    Mathf.RoundToInt(local.z / VoxelConstants.VOXEL_SIZE));
+                scatterIdentity = TreeHarvestPersistence.MakeIdentity(cell);
+            }
+            TreeHarvestPersistence.RecordHarvested(storePath, scatterIdentity, localSurface, isTree);
+        }
+
+        public static void RecordHarvestOnRoot(GameObject target)
+        {
+            if (target == null) return;
+            var tracker = target.GetComponentInParent<ScatterHarvestTracker>();
+            if (tracker == null) tracker = target.GetComponentInChildren<ScatterHarvestTracker>(true);
+            if (tracker != null)
+                tracker.RecordHarvestNow();
+        }
+
+        public static void MarkScatterTeardown(GameObject root)
+        {
+            if (root == null) return;
+            var trackers = root.GetComponentsInChildren<ScatterHarvestTracker>(true);
+            for (int i = 0; i < trackers.Length; i++)
+            {
+                if (trackers[i] != null)
+                    trackers[i].suppressDestroyRecord = true;
+            }
+        }
+
+        public bool HitProp(int damage)
+        {
+            hp -= Mathf.Max(1, damage);
+            if (hp > 0) return false;
+            RecordHarvestNow();
+            Destroy(gameObject);
+            return true;
+        }
+
+        private void OnDestroy()
+        {
+            if (suppressDestroyRecord || s_quitting || !Application.isPlaying) return;
+            if (ChunkScatter.WorldTeardownActive) return;
+            if (!gameObject.scene.isLoaded) return;
+            if (string.IsNullOrWhiteSpace(storePath) || string.IsNullOrWhiteSpace(scatterIdentity)) return;
+            TreeHarvestPersistence.RecordHarvested(storePath, scatterIdentity, localSurface, isTree);
+        }
+    }
+
+    /// <summary>
     /// Places biome scatter on the actual exterior of streamed terrain.
     ///
     /// Spherical worlds use SphereWorld's sampled radial surface instead of a global-Y
@@ -21,6 +119,8 @@ namespace VoxelEngine.Scattering
     /// </summary>
     public static class ChunkScatter
     {
+        private const string HolderName = "__scatter";
+
         private sealed class Reservation
         {
             public GameObject instance;
@@ -67,6 +167,7 @@ namespace VoxelEngine.Scattering
         /// destroyed, and mark the window in which scatter deaths are streaming.</summary>
         public static void ForgetWorld(IChunkScatterWorld world)
         {
+            TreeHarvestPersistence.FlushAll(clearMemoryCache: false);
             if (world != null) s_reservations.Remove(world);
             // 17.20.2-dev: detached creatures outlive even their chunk root's
             // destroy, so the teardown window ends any still tracked against a
@@ -87,15 +188,22 @@ namespace VoxelEngine.Scattering
             s_worldTeardown = true;
         }
 
-        /// <summary>Stamp every tree under a scatter holder that is about to be
+        /// <summary>Stamp every tree and scatter tracker under a scatter holder that is about to be
         /// destroyed for streaming reasons, so its OnDestroy never records a harvest.
         /// A fresh world's first scatter pass clears the teardown window again.</summary>
         public static void MarkScatterTeardown(Transform holder)
         {
             if (holder == null) return;
-            var trees = holder.GetComponentsInChildren<VoxelEngine.Trees.Tree>(true);
+            MarkScatterTeardown(holder.gameObject);
+        }
+
+        public static void MarkScatterTeardown(GameObject holderGo)
+        {
+            if (holderGo == null) return;
+            var trees = holderGo.GetComponentsInChildren<VoxelEngine.Trees.Tree>(true);
             for (int i = 0; i < trees.Length; i++)
                 if (trees[i] != null) trees[i].MarkStreamingTeardown();
+            ScatterHarvestTracker.MarkScatterTeardown(holderGo);
         }
 
         public static void Populate(IChunkScatterWorld world, Chunk chunk, BiomeRegistry registry, int seed)
@@ -110,7 +218,7 @@ namespace VoxelEngine.Scattering
 
             // Clear previously spawned scatter when a chunk is explicitly repopulated. Pool
             // returns also disable the holder, and reservations are pruned before next use.
-            var existing = chunk.go.transform.Find("__scatter");
+            var existing = chunk.go.transform.Find(HolderName);
             if (existing != null)
             {
                 RemoveReservationsOwnedBy(world, existing);
@@ -125,16 +233,11 @@ namespace VoxelEngine.Scattering
             // A hashed quarter-sample retains roughly one candidate per 4 square metres
             // without the height/parity blind spots of the previous 2 m XYZ lattice.
             const int CandidateStride = 1;
-            var holder = new GameObject("__scatter");
+            var holder = new GameObject(HolderName);
             // Chunk placement is complete before deferred scatter runs. Keep the holder at the
             // chunk origin so its children remain body-relative if the planet transform moves.
             holder.transform.SetParent(chunk.go.transform, worldPositionStays: false);
 
-            int chunkSeed = seed
-                          ^ (chunk.coord.x * 73856093)
-                          ^ (chunk.coord.y * 19349663)
-                          ^ (chunk.coord.z * 83492791);
-            var rng = new Unity.Mathematics.Random((uint)math.max(1, chunkSeed));
             var sphere = world as SphereWorld;
             string treeStorePath = TreeHarvestPersistence.GetStorePath(world);
             bool isSphere = sphere != null;
@@ -191,8 +294,9 @@ namespace VoxelEngine.Scattering
                 bool placed = false;
 
                 // Structures get first claim on a candidate so common scenery cannot hide a
-                // rare ruin. The remaining categories share the same deterministic RNG and
-                // one-result-per-surface-point budget as the original scatter array.
+                // rare ruin. Each (localVoxel, categoryPass) derives its own deterministic
+                // RNG so mined voxels or ecology changes in one cell never shift the RNG
+                // sequence for any other cell in the chunk.
                 for (int categoryPass = 0; categoryPass < 4; categoryPass++)
                 {
                     BiomeDefinition.ScatterEntry[] entries = categoryPass switch
@@ -204,9 +308,22 @@ namespace VoxelEngine.Scattering
                     };
                     if (entries == null || entries.Length == 0) continue;
 
-                    int firstEntry = rng.NextInt(entries.Length);
+                    uint cellSeed = math.hash(new int4(
+                        worldX,
+                        worldY,
+                        worldZ,
+                        seed + categoryPass * 19349663));
+                    var cellRng = new Unity.Mathematics.Random(math.max(1u, cellSeed));
+
+                    int firstEntry = cellRng.NextInt(entries.Length);
                     for (int entryOffset = 0; entryOffset < entries.Length; entryOffset++)
                     {
+                        float roll = cellRng.NextFloat();
+                        float scaleT = cellRng.NextFloat();
+                        float yawDeg = cellRng.NextFloat(0f, 360f);
+                        float flatOffsetX = cellRng.NextFloat(-0.4f, 0.4f);
+                        float flatOffsetZ = cellRng.NextFloat(-0.4f, 0.4f);
+
                         var entry = entries[(firstEntry + entryOffset) % entries.Length];
                         if (entry.prefab == null || entry.density <= 0f) continue;
                         if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
@@ -262,21 +379,21 @@ namespace VoxelEngine.Scattering
                                     ? ecologyReading.PassiveActivity01
                                     : ecologyReading.FloraSpawnMultiplier;
                         }
-                        if (rng.NextFloat() > Mathf.Clamp01(effectiveDensity)) continue;
+                        if (roll > Mathf.Clamp01(effectiveDensity)) continue;
 
-                        float scale = rng.NextFloat(entry.minScale, entry.maxScale);
+                        float scale = Mathf.Lerp(entry.minScale, entry.maxScale, scaleT);
                         if (scale <= 0f) continue;
 
                         Vector3 localBodyPos = localSurface;
                         if (!isSphere)
                         {
                             // Flat compatibility only. New planet work never uses this path.
-                            localBodyPos += new Vector3(rng.NextFloat(-0.4f, 0.4f), 0f, rng.NextFloat(-0.4f, 0.4f));
+                            localBodyPos += new Vector3(flatOffsetX, 0f, flatOffsetZ);
                         }
 
                         Quaternion randomYaw = isSphere
-                            ? Quaternion.AngleAxis(rng.NextFloat(0f, 360f), upDir)
-                            : Quaternion.Euler(0f, rng.NextFloat(0f, 360f), 0f);
+                            ? Quaternion.AngleAxis(yawDeg, upDir)
+                            : Quaternion.Euler(0f, yawDeg, 0f);
                         Quaternion localBodyRot = isSphere
                             ? randomYaw * Quaternion.FromToRotation(Vector3.up, upDir)
                             : randomYaw;
@@ -289,13 +406,15 @@ namespace VoxelEngine.Scattering
                         if ((isEnemy || isPassiveAnimal) && world is SphereWorld dryWorld
                             && !dryWorld.IsDryFooting(worldPos)) continue;
                         bool isTree = IsTreePrefab(entry.prefab);
-                        string treeIdentity = isTree
+                        bool isPersistentScatter = categoryPass == 1 && !isBuilding && !isEnemy && !isPassiveAnimal;
+                        string scatterIdentity = (isTree || isPersistentScatter)
                             ? TreeHarvestPersistence.MakeIdentity(localVoxel)
                             : null;
-                        // Scatter coordinates and the body's seed define the same tree after
-                        // reload. Skip a recorded stump before instantiating its deterministic
-                        // replacement, but leave all authored scatter choices and voxel data intact.
-                        if (isTree && TreeHarvestPersistence.IsHarvested(treeStorePath, treeIdentity))
+                        // Scatter coordinates and the body's seed define the same tree or non-mob
+                        // scatter prop after reload. Skip a recorded removal until its in-game
+                        // regrowth timer finishes.
+                        if ((isTree || isPersistentScatter)
+                            && TreeHarvestPersistence.IsHarvested(treeStorePath, scatterIdentity, localSurface))
                         {
                             placed = true;
                             break;
@@ -312,48 +431,219 @@ namespace VoxelEngine.Scattering
                                     : Mathf.Max(0.55f, scale * 0.70f);
                         if (IsBlocked(world, holder.transform, worldPos, worldUp, clearRadius)) continue;
 
-                        GameObject instance = Object.Instantiate(entry.prefab, worldPos, worldRot, holder.transform);
-                        instance.transform.localScale = Vector3.one * scale;
-                        if (isLivingFlora && instance.GetComponentInChildren<PollutionSensitiveFlora>(true) == null)
-                            instance.AddComponent<PollutionSensitiveFlora>();
-                        if (isTree)
-                        {
-                            var tree = instance.GetComponentInChildren<VoxelEngine.Trees.Tree>(true);
-                            if (tree == null)
-                            {
-                                tree = instance.AddComponent<VoxelEngine.Trees.Tree>();
-                                tree.maxHp = 80;
-                                tree.hp = 80;
-                                tree.minLogs = 2;
-                                tree.maxLogs = 4;
-                            }
-                            tree.scatterPersistencePath = treeStorePath;
-                            tree.stableScatterIdentity = treeIdentity;
-                        }
-                        if (instance.GetComponentInChildren<Collider>() == null)
-                        {
-                            var col = instance.AddComponent<CapsuleCollider>();
-                            col.height = isTree ? 4f : 1.5f;
-                            col.radius = isTree ? 0.6f : 0.45f;
-                            col.center = new Vector3(0f, col.height * 0.5f, 0f);
-                        }
-                        Register(world, instance, worldPos, clearRadius);
-                        if (isEnemy || isPassiveAnimal)
-                        {
-                            // 17.20.2-dev: tracked per chunk so repopulate, pool
-                            // return and chunk dispose can end them - they detached
-                            // from the holder on Awake and would otherwise outlive
-                            // every teardown path.
-                            if (!s_chunkCreatures.TryGetValue(chunk, out var creatures))
-                                s_chunkCreatures[chunk] = creatures = new List<GameObject>(4);
-                            creatures.Add(instance);
-                        }
+                        SpawnScatterInstance(
+                            world, chunk, holder.transform, entry.prefab,
+                            worldPos, worldRot, scale, clearRadius,
+                            isLivingFlora, isTree, isPersistentScatter,
+                            isEnemy, isPassiveAnimal,
+                            treeStorePath, scatterIdentity, localSurface);
                         placed = true;
                         break; // one authored scatter choice per validated surface point
                     }
                     if (placed) break;
                 }
             }
+        }
+
+        private static GameObject SpawnScatterInstance(
+            IChunkScatterWorld world,
+            Chunk chunk,
+            Transform holderTransform,
+            GameObject prefab,
+            Vector3 worldPos,
+            Quaternion worldRot,
+            float scale,
+            float clearRadius,
+            bool isLivingFlora,
+            bool isTree,
+            bool isPersistentScatter,
+            bool isEnemy,
+            bool isPassiveAnimal,
+            string treeStorePath,
+            string scatterIdentity,
+            Vector3 localSurface)
+        {
+            GameObject instance = Object.Instantiate(prefab, worldPos, worldRot, holderTransform);
+            instance.transform.localScale = Vector3.one * scale;
+            if (isLivingFlora && instance.GetComponentInChildren<PollutionSensitiveFlora>(true) == null)
+                instance.AddComponent<PollutionSensitiveFlora>();
+
+            if (isPersistentScatter || isTree)
+            {
+                var tracker = instance.GetComponent<ScatterHarvestTracker>();
+                if (tracker == null) tracker = instance.AddComponent<ScatterHarvestTracker>();
+                tracker.storePath = treeStorePath;
+                tracker.scatterIdentity = scatterIdentity;
+                tracker.localSurface = localSurface;
+                tracker.isTree = isTree;
+            }
+
+            if (isTree)
+            {
+                var trees = instance.GetComponentsInChildren<VoxelEngine.Trees.Tree>(true);
+                if (trees == null || trees.Length == 0)
+                {
+                    var tree = instance.AddComponent<VoxelEngine.Trees.Tree>();
+                    tree.maxHp = 80;
+                    tree.hp = 80;
+                    tree.minLogs = 2;
+                    tree.maxLogs = 4;
+                    tree.scatterPersistencePath = treeStorePath;
+                    tree.stableScatterIdentity = scatterIdentity;
+                }
+                else
+                {
+                    for (int t = 0; t < trees.Length; t++)
+                    {
+                        if (trees[t] == null) continue;
+                        trees[t].scatterPersistencePath = treeStorePath;
+                        trees[t].stableScatterIdentity = scatterIdentity;
+                    }
+                }
+            }
+
+            if (instance.GetComponentInChildren<Collider>() == null)
+            {
+                var col = instance.AddComponent<CapsuleCollider>();
+                col.height = isTree ? 4f : 1.5f;
+                col.radius = isTree ? 0.6f : 0.45f;
+                col.center = new Vector3(0f, col.height * 0.5f, 0f);
+            }
+
+            Register(world, instance, worldPos, clearRadius);
+            if (isEnemy || isPassiveAnimal)
+            {
+                // 17.20.2-dev: tracked per chunk so repopulate, pool
+                // return and chunk dispose can end them - they detached
+                // from the holder on Awake and would otherwise outlive
+                // every teardown path.
+                if (!s_chunkCreatures.TryGetValue(chunk, out var creatures))
+                    s_chunkCreatures[chunk] = creatures = new List<GameObject>(4);
+                creatures.Add(instance);
+            }
+            return instance;
+        }
+
+        /// <summary>
+        /// Respawns a single deterministic non-mob scatter entry at <paramref name="localVoxel"/>
+        /// when its in-game regrowth timer finishes and its owning chunk is currently loaded.
+        /// </summary>
+        public static bool TryRespawnAtVoxel(SphereWorld world, BiomeRegistry registry, int seed, Vector3Int localVoxel)
+        {
+            if (world == null || world.body == null || registry == null || registry.biomes == null) return false;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            Vector3Int chunkCoord = new Vector3Int(
+                Mathf.FloorToInt((float)localVoxel.x / S),
+                Mathf.FloorToInt((float)localVoxel.y / S),
+                Mathf.FloorToInt((float)localVoxel.z / S));
+
+            if (!world.TryGetChunk(chunkCoord, out Chunk chunk) || chunk == null || chunk.go == null || !chunk.isScattered)
+                return false;
+
+            int x = localVoxel.x - chunkCoord.x * S;
+            int y = localVoxel.y - chunkCoord.y * S;
+            int z = localVoxel.z - chunkCoord.z * S;
+            if (x < 0 || x >= S || y < 0 || y >= S || z < 0 || z >= S) return false;
+
+            Voxel voxel = chunk.GetVoxelLocal(x, y, z);
+            if (!voxel.IsSolid || IsLiquid(voxel)) return false;
+            if (!world.TryGetExteriorSurface(localVoxel, out Vector3 localSurface, out Vector3 upDir)) return false;
+
+            float altitude = localSurface.magnitude;
+            if (altitude <= world.SeaLevel) return false;
+
+            byte topMat = voxel.material;
+            float effectiveAltitude = altitude - world.SeaLevel + 96f;
+            float2 climate = SphereDensity.SampleClimate(seed, (float3)upDir);
+            BiomeDefinition biome = PickBiome(registry, climate, altitude - world.SeaLevel, topMat);
+            if (biome == null || biome.scatter == null || biome.scatter.Length == 0) return false;
+
+            const int categoryPass = 1;
+            BiomeDefinition.ScatterEntry[] entries = biome.scatter;
+            uint cellSeed = math.hash(new int4(
+                localVoxel.x,
+                localVoxel.y,
+                localVoxel.z,
+                seed + categoryPass * 19349663));
+            var cellRng = new Unity.Mathematics.Random(math.max(1u, cellSeed));
+            string treeStorePath = TreeHarvestPersistence.GetStorePath(world);
+            string scatterIdentity = TreeHarvestPersistence.MakeIdentity(localVoxel);
+
+            int firstEntry = cellRng.NextInt(entries.Length);
+            for (int entryOffset = 0; entryOffset < entries.Length; entryOffset++)
+            {
+                float roll = cellRng.NextFloat();
+                float scaleT = cellRng.NextFloat();
+                float yawDeg = cellRng.NextFloat(0f, 360f);
+                cellRng.NextFloat(-0.4f, 0.4f);
+                cellRng.NextFloat(-0.4f, 0.4f);
+
+                var entry = entries[(firstEntry + entryOffset) % entries.Length];
+                if (entry.prefab == null || entry.density <= 0f) continue;
+                if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
+                if (IsBuildingPrefab(entry.prefab) || IsEnemyPrefab(entry.prefab) || IsPassiveAnimalPrefab(entry.prefab))
+                    continue;
+
+                bool isLivingFlora = IsLivingFloraPrefab(entry.prefab);
+                if (topMat == (byte)MaterialId.Stone && isLivingFlora)
+                    continue;
+
+                bool isPalm = entry.prefab.name.IndexOf("palm", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isPalm && (topMat != (byte)MaterialId.Sand
+                    || altitude - world.SeaLevel > 12f
+                    || ((biome.biomeName ?? "").IndexOf("beach", System.StringComparison.OrdinalIgnoreCase) < 0
+                        && (biome.biomeName ?? "").IndexOf("ocean", System.StringComparison.OrdinalIgnoreCase) < 0))) continue;
+
+                float effectiveDensity = isPalm ? Mathf.Min(entry.density, 0.001f) : entry.density;
+                Transform rootTransform = chunk.go.transform.parent;
+                Vector3 ecologyPosition = rootTransform != null
+                    ? rootTransform.TransformPoint(localSurface)
+                    : localSurface;
+                if (isLivingFlora)
+                {
+                    EcologyReading ecologyReading = EcologyPressure.Sample(ecologyPosition);
+                    if (ecologyReading.Pressure01 >= TreeHarvestPersistence.MaxRegrowthPollutionPressure01)
+                        return false;
+                    effectiveDensity *= ecologyReading.FloraSpawnMultiplier;
+                }
+                if (roll > Mathf.Clamp01(effectiveDensity)) continue;
+
+                float scale = Mathf.Lerp(entry.minScale, entry.maxScale, scaleT);
+                if (scale <= 0f) continue;
+
+                Quaternion randomYaw = Quaternion.AngleAxis(yawDeg, upDir);
+                Quaternion localBodyRot = randomYaw * Quaternion.FromToRotation(Vector3.up, upDir);
+
+                Vector3 worldPos = rootTransform != null ? rootTransform.TransformPoint(localSurface) : localSurface;
+                Vector3 worldUp = rootTransform != null ? rootTransform.TransformDirection(upDir).normalized : upDir;
+                Quaternion worldRot = rootTransform != null ? rootTransform.rotation * localBodyRot : localBodyRot;
+
+                if (IsNearPlayerStructure(worldPos, worldUp, TreeHarvestPersistence.StructureBlockRegrowthRadius))
+                    return false;
+
+                Transform holderTransform = chunk.go.transform.Find(HolderName);
+                if (holderTransform == null)
+                {
+                    var holderGo = new GameObject(HolderName);
+                    holderGo.transform.SetParent(chunk.go.transform, worldPositionStays: false);
+                    holderTransform = holderGo.transform;
+                }
+
+                bool isTree = IsTreePrefab(entry.prefab);
+                float clearRadius = isTree
+                    ? Mathf.Max(2.4f, scale * 2.25f)
+                    : Mathf.Max(0.55f, scale * 0.70f);
+                if (IsBlocked(world, holderTransform, worldPos, worldUp, clearRadius)) return false;
+
+                SpawnScatterInstance(
+                    world, chunk, holderTransform, entry.prefab,
+                    worldPos, worldRot, scale, clearRadius,
+                    isLivingFlora, isTree, isPersistentScatter: true,
+                    isEnemy: false, isPassiveAnimal: false,
+                    treeStorePath, scatterIdentity, localSurface);
+                return true;
+            }
+            return false;
         }
 
         private static bool HasPotentialRadialExposure(IChunkScatterWorld world, Chunk chunk, int x, int y, int z, Vector3Int localVoxel)
@@ -371,12 +661,22 @@ namespace VoxelEngine.Scattering
                 nx < 0 ? -1 : nx >= S ? 1 : 0,
                 ny < 0 ? -1 : ny >= S ? 1 : 0,
                 nz < 0 ? -1 : nz >= S ? 1 : 0);
-            if (!world.TryGetChunk(neighbourCoord, out Chunk neighbour) || neighbour == null || !neighbour.isGenerated)
-                return true;
-            int wrappedX = (nx % S + S) % S;
-            int wrappedY = (ny % S + S) % S;
-            int wrappedZ = (nz % S + S) % S;
-            return !neighbour.GetVoxelLocal(wrappedX, wrappedY, wrappedZ).IsSolid;
+            if (world.TryGetChunk(neighbourCoord, out Chunk neighbour) && neighbour != null && neighbour.isGenerated)
+            {
+                int wrappedX = (nx % S + S) % S;
+                int wrappedY = (ny % S + S) % S;
+                int wrappedZ = (nz % S + S) % S;
+                return !neighbour.GetVoxelLocal(wrappedX, wrappedY, wrappedZ).IsSolid;
+            }
+
+            // Use the chunk's own 1-voxel padded border when the neighbour chunk is not yet loaded,
+            // so scatter exposure never depends on async chunk streaming order.
+            if (chunk.isAllocated && chunk.voxels.IsCreated
+                && nx >= -1 && nx <= S && ny >= -1 && ny <= S && nz >= -1 && nz <= S)
+            {
+                return !chunk.voxels[Chunk.LocalToPaddedIndex(nx, ny, nz)].IsSolid;
+            }
+            return true;
         }
 
         private static Vector3Int DominantAxis(Vector3 direction)
@@ -418,6 +718,24 @@ namespace VoxelEngine.Scattering
             return true;
         }
 
+        public static bool IsNearPlayerStructure(Vector3 worldPos, Vector3 worldUp, float radius)
+        {
+            int hitCount = Physics.OverlapSphereNonAlloc(
+                worldPos + worldUp * 0.5f, Mathf.Max(0.5f, radius), s_overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider hit = s_overlapBuffer[i];
+                if (hit == null) continue;
+                if (hit.GetComponentInParent<VoxelEngine.Building.PlacedBlock>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.Transport.Quarry>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.Farming.FarmPlot>() != null)
+                    return true;
+            }
+            return false;
+        }
+
         private static bool IsBlocked(IChunkScatterWorld world, Transform holder, Vector3 worldPos, Vector3 worldUp, float clearRadius)
         {
             if (s_reservations.TryGetValue(world, out List<Reservation> reservations))
@@ -448,7 +766,10 @@ namespace VoxelEngine.Scattering
                 if (holder != null && hit.transform.IsChildOf(holder)) continue;
                 if (hit.GetComponentInParent<VoxelEngine.Trees.Tree>() != null ||
                     hit.GetComponentInParent<VoxelEngine.Building.PlacedBlock>() != null ||
-                    hit.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() != null)
+                    hit.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.Transport.Quarry>() != null ||
+                    hit.GetComponentInParent<VoxelEngine.Farming.FarmPlot>() != null)
                     return true;
             }
 
@@ -513,7 +834,10 @@ namespace VoxelEngine.Scattering
             string name = prefab.name;
             return name.IndexOf("tree", System.StringComparison.OrdinalIgnoreCase) >= 0
                 || name.IndexOf("cypress", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("palm", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                || name.IndexOf("palm", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.StartsWith("Spring", System.StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("Summer", System.StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("Snow0", System.StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsLivingFloraPrefab(GameObject prefab)

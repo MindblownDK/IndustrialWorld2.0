@@ -1693,6 +1693,7 @@ namespace VoxelEngine.Networking
                 // in it. Sent even when empty - "no teams exist" is a real
                 // answer, and the panel prefers it over yesterday's guess.
                 SendTeamRosterTo(connection);
+                SyncAllTeamsResearch();
 
                 // 14.37.0 - and every live team banner right behind the
                 // roster, so the joiner's banner blocks, shields and screens
@@ -2745,20 +2746,166 @@ namespace VoxelEngine.Networking
             });
         }
 
+        private const string ResearchSyncChannelTag = "__research__";
+        private readonly Dictionary<string, Dictionary<string, int>> _playerResearchByPlayerId = new();
+
         private void OnServerPlayerState(NetworkConnection conn, PlayerStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted || conn == null || conn.IsLocalClient) return;
             if (string.IsNullOrEmpty(msg.Json)) return;
             if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string playerId)) return;
             if (string.IsNullOrEmpty(playerId)) return;
-            VoxelEngine.Persistence.PlayerRecords.Store(playerId, msg.Json);
+
+            if (string.Equals(msg.PlayerId, ResearchSyncChannelTag, System.StringComparison.Ordinal))
+            {
+                var entries = VoxelEngine.Research.ResearchManager.ParseRankJson(msg.Json);
+                RecordServerPlayerResearch(playerId, entries);
+                string existing = VoxelEngine.Persistence.PlayerRecords.Get(playerId);
+                if (!string.IsNullOrEmpty(existing))
+                {
+                    string mergedRecord = VoxelEngine.Persistence.WorldStatePersistence.MergeResearchIntoPlayerRecordJson(existing, entries);
+                    VoxelEngine.Persistence.PlayerRecords.Store(playerId, mergedRecord);
+                }
+                SyncAllTeamsResearch();
+                return;
+            }
+
+            var incomingRanks = VoxelEngine.Persistence.WorldStatePersistence.ExtractPlayerResearchRanks(msg.Json);
+            RecordServerPlayerResearch(playerId, incomingRanks);
+            string jsonToStore = msg.Json;
+            if (_playerResearchByPlayerId.TryGetValue(playerId, out var knownMap) && knownMap.Count > 0)
+            {
+                var knownList = new List<VoxelEngine.Research.ResearchRankEntry>(knownMap.Count);
+                foreach (var kv in knownMap)
+                    knownList.Add(new VoxelEngine.Research.ResearchRankEntry(kv.Key, kv.Value));
+                jsonToStore = VoxelEngine.Persistence.WorldStatePersistence.MergeResearchIntoPlayerRecordJson(jsonToStore, knownList);
+            }
+            VoxelEngine.Persistence.PlayerRecords.Store(playerId, jsonToStore);
+            SyncAllTeamsResearch();
         }
 
-        /// <summary>Client: the host has told us what we left in this world.</summary>
+        /// <summary>Client: the host has told us what we left in this world, or pushed team-shared research.</summary>
         private void OnClientPlayerState(PlayerStateBroadcast msg, Channel channel)
         {
             if (_serverStarted) return;   // a host is not a guest in its own world
+            if (string.Equals(msg.PlayerId, ResearchSyncChannelTag, System.StringComparison.Ordinal))
+            {
+                VoxelEngine.Research.ResearchManager.Instance?.ApplySyncedRanksJson(msg.Json);
+                return;
+            }
             VoxelEngine.Persistence.PlayerRecords.ReceiveLocalRecord(msg.Json);
+        }
+
+        /// <summary>Client: upload local research ranks immediately for Team Shared Research.</summary>
+        public void SendResearchRanks(string ranksJson)
+        {
+            if (!_clientStarted || _serverStarted || string.IsNullOrEmpty(ranksJson)) return;
+            _networkManager.ClientManager.Broadcast(new PlayerStateBroadcast
+            {
+                PlayerId = ResearchSyncChannelTag,
+                Json = ranksJson
+            });
+            UploadLocalPlayerState();
+        }
+
+        private void RecordServerPlayerResearch(string playerId, IEnumerable<VoxelEngine.Research.ResearchRankEntry> entries)
+        {
+            if (string.IsNullOrEmpty(playerId) || entries == null) return;
+            if (!_playerResearchByPlayerId.TryGetValue(playerId, out var map))
+            {
+                map = new Dictionary<string, int>(System.StringComparer.Ordinal);
+                _playerResearchByPlayerId[playerId] = map;
+            }
+            foreach (var e in entries)
+            {
+                if (e == null || string.IsNullOrWhiteSpace(e.nodeId) || e.rank <= 0) continue;
+                if (!map.TryGetValue(e.nodeId, out int cur) || e.rank > cur)
+                    map[e.nodeId] = e.rank;
+            }
+        }
+
+        /// <summary>Server/Host: merges and broadcasts research progress across every member
+        /// of each team when Team Shared Research is enabled.</summary>
+        public void SyncAllTeamsResearch()
+        {
+            if (!_serverStarted) return;
+            bool shared = VoxelEngine.Menu.WorldSession.Instance != null
+                ? VoxelEngine.Menu.WorldSession.Instance.teamSharedResearch
+                : VoxelEngine.Settings.GameSettings.TeamSharedResearch;
+            if (!shared) return;
+
+            string hostId = PlayerIdentity.LocalId;
+            if (!string.IsNullOrEmpty(hostId) && VoxelEngine.Research.ResearchManager.Instance != null)
+                RecordServerPlayerResearch(hostId, VoxelEngine.Research.ResearchManager.Instance.ExportRankEntries());
+
+            var teams = TeamRegistry.Teams;
+            if (teams == null || teams.Count == 0) return;
+
+            for (int t = 0; t < teams.Count; t++)
+            {
+                var team = teams[t];
+                if (team == null || team.memberIds == null || team.memberIds.Count == 0) continue;
+
+                var merged = new Dictionary<string, int>(System.StringComparer.Ordinal);
+                for (int m = 0; m < team.memberIds.Count; m++)
+                {
+                    string memberId = team.memberIds[m];
+                    if (string.IsNullOrEmpty(memberId)) continue;
+
+                    string stored = VoxelEngine.Persistence.PlayerRecords.Get(memberId);
+                    if (!string.IsNullOrEmpty(stored))
+                        RecordServerPlayerResearch(memberId, VoxelEngine.Persistence.WorldStatePersistence.ExtractPlayerResearchRanks(stored));
+
+                    if (_playerResearchByPlayerId.TryGetValue(memberId, out var memberRanks))
+                    {
+                        foreach (var kv in memberRanks)
+                        {
+                            if (!merged.TryGetValue(kv.Key, out int cur) || kv.Value > cur)
+                                merged[kv.Key] = kv.Value;
+                        }
+                    }
+                }
+
+                if (merged.Count == 0) continue;
+
+                var mergedEntries = new List<VoxelEngine.Research.ResearchRankEntry>(merged.Count);
+                foreach (var kv in merged)
+                    mergedEntries.Add(new VoxelEngine.Research.ResearchRankEntry(kv.Key, kv.Value));
+                string mergedJson = VoxelEngine.Research.ResearchManager.SerializeRankEntries(mergedEntries);
+
+                for (int m = 0; m < team.memberIds.Count; m++)
+                {
+                    string memberId = team.memberIds[m];
+                    if (string.IsNullOrEmpty(memberId)) continue;
+
+                    RecordServerPlayerResearch(memberId, mergedEntries);
+
+                    if (!string.IsNullOrEmpty(hostId) && string.Equals(memberId, hostId, System.StringComparison.Ordinal))
+                        VoxelEngine.Research.ResearchManager.Instance?.MergeRankEntries(mergedEntries, replaceExisting: false);
+
+                    string stored = VoxelEngine.Persistence.PlayerRecords.Get(memberId);
+                    if (!string.IsNullOrEmpty(stored))
+                    {
+                        string updated = VoxelEngine.Persistence.WorldStatePersistence.MergeResearchIntoPlayerRecordJson(stored, mergedEntries);
+                        if (!string.Equals(stored, updated, System.StringComparison.Ordinal))
+                            VoxelEngine.Persistence.PlayerRecords.Store(memberId, updated);
+                    }
+
+                    foreach (var pair in _playerIdByConnection)
+                    {
+                        if (!string.Equals(pair.Value, memberId, System.StringComparison.Ordinal)) continue;
+                        if (_networkManager.ServerManager.Clients.TryGetValue(pair.Key, out var conn)
+                            && conn != null && !conn.IsLocalClient)
+                        {
+                            _networkManager.ServerManager.Broadcast(conn, new PlayerStateBroadcast
+                            {
+                                PlayerId = ResearchSyncChannelTag,
+                                Json = mergedJson
+                            }, true);
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>Client: send the host what we are carrying. Called on a

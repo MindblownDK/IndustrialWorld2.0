@@ -16,7 +16,13 @@ namespace VoxelEngine.Research
         public ItemContainer scienceInput;
         public const int INPUT_SLOTS = 3; // 3 slots for the 3 science tiers
 
-        private void Awake() => EnsureContainers();
+        private void Awake()
+        {
+            EnsureContainers();
+            var station = GetComponent<CraftingStation>();
+            if (station != null && station.tier != StationTier.None)
+                station.tier = StationTier.None;
+        }
 
         public void EnsureContainers()
         {
@@ -39,25 +45,49 @@ namespace VoxelEngine.Research
             rm.TickProgress(Time.deltaTime);
         }
 
-        private bool TryConsumeCost(ResearchNode n)
+        public bool TryConsumeCost(ResearchNode n, ItemContainer fallbackInventory = null)
         {
-            // First check we have everything.
+            if (n == null || n.cost == null) return false;
+            EnsureContainers();
+            var rm = ResearchManager.Instance;
+
+            // First check we have everything across lab scienceInput + optional fallback inventory.
             foreach (var c in n.cost)
             {
                 if (c.pack == null || c.count <= 0) continue;
-                int have = string.IsNullOrEmpty(c.pack.itemId)
-                    ? scienceInput.CountOf(c.pack)
-                    : scienceInput.CountOfId(c.pack.itemId);
-                if (have < c.count) return false;
+                int need = rm != null ? rm.GetEffectiveCount(n, c.count) : c.count;
+                int haveLab = CountPack(scienceInput, c.pack);
+                int haveInv = fallbackInventory != null ? CountPack(fallbackInventory, c.pack) : 0;
+                if (haveLab + haveInv < need) return false;
             }
-            // Now actually remove.
+            // Remove from lab scienceInput first, then any remainder from fallbackInventory.
             foreach (var c in n.cost)
             {
                 if (c.pack == null || c.count <= 0) continue;
-                if (string.IsNullOrEmpty(c.pack.itemId)) scienceInput.Remove(c.pack, c.count);
-                else scienceInput.RemoveId(c.pack.itemId, c.count);
+                int need = rm != null ? rm.GetEffectiveCount(n, c.count) : c.count;
+                int haveLab = CountPack(scienceInput, c.pack);
+                int fromLab = Mathf.Min(haveLab, need);
+                if (fromLab > 0) RemovePack(scienceInput, c.pack, fromLab);
+                int rem = need - fromLab;
+                if (rem > 0 && fallbackInventory != null)
+                    RemovePack(fallbackInventory, c.pack, rem);
             }
             return true;
+        }
+
+        private static int CountPack(ItemContainer container, ItemDefinition pack)
+        {
+            if (container == null || pack == null) return 0;
+            return string.IsNullOrEmpty(pack.itemId)
+                ? container.CountOf(pack)
+                : container.CountOfId(pack.itemId);
+        }
+
+        private static void RemovePack(ItemContainer container, ItemDefinition pack, int count)
+        {
+            if (container == null || pack == null || count <= 0) return;
+            if (string.IsNullOrEmpty(pack.itemId)) container.Remove(pack, count);
+            else container.RemoveId(pack.itemId, count);
         }
     }
 }

@@ -1528,6 +1528,11 @@ namespace VoxelEngine.Cosmos
             if (!enableScatter || body == null) return;
             if (_biomeRegistry == null) _biomeRegistry = ResolveBiomeRegistry();
             if (_biomeRegistry == null || viewer == null) return;
+            if (VoxelEngine.Persistence.WorldStatePersistence.Instance != null
+                && !VoxelEngine.Persistence.WorldStatePersistence.Instance.LoadCompleted)
+                return;
+
+            TreeHarvestPersistence.TickRegrowth(this, _biomeRegistry, body.genParams.seed, Time.deltaTime);
 
             // Populating one chunk used to evaluate every solid voxel for every newly-generated
             // chunk in the same frame. During spawn this could mean hundreds of terrain scans and

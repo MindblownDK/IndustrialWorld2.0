@@ -48,6 +48,8 @@ namespace VoxelEngine.Menu
         private bool   _newFriendlyFire = WorldSession.DefaultFriendlyFire;
         private bool   _newAllowBannerPainting = true;
         private bool   _newOfflineDeath = WorldSession.DefaultOfflineDeath;
+        private bool   _newResearchQueueEnabled = WorldSession.DefaultResearchQueueEnabled;
+        private bool   _newTeamSharedResearch = WorldSession.DefaultTeamSharedResearch;
         private int    _newOrbitPace = WorldSession.OrbitPaceRealistic;
 
         // Edit-world form values. Only non-generation settings are editable here.
@@ -61,6 +63,8 @@ namespace VoxelEngine.Menu
         private bool   _editFriendlyFire = WorldSession.DefaultFriendlyFire;
         private bool   _editAllowBannerPainting = true;
         private bool   _editOfflineDeath = WorldSession.DefaultOfflineDeath;
+        private bool   _editResearchQueueEnabled = WorldSession.DefaultResearchQueueEnabled;
+        private bool   _editTeamSharedResearch = WorldSession.DefaultTeamSharedResearch;
         private string _menuStatus = string.Empty;
 
         // Multiplayer page: remembered between sessions so a friend's address
@@ -250,8 +254,9 @@ namespace VoxelEngine.Menu
 
         private void BuildUIBody()
         {
-            // Preserve scroll Y if we are rebuilding settings and a ScrollView exists
-            if (_root != null)
+            // Preserve scroll Y if we are rebuilding the same page and a ScrollView exists
+            _hasSavedScroll = false;
+            if (_root != null && _page == _lastBuiltPage)
             {
                 var existingScroll = _root.Q<ScrollView>();
                 if (existingScroll != null)
@@ -260,6 +265,7 @@ namespace VoxelEngine.Menu
                     _hasSavedScroll = true;
                 }
             }
+            _lastBuiltPage = _page;
 
             _root = _doc.rootVisualElement;
             VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
@@ -734,14 +740,54 @@ namespace VoxelEngine.Menu
             var offlineDeathHelp = T.Muted("Off = logout does not spend cryobed oxygen and does not kill you.");
             offlineDeathHelp.style.marginTop = 2;
             scroll.Add(offlineDeathHelp);
+
+            var researchQueueToggle = new Toggle("Research Queue (allow queueing up to 5 research nodes)");
+            researchQueueToggle.SetValueWithoutNotify(_newResearchQueueEnabled);
+            researchQueueToggle.style.marginTop = 8;
+            researchQueueToggle.style.color = new StyleColor(T.TextSecondary);
+            researchQueueToggle.RegisterValueChangedCallback(e => _newResearchQueueEnabled = e.newValue);
+            scroll.Add(researchQueueToggle);
+            var researchQueueHelp = T.Muted("On = queue up to 5 technologies in the Research UI.");
+            researchQueueHelp.style.marginTop = 2;
+            scroll.Add(researchQueueHelp);
+
+            var teamSharedResearchToggle = new Toggle("Team Shared Research (teammates share and sync research progress)");
+            teamSharedResearchToggle.SetValueWithoutNotify(_newTeamSharedResearch);
+            teamSharedResearchToggle.style.marginTop = 8;
+            teamSharedResearchToggle.style.color = new StyleColor(T.TextSecondary);
+            teamSharedResearchToggle.RegisterValueChangedCallback(e => _newTeamSharedResearch = e.newValue);
+            scroll.Add(teamSharedResearchToggle);
+            var teamSharedResearchHelp = T.Muted("On = team members automatically sync unlocked research when joining a team or completing nodes.");
+            teamSharedResearchHelp.style.marginTop = 2;
+            scroll.Add(teamSharedResearchHelp);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
             scroll.Add(BuildCosmosSection());
             scroll.Add(T.Spacer(20));
 
+            RestoreScrollIfSaved(scroll);
+
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("CREATE & PLAY", CreateAndLoadWorld, T.AccentCyan, LucideIcons.Play));
+        }
+
+        private void RestoreScrollIfSaved(ScrollView scroll)
+        {
+            if (!_hasSavedScroll || scroll == null) return;
+            float y = _savedScrollY;
+            _hasSavedScroll = false;
+            bool restoredOnLayout = false;
+            scroll.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                if (restoredOnLayout) return;
+                if (scroll.contentContainer.layout.height > 0f)
+                {
+                    restoredOnLayout = true;
+                    scroll.scrollOffset = new Vector2(0f, y);
+                }
+            });
+            scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0f, y)).ExecuteLater(20);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -855,6 +901,26 @@ namespace VoxelEngine.Menu
             var offlineDeathHelpEdit = T.Muted("Off = logout does not spend cryobed oxygen and does not kill you. An older world stays on until this is saved off.");
             offlineDeathHelpEdit.style.marginTop = 2;
             panel.Add(offlineDeathHelpEdit);
+
+            var researchQueueToggleEdit = new Toggle("Research Queue (allow queueing up to 5 research nodes)");
+            researchQueueToggleEdit.SetValueWithoutNotify(_editResearchQueueEnabled);
+            researchQueueToggleEdit.style.marginTop = 8;
+            researchQueueToggleEdit.style.color = new StyleColor(T.TextSecondary);
+            researchQueueToggleEdit.RegisterValueChangedCallback(e => _editResearchQueueEnabled = e.newValue);
+            panel.Add(researchQueueToggleEdit);
+            var researchQueueHelpEdit = T.Muted("On = queue up to 5 technologies in the Research UI.");
+            researchQueueHelpEdit.style.marginTop = 2;
+            panel.Add(researchQueueHelpEdit);
+
+            var teamSharedResearchToggleEdit = new Toggle("Team Shared Research (teammates share and sync research progress)");
+            teamSharedResearchToggleEdit.SetValueWithoutNotify(_editTeamSharedResearch);
+            teamSharedResearchToggleEdit.style.marginTop = 8;
+            teamSharedResearchToggleEdit.style.color = new StyleColor(T.TextSecondary);
+            teamSharedResearchToggleEdit.RegisterValueChangedCallback(e => _editTeamSharedResearch = e.newValue);
+            panel.Add(teamSharedResearchToggleEdit);
+            var teamSharedResearchHelpEdit = T.Muted("On = team members automatically sync unlocked research when enabled or when joining a team.");
+            teamSharedResearchHelpEdit.style.marginTop = 2;
+            panel.Add(teamSharedResearchHelpEdit);
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -1257,7 +1323,8 @@ namespace VoxelEngine.Menu
                 string[] candidates =
                 {
                     Path.Combine(Application.dataPath, "Changelog.md"),
-                    Path.Combine(Application.streamingAssetsPath, "Changelog.md")
+                    Path.Combine(Application.streamingAssetsPath, "Changelog.md"),
+                    Path.Combine(Application.dataPath, "..", "Changelog.md")
                 };
                 foreach (var candidate in candidates)
                 {
@@ -1908,12 +1975,7 @@ namespace VoxelEngine.Menu
             }
 
             // Restore preserved scroll offset (prevents jump-to-top on toggle/slider rebuild)
-            if (_hasSavedScroll && _settingsTab == STab.Interface)
-            {
-                float y = _savedScrollY;
-                scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0, y)).ExecuteLater(20);
-            }
-            _hasSavedScroll = false;
+            RestoreScrollIfSaved(scroll);
 
             panel.Add(T.Spacer(8));
             var resetBtn = PrimaryBtn("RESET DEFAULTS", () => { GameSettings.ResetToDefaults(); BuildUI(); }, T.AccentRed);
@@ -1946,6 +2008,8 @@ namespace VoxelEngine.Menu
             _editFriendlyFire = world.friendlyFire;
             _editAllowBannerPainting = world.allowBannerPainting;
             _editOfflineDeath = world.offlineDeath;
+            _editResearchQueueEnabled = world.researchQueueEnabled;
+            _editTeamSharedResearch = world.teamSharedResearch;
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -1968,12 +2032,14 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire, _editAllowBannerPainting, _editOfflineDeath))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire, _editAllowBannerPainting, _editOfflineDeath, _editResearchQueueEnabled, _editTeamSharedResearch))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
                 return;
             }
+            VoxelEngine.Settings.GameSettings.ResearchQueueEnabled = _editResearchQueueEnabled;
+            VoxelEngine.Settings.GameSettings.TeamSharedResearch = _editTeamSharedResearch;
 
             _menuStatus = $"Saved world settings for '{finalName}'.";
             _editOriginalName = finalName;
@@ -2048,6 +2114,10 @@ namespace VoxelEngine.Menu
             _session.friendlyFire = _newFriendlyFire;
             _session.allowBannerPainting = _newAllowBannerPainting;
             _session.offlineDeath = _newOfflineDeath;
+            _session.researchQueueEnabled = _newResearchQueueEnabled;
+            _session.teamSharedResearch = _newTeamSharedResearch;
+            VoxelEngine.Settings.GameSettings.ResearchQueueEnabled = _newResearchQueueEnabled;
+            VoxelEngine.Settings.GameSettings.TeamSharedResearch = _newTeamSharedResearch;
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

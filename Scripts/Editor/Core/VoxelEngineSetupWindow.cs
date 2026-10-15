@@ -2681,11 +2681,11 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(sci);
                 return sci;
             }
-            var sciT1 = MakeScience("Item_ScienceT1", "Science Pack I",   new Color(0.85f, 0.30f, 0.30f), 1,
+            var sciT1 = MakeScience("Item_ScienceT1", "Science Pack I",   VoxelEngine.Items.ScienceItem.GetTierColor(1), 1,
                 "Tier 1 research input. Crafted in your inventory from wood + stone.");
-            var sciT2 = MakeScience("Item_ScienceT2", "Science Pack II",  new Color(0.30f, 0.75f, 0.40f), 2,
+            var sciT2 = MakeScience("Item_ScienceT2", "Science Pack II",  VoxelEngine.Items.ScienceItem.GetTierColor(2), 2,
                 "Tier 2 research input. Crafted at a Crafting Bench from iron + copper ingots.");
-            var sciT3 = MakeScience("Item_ScienceT3", "Science Pack III", new Color(0.30f, 0.60f, 0.95f), 3,
+            var sciT3 = MakeScience("Item_ScienceT3", "Science Pack III", VoxelEngine.Items.ScienceItem.GetTierColor(3), 3,
                 "Tier 3 research input. Crafted at an Assembler from steel + circuitry.");
 
             // ---- 2) Research Lab prefab ----
@@ -2697,7 +2697,7 @@ namespace VoxelEngine.EditorTools
             var mat = MakeColoredMat(prefabsFolder, "Mat_ResearchLab", new Color(0.50f, 0.30f, 0.70f));
             cube.GetComponent<Renderer>().sharedMaterial = mat;
             var stat = labRoot.AddComponent<VoxelEngine.Crafting.CraftingStation>();
-            stat.tier        = VoxelEngine.Crafting.StationTier.Assembler;
+            stat.tier        = VoxelEngine.Crafting.StationTier.None;
             stat.displayName = "Research Lab";
             labRoot.AddComponent<VoxelEngine.Research.ResearchLab>();
             var labPrefab = PrefabUtility.SaveAsPrefabAsset(labRoot, labPath);

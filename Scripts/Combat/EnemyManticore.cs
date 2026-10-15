@@ -88,20 +88,24 @@ namespace VoxelEngine.Combat
             float spd;
             if (aggro)
             {
+                bool hasLos = VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.25f);
                 Vector3 toP = flatToPlayer.sqrMagnitude > 0.0001f ? flatToPlayer.normalized
                                                                   : Vector3.ProjectOnPlane(transform.forward, up).normalized;
                 moveDir = toP;
-                if (distP > rangedRange)        spd = chaseSpeed;   // close the gap
-                else if (distP > rangedMinRange) spd = 0f;           // firing band — hold + loose spikes
-                else                             spd = chaseSpeed;   // close in for melee
+                if (distP > rangedRange || !hasLos) spd = chaseSpeed;   // close the gap
+                else if (distP > rangedMinRange)    spd = 0f;           // firing band — hold + loose spikes
+                else                                spd = chaseSpeed;   // close in for melee
 
                 // Ranged volley (firing band) - 17.19.0-dev: the tail rears and
                 // the eyes glow BEFORE the spikes fly. Aim stays live at the
                 // release: the projectiles are the dodgeable part.
                 if (_pendingVolley > 0f && Time.time >= _pendingVolley)
-                { _pendingVolley = 0f; _anim?.Strike(); FireSpikeVolley(up); }
+                {
+                    _pendingVolley = 0f;
+                    if (hasLos) { _anim?.Strike(); FireSpikeVolley(up); }
+                }
                 else if (_pendingVolley <= 0f
-                    && distP <= rangedRange && distP >= rangedMinRange && Time.time >= _nextRangedAt)
+                    && distP <= rangedRange && distP >= rangedMinRange && hasLos && Time.time >= _nextRangedAt)
                 {
                     _nextRangedAt = Time.time + rangedCooldown;
                     _pendingVolley = Time.time + VolleyWindupSeconds;
@@ -112,11 +116,14 @@ namespace VoxelEngine.Combat
                 {
                     _pendingMelee = 0f;
                     _anim?.Strike();
-                    if (_player != null && Vector3.Distance(_player.position, pos) <= meleeRange + 1.4f)
+                    if (_player != null
+                        && Vector3.Distance(_player.position, pos) <= meleeRange + 1.4f
+                        && hasLos)
                         MeleeAttack();
                 }
                 else if (_pendingMelee <= 0f
                     && distP <= meleeRange && Vector3.Distance(_player.position, pos) <= meleeRange + 0.8f
+                    && hasLos
                     && Time.time >= _nextMeleeAt)
                 {
                     _nextMeleeAt = Time.time + meleeCooldown;

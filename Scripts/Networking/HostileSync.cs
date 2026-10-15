@@ -201,6 +201,69 @@ namespace VoxelEngine.Networking
             target = best;
         }
 
+        private static readonly RaycastHit[] _losHits = new RaycastHit[32];
+
+        /// <summary>
+        /// True when no solid terrain, wall, door, grid hull, or placed block
+        /// obstructs the segment between the attacker and the target player/avatar.
+        /// </summary>
+        public static bool HasLineOfSight(Transform attacker, Transform target, float attackerEyeHeight = 1.1f, float targetEyeHeight = 1.0f)
+        {
+            if (attacker == null || target == null) return false;
+            Vector3 targetUp = target.up.sqrMagnitude > 0.001f ? target.up.normalized : Vector3.up;
+            Vector3 targetPos = target.position + targetUp * targetEyeHeight;
+            return HasLineOfSightToPoint(attacker, target, targetPos, attackerEyeHeight);
+        }
+
+        public static bool HasLineOfSight(Transform attacker, Vector3 targetPos, float attackerEyeHeight = 1.1f)
+        {
+            return HasLineOfSightToPoint(attacker, null, targetPos, attackerEyeHeight);
+        }
+
+        private static bool HasLineOfSightToPoint(Transform attacker, Transform target, Vector3 targetPos, float attackerEyeHeight)
+        {
+            if (attacker == null) return false;
+            Vector3 attackerUp = attacker.up.sqrMagnitude > 0.001f ? attacker.up.normalized : Vector3.up;
+            Vector3 origin = attacker.position + attackerUp * attackerEyeHeight;
+            Vector3 delta = targetPos - origin;
+            float dist = delta.magnitude;
+            if (dist <= 0.15f) return true;
+
+            Vector3 dir = delta / dist;
+            int count = Physics.RaycastNonAlloc(origin, dir, _losHits, dist, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _losHits[i];
+                var col = hit.collider;
+                if (col == null || col.isTrigger) continue;
+                if (hit.distance >= dist - 0.05f) continue;
+
+                Transform ht = col.transform;
+                if (ht == attacker || ht.IsChildOf(attacker) || attacker.IsChildOf(ht)) continue;
+                if (target != null && (ht == target || ht.IsChildOf(target) || target.IsChildOf(ht))) continue;
+
+                // Ignore player character colliders and dropped items/projectiles/creatures.
+                if (col.GetComponentInParent<VoxelEngine.Player.PlayerController>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Player.PlayerStats>() != null) continue;
+                if (col.GetComponentInParent<PlayerAvatar>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Items.DroppedItem>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Items.DeathLootBag>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Combat.Fireball>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Combat.ManticoreSpike>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Combat.FireWallHazard>() != null) continue;
+                if (col.GetComponentInParent<VoxelEngine.Combat.Damageable>() != null
+                    && col.GetComponentInParent<VoxelEngine.Building.PlacedBlock>() == null
+                    && col.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() == null
+                    && col.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>() == null
+                    && col.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>() == null
+                    && col.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() == null)
+                    continue;
+
+                return false;
+            }
+            return true;
+        }
+
         // ─────────────────── strikes (one funnel for all hostile damage) ───────────────────
 
         /// <summary>Hostile damage lands victim-side, like fall and collision

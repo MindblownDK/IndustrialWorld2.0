@@ -40,6 +40,8 @@ namespace VoxelEngine.Combat
             return fb;
         }
 
+        private static readonly RaycastHit[] _hitBuf = new RaycastHit[16];
+
         private void Update()
         {
             float dt = Time.deltaTime;
@@ -48,45 +50,59 @@ namespace VoxelEngine.Combat
 
             Vector3 step = _vel * dt;
             float dist = step.magnitude;
-            if (dist > 0.0001f && Physics.Raycast(transform.position, step, out var hit, dist, ~0, QueryTriggerInteraction.Ignore))
+            if (dist > 0.0001f)
             {
-                if (_owner != null && (hit.collider.transform == _owner.transform || hit.collider.transform.IsChildOf(_owner.transform)))
+                int n = Physics.RaycastNonAlloc(transform.position, step.normalized, _hitBuf, dist, ~0, QueryTriggerInteraction.Ignore);
+                RaycastHit hit = default;
+                float bestDist = float.MaxValue;
+                bool found = false;
+                for (int i = 0; i < n; i++)
                 {
-                    transform.position += step;
-                    return;
-                }
-
-                if (visualOnly) { Destroy(gameObject); return; }   // 14.55.0 - replayed cast, host owns the damage
-
-                var ps = hit.collider.GetComponentInParent<PlayerStats>();
-                if (ps != null)
-                {
-                    // Local player hit - victim-side funnel (death cause + burn + feedback).
-                    VoxelEngine.Networking.HostileSync.ApplyStrikeLocal(damage, "Ifrit",
-                        VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, burnDuration);
-                }
-                else
-                {
-                    // 14.55.0 - a remote player's avatar: route the strike to its machine.
-                    var av = hit.collider.GetComponentInParent<VoxelEngine.Networking.PlayerAvatar>();
-                    if (av != null)
+                    var h = _hitBuf[i];
+                    if (h.collider == null) continue;
+                    if (_owner != null && (h.collider.transform == _owner.transform || h.collider.transform.IsChildOf(_owner.transform)))
+                        continue;
+                    if (h.distance < bestDist)
                     {
-                        VoxelEngine.Networking.HostileSync.StrikeAvatar(av, damage, "Ifrit",
+                        bestDist = h.distance;
+                        hit = h;
+                        found = true;
+                    }
+                }
+                if (found)
+                {
+                    if (visualOnly) { Destroy(gameObject); return; }   // 14.55.0 - replayed cast, host owns the damage
+
+                    var ps = hit.collider.GetComponentInParent<PlayerStats>();
+                    if (ps != null)
+                    {
+                        // Local player hit - victim-side funnel (death cause + burn + feedback).
+                        VoxelEngine.Networking.HostileSync.ApplyStrikeLocal(damage, "Ifrit",
                             VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, burnDuration);
                     }
                     else
                     {
-                        var d = hit.collider.GetComponentInParent<IDamageable>();
-                        if (d != null && d.IsAlive)
-                            d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Fire,
-                                point = hit.point, direction = step.normalized, source = _owner });
+                        // 14.55.0 - a remote player's avatar: route the strike to its machine.
+                        var av = hit.collider.GetComponentInParent<VoxelEngine.Networking.PlayerAvatar>();
+                        if (av != null)
+                        {
+                            VoxelEngine.Networking.HostileSync.StrikeAvatar(av, damage, "Ifrit",
+                                VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, burnDuration);
+                        }
+                        else
+                        {
+                            var d = hit.collider.GetComponentInParent<IDamageable>();
+                            if (d != null && d.IsAlive)
+                                d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Fire,
+                                    point = hit.point, direction = step.normalized, source = _owner });
+                        }
                     }
+                    // 9.16.0 fire system — a fireball splashing into a flammable pool sets it alight.
+                    var aw = VoxelEngine.Core.ActiveWorld.Current;
+                    if (aw != null) VoxelEngine.Fire.FireManager.TryIgniteAt(aw.WorldToVoxel(hit.point));
+                    Destroy(gameObject);
+                    return;
                 }
-                // 9.16.0 fire system — a fireball splashing into a flammable pool sets it alight.
-                var aw = VoxelEngine.Core.ActiveWorld.Current;
-                if (aw != null) VoxelEngine.Fire.FireManager.TryIgniteAt(aw.WorldToVoxel(hit.point));
-                Destroy(gameObject);
-                return;
             }
             transform.position += step;
         }

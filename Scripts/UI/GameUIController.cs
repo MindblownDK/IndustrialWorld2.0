@@ -1218,10 +1218,17 @@ namespace VoxelEngine.UI
         public void OpenStation(CraftingStation st)
         {
             if (st == null) return;
+            if (Crafting.Crafter.IsResearchLabStation(st))
+            {
+                var lab = st.GetComponentInParent<VoxelEngine.Research.ResearchLab>()
+                       ?? st.GetComponentInChildren<VoxelEngine.Research.ResearchLab>(true);
+                if (lab != null) lab.EnsureContainers();
+                VoxelEngine.Research.ResearchUI.Instance?.Open(lab);
+                return;
+            }
             if (!_inventoryOpen) UIState.PushBlock();
             ClearArmorUpgradeStationBinding();
-            bool inventoryCraftingOnly = Crafting.Crafter.IsResearchLabStation(st)
-                || st.tier == Crafting.StationTier.CraftingBench
+            bool inventoryCraftingOnly = st.tier == Crafting.StationTier.CraftingBench
                 || st.tier == Crafting.StationTier.Assembler;
             // Crafting Bench and Assembler use only the inventory crafting surface.
             // Other specialized stations keep their existing right-side station panel.

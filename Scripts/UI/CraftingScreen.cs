@@ -688,6 +688,33 @@ namespace VoxelEngine.UI
                     qty.pickingMode = PickingMode.Ignore;
                     row.Add(qty);
 
+                    // Hover tooltip for required ingredient row (shows item name, machine needed,
+                    // input items, output item, craft time, and have/required count).
+                    row.pickingMode = PickingMode.Position;
+                    row.style.paddingTop = 2;
+                    row.style.paddingBottom = 2;
+                    row.style.paddingLeft = 4;
+                    row.style.paddingRight = 4;
+                    T.Radius(row, 3);
+                    var hoveredItem = ing.item;
+                    int hoveredHave = have;
+                    int hoveredNeed = ing.count;
+                    row.RegisterCallback<PointerEnterEvent>(e =>
+                    {
+                        row.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.10f));
+                        Tooltip.ShowRequiredItemAt(hoveredItem, hoveredHave, hoveredNeed, new Vector2(e.position.x, e.position.y));
+                    });
+                    row.RegisterCallback<PointerMoveEvent>(e =>
+                    {
+                        Tooltip.ShowRequiredItemAt(hoveredItem, hoveredHave, hoveredNeed, new Vector2(e.position.x, e.position.y));
+                    });
+                    row.RegisterCallback<PointerLeaveEvent>(_ =>
+                    {
+                        row.style.backgroundColor = new StyleColor(Color.clear);
+                        Tooltip.HideSticky();
+                    });
+                    row.RegisterCallback<DetachFromPanelEvent>(_ => Tooltip.HideSticky());
+
                     detail.Add(row);
                 }
             }

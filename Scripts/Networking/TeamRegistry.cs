@@ -445,6 +445,7 @@ namespace VoxelEngine.Networking
             Version++;
             Save();
             DiffForLocalPlayer(before, _state);
+            NetworkBootstrap.Instance?.SyncAllTeamsResearch();
         }
 
         /// <summary>Deep copy via the same serializer the wire and the save
@@ -472,6 +473,8 @@ namespace VoxelEngine.Networking
                 Debug.Log($"[Teams] roster applied: {incoming.teams?.Count ?? 0} team(s), " +
                           $"{incoming.invites?.Count ?? 0} invite(s).");
                 DiffForLocalPlayer(previous, incoming);
+                if (TeamOf(NetworkSession.LocalPlayerId) != null)
+                    VoxelEngine.Research.ResearchManager.Instance?.PushLocalResearchToNetwork();
             }
             catch (Exception ex) { Debug.LogWarning("[TeamRegistry] ApplySnapshot: " + ex.Message); }
         }

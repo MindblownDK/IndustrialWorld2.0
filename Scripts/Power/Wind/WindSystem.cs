@@ -69,13 +69,51 @@ namespace VoxelEngine.Power.Wind
             _currentWindSpeed = Mathf.Clamp(
                 (baseSpeed + gust) * Weather.WeatherManager.WindMultiplier, 2f, 45f);
 
-            // Slight direction drift (realistic)
-            float dirDrift = Mathf.Sin(_timer * 0.15f) * 12f;
-            _currentWindDir = Quaternion.Euler(0, dirDrift, 0) * windDirection.normalized;
+            // Predictable planet-locked prevailing wind at the observer's position, with only
+            // a tiny ±2.5° micro-sway so players can reliably design factories around wind & pollution.
+            Vector3 refPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+            Vector3 prevailing = GetPrevailingWorldDirection(refPos, out Vector3 surfaceUp);
+            float microSway = Mathf.Sin(_timer * 0.25f) * 2.5f;
+            _currentWindDir = (Quaternion.AngleAxis(microSway, surfaceUp) * prevailing).normalized;
         }
 
         public float GetWindSpeed() => _currentWindSpeed;
         public Vector3 GetWindDirection() => _currentWindDir;
+
+        /// <summary>
+        /// Planet-locked prevailing wind direction in body-local space at a given body-local position.
+        /// Uses a steady zonal (eastward tangent) flow around the planet's local Y axis so wind direction
+        /// at any factory location on the planet remains constant across day/night rotation.
+        /// </summary>
+        public static Vector3 GetPrevailingLocalDirection(Vector3 localPos)
+        {
+            if (localPos.sqrMagnitude < 0.0001f)
+                return new Vector3(1f, 0f, 0.3f).normalized;
+            Vector3 localUp = localPos.normalized;
+            Vector3 tangent = Vector3.Cross(Vector3.up, localUp);
+            if (tangent.sqrMagnitude < 0.0001f)
+                tangent = Vector3.Cross(Vector3.forward, localUp);
+            return tangent.normalized;
+        }
+
+        /// <summary>
+        /// Planet-locked prevailing wind direction in world space at <paramref name="worldPos"/>.
+        /// </summary>
+        public static Vector3 GetPrevailingWorldDirection(Vector3 worldPos, out Vector3 surfaceUp)
+        {
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body != null)
+            {
+                Vector3 localPos = body.transform.InverseTransformPoint(worldPos);
+                Vector3 localUp = localPos.sqrMagnitude > 0.0001f ? localPos.normalized : Vector3.up;
+                Vector3 localDir = GetPrevailingLocalDirection(localPos);
+                surfaceUp = body.transform.TransformDirection(localUp).normalized;
+                return body.transform.TransformDirection(localDir).normalized;
+            }
+            surfaceUp = Vector3.up;
+            Vector3 fallback = Instance != null ? Instance.windDirection : new Vector3(1f, 0f, 0.3f);
+            return fallback.sqrMagnitude > 0.0001f ? fallback.normalized : Vector3.right;
+        }
 
         /// <summary>
         /// Returns true if wind is significantly obstructed at this world position (upward ray or volume check).

@@ -43,6 +43,8 @@ namespace VoxelEngine.UI
             _box.pickingMode            = PickingMode.Ignore;
             _box.style.display          = DisplayStyle.None;
             uiRoot.Add(_box);
+            _box.SendToBack();
+            LcdHudTheme.YieldWhileBlocking(_box);
 
             // Top: eyebrow label "RESEARCHING"
             _eyebrow = new Label("RESEARCHING");
@@ -98,7 +100,9 @@ namespace VoxelEngine.UI
             if (_box == null) return;
 
             var rm = ResearchManager.Instance;
-            if (rm == null || rm.ActiveResearch == null)
+            if (rm == null || rm.ActiveResearch == null
+                || UIState.IsBlocking
+                || (ResearchUI.Instance != null && ResearchUI.Instance.IsOpen))
             {
                 _box.style.display = DisplayStyle.None;
                 _smoothPct = 0f;
@@ -107,6 +111,11 @@ namespace VoxelEngine.UI
 
             _box.style.display = DisplayStyle.Flex;
             var n = rm.ActiveResearch;
+            if (_eyebrow != null)
+            {
+                int queued = rm.IsResearchQueueEnabled ? rm.QueuedWaitingCount : 0;
+                _eyebrow.text = queued > 0 ? $"RESEARCHING  ·  +{queued} QUEUED" : "RESEARCHING";
+            }
 
             _title.text = n.displayName;
 

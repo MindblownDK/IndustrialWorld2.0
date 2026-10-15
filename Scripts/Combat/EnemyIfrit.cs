@@ -91,15 +91,19 @@ namespace VoxelEngine.Combat
             float spd;
             if (aggro)
             {
+                bool hasLos = VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.3f);
                 Vector3 toP = flatToPlayer.sqrMagnitude > 0.0001f ? flatToPlayer.normalized
                                                                   : Vector3.ProjectOnPlane(transform.forward, up).normalized;
-                if (distP > castRange)            { moveDir = toP;  spd = chaseSpeed; }          // approach
+                if (distP > castRange || !hasLos) { moveDir = toP;  spd = chaseSpeed; }          // approach
                 else if (distP < castRange * 0.6f){ moveDir = -toP; spd = chaseSpeed * 0.7f; }   // kite back
                 else                              { moveDir = toP;  spd = 0f; }                  // hold + cast
 
                 if (_pendingFireball > 0f && Time.time >= _pendingFireball)
-                { _pendingFireball = 0f; _anim?.Strike(); CastFireballs(up); }
-                else if (_pendingFireball <= 0f && Time.time >= _nextFireball)
+                {
+                    _pendingFireball = 0f;
+                    if (hasLos) { _anim?.Strike(); CastFireballs(up); }
+                }
+                else if (_pendingFireball <= 0f && Time.time >= _nextFireball && hasLos)
                 {
                     _nextFireball = Time.time + fireballCooldown;
                     _pendingFireball = Time.time + FireballWindupSeconds;
@@ -107,8 +111,15 @@ namespace VoxelEngine.Combat
                 }
                 if (Time.time >= _nextTeleport)  Teleport(up);
                 if (_pendingFirewall > 0f && Time.time >= _pendingFirewall)
-                { _pendingFirewall = 0f; _anim?.Strike(); CastFireWallAt(_firewallTarget, up); }
-                else if (_pendingFirewall <= 0f && Time.time >= _nextFirewall)
+                {
+                    _pendingFirewall = 0f;
+                    if (VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _firewallTarget + up * 0.6f, 1.3f))
+                    {
+                        _anim?.Strike();
+                        CastFireWallAt(_firewallTarget, up);
+                    }
+                }
+                else if (_pendingFirewall <= 0f && Time.time >= _nextFirewall && hasLos)
                 {
                     _nextFirewall = Time.time + firewallCooldown;
                     _pendingFirewall = Time.time + FirewallWindupSeconds;

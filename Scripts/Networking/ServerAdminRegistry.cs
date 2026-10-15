@@ -443,6 +443,14 @@ namespace VoxelEngine.Networking
                 case "allowBannerPainting": session.allowBannerPainting = on; break;
                 case "allowTeammateTeleport": session.allowTeammateTeleport = on; break;
                 case "offlineDeath": session.offlineDeath = on; break;
+                case "researchQueueEnabled":
+                    session.researchQueueEnabled = on;
+                    VoxelEngine.Research.ResearchManager.Instance?.OnResearchSettingsChanged();
+                    break;
+                case "teamSharedResearch":
+                    session.teamSharedResearch = on;
+                    VoxelEngine.Research.ResearchManager.Instance?.OnResearchSettingsChanged();
+                    break;
                 case "showDropVoidWarning": session.showDropVoidWarning = on; break;
                 case "maxDroppedItems":
                     if (!int.TryParse(value, out int drops)) return false;

@@ -106,17 +106,28 @@ namespace VoxelEngine.Combat
             {
                 if (_diving)
                 {
-                    desiredPos = _player.position + up * 1.8f;
-                    spd = diveSpeed * SpeedMul;
-                    if (Vector3.Distance(pos, _player.position) < meleeRange)
+                    if (!VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.4f))
                     {
-                        TalonStrike(up);
                         _diving = false;
-                        _nextDiveAt = Time.time + diveCooldown * CdMul;
+                        _nextDiveAt = Time.time + diveCooldown * CdMul * 0.5f;
+                        desiredPos = _player.position + up * hoverHeight;
+                        spd = engageSpeed * SpeedMul;
+                    }
+                    else
+                    {
+                        desiredPos = _player.position + up * 1.8f;
+                        spd = diveSpeed * SpeedMul;
+                        if (Vector3.Distance(pos, _player.position) < meleeRange)
+                        {
+                            TalonStrike(up);
+                            _diving = false;
+                            _nextDiveAt = Time.time + diveCooldown * CdMul;
+                        }
                     }
                 }
                 else
                 {
+                    bool hasLos = VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, _player, 1.4f);
                     _orbitAngle += orbitSpeed * SpeedMul * dt;
                     Vector3 fwd = Vector3.ProjectOnPlane(_player.position - pos, up);
                     if (fwd.sqrMagnitude < 0.0001f) fwd = Vector3.ProjectOnPlane(transform.forward, up);
@@ -127,12 +138,12 @@ namespace VoxelEngine.Combat
                     desiredPos = _player.position + up * hoverHeight + circleOffset;
                     spd = engageSpeed * SpeedMul;
 
-                    if (Time.time >= _nextDiveAt) _diving = true;
+                    if (Time.time >= _nextDiveAt && hasLos) _diving = true;
                     // 17.19.0-dev: the wings heave up first, the blast follows -
                     // enrage shortens the windup but never removes it.
                     if (_pendingGust > 0f && Time.time >= _pendingGust)
                     { _pendingGust = 0f; _anim?.Strike(); WingGust(pos, up); }
-                    else if (_pendingGust <= 0f && Time.time >= _nextGustAt)
+                    else if (_pendingGust <= 0f && Time.time >= _nextGustAt && hasLos)
                     {
                         _nextGustAt = Time.time + gustCooldown * CdMul;
                         _pendingGust = Time.time + GustWindupSeconds * CdMul;
@@ -179,7 +190,8 @@ namespace VoxelEngine.Combat
             if (ps != null)
             {
                 Vector3 toP = Vector3.ProjectOnPlane(ps.transform.position - pos, up);
-                if (toP.magnitude <= gustRadius)
+                if (toP.magnitude <= gustRadius
+                    && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, ps.transform, 1.4f))
                 {
                     ps.TakeDamage(gustDamage);
                     var pc = ps.GetComponent<VoxelEngine.Player.PlayerController>();
@@ -192,7 +204,8 @@ namespace VoxelEngine.Combat
             {
                 if (av == null) continue;
                 Vector3 toAv = Vector3.ProjectOnPlane(av.transform.position - pos, up);
-                if (toAv.magnitude <= gustRadius)
+                if (toAv.magnitude <= gustRadius
+                    && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, av.transform, 1.4f))
                     VoxelEngine.Networking.HostileSync.StrikeAvatar(av, gustDamage, "Roc");
             }
             // Dust ring visual at the Roc - and replayed on every guest.

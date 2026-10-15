@@ -67,7 +67,8 @@ namespace VoxelEngine.Combat
                 if (ps != null)
                 {
                     Vector3 toPlayer = Vector3.ProjectOnPlane(ps.transform.position - transform.position, up);
-                    if (toPlayer.magnitude <= radius)
+                    if (toPlayer.magnitude <= radius
+                        && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, ps.transform, 0.5f))
                         ps.ApplyBurn(burnDps, tickInterval + 0.5f);   // keep the burn alive while inside
                 }
 
@@ -77,7 +78,8 @@ namespace VoxelEngine.Combat
                 {
                     if (av == null) continue;
                     Vector3 toAv = Vector3.ProjectOnPlane(av.transform.position - transform.position, up);
-                    if (toAv.magnitude <= radius)
+                    if (toAv.magnitude <= radius
+                        && VoxelEngine.Networking.HostileSync.HasLineOfSight(transform, av.transform, 0.5f))
                         VoxelEngine.Networking.HostileSync.StrikeAvatar(av, 0f, "Ifrit",
                             VoxelEngine.Networking.HostileSync.EffectBurn, burnDps, tickInterval + 0.5f);
                 }
