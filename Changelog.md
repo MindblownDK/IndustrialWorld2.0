@@ -1,9 +1,21 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.25.1-dev`
+**Current Version:** `17.25.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.25.2-dev] Fix BiofuelAndTreeFarmSetup Editor Field Names
+
+**Type:** PATCH - aligns `MachineCategory.Custom`, `ResourceItem.subcategory`, and `ResearchNode.unlocksRecipes` in `Scripts/Editor/Farming/BiofuelAndTreeFarmSetup.cs`. Save-compatible.
+
+**GitHub title:** `[17.25.2-dev] Fix BiofuelAndTreeFarmSetup editor field names`
+
+#### Fixed
+- **`BiofuelAndTreeFarmSetup` (`Scripts/Editor/Farming/BiofuelAndTreeFarmSetup.cs`).** Replaced `MachineCategory.Processor` with `MachineCategory.Custom`, `ResourceItem.resourceCategory` with `ResourceItem.subcategory`, and removed the non-existent `ResearchNode.unlocksItems` assignment in favor of `ResearchNode.unlocksRecipes`.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.25.2-dev`, PATCH over `17.25.1-dev`. Save-compatible.
 
 ### [17.25.1-dev] Fix Biofuel & Tree Farm API References and Move Sapling Drop Out of Tree.cs
 

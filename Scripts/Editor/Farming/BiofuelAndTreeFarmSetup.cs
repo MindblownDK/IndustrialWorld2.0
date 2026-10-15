@@ -203,7 +203,7 @@ namespace VoxelEngine.EditorTools
                 "machine_auto_tree_farm",
                 "Automatic Tree Farm",
                 "Self-contained 4x3x4 automated forestry plot and gantry harvester. Grows full-sized timber trees with water irrigation and nutrient bonuses, automatically fells and replants them, tends nearby Tree Farming Plots within 10 m, and exports Wood Logs, Saplings, Biomass, and Wood Chips to belts or chutes.",
-                MachineCategory.Processor,
+                MachineCategory.Custom,
                 autoTreeFarmPrefab);
 
             EnsureMachineDefinition(
@@ -211,7 +211,7 @@ namespace VoxelEngine.EditorTools
                 "machine_biomass_press",
                 "Biomass Press",
                 "Industrial 2x2x2 screw-press and bio-refinery. Compresses farm crops, seeds, wood logs, wood chips, and biomass into solid Biomass, Biofuel Briquettes, and piped Liquid Biofuel for generators and fluid networks.",
-                MachineCategory.Processor,
+                MachineCategory.Custom,
                 biomassPressPrefab);
 
             // ── 4. Crafting Recipes & Research Node ─────────────────────────────
@@ -611,13 +611,13 @@ namespace VoxelEngine.EditorTools
                 item.maxStack = maxStack;
                 item.massPerUnit = 0.5f;
                 item.category = category;
-                item.resourceCategory = resCat;
+                item.subcategory = resCat;
                 item.fuelSeconds = fuelSeconds;
             }
             else if (fuelSeconds > 0f && item.fuelSeconds <= 0f)
             {
                 item.fuelSeconds = fuelSeconds;
-                item.resourceCategory = ResourceCategory.Fuel;
+                item.subcategory = ResourceCategory.Fuel;
             }
             EditorUtility.SetDirty(item);
             return item;
@@ -803,12 +803,6 @@ namespace VoxelEngine.EditorTools
             AddRecipeUnlock(node, recBriquette);
             AddRecipeUnlock(node, recAutoTreeFarm);
             AddRecipeUnlock(node, recBiomassPress);
-
-            var unlockItems = new List<ItemDefinition>(node.unlocksItems ?? System.Array.Empty<ItemDefinition>());
-            if (blockTreePlot != null && !unlockItems.Contains(blockTreePlot)) unlockItems.Add(blockTreePlot);
-            if (blockAutoTreeFarm != null && !unlockItems.Contains(blockAutoTreeFarm)) unlockItems.Add(blockAutoTreeFarm);
-            if (blockBiomassPress != null && !unlockItems.Contains(blockBiomassPress)) unlockItems.Add(blockBiomassPress);
-            node.unlocksItems = unlockItems.ToArray();
             EditorUtility.SetDirty(node);
 
             string[] treeGuids = AssetDatabase.FindAssets("t:ResearchTree");
