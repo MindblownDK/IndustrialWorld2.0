@@ -48,6 +48,11 @@ namespace VoxelEngine.Transport
 {
     public enum QuarryPhase { Idle, TapeFrame, BuildingFrame, Mining, Complete }
 
+    /// <summary>17.27.0-dev - why a quarry has no power, in three words on the machine
+    /// itself: no cable reached it, a cable reached it but the network cannot carry the
+    /// load, or it is being served.</summary>
+    public enum QuarryPowerState { Unwired, Starved, Served }
+
     [RequireComponent(typeof(PlacedBlock))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
@@ -110,6 +115,66 @@ namespace VoxelEngine.Transport
         public float EffPowerDraw => Mathf.Max(10f,
             basePowerDraw + (InstalledRangeLevel + InstalledSpeedLevel) * powerPerPerfUpgrade
                           - InstalledEfficiencyLevel * powerSavePerEffUpgrade);
+
+        // ── 17.27.0-dev: the machine's own electrical readout ───────────────
+        // The front multimeter and the machine panel both read these, so the two can
+        // never disagree about what the drill is doing or what it is costing.
+
+        /// <summary>Watts the drill is pulling right now: the rated load while a phase
+        /// is actually running, and nothing at all while it is stopped, dead or done.
+        /// A meter that reads 0 W on an unpowered machine is telling the truth; the
+        /// machine's appetite is <see cref="MaxPowerDrawW"/>.</summary>
+        public float LivePowerDrawW
+        {
+            get
+            {
+                if (!IsPowered) return 0f;
+                if (Phase == QuarryPhase.Idle || Phase == QuarryPhase.Complete) return 0f;
+                return EffPowerDraw;
+            }
+        }
+
+        /// <summary>The highest load this build can ever ask for: the base draw plus
+        /// every performance module fitted, before efficiency modules shave it back.
+        /// This is the red end of the meter, and it does not move when the drill idles.</summary>
+        public float MaxPowerDrawW => Mathf.Max(10f,
+            basePowerDraw + (MaxRangeLevel + MaxSpeedLevel) * powerPerPerfUpgrade);
+
+        /// <summary>Rated load of the drill as currently built (efficiency included).</summary>
+        public float RatedPowerDrawW => EffPowerDraw;
+
+        /// <summary>True when the drill is connected to at least one other power node.</summary>
+        public bool IsWired => _pc != null && _pc.neighbours != null && _pc.neighbours.Count > 0;
+
+        /// <summary>Power health, in the words the panel and the meter both use:
+        /// UNWIRED (no cable found), STARVED (wired, network cannot serve the load) or
+        /// SERVED (wired and running on real supply).</summary>
+        public QuarryPowerState PowerState
+        {
+            get
+            {
+                if (_pc == null) return QuarryPowerState.Served;   // unpowered by design
+                if (_pc.IsPowered) return QuarryPowerState.Served;
+                return IsWired ? QuarryPowerState.Starved : QuarryPowerState.Unwired;
+            }
+        }
+
+        public bool IsPowered => _pc == null || _pc.IsPowered;
+
+        /// <summary>One-line status the way the drill itself would print it.</summary>
+        public string StatusLabel => PowerState switch
+        {
+            QuarryPowerState.Unwired => "NO CABLE",
+            QuarryPowerState.Starved => "NO SUPPLY",
+            _ => Phase switch
+            {
+                QuarryPhase.TapeFrame     => "SURVEYING",
+                QuarryPhase.BuildingFrame => "BUILDING",
+                QuarryPhase.Mining        => IsOutputFull ? "OUTPUT FULL" : "DRILLING",
+                QuarryPhase.Complete      => "COMPLETE",
+                _                         => "IDLE"
+            }
+        };
 
         // Ground-probe band around the block's own plane (local metres). The
         // original mined from the quarry's own voxel layer; columns keep that
@@ -274,7 +339,12 @@ namespace VoxelEngine.Transport
         void Update()
         {
             if (!_ok) return;
-            if (_pc) _pc.wattsPerSecond = EffPowerDraw;
+            // 17.27.0-dev: a finished drill does not hold a claim on the grid. While it
+            // still has work - including waiting for power - it asks for its full rated
+            // draw so the network can decide whether it can be served; once it is
+            // COMPLETE there is nothing left to power, and releasing the demand lets a
+            // finished machine stop loading the base (the front meter reads 0 W with it).
+            if (_pc) _pc.wattsPerSecond = Phase == QuarryPhase.Complete ? 0f : EffPowerDraw;
             bool hp = _pc == null || _pc.IsPowered;
 
             // Destroy ghost when power comes on (real frame is about to build)

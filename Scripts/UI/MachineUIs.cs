@@ -1787,7 +1787,12 @@ namespace VoxelEngine.UI
             var pc = q.GetComponent<VoxelEngine.Power.PowerConsumer>();
             bool powered = pc == null || pc.IsPowered;
 
-            string status = !powered ? "NO POWER" : q.Phase switch
+            // 17.27.0-dev: "NO POWER" hid two very different problems behind one word.
+            // The panel now says which one it is, in the same words as the machine's own
+            // front meter.
+            string status = !powered
+                ? (q.PowerState == QuarryPowerState.Unwired ? "NO CABLE" : "NO POWER")
+                : q.Phase switch
             {
                 QuarryPhase.TapeFrame     => "SURVEYING",
                 QuarryPhase.BuildingFrame => "BUILDING",
@@ -1890,9 +1895,16 @@ namespace VoxelEngine.UI
             right.pickingMode = PickingMode.Ignore;
 
             if (pc != null)
-                right.Add(T.StatRow("\u26A1", "Power",
-                    powered ? $"{q.EffPowerDraw:0} W  \u00B7  Connected" : "Disconnected",
-                    powered ? T.AccentGreen : T.AccentRed));
+            {
+                string powerText = q.PowerState switch
+                {
+                    QuarryPowerState.Unwired => "No cable - run power to the front inlet",
+                    QuarryPowerState.Starved => $"Supply too low - needs {q.RatedPowerDrawW:0} W",
+                    _ => $"{q.LivePowerDrawW:0} / {q.MaxPowerDrawW:0} W  \u00B7  Connected"
+                };
+                right.Add(T.StatRow("\u26A1", "Power", powerText,
+                    q.PowerState == QuarryPowerState.Served ? T.AccentGreen : T.AccentRed));
+            }
 
             right.Add(T.StatRow("\uD83D\uDCD0", "Area",
                 $"{q.AreaX}\u00D7{q.AreaZ}  ({q.EffSize}\u00B2)", T.AccentCyan));

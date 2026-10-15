@@ -44,10 +44,13 @@ Shader "VoxelEngine/VoxelWaterURP"
         _FlowNormalStrength ("Flow Normal Strength", Range(0, 2)) = 1.0
         _FlowFoamStrength   ("Flow Foam Strength", Range(0, 2)) = 0.8
 
-        // 17.26.1-dev: a property header is a plain label. The version tag these three
-        // carried (" - 9.16.0") is not a valid ShaderLab attribute argument - the parser
-        // stopped on the dotted number and rejected the whole shader.
-        [Header(Thin-Film Iridescence)]
+        // 17.27.0-dev: a property header is a plain LABEL - words and spaces only.
+        // The ShaderLab parser takes the first dash it sees as a minus operator and
+        // reports "unexpected $undefined, expecting TVAL_ID" for the whole shader
+        // (the first report pointed at this line, the second at this line again once
+        // the version tag beside it was gone: it was never the version, it was the
+        // hyphen in a two-word name). No header in this file may carry punctuation.
+        [Header(Iridescence)]
         _IridescenceStrength ("Iridescence Strength", Range(0, 1)) = 0.0
         _IridescenceScale    ("Iridescence Hue Cycle", Range(0, 4)) = 1.0
 

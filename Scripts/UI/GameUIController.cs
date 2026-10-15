@@ -5443,7 +5443,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             int ghostCount = dragStack.count;
             if (ghostCount > 1 || clampedPartial > 0)
             {
-                var l = new Label(ghostCount.ToString());
+                var l = new Label(ghostCount.ToString()) { name = DragGhostCountName };
                 l.style.position = Position.Absolute;
                 l.style.bottom = 2; l.style.right = 4;
                 l.style.color = Color.white;
@@ -5647,6 +5647,96 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             _dragSource.partialCount = 0;
             ResetQuickTransferDrag();
             if (_dragGhost != null) { _dragGhost.RemoveFromHierarchy(); _dragGhost = null; }
+        }
+
+        private const string DragGhostCountName = "DragGhostCount";
+
+        /// <summary>17.27.0-dev - RIGHT-CLICK WHILE CARRYING A STACK PLACES ONE ITEM.
+        ///
+        /// Right-click already meant "split to cursor" on a slot and "drop everything"
+        /// while dragging, which left no gesture for the most common inventory action
+        /// there is: feeding a machine one item at a time, or topping up a stack without
+        /// spilling forty items into it. With a stack on the cursor, RMB on a slot now
+        /// moves exactly ONE item into it - allowed when the slot is empty or already
+        /// holds the same stackable item with room left, refused (drag intact) against
+        /// anything else. The drag survives while the cursor still carries something, so
+        /// a row of slots can be filled one click at a time.
+        ///
+        /// Returns false when the destination is not a plain slot container (storage
+        /// drawers and filter slots own their own right-click rules), so the caller can
+        /// fall through to the historical end-drag behaviour.</summary>
+        private bool DepositOneFromDrag(IItemContainer destC, int destIdx)
+        {
+            if (!_dragSource.active || destC == null) return false;
+            var srcC = _dragSource.container;
+            int srcIdx = _dragSource.slotIndex;
+            if (srcC == null) return false;
+
+            if (destC is VoxelEngine.Storage.IItemFilterSlot
+                || destC is VoxelEngine.Storage.StorageDrawer
+                || srcC is VoxelEngine.Storage.StorageDrawer) return false;
+
+            var fullSrc = srcC.GetSlot(srcIdx).Clone();
+            if (fullSrc.IsEmpty || fullSrc.item == null) { CancelDrag(); Refresh(); return true; }
+
+            int partial = _dragSource.partialCount;
+            bool partialSplit = partial > 0 && partial < fullSrc.count;
+            int carried = partialSplit ? partial : fullSrc.count;
+
+            // The same slot, or a slot that cannot take this item: leave the drag alone.
+            if (srcC == destC && srcIdx == destIdx) return true;
+            var dst = destC.GetSlot(destIdx).Clone();
+            if (!dst.IsEmpty)
+            {
+                if (dst.item != fullSrc.item || !fullSrc.item.IsStackable) return true;
+                if (dst.count >= ItemStack.MaxItemsPerStack(fullSrc.item)) return true;
+            }
+
+            // One item moves, and only one: the destination gains it, the source
+            // container loses it, and the cursor carries one less.
+            dst.count += 1;
+            destC.SetSlot(destIdx, dst);
+
+            fullSrc.count -= 1;
+            if (fullSrc.count <= 0) srcC.SetSlot(srcIdx, new ItemStack());
+            else srcC.SetSlot(srcIdx, fullSrc);
+
+            carried -= 1;
+            if (carried <= 0)
+            {
+                CancelDrag();
+                Refresh();
+                return true;
+            }
+
+            _dragSource.partialCount = partialSplit ? carried : 0;
+            UpdateDragGhostCount(carried);
+            Refresh();
+            return true;
+        }
+
+        /// <summary>Keeps the cursor stack's label honest while items are placed one at
+        /// a time; the ghost is built once in BeginDrag, so the number is written into
+        /// it again here.</summary>
+        private void UpdateDragGhostCount(int count)
+        {
+            if (_dragGhost == null) return;
+            var label = _dragGhost.Q<Label>(DragGhostCountName);
+            if (count > 1)
+            {
+                if (label == null)
+                {
+                    label = new Label(count.ToString()) { name = DragGhostCountName };
+                    label.style.position = Position.Absolute;
+                    label.style.bottom = 2; label.style.right = 4;
+                    label.style.color = Color.white;
+                    label.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    label.pickingMode = PickingMode.Ignore;
+                    _dragGhost.Add(label);
+                }
+                else label.text = count.ToString();
+            }
+            else if (label != null) label.RemoveFromHierarchy();
         }
 
         private void SplitOrMove(IItemContainer c, int idx)
@@ -6674,6 +6764,13 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
                 if (_dragSource.active)
                 {
+                    // 17.27.0-dev: carrying a stack, RMB places ONE item into the
+                    // slot under the cursor (empty slot, or the same stackable item
+                    // with room). Containers that own their own right-click rules
+                    // decline the call and fall through to the historical drop.
+                    if (slotRef != null
+                        && DepositOneFromDrag(slotRef.container, slotRef.index)) return;
+
                     if (slotRef != null)
                         EndDrag(slotRef.container, slotRef.index);
                     else

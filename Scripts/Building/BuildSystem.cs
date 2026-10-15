@@ -31,6 +31,14 @@ namespace VoxelEngine.Building
         /// <summary>The modern build reach (m). Anything shorter is treated as a stale
         /// serialized value from an older player prefab and auto-upgraded in Awake().</summary>
         public const float BuildReach = 16f;
+
+        /// <summary>How far the aim is followed when it finds no surface inside build
+        /// reach. Long enough to find the beach, the far bank or the hillside the player
+        /// is actually looking at, so the ghost can be shown standing on it.</summary>
+        private const float AimAssistReach = 220f;
+        /// <summary>Seconds between "no target" HUD reminders while the aim stays empty.</summary>
+        private const float AimHintCooldown = 6f;
+
         private const float InteriorLatticeSpacing = 1f;
         public bool  gridSnap = true;
         public float gridSize = 1f;
@@ -44,6 +52,9 @@ namespace VoxelEngine.Building
         private BlockItem  _ghostItem;
         private Material   _ghostMaterialValid;
         private Material   _ghostMaterialInvalid;
+        // 17.27.0-dev: amber means "no target yet" - the crosshair is not on a surface
+        // within building reach. It is NOT a refusal, and it must not be painted red.
+        private Material   _ghostMaterialPending;
         // Renderer material arrays are allocated by Unity when reassigned. Remember
         // the active ghost tint so a stable valid/invalid preview does not rebuild
         // those arrays every frame.
@@ -149,6 +160,7 @@ namespace VoxelEngine.Building
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));
             _ghostMaterialInvalid = MakeGhostMaterial(new Color(0.95f, 0.35f, 0.3f, ghostAlpha));
+            _ghostMaterialPending = MakeGhostMaterial(new Color(0.96f, 0.78f, 0.24f, ghostAlpha));
 
             // Older player prefabs serialized the short 8 m build reach — upgrade it.
             if (reach < BuildReach) reach = BuildReach;
@@ -233,6 +245,31 @@ namespace VoxelEngine.Building
             }
 #endif
         }
+
+        /// <summary>17.27.0-dev - one polite line explaining an aim with no surface, at
+        /// most every few seconds, so a pending (amber) ghost never looks like a bug and a
+        /// far surface is not mistaken for an unreachable refusal.</summary>
+        private void ShowAimHint(BlockItem block, float surfaceDistance)
+        {
+            if (Time.unscaledTime < _nextAimHint) return;
+            _nextAimHint = Time.unscaledTime + AimHintCooldown;
+
+            string name = block != null && !string.IsNullOrEmpty(block.displayName)
+                ? block.displayName
+                : "this block";
+            if (surfaceDistance > 0f)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Too far to build",
+                    $"'{name}' is aimed at ground {surfaceDistance:0} m away. Building reach is {reach:0} m - walk closer.",
+                    block != null ? block.icon : null, new Color(0.96f, 0.78f, 0.24f));
+                return;
+            }
+            VoxelEngine.UI.BuildFeedbackHud.Show("No surface in view",
+                $"Point the crosshair at ground or a structure within {reach:0} m to place '{name}'.",
+                block != null ? block.icon : null, new Color(0.96f, 0.78f, 0.24f));
+        }
+
+        private float _nextAimHint;
 
         private void TraceGhost(string state)
         {
@@ -364,17 +401,35 @@ namespace VoxelEngine.Building
                     ApplyGhostMaterialIfChanged(chainCanPlace ? _ghostMaterialValid : _ghostMaterialInvalid);
                     return;
                 }
-                // Keep a red preview in front of the camera when the aim ray
-                // finds no collider. Placement still requires a real hit, but an
-                // empty scene/edge gap must not look like a missing prefab ghost.
+                // 17.27.0-dev - "NO TARGET" IS NOT "FORBIDDEN".
+                //
+                // This branch used to hang the machine in the air at 40% of the reach in
+                // the INVALID colour. Aiming over a beach at eye level - ground below the
+                // crosshair, sea beyond it - put a big red quarry in the sky, which reads
+                // as a broken placement system rather than "the crosshair is not on
+                // anything". The aim is now followed far past building reach: if there is
+                // a surface out there the ghost is stood ON it (walk closer and it turns
+                // green), and only a genuinely empty aim keeps the preview floating - in
+                // the pending colour, with the reason on the HUD.
                 _ghost.SetActive(true);
                 HidePrecisionLattice();
+                if (TryRaycastIgnoringSelf(ray, out var farHit, AimAssistReach) && farHit.collider != null)
+                {
+                    Quaternion farRotation = GravityProvider.GetSurfaceRotation(farHit.point)
+                        * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                    _ghost.transform.SetPositionAndRotation(farHit.point, farRotation);
+                    ApplyGhostMaterialIfChanged(_ghostMaterialPending);
+                    ShowAimHint(block, Vector3.Distance(farHit.point, shootCamera.transform.position));
+                    return;
+                }
+
                 float previewDistance = Mathf.Clamp(reach * 0.4f, 2f, 4f);
                 Vector3 previewPosition = ray.GetPoint(previewDistance);
                 Quaternion previewRotation = GravityProvider.GetSurfaceRotation(previewPosition)
                     * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                 _ghost.transform.SetPositionAndRotation(previewPosition, previewRotation);
-                ApplyGhostMaterialIfChanged(_ghostMaterialInvalid);
+                ApplyGhostMaterialIfChanged(_ghostMaterialPending);
+                ShowAimHint(block, -1f);
                 return;
             }
             _ghostNoHitSince = -1f;
@@ -3503,6 +3558,37 @@ namespace VoxelEngine.Building
             if (VoxelEngine.Scattering.ScatterClear.IsScatterCollider(collider)) return true;
             // Thin conduits and draped roads may overlap static world geometry.
             if (isThin || isSurfaceOverlay) return true;
+
+            // 17.27.0-dev - NATURAL GROUND IS NOT AN OBSTACLE.
+            //
+            // The old tail of this chain allowed only colliders that carried a
+            // rigidbody, which made every static surface a blocker - including the
+            // raw voxel terrain the player is standing on. Aiming a machine at
+            // natural ground tinted the ghost red and refused the click, while the
+            // same machine placed happily on a base. The seated pose already keeps
+            // the prefab above the surface (ComputeSurfaceFlushPlacement), so the
+            // probe only has to answer "is a STRUCTURE here"; terrain, cliffs and
+            // static scenery answer no. This is the same allowance law the grid
+            // builder applies, so the two placement paths finally agree.
+            if (collider.attachedRigidbody == null
+                && collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() == null
+                && collider.GetComponentInParent<PlacedBlock>() == null
+                && collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() == null)
+            {
+                // ...but a BODY is not scenery. A CharacterController carries no
+                // rigidbody, so "no rigidbody" alone would let a block be placed inside
+                // another player: the builder's own capsule is allowed, everyone else's
+                // still refuses.
+                var otherPlayer = collider.GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                if (otherPlayer == null
+                    || VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(collider, transform))
+                    return true;
+                return false;
+            }
+
+            // The builder's own capsule never blocks the cell he is aiming at.
+            if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(collider, transform)) return true;
+
             if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)
                 return false;
             return collider.attachedRigidbody != null;

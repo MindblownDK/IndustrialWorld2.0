@@ -207,7 +207,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Author catalytic cracking and petrochemicals", () => VoxelEngine.EditorTools.CatalyticCrackingSetup.RunStep71()),
                 Setup("Author universal machine upgrade modules", () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75()),
                 Setup("Convert the jack pump to tank-only crude output", () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76()),
-                Setup("Build the deep-core programme", () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86()));
+                Setup("Build the deep-core programme", () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86()),
+                Setup("Rebuild the Quarry machine and its front multimeter (17.27.0-dev)", () => VoxelEngine.EditorTools.QuarryMachineSetup.RunStep121()));
 
             AddSetupGroup(parent, ref number, "Fluids, Atmosphere & Environment",
                 "Water, liquids, weather, pressure, thermal hazards and pollution. The duplicate spherical-water action was removed; one action now owns that setup.", false,
@@ -5980,30 +5981,12 @@ namespace VoxelEngine.EditorTools
             // ════════════════════════════════════════════════════════════
             //  QUARRY + UPGRADES (Range / Speed / Efficiency)
             // ════════════════════════════════════════════════════════════
-            var quarryPrefab = MakePref(MISC_PREFABS, "Quarry",
-                new Color(0.35f, 0.35f, 0.40f), new Vector3(2f, 2.4f, 2f),
-root =>
-                {
-                    var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
-                    pc.wattsPerSecond = 500f; pc.connectRadius = 2f;
-                    var portCfg = root.AddComponent<VoxelEngine.Transport.PortConfig>();
-                    portCfg.ports = new VoxelEngine.Transport.PortConfig.FacePort[]
-                    {
-                        new() { face = VoxelEngine.Transport.CubeFace.PosX, direction = VoxelEngine.Transport.PortDirection.Output, networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.NegX, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.PosY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.NegY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.PosZ, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.NegZ, direction = VoxelEngine.Transport.PortDirection.Input,  networkType = VoxelEngine.Transport.PortNetworkType.Power, enabled = true },
-                    };
-                    var q = root.AddComponent<VoxelEngine.Transport.Quarry>();
-                    q.defaultSize = 16; q.baseMineInterval = 0.5f; q.quarryTier = 3;
-                    q.maximumMiningDepth = 64;
-                    q.forwardOffset = 2f; q.frameBuildInterval = 0.06f;
-                    q.frameColor = new Color(0.18f, 0.19f, 0.22f);
-                    q.outputSlots = 6;
-                    q.EnsureUpgrades();
-                });
+            // 17.27.0-dev: the machine's body, its front power inlet and its front
+            // multimeter are authored by QuarryMachineSetup, so the dedicated rebuild
+            // step and this full content run always produce the same quarry. The item,
+            // the upgrades and the recipes below are unchanged.
+            var quarryPrefab = VoxelEngine.EditorTools.QuarryMachineSetup.Build($"{MISC_PREFABS}/Quarry.prefab")
+                ?? AssetDatabase.LoadAssetAtPath<GameObject>($"{MISC_PREFABS}/Quarry.prefab");
             var blockQuarry = MakeBlk(MISC_BLOCKS, "Block_Quarry", "Quarry",
                 "Late-game automated strip-miner. Builds a frame, then excavates the rectangle in front of itself (default 16×16) to a finite 64-layer maximum depth. Accepts Range, Speed & Efficiency upgrades. Powered (~500 W). Tier-3 mining.",
                 new Color(0.35f, 0.35f, 0.40f), quarryPrefab, "Logistics", hp: 800, miningTier: 3);

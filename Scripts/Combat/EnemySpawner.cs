@@ -280,22 +280,27 @@ namespace VoxelEngine.Combat
             if (face.sqrMagnitude < 0.001f) return false;
             face.Normalize();
 
-            Vector3 probe = desired + up * 2.5f;
-            if (!Physics.Raycast(probe + up * 2f, -up, out var groundHit, 12f,
-                    ~0, QueryTriggerInteraction.Ignore)) return false;
-            if (groundHit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) return false;
-            if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphere)
-            {
-                Vector3 local = sphere.body.transform.InverseTransformPoint(groundHit.point);
-                Vector3 normal = local.normalized;
-                if (!sphere.TryGroundSurface(ref local, ref normal)) return false;
-                Vector3 terrainPoint = sphere.body.transform.TransformPoint(local);
-                if (Vector3.Distance(terrainPoint, groundHit.point) > 0.2f
-                    || !sphere.IsDryFooting(terrainPoint)) return false;
-            }
+            // 17.27.0-dev - MOBS SPAWNING UNDER THE SURFACE.
+            //
+            // The old probe was a single 12 m ray from 4.5 m above the anchor, and it
+            // trusted whatever it hit first: a cave ceiling, a hull, a placed block or a
+            // ledge above the anchor all became "the ground". The mob was then placed
+            // 1.2 m along the radial up from that point - which on a slope, a cliff face
+            // or a seam between chunk meshes is a spot INSIDE the terrain, so the capsule
+            // spawned embedded, the solver pushed it out the only way it could (down) and
+            // the ghoul fell through the surface it was meant to be standing on. It also
+            // stopped at the first hit, so a cave floor under a surface was a valid
+            // answer whenever the surface itself was not within the ray's reach.
+            //
+            // The probe now: casts from well above the anchor and takes the SHALLOWEST
+            // hit whose surface is walkable (up-ish), rejects anything that is not the
+            // world's own terrain to within 20 cm, requires a spot the mob's whole body
+            // fits in clear of geometry, and only then stands the prefab on it with its
+            // own collider bottom 0.35 m clear of the ground.
+            if (!CreatureSpawnGround.TryResolve(desired, up, out var surfacePoint, out var surfaceNormal)) return false;
+            if (!CreatureSpawnGround.TryFindClearStandPoint(ghoulPrefab, surfacePoint, up, out var spawnPos)) return false;
 
-            Vector3 spawnPos = groundHit.point + up * 1.2f;
-            var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(face, up));
+            var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(face, surfaceNormal));
             var ghoul = go.GetComponent<EnemyGhoul>();
             if (ghoul == null)
             {

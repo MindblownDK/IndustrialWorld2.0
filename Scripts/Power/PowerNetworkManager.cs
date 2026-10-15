@@ -116,6 +116,42 @@ namespace VoxelEngine.Power
             var snapshot = new List<PowerNode>(_allNodes);
             snapshot.RemoveAll(n => n == null);
 
+            // 17.27.0-dev - THE PROXIMITY GATE MEASURED THE WRONG THING.
+            //
+            // A node's transform is its pivot, not its socket. A static machine - the
+            // Quarry is the one that showed this - has its pivot at the base of a body
+            // several metres across, so a power cable laid against its flank or into the
+            // inlet on its side could be further from the pivot than connectRadius and
+            // was never even considered for a link. The player saw a machine that told
+            // them "NO POWER" no matter how they ran the cable to it, and a network that
+            // never registered the machine as a load. The gate now also passes whenever
+            // the other node's own collider bounds reach within connectRadius of this
+            // node's pivot, so a cable touching any part of a machine can bond to it.
+            // Bounds are computed once per rebuild, not once per pair.
+            var boundsCache = new Dictionary<PowerNode, Bounds>(snapshot.Count);
+            foreach (var n in snapshot)
+            {
+                Bounds b = new Bounds(n.transform.position, Vector3.zero);
+                bool any = false;
+                var colliders = n.GetComponentsInChildren<Collider>(true);
+                for (int i = 0; i < colliders.Length; i++)
+                {
+                    var col = colliders[i];
+                    if (col == null || !col.enabled || col.isTrigger) continue;
+                    if (!any) { b = col.bounds; any = true; }
+                    else b.Encapsulate(col.bounds);
+                }
+                if (any) boundsCache[n] = b;
+            }
+
+            bool WithinLinkRange(PowerNode a, PowerNode b, float r)
+            {
+                if ((a.transform.position - b.transform.position).sqrMagnitude <= r * r) return true;
+                if (boundsCache.TryGetValue(b, out var bb) && bb.SqrDistance(a.transform.position) <= r * r) return true;
+                if (boundsCache.TryGetValue(a, out var ab) && ab.SqrDistance(b.transform.position) <= r * r) return true;
+                return false;
+            }
+
             // Build neighbour lists using a spatial hash (cell size = 2m) — O(N + K) instead of O(N^2).
             const float CELL = 4f;
             var hash = new Dictionary<Vector3Int, List<PowerNode>>();
@@ -128,6 +164,22 @@ namespace VoxelEngine.Power
                 var key = Cell(n.transform.position);
                 if (!hash.TryGetValue(key, out var bucket)) hash[key] = bucket = new List<PowerNode>(4);
                 bucket.Add(n);
+                // Large machines must also be findable from the cells their body covers,
+                // otherwise the hash lookup above never offers the cable as a candidate.
+                if (boundsCache.TryGetValue(n, out var nb) && nb.extents.sqrMagnitude > CELL * CELL)
+                {
+                    var lo = Cell(nb.min);
+                    var hi = Cell(nb.max);
+                    for (int z = lo.z; z <= hi.z; z++)
+                    for (int y = lo.y; y <= hi.y; y++)
+                    for (int x = lo.x; x <= hi.x; x++)
+                    {
+                        var extra = new Vector3Int(x, y, z);
+                        if (extra == key) continue;
+                        if (!hash.TryGetValue(extra, out var other)) hash[extra] = other = new List<PowerNode>(4);
+                        if (!other.Contains(n)) other.Add(n);
+                    }
+                }
             }
             foreach (var n in snapshot)
             {
@@ -141,8 +193,9 @@ namespace VoxelEngine.Power
                     foreach (var b in bucket)
                     {
                         if (b == n) continue;
+                        if (n.neighbours.Contains(b)) continue;      // already bonded from the other side
                         float r = Mathf.Max(rA, b.connectRadius);
-                        if ((n.transform.position - b.transform.position).sqrMagnitude > r * r) continue;
+                        if (!WithinLinkRange(n, b, r)) continue;
 
                         // New: ask BOTH ends whether the link is legal.
                         // This enforces grid-alignment for cables AND line-of-sight checks,

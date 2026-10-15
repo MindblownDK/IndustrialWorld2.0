@@ -110,18 +110,24 @@ namespace VoxelEngine.Fauna
             Vector3 tangent = rand - Vector3.Project(rand, up);
             if (tangent.sqrMagnitude < 0.001f) return;
             tangent = tangent.normalized * Random.Range(spawnNearMin, spawnNearMax);
-            Vector3 spawnPos = ppos + tangent + up * 2.5f;
 
             // Ground check: the spawn point must sit over real footing (and never a
             // ship hull) — a player flying high above the surface no longer seeds
             // animals in midair around him.
-            if (!Physics.Raycast(spawnPos + up * 2f, -up, out var groundHit, 12f,
-                    ~0, QueryTriggerInteraction.Ignore)) return;
-            if (groundHit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) return;
-            spawnPos = groundHit.point + up * 1.2f;
+            //
+            // 17.27.0-dev: the same surface solve the hostiles use (see
+            // CreatureSpawnGround). A first-hit ray plus a flat 1.2 m radial offset
+            // buried animals in slopes and answered "cave floor" for a canopy-height
+            // anchor; now the shallowest walkable hit that IS the world's terrain wins,
+            // and the animal stands with its own collider clear of the ground.
+            if (!VoxelEngine.Combat.CreatureSpawnGround.TryResolve(ppos + tangent, up,
+                    out var surfacePoint, out var surfaceNormal)) return;
 
             var prefab = animalPrefabs[Random.Range(0, animalPrefabs.Length)];
-            var go = Instantiate(prefab, spawnPos, Quaternion.LookRotation(-tangent, up));
+            if (!VoxelEngine.Combat.CreatureSpawnGround.TryFindClearStandPoint(prefab, surfacePoint, up,
+                    out var spawnPos)) return;
+
+            var go = Instantiate(prefab, spawnPos, Quaternion.LookRotation(-tangent, surfaceNormal));
             var animal = go.GetComponent<PassiveAnimal>();
             if (animal != null) _alive.Add(animal);
             else

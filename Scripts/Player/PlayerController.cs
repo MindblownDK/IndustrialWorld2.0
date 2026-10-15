@@ -82,6 +82,15 @@ namespace VoxelEngine.Player
         /// <summary>Lift above which the footing recovery counts as catching a fall
         /// and cancels downward velocity. Below it the ground stick is left intact.</summary>
         private const float MinRecoveryToCancelFall = 0.02f;
+        /// <summary>17.27.0-dev - how far a PLANTED player may sit from its exact
+        /// clearance before the footing solve touches it at all, in either direction.
+        /// Inside the band the body is a fixed point; a stationary player can no longer
+        /// be pumped up and down by millimetre noise in the sampled ground.</summary>
+        private const float PlantedFootingDeadband = 0.02f;
+        /// <summary>17.27.0-dev - smallest footing movement worth handing to the eye as a
+        /// step. Real steps are centimetres; maintenance is millimetres, and feeding that
+        /// into the camera and decaying it back out was a bob in its own right.</summary>
+        private const float CameraStepCompensationMinimum = 0.03f;
 
         // ── Standing on a moving deck (14.26.0) ──────────────────────────
         //
@@ -794,6 +803,20 @@ namespace VoxelEngine.Player
             // look angle (you can dive at a downward angle by looking down).
             var waterState = GetComponent<PlayerWaterState>();
             bool inWater = waterState != null && waterState.IsSwimming;
+            // 17.27.0-dev - THE STANDING BOB, second pass.
+            //
+            // Round 2 took gravity and the ground stick away from a planted player, which
+            // killed the big 2 m/s cycle but not the bob: the footing solve below was still
+            // the only writer of vertical position, and it acted on EVERY millimetre. Its
+            // lift half had a 1 mm threshold, its settle half a 5 mm one, and the ground it
+            // samples is a voxel mesh whose ray hit wanders by a millimetre or two as the
+            // ray origin moves with the solve it is feeding. Lift, drift, settle, lift - a
+            // limit cycle the player sees as a standing bob on terrain and on foundations
+            // alike. A planted player is now measured against a CENTIMETRE band on both
+            // halves, so standing still is a fixed point instead of a loop. A real overlap
+            // (terrain streamed in under the feet, a restored body inside a block) and a
+            // real drop (a ledge under the feet) are both still recovered at full speed.
+            bool planted = false;
             if (inWater)
             {
                 float surfY = waterState.WaterSurfaceY;
@@ -870,7 +893,7 @@ namespace VoxelEngine.Player
                 // their own attachment), the radial velocity is simply held at zero and the
                 // capsule stands perfectly still. Walking, jumping, water and the boots are
                 // all untouched.
-                bool planted = _grounded
+                planted = _grounded
                     && wishDir.sqrMagnitude < 0.001f
                     && (_boots == null || !_boots.Engaged);
                 if (planted)
@@ -954,7 +977,7 @@ namespace VoxelEngine.Player
                 SuppressStandingSlide(up, beforeWalkMove, intendedHoriz, wish, dt);
 
             if (!inWater)
-                RecoverTerrainFooting(up);
+                RecoverTerrainFooting(up, planted);
 
             // Re-anchor LAST, once the final position for this frame is settled, so
             // next frame's carry is measured from where the player actually ended up.
@@ -1499,7 +1522,11 @@ namespace VoxelEngine.Player
             Vector3 before = transform.position;
             _cc.Move(up * lift);
             float movedUp = Vector3.Dot(transform.position - before, up);
-            if (movedUp > 0.002f)
+            // 17.27.0-dev: only a REAL step hands the eye a compensation offset. A few
+            // millimetres of maintenance were being written into the camera every frame
+            // and decayed straight back out, which is a bob generator even when the body
+            // itself is still.
+            if (movedUp > CameraStepCompensationMinimum)
                 _cameraStepOffset = Mathf.Clamp(_cameraStepOffset - movedUp, -0.35f, 0.35f);
         }
 
@@ -1517,7 +1544,7 @@ namespace VoxelEngine.Player
         /// elsewhere in the move pipeline simply stayed, and a per-frame nudge
         /// accumulated into a slow climb off the planet.
         /// </summary>
-        private void RecoverTerrainFooting(Vector3 up)
+        private void RecoverTerrainFooting(Vector3 up, bool planted = false)
         {
             if (_cc == null) return;
             if (!_grounded && VerticalSpeed(up) > 0.05f) return;
@@ -1532,7 +1559,12 @@ namespace VoxelEngine.Player
             float feetAboveGround = Vector3.Dot(transform.position - hit.point, up);
             float correction = footClearance - feetAboveGround;   // + lift, - settle
 
-            if (correction > 0.001f)
+            // 17.27.0-dev: a planted player is left alone inside a centimetre band on
+            // both halves of the solve. See the note in the walk update: a stationary
+            // body must be a fixed point, not a limit cycle between lift and settle.
+            float band = planted ? PlantedFootingDeadband : 0f;
+
+            if (correction > 0.001f + band)
             {
                 // Recover a bad overlap smoothly rather than snapping up in a single frame.
                 float maxStepUp = Mathf.Max(0.02f, 5.0f * Time.deltaTime);
@@ -1551,7 +1583,7 @@ namespace VoxelEngine.Player
 
             // Hovering. The deadband is wider on this side than the 1 mm lift band
             // so the two halves can never buzz against each other.
-            if (correction > -FootSettleDeadband) return;
+            if (correction > -(FootSettleDeadband + band)) return;
             if (!_grounded) return;                       // genuinely airborne: gravity owns it
             if (VerticalSpeed(up) > 0.01f) return;        // jumping or launched: leave it alone
 
@@ -1565,7 +1597,7 @@ namespace VoxelEngine.Player
             Vector3 beforeSettle = transform.position;
             _cc.Move(-up * settleAmount);
             float movedDown = Vector3.Dot(beforeSettle - transform.position, up);
-            if (movedDown > 0.002f)
+            if (movedDown > CameraStepCompensationMinimum)
                 _cameraStepOffset = Mathf.Clamp(_cameraStepOffset + movedDown, -0.35f, 0.35f);
             _grounded = true;
         }
