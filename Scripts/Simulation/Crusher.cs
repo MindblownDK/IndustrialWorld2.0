@@ -97,6 +97,29 @@ namespace VoxelEngine.Simulation
             if (inputC   == null) inputC   = new ItemContainer("Input",    INPUT_SLOTS);    else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);   else outputC.Resize(OUTPUT_SLOTS);
             if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS);  else upgradeC.Resize(UPGRADE_SLOTS);
+
+            upgradeC.OnChanged -= RecalculateUpgrades;
+            upgradeC.OnChanged += RecalculateUpgrades;
+            RecalculateUpgrades();
+        }
+
+        private void RecalculateUpgrades()
+        {
+            if (upgradeC == null) return;
+            float speed = 1f;
+            float eff = 1f;
+            for (int i = 0; i < upgradeC.Size; i++)
+            {
+                var stack = upgradeC.GetSlot(i);
+                if (stack == null || stack.IsEmpty || stack.item == null) continue;
+                if (stack.item is FurnaceUpgradeItem mod)
+                {
+                    speed *= Mathf.Pow(mod.speedMultiplier, stack.count);
+                    eff   *= Mathf.Pow(mod.efficiencyMultiplier, stack.count);
+                }
+            }
+            _speedMultiplier = speed;
+            _efficiencyMultiplier = eff;
         }
 
         /// <summary>Restores additive machine state after its containers are loaded.</summary>
@@ -232,7 +255,7 @@ namespace VoxelEngine.Simulation
             return r != null
                 && r.inputs != null
                 && r.inputs.Length > 0
-                && r.inputs[0].item == item
+                && ItemIdentity.Same(r.inputs[0].item, item)
                 && count >= r.inputs[0].count;
         }
 
@@ -250,7 +273,13 @@ namespace VoxelEngine.Simulation
             // Consume inputs.
             foreach (var inp in _current.inputs)
             {
-                inputC.Remove(inp.item, inp.count);
+                int removed = inputC.Remove(inp.item, inp.count);
+                if (removed < inp.count)
+                {
+                    var slot0 = inputC.GetSlot(0);
+                    if (!slot0.IsEmpty && ItemIdentity.Same(slot0.item, inp.item))
+                        inputC.Remove(slot0.item, inp.count - removed);
+                }
                 ProductionStatsTracker.RecordConsumed(inp.item, inp.count);
             }
 

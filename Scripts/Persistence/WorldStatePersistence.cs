@@ -1831,6 +1831,15 @@ namespace VoxelEngine.Persistence
             if (crusher != null)
                 return SerializeMulti(crusher.inputC, crusher.outputC, crusher.upgradeC);
 
+            var oreWasher = go.GetComponentInChildren<VoxelEngine.Simulation.OreWasher>(true);
+            if (oreWasher != null)
+            {
+                oreWasher.EnsureContainers();
+                var sc = SerializeMulti(oreWasher.inputC, oreWasher.outputC, oreWasher.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
             if (assembler != null)
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
@@ -4983,6 +4992,15 @@ namespace VoxelEngine.Persistence
             if (crusher != null)
             {
                 DeserializeMulti(sc, crusher.inputC, crusher.outputC, crusher.upgradeC);
+                return;
+            }
+
+            var oreWasher = go.GetComponentInChildren<VoxelEngine.Simulation.OreWasher>(true);
+            if (oreWasher != null)
+            {
+                oreWasher.EnsureContainers();
+                DeserializeMulti(sc, oreWasher.inputC, oreWasher.outputC, oreWasher.upgradeC);
+                RestorePortSnapshot(go, sc);
                 return;
             }
 

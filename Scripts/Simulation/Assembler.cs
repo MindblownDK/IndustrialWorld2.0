@@ -106,6 +106,29 @@ namespace VoxelEngine.Simulation
             if (inputC   == null) inputC   = new ItemContainer("Inputs",   inSlots);  else inputC.Resize(inSlots);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  outSlots); else outputC.Resize(outSlots);
             if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", upSlots);  else upgradeC.Resize(upSlots);
+
+            upgradeC.OnChanged -= RecalculateUpgrades;
+            upgradeC.OnChanged += RecalculateUpgrades;
+            RecalculateUpgrades();
+        }
+
+        private void RecalculateUpgrades()
+        {
+            if (upgradeC == null) return;
+            float speed = 1f;
+            float eff = 1f;
+            for (int i = 0; i < upgradeC.Size; i++)
+            {
+                var stack = upgradeC.GetSlot(i);
+                if (stack == null || stack.IsEmpty || stack.item == null) continue;
+                if (stack.item is FurnaceUpgradeItem mod)
+                {
+                    speed *= Mathf.Pow(mod.speedMultiplier, stack.count);
+                    eff   *= Mathf.Pow(mod.efficiencyMultiplier, stack.count);
+                }
+            }
+            _speedMult = speed;
+            _effMult = eff;
         }
 
         /// <summary>Restores additive machine state after its containers are loaded.</summary>

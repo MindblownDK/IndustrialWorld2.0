@@ -101,6 +101,157 @@ namespace VoxelEngine.UI
                 "Top-fed crusher. Inputs arrive from above; outputs can be pulled from the output buffer.");
         }
 
+        public static VisualElement OreWasherPanel(OreWasher washer, SlotBuilder slot)
+        {
+            washer.EnsureContainers();
+            washer.EnsureTanks();
+
+            Color accent = UIThemeOverride.ResolveAccent(washer, T.AccentCyan);
+            string status = !washer.UserEnabled ? "DISABLED"
+                : !washer.IsOnline ? "NO POWER"
+                : washer.IsLowWater ? "LOW WATER"
+                : washer.IsTailingsBackedUp ? "TAILINGS FULL"
+                : washer.IsActive ? "WASHING"
+                : "IDLE";
+            Color statusColor = !washer.UserEnabled || !washer.IsOnline ? T.AccentRed
+                : washer.IsLowWater || washer.IsTailingsBackedUp ? T.AccentAmber
+                : washer.IsActive ? T.AccentGreen
+                : T.TextMuted;
+
+            var p = T.MachinePanel();
+            p.Add(BuildHeader("💧", "Ore Washer", status, statusColor, accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!washer.UserEnabled || !washer.IsOnline ? 0 : washer.IsActive ? 2 : 1));
+
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            p.Add(content);
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            top.style.marginBottom = 8;
+            var toggle = T.SmallButton(washer.UserEnabled ? "Enabled" : "Disabled",
+                () => { washer.UserEnabled = !washer.UserEnabled; GameUIController.Instance?.RequestRefresh(); },
+                washer.UserEnabled ? T.AccentGreen : T.AccentRed);
+            toggle.style.marginRight = 8;
+            top.Add(toggle);
+            top.Add(T.StatRow("⚡", "Power", $"{washer.CurrentWattage:0} W", washer.IsOnline ? T.AccentGold : T.TextMuted));
+            content.Add(top);
+
+            var selectedRecipe = washer.CurrentRecipe;
+            string recipeName = selectedRecipe != null ? selectedRecipe.GetName() : "Auto / waiting for input";
+            content.Add(T.StatRow("⏱", "Recipe", recipeName, selectedRecipe != null ? accent : T.TextMuted));
+            var (progressBar, _) = T.ProgressBar(washer.Progress01, accent, 9, false);
+            content.Add(progressBar);
+            content.Add(T.Divider());
+
+            // ── Wash Water & Tailings Sluice Telemetry ──
+            content.Add(T.Subtitle("Wash Water & Sluice"));
+            var waterCard = T.Card();
+            waterCard.style.flexDirection = FlexDirection.Row;
+            waterCard.style.alignItems = Align.Center;
+            waterCard.style.marginBottom = 8;
+
+            var tankCol = new VisualElement();
+            tankCol.style.alignItems = Align.Center;
+            tankCol.style.marginRight = 12;
+            var gauge = T.TankGaugeWithParts("Wash Water", washer.waterTank.Fill01,
+                VoxelEngine.Items.LiquidType.Water.Color(),
+                $"{washer.waterTank.stored:0}/{washer.waterTank.capacity:0} L", 64f, 84f);
+            tankCol.Add(gauge.column);
+
+            var btnRow = new VisualElement();
+            btnRow.style.flexDirection = FlexDirection.Row;
+            btnRow.style.marginTop = 3;
+            var pourBtn = T.SmallButton("▲", () => GameUIController.Instance?.MachineTankSwap(washer.waterTank, true), T.AccentGreen);
+            pourBtn.tooltip = "Pour 0.5 L from a water canister in your hand into the wash tank.";
+            var drawBtn = T.SmallButton("▼", () => GameUIController.Instance?.MachineTankSwap(washer.waterTank, false), T.AccentCyan);
+            drawBtn.tooltip = "Draw 0.5 L from the wash tank into a canister in your hand.";
+            var drainBtn = T.SmallButton("⊘", () => { washer.waterTank.Drain(); GameUIController.Instance?.RefreshCurrentPanel(); }, T.AccentRed);
+            drainBtn.tooltip = "Empty the wash tank.";
+            btnRow.Add(pourBtn);
+            btnRow.Add(drawBtn);
+            btnRow.Add(drainBtn);
+            tankCol.Add(btnRow);
+            waterCard.Add(tankCol);
+
+            var infoCol = new VisualElement();
+            infoCol.style.flexGrow = 1;
+            infoCol.Add(T.StatRow("🚰", "Water Feed",
+                washer.IsWaterPiped ? "Piped Network Connected" : "Manual Canister / Internal Buffer",
+                washer.IsWaterPiped ? T.AccentGreen : T.AccentCyan));
+            infoCol.Add(T.StatRow("💧", "Per Batch",
+                $"{washer.EffectiveWaterPerBatch(selectedRecipe):0.#} L Water",
+                washer.IsLowWater ? T.AccentAmber : T.TextSecondary));
+            infoCol.Add(T.StatRow("🧪", "Feed Quality",
+                $"{washer.WaterQuality01 * 100f:0}% ({(washer.SourceContamination01 > 0.25f ? "Runoff Detected" : "Clean")})",
+                washer.SourceContamination01 > 0.25f ? T.AccentAmber : T.AccentGreen));
+
+            var tailingsRow = new VisualElement();
+            tailingsRow.style.flexDirection = FlexDirection.Row;
+            tailingsRow.style.alignItems = Align.Center;
+            tailingsRow.style.marginTop = 6;
+            var retainBtn = ModeButton("Retain Tailings", !washer.sluiceDischargeTailings, T.AccentGreen, () =>
+            {
+                washer.sluiceDischargeTailings = false;
+                GameUIController.Instance?.RequestRefresh();
+            });
+            retainBtn.style.marginRight = 6;
+            var sluiceBtn = ModeButton("Sluice Discharge", washer.sluiceDischargeTailings, T.AccentAmber, () =>
+            {
+                washer.sluiceDischargeTailings = true;
+                GameUIController.Instance?.RequestRefresh();
+            });
+            tailingsRow.Add(retainBtn);
+            tailingsRow.Add(sluiceBtn);
+            infoCol.Add(tailingsRow);
+            infoCol.Add(T.Muted(washer.sluiceDischargeTailings
+                ? "Sluice Discharge active: mineral tailings are vented into soil/water runoff instead of halting on full output."
+                : "Retain Tailings active: mineral tailings are collected in Outputs for reprocessing, crushing, or furnace vitrification."));
+
+            waterCard.Add(infoCol);
+            content.Add(waterCard);
+            content.Add(T.Divider());
+
+            content.Add(T.Subtitle("Recipe Selection"));
+            var recipeList = new ScrollView(ScrollViewMode.Vertical);
+            recipeList.style.maxHeight = 168;
+            recipeList.style.marginBottom = 8;
+            T.StyleScroller(recipeList);
+            if (washer.knownRecipes != null)
+            {
+                foreach (var recipe in washer.knownRecipes)
+                {
+                    if (recipe == null) continue;
+                    recipeList.Add(MachineRecipeCard(recipe, recipe == selectedRecipe, accent, () => washer.SelectRecipe(recipe)));
+                }
+            }
+            content.Add(recipeList);
+
+            content.Add(T.Subtitle("Inventory"));
+            var slotRow = new VisualElement();
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.flexWrap = Wrap.Wrap;
+            slotRow.style.justifyContent = Justify.Center;
+            slotRow.style.marginTop = 5;
+            slotRow.Add(T.SlotCard("Inputs", SlotGrid(washer.inputC, slot)));
+            slotRow.Add(T.Spacer(10));
+            slotRow.Add(T.SlotCard("Outputs", SlotGrid(washer.outputC, slot)));
+            if (washer.upgradeC != null && washer.upgradeC.Size > 0)
+            {
+                slotRow.Add(T.Spacer(10));
+                slotRow.Add(T.SlotCard("Upgrades", SlotGrid(washer.upgradeC, slot)));
+            }
+            content.Add(slotRow);
+            content.Add(T.Spacer(8));
+            content.Add(T.Muted("Connect a Water Pipe (or pour with a Liquid Canister) and feed Crushed Ore or Mineral Tailings."));
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
         public static VisualElement AssemblerPanel(Assembler assembler, SlotBuilder slot)
         {
             assembler.EnsureContainers();

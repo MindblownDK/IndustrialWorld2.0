@@ -200,9 +200,13 @@ namespace VoxelEngine.Fluids
                     var tank = col.GetComponentInParent<VoxelEngine.Fluids.WaterTank>();
                     var pump = col.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
                     var biofarm = col.GetComponentInParent<VoxelEngine.Building.Biofarm>();
-                    if (tank != null || pump != null || biofarm != null)
+                    var oreWasher = col.GetComponentInParent<VoxelEngine.Simulation.OreWasher>();
+                    if (tank != null || pump != null || biofarm != null || oreWasher != null)
                     {
-                        Vector3 anchor = tank != null ? tank.transform.position : pump != null ? pump.transform.position : biofarm.transform.position;
+                        Vector3 anchor = tank != null ? tank.transform.position
+                            : pump != null ? pump.transform.position
+                            : biofarm != null ? biofarm.transform.position
+                            : oreWasher.transform.position;
                         Vector3 delta = anchor - transform.position;
                         if (VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(
                                 delta, VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 1.2f, 0.45f))

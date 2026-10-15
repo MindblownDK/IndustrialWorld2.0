@@ -239,6 +239,7 @@ namespace VoxelEngine.Environment
         private DistillationPlant _distillationPlant;
         private CatalyticCracker _catalyticCracker;
         private StationaryChemicalPlant _chemicalPlant;
+        private VoxelEngine.Simulation.OreWasher _oreWasher;
         private GridRefinery _gridRefinery;
         private GridChemicalPlant _gridChemicalPlant;
         private FlareStack _flare;
@@ -264,6 +265,7 @@ namespace VoxelEngine.Environment
             _distillationPlant = GetComponentInChildren<DistillationPlant>(true);
             _catalyticCracker = GetComponentInChildren<CatalyticCracker>(true);
             _chemicalPlant = GetComponentInChildren<StationaryChemicalPlant>(true);
+            _oreWasher = GetComponentInChildren<VoxelEngine.Simulation.OreWasher>(true);
             _gridRefinery = GetComponentInChildren<GridRefinery>(true);
             _gridChemicalPlant = GetComponentInChildren<GridChemicalPlant>(true);
             _flare = GetComponentInChildren<FlareStack>(true);
@@ -356,6 +358,8 @@ namespace VoxelEngine.Environment
                 return _catalyticCracker.Current != null && _catalyticCracker.IsOnline ? 1f : 0f;
             if (_chemicalPlant != null)
                 return _chemicalPlant.Current != null && _chemicalPlant.IsOnline ? 1f : 0f;
+            if (_oreWasher != null)
+                return _oreWasher.PollutionActivity01;
             if (_gridRefinery != null)
                 return _gridRefinery.Enabled && _gridRefinery.Grid != null
                     && _gridRefinery.Grid.HasPower && _gridRefinery.Current != null ? 1f : 0f;

@@ -1264,7 +1264,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | 17.1.9-dev wires `RecipeGraphRepairUtility` into `Tools > Voxel Engine > Voxel Engine Setup`; Thomas's Unity scan confirms 0 errors/warnings for 239 registered crafting, 4 smelting, and 8 machine recipes, with 211 unregistered assets accepted outside the active graph. |
 | Production-line UI | ✅ COMPLETED | Final polish pass: themed-panel tokens everywhere, entrance pop animation (0.18s scale+opacity), hover scale 1.02x + BgHover, responsive minWidth 300/280, flex wrap at 1280×720 to ultrawide, styled scrollers with production accent, micro-interactions on recipe cards and bottleneck hints, theme-aware text colors via UIThemeManager. Crusher/Assembler UIs, live Production Statistics with bottleneck/surplus hints, hideable hints, Recipe Browser dependency view, recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, theme override, pinned recipes with copy/clear, inventory-aware material summary, missing-only filter, CSV export, batch planning, machine-count estimates, copyable plans, shopping lists, method summaries, dependency chains — all polished. |
-| Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
+| Advanced processing | ✅ COMPLETED | Chemical processing, oil refining, and the 17.22.0-dev Ore Washing, Enrichment & Tailings Loop (`OreWasher`, `WashedIronOre`, `WashedCopperOre`, `MineralTailings`, bonus-yield smelting, tailings reprocessing/vitrification, and soil/water runoff pollution integration) are complete. |
 | UI theme system | ✅ COMPLETED | `UIThemeDefinition` full spec, 10 enriched assets + `UIThemeDatabase`, USS variables reactive via `OnThemeChanged`, `ThemedPanel`/`ThemedDocument`, `UIThemeApplier`, Interface tab with description, preview, RGB chips, opacity/radius/glow/animation sliders, copy/import/reset — scroll-preserving rebuilds. Premium editor explanatory text removed as requested. |
 | Research UI overhaul | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, zoom controls, breathing glow on ready nodes, pulsing connector lines, bottom details panel with unlock previews, search, and Space-to-research shortcut (5.41.0-dev) |
 
@@ -1277,9 +1277,10 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Combines fluid + item recipes.
    - Example: water + coal → oil processing early line.
 
-3. **Ore Washing / Enrichment**
-   - Byproduct system: crushed ore → washed ore + tailings.
-   - Tailings can be processed or stored (pollution hook for future).
+3. **Ore Washing / Enrichment — ✅ COMPLETED (17.22.0-dev)**
+   - Byproduct system: crushed ore + water → washed ore + mineral tailings (`OreWasher`, `WashedIronOre`, `WashedCopperOre`, `MineralTailings`).
+   - Washed ore smelts for bonus yield (2 ingots per washed ore); crushed ore smelts 1:1 (2 ingots per raw ore).
+   - Tailings can be stored, reprocessed in the Ore Washer (`Sand` + 50% `Crushed Iron Ore`), crushed (`Gravel` + 65% `Sand`), compacted, or vitrified in a furnace into `Stone`, and integrate with `PollutionEmitter` / `PollutionService` soil and water runoff (`Retain Tailings` vs. `Sluice Discharge` modes).
 
 4. **Advanced Finite-Depth Quarry**
    - Late Tier-5 production research rather than an early mining shortcut.

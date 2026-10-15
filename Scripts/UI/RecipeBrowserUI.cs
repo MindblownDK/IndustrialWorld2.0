@@ -1338,7 +1338,14 @@ namespace VoxelEngine.UI
 
         private static string MachineKind(MachineRecipeType type)
         {
-            return type == MachineRecipeType.Assembling ? "AI-assembler" : type.ToString();
+            return type switch
+            {
+                MachineRecipeType.Assembling => "AI-assembler",
+                MachineRecipeType.Crushing   => "Crusher",
+                MachineRecipeType.Washing    => "Ore Washer",
+                MachineRecipeType.Chemical   => "Chemical Plant",
+                _                            => type.ToString()
+            };
         }
 
         private static string OutputKey(ItemDefinition item)

@@ -1,9 +1,30 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.21.0-dev`
+**Current Version:** `17.22.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.22.0-dev] Ore Washing, Enrichment & Tailings Loop (Section 6.2 / 4.6.0)
+
+**Type:** MINOR - adds the Ore Washer machine, Washed Iron/Copper Ore, Mineral Tailings, bonus-yield smelting recipes, tailings reprocessing/vitrification recipes, piped/canister wash-water integration, and soil/water runoff pollution integration. Save-compatible via `IMachineProcessState` and `WorldStatePersistence`.
+
+**GitHub title:** `[17.22.0-dev] Add Ore Washer, ore enrichment smelting chain, mineral tailings loop, and runoff pollution integration`
+
+#### Added
+- **Ore Washer Machine (`Scripts/Simulation/OreWasher.cs`, `Scripts/Simulation/OreWasherMotionAnimator.cs`).** Powered hydro-rotary trommel and sluice classifier (`IMachine`, `IItemConsumer`, `IItemProvider`, `IItemPortHost`, `IFluidStore`, `IMachineProcessState`) with 2 input slots, 4 output slots, 2 universal upgrade slots, and a 500 L internal `Wash Water` tank. Automatically pulls water at up to 60 L/s from adjacent `WaterPipe` / `WaterTank` / `WaterPump` fluid networks and also supports manual pouring/drawing via `LiquidCanister`. Samples local runoff contamination (`PollutionService.SampleRunoff01`) to report feed water quality and modulate washing efficiency.
+- **Tailings Retention vs. Sluice Discharge Modes (`Scripts/Simulation/OreWasher.cs`, `Scripts/UI/MachineUIs.cs`).** Players can toggle between `Retain Tailings` (collects `Mineral Tailings` in the output buffer for downstream processing or storage and pauses as `TAILINGS FULL` if full) and `Sluice Discharge` (vents excess tailings slurry directly into soil/water runoff via `PollutionService.Emit` and elevates `PollutionEmitter` effluent load).
+- **Ore Washer UI Panel (`Scripts/UI/MachineUIs.cs`, `Scripts/UI/GameUIController.cs`, `Scripts/Player/PlayerInteractionTool.cs`).** Added `MachineUIs.OreWasherPanel` with status indicators (`WASHING`, `LOW WATER`, `TAILINGS FULL`, `NO POWER`, `DISABLED`), live `Wash Water` tank gauge with canister Pour/Draw/Drain buttons, piped network and feed-quality telemetry, tailings mode toggle, recipe cards, inventory/upgrade slots, item port configuration overlay, shift-click quick transfer, and live pollution telemetry readout.
+- **Enrichment & Tailings Content (`Scripts/Editor/Crafting/OreWashingSetup.cs`, `Scripts/Editor/Core/VoxelEngineSetupWindow.cs`).** Non-destructive setup (`Tools > Voxel Engine > Setup Wizard` -> `Build ore washing, enrichment and tailings loop`, also integrated into `Build factory foundations, conveyors and high-voltage grid`) authors and links:
+  - Items: `Item_WashedIronOre.asset` (`washed_iron_ore`), `Item_WashedCopperOre.asset` (`washed_copper_ore`), `Item_MineralTailings.asset` (`mineral_tailings`), and `Block_OreWasher.asset` (`block_ore_washer`, `OreWasher.prefab`, `MachineDef_OreWasher.asset`).
+  - Ore Washer recipes (`MachineRecipeType.Washing`): `MachineRecipe_WashIronOre` (`2x Crushed Iron Ore` + water -> `2x Washed Iron Ore` + `1x Mineral Tailings`), `MachineRecipe_WashCopperOre` (`2x Crushed Copper Ore` + water -> `2x Washed Copper Ore` + `1x Mineral Tailings`), and `MachineRecipe_ReprocessTailings` (`4x Mineral Tailings` + water -> `2x Sand` + 50% `1x Crushed Iron Ore`).
+  - Tailings crushing & crafting recipes: `MachineRecipe_CrushTailings` (`2x Mineral Tailings` -> `1x Gravel` + 65% `1x Sand` on `Crusher`), `Recipe_CompactTailings` (`3x Mineral Tailings` -> `1x Gravel`), and `Recipe_OreWasher`.
+  - Bonus-yield smelting & vitrification recipes (`SmeltingRecipe`): `Smelt_CrushedIron` (`1x Crushed Iron Ore` -> `1x Iron Ingot`), `Smelt_CrushedCopper` (`1x Crushed Copper Ore` -> `1x Copper Ingot`), `Smelt_WashedIron` (`1x Washed Iron Ore` -> `2x Iron Ingot`), `Smelt_WashedCopper` (`1x Washed Copper Ore` -> `2x Copper Ingot`), and `Smelt_TailingsToSlag` (`2x Mineral Tailings` -> `1x Stone`), wired non-destructively to `Furnace`, `ElectricFurnace`, and `GridElectricFurnace`.
+  - Pollution & Research: `PollutionSource_OreWashing.asset` (`Ore Washing Effluent`) wired to `PollutionEmitter` on `OreWasher.prefab`, and `ResNode_OreWashing.asset` (`Ore Washing & Enrichment`) in `ResearchTree.asset`.
+- **Water Pipe Visual Arm & Persistence Integration (`Scripts/Fluids/WaterPipe.cs`, `Scripts/Environment/Pollution/PollutionEmitter.cs`, `Scripts/Persistence/WorldStatePersistence.cs`, `Scripts/UI/RecipeBrowserUI.cs`).** `WaterPipe` connects visual arms to adjacent `OreWasher` blocks; `PollutionEmitter` tracks `OreWasher.PollutionActivity01`; `WorldStatePersistence` serializes `OreWasher` item containers, port configs, and `IMachineProcessState` tank/recipe/progress/mode state; and `Crusher` / `Assembler` now recalculate universal `FurnaceUpgradeItem` speed and efficiency multipliers.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.22.0-dev`, MINOR over `17.21.0-dev`. Save-compatible via existing `IMachineProcessState` and container persistence.
 
 ### [17.21.0-dev] Movement Smoothing, Line-of-Sight Combat, Predictable Wind, Crafting Ingredient Tooltips, Scatter Persistence & Timed Regrowth, and Research Queue & Team Sync
 
