@@ -379,7 +379,7 @@ namespace VoxelEngine.UI
                 }
                 string machine = mr.recipeType switch
                 {
-                    VoxelEngine.Simulation.MachineRecipeType.Smelting   => "Furnace / Smelter",
+                    VoxelEngine.Simulation.MachineRecipeType.Smelting   => "Coke Kiln / Arc Foundry",
                     VoxelEngine.Simulation.MachineRecipeType.Crushing   => "Crusher",
                     VoxelEngine.Simulation.MachineRecipeType.Assembling => "Assembler",
                     VoxelEngine.Simulation.MachineRecipeType.Chemical   => "Chemical Plant",

@@ -1340,6 +1340,7 @@ namespace VoxelEngine.UI
         {
             return type switch
             {
+                MachineRecipeType.Smelting   => "Coke Kiln / Arc Foundry",
                 MachineRecipeType.Assembling => "AI-assembler",
                 MachineRecipeType.Crushing   => "Crusher",
                 MachineRecipeType.Washing    => "Ore Washer",

@@ -166,7 +166,7 @@ namespace VoxelEngine.EditorTools
             // Prefer the real component; fall back to the object by name so a
             // GUID breakage never leaves a broken 'Network' object behind and
             // a duplicate beside it.
-            var manager = Object.FindFirstObjectByType<NetworkManager>(FindObjectsInactive.Include);
+            var manager = Object.FindAnyObjectByType<NetworkManager>(FindObjectsInactive.Include);
             GameObject go = manager != null ? manager.gameObject : GameObject.Find("Network");
             if (go == null)
             {

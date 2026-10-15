@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.21.0-dev`
-**Roadmap Version:** `17.21.0-dev`
+**Current Version:** `17.23.2-dev`
+**Roadmap Version:** `17.23.2-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.23.2-dev / 17.23.1-dev / 17.23.0-dev - Two-Stage Metallurgical Coking, Steel & Brass Alloying Chain, and OreWasher Fluid Store Fix
+- Added `MetallurgicalFoundry` (`FoundryTier.CokeKiln` solid-fuel Beehive Coke & Alloy Kiln with auto-self-fueling and `FoundryTier.ArcFoundry` 3-Phase Electric Arc Foundry with 1.75x speed and 3 upgrade slots) plus `MetallurgicalFoundryAnimator`
+- Authored `Metallurgical Coke` (`18s` fuel), `Zinc Calamine`, `Foundry Slag`, and automatable coking, carburized/washed-ore Steel, calamine/concentrate Brass, and byproduct recycling recipes across Coke Kiln, Arc Foundry, Ore Washer, Crusher, and Furnaces
+- Fixed `IFluidStore` implementation in `OreWasher.cs` and kept all setup actions exclusively inside `Tools > Voxel Engine > Setup Wizard`
+
+### 17.22.0-dev - Ore Washing, Enrichment & Tailings Loop (Section 6.2 / 4.6.0)
+- Shipped `OreWasher` (`2x2x2` hydro-rotary trommel + sluice classifier) with 500 L internal `Wash Water` tank, auto-refill from adjacent `WaterPipe` networks, `LiquidCanister` pour/draw, and `OreWasherMotionAnimator`
+- Authored `Washed Iron Ore`, `Washed Copper Ore`, and `Mineral Tailings`, plus bonus-yield smelting (`1x Washed Ore -> 2x Ingot`) and tailings reprocessing/crushing/vitrification loops
+- Added `Retain Tailings` vs. `Sluice Discharge` runoff modes wired into `PollutionEmitter` (`PollutionSource_OreWashing`) and `PollutionService`
+
 ### 17.21.0-dev - Research Queue & Team Sync, Scatter Persistence & Timed Regrowth, Crafting Tooltips, Predictable Wind, LOS Combat, and Movement & UI Fixes
 - Research gains a toggleable 5-slot queue and Team Shared Research across World Settings, Server Admin, and `server_config.json`, plus drag-to-pan canvas, Space-to-research, Green/Blue/Purple `I`/`II`/`III` science pack dots, hidden `0/N` costs on completed nodes, non-Assembler Research Lab tier, and unblocked Lab UI interaction
 - Trees and non-mob scatter persist across save/load via deterministic per-cell RNG and `ScatterHarvestTracker` and regrow only on an in-game timer when unpolluted and away from structures; `GameVersion` matches `17.21.0-dev`; weather debug hotkeys are Editor-only; `SettingsUI.InterfaceTab` live-updates active button state
@@ -43,17 +53,6 @@
 - The Ghoul's sibling-mesh shoulders, arms, hands and claws now share a shoulder-rooted pull-back, forward swipe and eased recovery; other hostile rigs are unchanged
 - Cosmic-clock watchdog follows scaled game time like `CosmicRegistry.Update`, so pausing cannot falsely advance the orbital phase or trigger a deep-space frame handoff
 - No prefab, biome data, save schema, chunk format or wire change; no Setup rerun
-
-### 17.20.2-dev - Doubled Overlapping Enemies Fixed: Scatter Creatures End With Their Chunk
-- The frozen twin was a survivor, not a duplicate spawn: every scattered creature detaches from the `__scatter` holder on Awake, so holder teardown on repopulate/pool-return never reached them and no other system culled scatter-born creatures - sleepers lived on as statues near their home points while each revisit spawned fresh creatures beside them from the same deterministic points (moving new copy + authored-pose frozen survivor, growing every revisit and leaking for the whole session)
-- Scatter-born enemies and passive animals now follow their chunk's lifecycle: repopulate, pool return and chunk dispose end the previous batch (`ChunkScatter.DestroyChunkCreatures`, tracked per chunk), the world-teardown window sweeps stragglers, ridden mounts are never destroyed, and creature population stays bounded by the streaming window - spawner hostiles and guest replicas untouched
-- The duplicate creature entries in four biome definitions were confirmed as authored spawn control (one entry wins per surface point, never a double spawn) and deliberately left as they are; the earlier dedupe attempt was fully reverted - no biome asset, prefab or entry-selection change in this round
-
-### 17.20.1-dev - Visible Wind Lines, No Grass Blink, Bindable Ctrl Combos
-- The wind lines' invisibility was three stacked causes, all fixed: nothing ever CREATED a `WindField` (bootstrap only searched for hand-placed ones) so it is now created when missing and driven by the body settings - which also wakes the sail forces and grass wind on worlds that had none; the line material led with a generic URP particle shader whose fresh material defaults to opaque, so the project's proven transparent weather shader now leads the chain; and the visual is a singleton hostable by the weather rig or the wind object, anchored on the camera
-- Ctrl+B stopped blinking the grass: the preference setter fired `OnChanged`, which `QualityPresetApplier` answers by force-rebuilding the GPU grass - the setter now persists directly (the visual polls it per frame), no event, no rebuild
-- Settings - Keybinds binds modifier combos: holding Ctrl during capture stores `Ctrl+X`, enforced by both input backends, while modifier keys still bind plain for Sprint/Slide; captures write their row in place instead of rebuilding the tab, so the scroll position survives; the wind-lines default is now literally `Ctrl+B` (migration v26, custom binds preserved) and the build wheel still owns plain B
-- The "two enemy prefabs overlapping" report was investigated and every code path ruled out (single-rig builders, full guest-cull destroy, tint-only variants, pose-only animator); the prefab assets live outside the sparse clone, so reproduction details were requested before any speculative change - nothing touched on the enemy side this round
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -1264,7 +1263,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | 17.1.9-dev wires `RecipeGraphRepairUtility` into `Tools > Voxel Engine > Voxel Engine Setup`; Thomas's Unity scan confirms 0 errors/warnings for 239 registered crafting, 4 smelting, and 8 machine recipes, with 211 unregistered assets accepted outside the active graph. |
 | Production-line UI | ✅ COMPLETED | Final polish pass: themed-panel tokens everywhere, entrance pop animation (0.18s scale+opacity), hover scale 1.02x + BgHover, responsive minWidth 300/280, flex wrap at 1280×720 to ultrawide, styled scrollers with production accent, micro-interactions on recipe cards and bottleneck hints, theme-aware text colors via UIThemeManager. Crusher/Assembler UIs, live Production Statistics with bottleneck/surplus hints, hideable hints, Recipe Browser dependency view, recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, theme override, pinned recipes with copy/clear, inventory-aware material summary, missing-only filter, CSV export, batch planning, machine-count estimates, copyable plans, shopping lists, method summaries, dependency chains — all polished. |
-| Advanced processing | ✅ COMPLETED | Chemical processing, oil refining, and the 17.22.0-dev Ore Washing, Enrichment & Tailings Loop (`OreWasher`, `WashedIronOre`, `WashedCopperOre`, `MineralTailings`, bonus-yield smelting, tailings reprocessing/vitrification, and soil/water runoff pollution integration) are complete. |
+| Advanced processing | ✅ COMPLETED | Chemical processing, oil refining, the 17.22.0-dev Ore Washing, Enrichment & Tailings Loop (`OreWasher`, `WashedIronOre`, `WashedCopperOre`, `MineralTailings`), and the 17.23.0-dev Two-Stage Metallurgical Coking, Steel & Brass Alloying Chain (`MetallurgicalFoundry` — `CokeKiln` & `ArcFoundry`, `MetallurgicalCoke`, `ZincCalamine`, `FoundrySlag`) are complete. |
 | UI theme system | ✅ COMPLETED | `UIThemeDefinition` full spec, 10 enriched assets + `UIThemeDatabase`, USS variables reactive via `OnThemeChanged`, `ThemedPanel`/`ThemedDocument`, `UIThemeApplier`, Interface tab with description, preview, RGB chips, opacity/radius/glow/animation sliders, copy/import/reset — scroll-preserving rebuilds. Premium editor explanatory text removed as requested. |
 | Research UI overhaul | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, zoom controls, breathing glow on ready nodes, pulsing connector lines, bottom details panel with unlock previews, search, and Space-to-research shortcut (5.41.0-dev) |
 
@@ -1277,10 +1276,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Combines fluid + item recipes.
    - Example: water + coal → oil processing early line.
 
-3. **Ore Washing / Enrichment — ✅ COMPLETED (17.22.0-dev)**
+3. **Ore Washing / Enrichment & Two-Stage Metallurgical Alloying — ✅ COMPLETED (17.22.0-dev / 17.23.0-dev)**
    - Byproduct system: crushed ore + water → washed ore + mineral tailings (`OreWasher`, `WashedIronOre`, `WashedCopperOre`, `MineralTailings`).
    - Washed ore smelts for bonus yield (2 ingots per washed ore); crushed ore smelts 1:1 (2 ingots per raw ore).
-   - Tailings can be stored, reprocessed in the Ore Washer (`Sand` + 50% `Crushed Iron Ore`), crushed (`Gravel` + 65% `Sand`), compacted, or vitrified in a furnace into `Stone`, and integrate with `PollutionEmitter` / `PollutionService` soil and water runoff (`Retain Tailings` vs. `Sluice Discharge` modes).
+   - Tailings can be stored, reprocessed in the Ore Washer (`Sand` + 50% `Crushed Iron Ore`), leached for `Zinc Calamine`, crushed (`Gravel` + 65% `Sand`), compacted, or vitrified in a furnace into `Stone`, and integrate with `PollutionEmitter` / `PollutionService` soil and water runoff (`Retain Tailings` vs. `Sluice Discharge` modes).
+   - Two-stage Steel & Brass metallurgy (`MetallurgicalFoundry`): starts with the solid-fuel Beehive `Coke & Alloy Kiln` (`2x2x2`, auto-draws `Coal`/`Metallurgical Coke` fuel for single-belt automation) and upgrades to the 3-Phase `Electric Arc Foundry` (`3x2x3`, `1.75x` speed, 3 upgrade slots, plunging graphite electrodes), producing `Metallurgical Coke`, `Steel Ingot`, and `Brass Ingot` with `Foundry Slag` and `Zinc Calamine` byproducts.
 
 4. **Advanced Finite-Depth Quarry**
    - Late Tier-5 production research rather than an early mining shortcut.

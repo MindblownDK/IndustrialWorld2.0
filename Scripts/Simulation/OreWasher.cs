@@ -184,8 +184,8 @@ namespace VoxelEngine.Simulation
             if (state == null) return;
             EnsureContainers();
             EnsureTanks();
-            state.recipeName = MachineProcessPersistence.NameOf(_current);
-            state.selectedRecipeName = MachineProcessPersistence.NameOf(_selectedRecipe);
+            state.recipeName = _current != null ? _current.name : string.Empty;
+            state.selectedRecipeName = _selectedRecipe != null ? _selectedRecipe.name : string.Empty;
             state.progressSeconds = Mathf.Max(0f, _processProgress);
             MachineProcessPersistence.CaptureTanks(state, FluidTanks);
             state.SetExtra("userEnabled", _userEnabled ? 1f : 0f);
@@ -252,7 +252,7 @@ namespace VoxelEngine.Simulation
 
         // ── IFluidStore & Canister Interaction ────────────────────────
 
-        public float StoredOf(LiquidType type)
+        public float Available(LiquidType type)
         {
             EnsureTanks();
             return type == LiquidType.Water ? waterTank.stored : 0f;
@@ -264,13 +264,13 @@ namespace VoxelEngine.Simulation
             return type == LiquidType.Water ? waterTank.SpaceFor(LiquidType.Water) : 0f;
         }
 
-        public float Take(LiquidType type, float litres)
+        public float Draw(LiquidType type, float litres)
         {
             EnsureTanks();
-            return type == LiquidType.Water ? waterTank.Take(LiquidType.Water, litres) : 0f;
+            return type == LiquidType.Water ? waterTank.Remove(litres) : 0f;
         }
 
-        public float Add(LiquidType type, float litres)
+        public float Fill(LiquidType type, float litres)
         {
             EnsureTanks();
             return type == LiquidType.Water ? waterTank.Add(LiquidType.Water, litres) : 0f;
@@ -331,7 +331,8 @@ namespace VoxelEngine.Simulation
             if (_current == null || !HasAllInputs(_current))
                 _current = FindRecipeForInput();
 
-            bool canRunBatch = _current != null && !IsLowWater && CanFitOutputs(_current, out bool tailingsBlocked);
+            bool tailingsBlocked = false;
+            bool canRunBatch = _current != null && !IsLowWater && CanFitOutputs(_current, out tailingsBlocked);
             IsTailingsBackedUp = tailingsBlocked;
 
             float wantWattage = (_current != null && canRunBatch)
@@ -612,7 +613,7 @@ namespace VoxelEngine.Simulation
             }
 
             // Consume water and item inputs.
-            waterTank.Take(LiquidType.Water, waterNeeded);
+            waterTank.Remove(waterNeeded);
             foreach (var inp in _current.inputs)
             {
                 RemoveMatching(inputC, inp.item, inp.count);

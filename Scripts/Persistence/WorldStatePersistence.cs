@@ -1840,6 +1840,15 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            var foundry = go.GetComponentInChildren<VoxelEngine.Simulation.MetallurgicalFoundry>(true);
+            if (foundry != null)
+            {
+                foundry.EnsureContainers();
+                var sc = SerializeMulti(foundry.inputC, foundry.fuelC, foundry.outputC, foundry.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
             if (assembler != null)
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
@@ -5000,6 +5009,15 @@ namespace VoxelEngine.Persistence
             {
                 oreWasher.EnsureContainers();
                 DeserializeMulti(sc, oreWasher.inputC, oreWasher.outputC, oreWasher.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var foundry = go.GetComponentInChildren<VoxelEngine.Simulation.MetallurgicalFoundry>(true);
+            if (foundry != null)
+            {
+                foundry.EnsureContainers();
+                DeserializeMulti(sc, foundry.inputC, foundry.fuelC, foundry.outputC, foundry.upgradeC);
                 RestorePortSnapshot(go, sc);
                 return;
             }

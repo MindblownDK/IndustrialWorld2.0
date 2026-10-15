@@ -252,6 +252,119 @@ namespace VoxelEngine.UI
             return p;
         }
 
+        public static VisualElement FoundryPanel(MetallurgicalFoundry foundry, SlotBuilder slot)
+        {
+            foundry.EnsureContainers();
+            bool isArc = foundry.tier == FoundryTier.ArcFoundry;
+            Color accent = UIThemeOverride.ResolveAccent(foundry, isArc ? T.AccentGold : T.AccentOrange);
+
+            string status = !foundry.UserEnabled ? "DISABLED"
+                : !foundry.IsOnline ? (foundry.UsesSolidFuel ? "NO FUEL" : "NO POWER")
+                : foundry.IsActive ? (isArc ? "ARCING" : "FIRING")
+                : "IDLE";
+            Color statusColor = !foundry.UserEnabled || !foundry.IsOnline ? T.AccentRed
+                : foundry.IsActive ? T.AccentGreen
+                : T.TextMuted;
+
+            var p = T.MachinePanel();
+            p.Add(BuildHeader(isArc ? "⚡" : "🔥", foundry.MachineName, status, statusColor, accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!foundry.UserEnabled || !foundry.IsOnline ? 0 : foundry.IsActive ? 2 : 1));
+
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            p.Add(content);
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            top.style.flexWrap = Wrap.Wrap;
+            top.style.marginBottom = 8;
+            var toggle = T.SmallButton(foundry.UserEnabled ? "Enabled" : "Disabled",
+                () => { foundry.UserEnabled = !foundry.UserEnabled; GameUIController.Instance?.RequestRefresh(); },
+                foundry.UserEnabled ? T.AccentGreen : T.AccentRed);
+            toggle.style.marginRight = 8;
+            top.Add(toggle);
+
+            if (foundry.UsesSolidFuel)
+            {
+                var selfFuelBtn = T.SmallButton(foundry.autoSelfFuel ? "Auto-Fuel: ON" : "Auto-Fuel: OFF",
+                    () => { foundry.autoSelfFuel = !foundry.autoSelfFuel; GameUIController.Instance?.RequestRefresh(); },
+                    foundry.autoSelfFuel ? T.AccentCyan : T.BgSlot);
+                selfFuelBtn.tooltip = "Automatically pulls Coal or Metallurgical Coke from Inputs/Outputs into the Fuel slot when fuel runs out.";
+                selfFuelBtn.style.marginRight = 8;
+                top.Add(selfFuelBtn);
+                top.Add(T.StatRow("🔥", "Burn", foundry.IsBurning ? $"{foundry.FuelRemaining:0.0}s" : "Cold",
+                    foundry.IsBurning ? T.AccentOrange : T.TextMuted));
+            }
+            else
+            {
+                top.Add(T.StatRow("⚡", "Power", $"{foundry.CurrentWattage:0} W",
+                    foundry.IsOnline ? T.AccentGold : T.TextMuted));
+                top.Add(T.Spacer(8));
+                top.Add(T.StatRow("⚙", "Speed", $"{foundry.SpeedMultiplier:0.00}x", accent));
+            }
+            content.Add(top);
+
+            if (foundry.UsesSolidFuel)
+            {
+                var (fuelBar, _) = T.ProgressBar(foundry.FuelProgress01, T.AccentOrange, 6, false);
+                fuelBar.style.marginBottom = 6;
+                content.Add(fuelBar);
+            }
+
+            var selectedRecipe = foundry.CurrentRecipe;
+            string recipeName = selectedRecipe != null ? selectedRecipe.GetName() : "Auto / waiting for charge";
+            content.Add(T.StatRow("⏱", "Process", recipeName, selectedRecipe != null ? accent : T.TextMuted));
+            var (progressBar, _) = T.ProgressBar(foundry.Progress01, accent, 9, false);
+            content.Add(progressBar);
+            content.Add(T.Divider());
+
+            content.Add(T.Subtitle("Metallurgical Recipes"));
+            var recipeList = new ScrollView(ScrollViewMode.Vertical);
+            recipeList.style.maxHeight = 176;
+            recipeList.style.marginBottom = 8;
+            T.StyleScroller(recipeList);
+            if (foundry.knownRecipes != null)
+            {
+                foreach (var recipe in foundry.knownRecipes)
+                {
+                    if (recipe == null) continue;
+                    recipeList.Add(MachineRecipeCard(recipe, recipe == selectedRecipe, accent, () => foundry.SelectRecipe(recipe)));
+                }
+            }
+            content.Add(recipeList);
+
+            content.Add(T.Subtitle("Crucible & Buffers"));
+            var slotRow = new VisualElement();
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.flexWrap = Wrap.Wrap;
+            slotRow.style.justifyContent = Justify.Center;
+            slotRow.style.marginTop = 5;
+            slotRow.Add(T.SlotCard("Inputs", SlotGrid(foundry.inputC, slot)));
+            if (foundry.UsesSolidFuel)
+            {
+                slotRow.Add(T.Spacer(10));
+                slotRow.Add(T.SlotCard("Fuel", SlotGrid(foundry.fuelC, slot)));
+            }
+            slotRow.Add(T.Spacer(10));
+            slotRow.Add(T.SlotCard("Outputs", SlotGrid(foundry.outputC, slot)));
+            if (!foundry.UsesSolidFuel && foundry.upgradeC != null && foundry.UpgradeSlots > 0)
+            {
+                slotRow.Add(T.Spacer(10));
+                slotRow.Add(T.SlotCard("Upgrades", SlotGrid(foundry.upgradeC, slot)));
+            }
+            content.Add(slotRow);
+            content.Add(T.Spacer(8));
+            content.Add(T.Muted(foundry.UsesSolidFuel
+                ? "Cokes Coal into Metallurgical Coke, carburizes Iron + Coke into Steel, and cements Copper + Zinc Calamine + Coke into Brass. Byproduct Foundry Slag can be crushed or washed."
+                : "High-temperature 3-phase electric arc foundry. Runs coking, steel, and brass alloying at 1.75x base speed with bonus ingot yields."));
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
         public static VisualElement AssemblerPanel(Assembler assembler, SlotBuilder slot)
         {
             assembler.EnsureContainers();

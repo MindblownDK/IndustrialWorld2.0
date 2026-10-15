@@ -1,9 +1,64 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.22.0-dev`
+**Current Version:** `17.23.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.23.2-dev] Fix OreWashingSetup Editor Script Field & Tuple Array Types
+
+**Type:** PATCH - fixes `EnsureResourceItem` return type for tuple array covariance, `MachineCategory.Furnace`, `BlockItem` (`blockHealth`, `miningTier`, `gridSize`), `MachineDefinition` (`prefab`), and `FactoryStatusIndicator` (`rendererChildName`) in `OreWashingSetup.cs`, plus `FindAnyObjectByType` in `NetworkSetup.cs`. No save schema or runtime changes.
+
+**GitHub title:** `[17.23.2-dev] Fix OreWashingSetup editor script field and tuple array types`
+
+#### Fixed
+- **`OreWashingSetup.cs` tuple array and ScriptableObject/component field alignment (`Scripts/Editor/Crafting/OreWashingSetup.cs`).** Changed `EnsureResourceItem` return type to `ItemDefinition` so `new[] { (item, count) }` arrays match `(ItemDefinition, int)[]`; updated `MachineCategory.Smelter` to `MachineCategory.Furnace`; aligned `BlockItem` fields to `blockHealth`, `miningTier`, and `gridSize`; aligned `MachineDefinition` to `prefab`; removed redundant `baseSpeedMultiplier` assignment on `MetallurgicalFoundry`; and bound `FactoryStatusIndicator.rendererChildName = "Generated_StatusLamp"`.
+- **Deprecated `FindFirstObjectByType` warning (`Scripts/Editor/Networking/NetworkSetup.cs`).** Replaced `Object.FindFirstObjectByType<NetworkManager>(FindObjectsInactive.Include)` with `Object.FindAnyObjectByType<NetworkManager>(FindObjectsInactive.Include)`.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.23.2-dev`, PATCH over `17.23.1-dev`. Save-compatible.
+
+### [17.23.1-dev] Fix OreWasher & MetallurgicalFoundry Process State Persistence Compile Errors
+
+**Type:** PATCH - fixes `MachineProcessPersistence.NameOf` overload resolution, definite assignment of `tailingsBlocked` in `OreWasher.cs`, and fuel burn time extra-key serialization in `MetallurgicalFoundry.cs`. No save schema or asset changes.
+
+**GitHub title:** `[17.23.1-dev] Fix OreWasher and MetallurgicalFoundry process persistence compile errors`
+
+#### Fixed
+- **`MachineProcessPersistence.NameOf` and `MachineRecipe` serialization (`Scripts/Crafting/MachineProcessState.cs`, `Scripts/Simulation/OreWasher.cs`, `Scripts/Simulation/MetallurgicalFoundry.cs`).** Added a generic `ScriptableObject` overload `MachineProcessPersistence.NameOf(ScriptableObject)` and serialized `_current.name` / `_selectedRecipe.name` directly in `OreWasher` and `MetallurgicalFoundry`.
+- **Definite assignment of `tailingsBlocked` (`Scripts/Simulation/OreWasher.cs`).** Initialized `bool tailingsBlocked = false;` prior to short-circuit evaluation in `OreWasher.SimulationTick`.
+- **Solid-fuel burn duration persistence on `MetallurgicalFoundry` (`Scripts/Simulation/MetallurgicalFoundry.cs`).** Stored `_fuelRemaining` and `_fuelMaxDuration` via `MachineProcessState.SetExtra`/`GetExtra` (`fuelRemaining`, `fuelMaxDuration`) matching `Furnace.cs`.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.23.1-dev`, PATCH over `17.23.0-dev`. Save-compatible.
+
+### [17.23.0-dev] Two-Stage Metallurgical Coking, Steel & Brass Alloying Chain, and OreWasher Fluid Store Fix
+
+**Type:** MINOR - adds the two-stage `MetallurgicalFoundry` (`Coke & Alloy Kiln` and `Electric Arc Foundry`), `Metallurgical Coke`, `Zinc Calamine`, and `Foundry Slag` items, realistic automatable Steel and Brass alloying recipes with byproduct recovery, procedural animations, UI, persistence, and pollution profiles; fixes `IFluidStore` implementation in `OreWasher.cs` and keeps setup actions exclusively inside `VoxelEngineSetupWindow`. Save-compatible via `IMachineProcessState` and `WorldStatePersistence`.
+
+**GitHub title:** `[17.23.0-dev] Add Coke & Alloy Kiln, Electric Arc Foundry, realistic Steel & Brass alloying chain with byproducts, and fix OreWasher IFluidStore`
+
+#### Added
+- **Two-Stage Metallurgical Foundry System (`Scripts/Simulation/MetallurgicalFoundry.cs`, `Scripts/Simulation/MetallurgicalFoundryAnimator.cs`).** Implements `IMachine`, `IItemConsumer`, `IItemProvider`, `IItemPortHost`, and `IMachineProcessState` across two machine tiers:
+  - **Tier 1 — Coke & Alloy Kiln (`FoundryTier.CokeKiln`, `2x2x2`).** Early-industrial brick-and-iron beehive metallurgical kiln that burns solid fuel (`Coal`, `Wood`, or `Metallurgical Coke`) with `autoSelfFuel = true` so it automatically draws fuel from its own `Metallurgical Coke` output or `Coal`/`Coke` inputs for single-belt unattended automation. Features 3 input slots, 1 fuel slot, 4 output slots, and procedural chimney damper and firebox ember animations.
+  - **Tier 2 — Electric Arc Foundry (`FoundryTier.ArcFoundry`, `3x2x3`).** Industrial 3-phase electric arc furnace (`450 W` active, `15 W` idle) running at `1.75x` base speed with 4 input slots, 4 output slots, 3 universal `FurnaceUpgradeItem` slots, and procedural 3-phase plunging graphite electrodes with high-frequency arc plasma flicker and molten bath glow.
+- **Metallurgical Intermediates & Byproducts (`Scripts/Editor/Crafting/OreWashingSetup.cs`).** Non-destructive setup authors and persists:
+  - `Item_MetallurgicalCoke.asset` (`metallurgical_coke`, `ResourceCategory.Fuel`, `fuelSeconds = 18f`): high-carbon reducing agent baked from coal that also burns for 18s in solid-fuel furnaces, kilns, coal generators, and steam locomotives.
+  - `Item_ZincCalamine.asset` (`zinc_calamine`, `ResourceCategory.Raw`): calcined zinc carbonate/sphalerite concentrate extracted from copper ores, mineral tailings, and foundry slag.
+  - `Item_FoundrySlag.asset` (`foundry_slag`, `ResourceCategory.Raw`): vitreous silicate and metal-oxide dross tapped from coking and alloy smelting.
+- **Automatable Steel, Brass & Byproduct Recycling Recipes (`Scripts/Editor/Crafting/OreWashingSetup.cs`).**
+  - **Coal Coking:** `MachineRecipe_CokeCoal` (`2x Coal` -> `2x Metallurgical Coke` + 75% `1x Foundry Slag`).
+  - **Steelmaking:** `MachineRecipe_CarburizeSteel` (`2x Iron Ingot + 1x Metallurgical Coke` -> `2x Steel Ingot` + 100% `1x Foundry Slag`), `MachineRecipe_SmeltWashedSteel` (`2x Washed Iron Ore + 1x Metallurgical Coke` -> `3x Steel Ingot` + 100% `1x Foundry Slag`), and Arc Foundry exclusive `MachineRecipe_ArcSteel` (`2x Washed Iron Ore + 1x Iron Ingot + 1x Metallurgical Coke` -> `4x Steel Ingot` + 100% `1x Foundry Slag`).
+  - **Brass Alloying:** `MachineRecipe_AlloyBrassCalamine` (`2x Copper Ingot + 1x Zinc Calamine + 1x Metallurgical Coke` -> `2x Brass Ingot` + 100% `1x Foundry Slag`), `MachineRecipe_AlloyBrassConcentrate` (`2x Washed Copper Ore + 1x Crushed Iron Ore + 1x Metallurgical Coke` -> `3x Brass Ingot` + 100% `1x Zinc Calamine`), and Arc Foundry exclusive `MachineRecipe_ArcBrass` (`2x Washed Copper Ore + 1x Zinc Calamine + 1x Metallurgical Coke` -> `4x Brass Ingot` + 100% `1x Foundry Slag`).
+  - **Zinc Calamine & Foundry Slag Recovery:** `MachineRecipe_WashZincCalamine` (`1x Crushed Copper Ore + 1x Mineral Tailings` -> `2x Zinc Calamine` + 75% `1x Sand` in `OreWasher`), `MachineRecipe_CrushZincCalamine` (`2x Crushed Copper Ore` -> `1x Zinc Calamine` + 75% `1x Gravel` in `Crusher`), `MachineRecipe_WashFoundrySlag` (`2x Foundry Slag` -> `1x Crushed Iron Ore` + 75% `1x Zinc Calamine` in `OreWasher`), `MachineRecipe_CrushFoundrySlag` (`2x Foundry Slag` -> `2x Gravel` + 50% `1x Crushed Iron Ore` in `Crusher`), and `Smelt_SlagToStone` (`2x Foundry Slag` -> `1x Stone` in Furnaces).
+- **Foundry UI, Persistence & Pollution Integration (`Scripts/UI/MachineUIs.cs`, `Scripts/UI/GameUIController.cs`, `Scripts/UI/RecipeBrowserUI.cs`, `Scripts/UI/Tooltip.cs`, `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/Persistence/WorldStatePersistence.cs`, `Scripts/Environment/Pollution/PollutionEmitter.cs`).** Added `MachineUIs.FoundryPanel` with solid-fuel burn telemetry + `Auto-Draw Coke/Coal Fuel` toggle for the `Coke & Alloy Kiln`, power/efficiency telemetry + upgrade slots for the `Electric Arc Foundry`, recipe selector cards, directional item port configuration, shift-click quick transfer, full save/load persistence, and `PollutionSource_CokeKiln` / `PollutionSource_ArcFoundry` emission profiles.
+
+#### Fixed
+- **`OreWasher` `IFluidStore` interface implementation (`Scripts/Simulation/OreWasher.cs`).** Implemented `IFluidStore.Available(LiquidType)`, `IFluidStore.SpaceFor(LiquidType)`, `IFluidStore.Draw(LiquidType, float)`, and `IFluidStore.Fill(LiquidType, float)`, and replaced `waterTank.Take(...)` with `waterTank.Remove(...)` to match `MachineFluidTank`.
+- **Setup Wizard-only entry point (`Scripts/Editor/Crafting/OreWashingSetup.cs`, `Scripts/Editor/Core/VoxelEngineSetupWindow.cs`).** Removed the standalone `[MenuItem]` attribute from `OreWashingSetup.cs` so all setup actions live exclusively inside `Tools > Voxel Engine > Setup Wizard`, and aligned `MachineRecipeSlot`, `MachineDefinition`, and `FactoryStatusIndicator` fields with current definitions.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: `17.23.0-dev`, MINOR over `17.22.0-dev`. Save-compatible via `IMachineProcessState` and container persistence.
 
 ### [17.22.0-dev] Ore Washing, Enrichment & Tailings Loop (Section 6.2 / 4.6.0)
 

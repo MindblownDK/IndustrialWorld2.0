@@ -132,6 +132,9 @@ namespace VoxelEngine.Crafting
         /// <summary>The name written for a recipe: its asset name, which survives panel rebuilds and reloads alike.</summary>
         public static string NameOf(ProcessingRecipe recipe) => recipe == null ? string.Empty : recipe.name;
 
+        /// <summary>Generic ScriptableObject overload for MachineRecipe / SmeltingRecipe assets.</summary>
+        public static string NameOf(ScriptableObject recipe) => recipe == null ? string.Empty : recipe.name;
+
         /// <summary>
         /// Find the machine's own recipe object for a saved name. Matches the asset
         /// name first (what gets written) and the recipe's display label second, so a

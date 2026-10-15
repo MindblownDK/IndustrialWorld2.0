@@ -196,7 +196,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build stationary and grid floodlights", BuildFloodlightContent),
                 Setup("Build wind-power content", BuildWindmillContent),
                 Setup("Build factory foundations, conveyors and high-voltage grid", BuildFactoryFoundationsContent),
-                Setup("Build ore washing, enrichment and tailings loop", () => VoxelEngine.EditorTools.OreWashingSetup.RunStep115()),
+                Setup("Build ore washing, tailings and metallurgical foundry loop", () => VoxelEngine.EditorTools.OreWashingSetup.RunStep115()),
                 Setup("Add or repair factory prefab visuals", () => VoxelEngine.EditorTools.FactoryPrefabVisualsBuilder.BuildAll()),
                 Setup("Build geological prospecting and ore detection", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59()),
                 Setup("Author the distillation plant", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69()),

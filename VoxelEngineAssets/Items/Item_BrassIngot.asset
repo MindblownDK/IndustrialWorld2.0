@@ -9,20 +9,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0e6019685b9c9bc4eba114014ee5193b, type: 3}
+  m_Script: {fileID: 11500000, guid: 67991de244e87534293bf080297171d8, type: 3}
   m_Name: Item_BrassIngot
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.ItemDefinition
-  itemId: brassingot
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.ResourceItem
+  itemId: brass_ingot
   displayName: Brass Ingot
-  description: 'Copper and iron fired together into the steampunk metal: brass. Takes
-    a polish, keeps a colour, and belongs on anything with a gauge, a drum or a departure
-    board on it.'
+  description: Corrosion-resistant copper-zinc alloy ingot smelted from copper and
+    zinc calamine.
   icon: {fileID: 0}
-  iconTint: {r: 0.72, g: 0.51, b: 0.22, a: 1}
-  maxStack: 900
+  iconTint: {r: 0.85, g: 0.68, b: 0.24, a: 1}
+  maxStack: 100
   massPerUnit: 1
-  category: Resources
+  category: Factory
   requiresContainment: 0
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
+  subcategory: 1
+  fuelSeconds: 0

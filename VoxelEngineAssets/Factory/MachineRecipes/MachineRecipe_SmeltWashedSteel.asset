@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5af1251a0a8394f44a7ab4148e911994, type: 3}
+  m_Name: MachineRecipe_SmeltWashedSteel
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.MachineRecipe
+  displayName: Direct Concentrate Steel
+  icon: {fileID: 0}
+  recipeType: 0
+  inputs:
+  - item: {fileID: 11400000, guid: 25c6326036768df418187295b5b42cb4, type: 2}
+    count: 2
+  - item: {fileID: 11400000, guid: 4c840fd8bb046414f83b9e9bde536135, type: 2}
+    count: 1
+  outputItem: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+  outputCount: 3
+  byproductItem: {fileID: 11400000, guid: f1173d64139a7c64782f215bf107044f, type: 2}
+  byproductCount: 1
+  byproductChance: 1
+  processSeconds: 6
+  unlockedByDefault: 1

@@ -1504,6 +1504,8 @@ namespace VoxelEngine.Player
                 if (crusher != null) { UI.GameUIController.Instance?.OpenMachine(crusher); return; }
                 var oreWasher = hit.collider.GetComponentInParent<VoxelEngine.Simulation.OreWasher>();
                 if (oreWasher != null) { UI.GameUIController.Instance?.OpenMachine(oreWasher); return; }
+                var foundry = hit.collider.GetComponentInParent<VoxelEngine.Simulation.MetallurgicalFoundry>();
+                if (foundry != null) { UI.GameUIController.Instance?.OpenMachine(foundry); return; }
                 var assembler = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Assembler>();
                 if (assembler != null) { UI.GameUIController.Instance?.OpenMachine(assembler); return; }
                 var funnel = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Funnel>();

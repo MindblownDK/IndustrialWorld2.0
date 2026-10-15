@@ -139,6 +139,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Storage.StorageItemDisplayBlock _openItemDisplay;
         private VoxelEngine.Simulation.Crusher _openCrusher;
         private VoxelEngine.Simulation.OreWasher _openOreWasher;
+        private VoxelEngine.Simulation.MetallurgicalFoundry _openFoundry;
         private VoxelEngine.Simulation.Assembler _openAssembler;
         private VoxelEngine.Simulation.Funnel _openFunnel;
         private VoxelEngine.Simulation.ConveyorSplitter _openSplitter;
@@ -454,7 +455,7 @@ namespace VoxelEngine.UI
                 _openPortReactor != null || _openProcessor != null || _openReprocessor != null ||
                 _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null || _openWaterPump != null || _openWindTurbine != null ||
                 _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null ||
-                _openCrusher != null || _openOreWasher != null || _openAssembler != null ||
+                _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null ||
                 _openGridBlock != null || _openGridTerminal != null || _openWaterTower != null || _openRadarBeacon != null ||
                 _openSteamEngine != null || _openSchedule != null;
 
@@ -671,7 +672,7 @@ namespace VoxelEngine.UI
             _openImporter        = null; _openExporter        = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS             = null;
             _openPowerstation = null; _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
 
             // Normalize + auto-refuel equipped jetpacks BEFORE building the UI:
             // pulling H₂/charge from portable containers mutates the inventory and
@@ -698,7 +699,7 @@ namespace VoxelEngine.UI
             _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openDistillationPlant = null; _openPumpjack = null; _openChemPlant = null; _openCarbonHarvester = null;
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
-            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             UnlockCursor();
             Refresh();
         }
@@ -832,7 +833,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             UnwatchAllContainers();
@@ -873,7 +874,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openStation    = f.GetComponent<CraftingStation>();
@@ -899,7 +900,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openStation    = ef.GetComponent<CraftingStation>();
@@ -924,7 +925,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _inventoryOpen  = true;
@@ -945,7 +946,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _inventoryOpen  = true;
@@ -970,7 +971,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null; _openDronePort = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openPortalController = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openVoltageStation = null;
             _openDefense = null;
             _openPowerBattery = null;
@@ -1020,6 +1021,9 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Simulation.OreWasher washer:
                     _openOreWasher = washer; washer.EnsureContainers(); washer.EnsureTanks();
                     WatchContainer(washer.inputC); WatchContainer(washer.outputC); WatchContainer(washer.upgradeC); break;
+                case VoxelEngine.Simulation.MetallurgicalFoundry foundry:
+                    _openFoundry = foundry; foundry.EnsureContainers();
+                    WatchContainer(foundry.inputC); WatchContainer(foundry.fuelC); WatchContainer(foundry.outputC); WatchContainer(foundry.upgradeC); break;
                 case VoxelEngine.Simulation.Assembler assembler:
                     _openAssembler = assembler; assembler.EnsureContainers();
                     WatchContainer(assembler.inputC); WatchContainer(assembler.outputC); WatchContainer(assembler.upgradeC); break;
@@ -1155,7 +1159,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openGridTerminal = grid; _terminalTab = -1;
@@ -1210,7 +1214,7 @@ namespace VoxelEngine.UI
             _openCraftTerminal = null; _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null; _openPowerBattery = null; _openVoltageStation = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -1253,7 +1257,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openExternalStorage = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openVoltageStation = null;
@@ -1295,7 +1299,7 @@ namespace VoxelEngine.UI
             _openPowerstation= null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
             _openVoltageStation = null;
@@ -1551,7 +1555,7 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
-                    _openCrusher != null || _openOreWasher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
+                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
@@ -1570,7 +1574,7 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
-                    _openCrusher != null || _openOreWasher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
+                    _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openCarbonHarvester != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null || _openRadarBeacon != null ||
                     _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null || _openStation != null;
                 // The station pane has its own filtered list on the right; keep the
@@ -1652,6 +1656,7 @@ namespace VoxelEngine.UI
                 else if (_openCarbonHarvester  != null) { var mp = MachineUIs.CarbonHarvesterPanel(_openCarbonHarvester, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openCarbonHarvester); }
                 else if (_openCrusher          != null) { var mp = MachineUIs.CrusherPanel(_openCrusher, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openCrusher); }
                 else if (_openOreWasher        != null) { var mp = MachineUIs.OreWasherPanel(_openOreWasher, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openOreWasher); }
+                else if (_openFoundry          != null) { var mp = MachineUIs.FoundryPanel(_openFoundry, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openFoundry); }
                 else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openAssembler); }
                 else if (_openFunnel           != null) _contentLayer.Add(MachineUIs.FunnelPanel(_openFunnel));
                 else if (_openSplitter         != null) _contentLayer.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
@@ -1690,6 +1695,7 @@ namespace VoxelEngine.UI
             else if (_openFlareStack != null) source = _openFlareStack;
             else if (_openChemPlant != null) source = _openChemPlant;
             else if (_openOreWasher != null) source = _openOreWasher;
+            else if (_openFoundry != null) source = _openFoundry;
             if (source == null || content == null || content.childCount == 0) return;
 
             PollutionEmitter.CollectForDisplay(source, _displayPollutionEmitters);
@@ -1861,6 +1867,7 @@ namespace VoxelEngine.UI
             if (_openFlareStack != null) return _openFlareStack;
             if (_openChemPlant != null) return _openChemPlant;
             if (_openOreWasher != null) return _openOreWasher;
+            if (_openFoundry != null) return _openFoundry;
             return null;
         }
 
@@ -2816,7 +2823,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _openQuarry = null; _openReactor = null; _openStation = null; _recipeBrowserOpen = false;
             _productionStatsOpen = false; _openChest = null; _openGridTerminal = null;
-            _openCrusher = null; _openOreWasher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openCrusher = null; _openOreWasher = null; _openFoundry = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = d;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -3166,7 +3173,7 @@ namespace VoxelEngine.UI
                    _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                    _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null || _openDrawerController != null ||
-                   _openDronePort != null || _openItemDisplay != null || _openCrusher != null || _openOreWasher != null || _openAssembler != null ||
+                   _openDronePort != null || _openItemDisplay != null || _openCrusher != null || _openOreWasher != null || _openFoundry != null || _openAssembler != null ||
                    _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openCarbonHarvester != null || _openStation != null ||
                    _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null ||
@@ -6903,6 +6910,14 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 {
                     bool isUpgrade = item is FurnaceUpgradeItem;
                     return isUpgrade ? _openOreWasher.upgradeC : _openOreWasher.inputC;
+                }
+                if (_openFoundry != null)
+                {
+                    if (!_openFoundry.UsesSolidFuel && item is FurnaceUpgradeItem)
+                        return _openFoundry.upgradeC;
+                    if (_openFoundry.UsesSolidFuel && item is ResourceItem ri && ri.fuelSeconds > 0f && _openFoundry.fuelC.GetSlot(0).IsEmpty)
+                        return _openFoundry.fuelC;
+                    return _openFoundry.inputC;
                 }
                 if (_openAssembler != null)
                 {
