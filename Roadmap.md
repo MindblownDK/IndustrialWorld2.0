@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.2-dev`
-**Roadmap Version:** `17.27.2-dev`
+**Current Version:** `17.27.3-dev`
+**Roadmap Version:** `17.27.3-dev`
 **Date:** 2026-10-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,10 +29,10 @@
 
 ## 0. Recently Done
 
-### 17.27.2-dev - Rear Instrument Display, Readable & Occluded World Text, Right-Click One-Item Fix
-- The quarry's instruments sit on its REAR face (screen, needle dial, power socket, state lamp) because the pit is dug on the front; the labelled glowing power plate is gone, the port declares `NegZ` Input/Power, and the collider set follows the socket
-- Machine labels are authored with the yaw their face needs (`TextMesh` reads from local -Z) and swapped onto the depth-tested font material at runtime by `WorldTextMaterial.ApplyToHierarchy`, so readouts face the player and no text draws through the hull or terrain
-- `GameUIController` fills an EMPTY slot from a stack on the cursor with a one-item copy of that stack instead of writing a count with no item, and the wizard step is renamed "Rebuild the Quarry machine and its rear instrument display (17.27.2-dev)"
+### 17.27.3-dev / 17.27.2-dev - Cutter Wheel Motion, Surface-Started Pit, Rear Instrument Display, Branch Filter Return
+- The cutter wheel, hub, teeth and spokes hang under `CutterWheelPivot`, which `Quarry.SpinCutter` turns about its axle (165 deg/s cutting, 26 while surveying and framing, coasting down, still when unpowered or complete); the pit's column scan covers 24 m up / 32 m down in two passes, so every column starts at its own highest solid voxel, and the machine's labels and readout are sized from measured text width
+- The quarry's instruments sit on its REAR face (screen, needle dial, power socket, state lamp, measured name bar) because the pit is dug on the front; the labelled glowing power plate is gone, the port declares `NegZ` Input/Power, and machine labels are turned to face outwards and swapped onto the depth-tested font material at runtime by `WorldTextMaterial.ApplyToHierarchy`
+- `ResearchUI` has its branch strip back: only branches with nodes are listed (each with a count), ALL is always first, BUILDING is never offered, and Player Upgrades gets its own tab; `GameUIController` fills an EMPTY slot from a stack on the cursor with a one-item copy of that stack instead of writing a count with no item
 
 ### 17.27.1-dev / 17.27.0-dev - Quarry Machine & Instrument Cluster, Static Placement Verdict, Mob Spawn Surfaces, Standing Bob Second Pass
 - Quarry rebuilt as a large industrial machine (`QuarryMachineSetup`, wizard step) with tracks, gantry, cutter wheel, conveyor, cab and stacks; the root is the ground contact plane (`PlacementPivotAnchor`) and collision is split body / blade / socket / cutter wheel so the instrument panel stays walkable

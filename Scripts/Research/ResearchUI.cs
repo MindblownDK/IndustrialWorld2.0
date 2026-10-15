@@ -8,16 +8,16 @@
 //   ┌──────────────────────────────────────────────────────────────────────┐
 //   │  ◀  ▶  ⬚  [Search___________]  Era: All  [Close]                   │
 //   ├──────────┬───────────────────────────────────────────────────────────┤
-//   │  Tabs    │  ∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞  │
-//   │          │  (pan/zoom canvas with tier labels, node cards, glowing   │
-//   │ • All    │   bezier connectors, era banners)                        │
-//   │ • Log.   │                                                          │
-//   │ • Prod   │    Era 1: Mechanized                                     │
+//   │ Branch   │  ∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞  │
+//   │ filter   │  (pan/zoom canvas with tier labels, node cards, glowing   │
+//   │ • ALL 42 │   bezier connectors, era banners)                        │
+//   │ • Log. 9 │                                                          │
+//   │ • Prod  6│    Era 1: Mechanized                                     │
 //   │ • Power  │     Tier 1        Tier 2        Tier 3                   │
 //   │ • Chem.  │    [Card]─ ─ ─ ─[Card]─ ─ ─ ─[Card]                     │
 //   │ • Store  │      │                     │                             │
-//   │ • Build  │    [Card]                 [Card]                         │
-//   │ • Mil.   │                                                          │
+//   │ • Mil.   │    [Card]                 [Card]                         │
+//   │ • Player │                                                          │
 //   │          │  Zoom: [−] [61%] [+] [Reset]                             │
 //   ├──────────┴───────────────────────────────────────────────────────────┤
 //   │  Details panel at bottom (collapsible): cost, unlocks, progress bar  │
@@ -344,9 +344,10 @@ namespace VoxelEngine.Research
             bodyRow.style.flexGrow = 1;
             bodyRow.style.minHeight = 0;
             flexCol.Add(bodyRow);
-            // 17.26.0-dev - the BRANCH FILTER column is gone. The tree is one map with
-            // search and the dependency layout doing the filtering, so the panel hands
-            // the whole width to the canvas instead of a tab strip that hid nodes.
+            // 17.27.3-dev - the branch filter is back, with the two rules learned the
+            // hard way: it never lists a branch the tree has no nodes in (an empty tab
+            // read as a broken screen), and it does not offer BUILDING at all.
+            BuildBranchColumn(bodyRow);
             BuildCanvasColumn(bodyRow);
             BuildDetailsPanel(flexCol);
         }
@@ -737,18 +738,163 @@ namespace VoxelEngine.Research
         }
         private TextField _searchField;
 
-        // ── Branch filter (REMOVED 17.26.0-dev) ─────────────────────────
-        // The left tab strip filtered the map by ResearchSubCategory and read as an
-        // empty screen whenever the selected branch had no nodes yet - the Military
-        // and Building sections in particular. The map is one tree now: search finds
-        // a node, the dependency layout shows where it sits, and the sub-category
-        // still rides each card as a label. Nothing filters nodes out of the view.
+        // ── Branch filter (restored 17.27.3-dev) ────────────────────────
+        // A left strip of branch buttons filters the map by the node's own
+        // ResearchSubCategory. Three rules, all of them corrections of earlier mistakes:
         //
-        // The node's own sub-category is still authored and still drives the card
-        // label and the ordering inside a layer, so no content work is lost.
+        //   1. A branch is ONLY offered when the tree actually has nodes in it, and each
+        //      tab carries its node count. The first version of this strip listed every
+        //      category whether it had content or not, so the Military and Building tabs
+        //      opened onto an empty canvas and read as a broken window.
+        //   2. BUILDING is never offered. It is the one branch that was asked for by name
+        //      to be removed, and its nodes are still on the map under ALL - the filter is
+        //      the only thing that goes away, never the research.
+        //   3. ALL is the first tab and is always present, so nothing can become
+        //      unreachable: a branchess view of the tree is one click away.
+        //
+        // Player Upgrades is a category rather than a sub-category, so it gets its own tab
+        // only when such nodes exist, and it is matched on the category.
+
+        private const string PlayerTabKey = "PLAYER UPGRADES";
+
+        /// <summary>One button in the branch strip: what it shows and what it selects.</summary>
+        private struct BranchTab
+        {
+            public string label;
+            public bool playersOnly;              // true = filter on ResearchCategory, not sub-category
+            public ResearchSubCategory sub;       // valid when playersOnly is false
+            public int count;
+        }
+
+        private readonly List<BranchTab> _branchTabs = new();
+        private readonly List<(BranchTab tab, Button button)> _branchButtons = new();
+        private int _branchIndex;                 // 0 is always ALL
+        private VisualElement _branchColumn;
 
         private static string BranchLabelFor(ResearchNode node)
             => node == null ? "GENERAL" : node.subCategory.ToString().ToUpperInvariant();
+
+        private void BuildBranchColumn(VisualElement parent)
+        {
+            _branchColumn = new VisualElement();
+            _branchColumn.style.width = 168;
+            _branchColumn.style.flexShrink = 0;
+            _branchColumn.style.marginRight = 8;
+            _branchColumn.style.backgroundColor = new StyleColor(CANVAS_BG);
+            _branchColumn.style.borderTopWidth = _branchColumn.style.borderBottomWidth =
+            _branchColumn.style.borderLeftWidth = _branchColumn.style.borderRightWidth = 1;
+            var border = new StyleColor(new Color(0.12f, 0.25f, 0.31f, 0.95f));
+            _branchColumn.style.borderTopColor = _branchColumn.style.borderBottomColor =
+            _branchColumn.style.borderLeftColor = _branchColumn.style.borderRightColor = border;
+            SetRadius(_branchColumn, 6);
+            parent.Add(_branchColumn);
+
+            CollectBranchTabs();
+
+            var title = new Label("BRANCH");
+            title.style.color = new Color(0.70f, 0.88f, 0.92f);
+            title.style.fontSize = 9;
+            title.style.letterSpacing = 2f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.marginTop = 8; title.style.marginLeft = 10; title.style.marginBottom = 8;
+            _branchColumn.Add(title);
+
+            _branchButtons.Clear();
+            for (int i = 0; i < _branchTabs.Count; i++)
+            {
+                var tab = _branchTabs[i];
+                int index = i;
+                var btn = new Button(() => SelectBranch(index));
+                btn.text = tab.label + "  " + tab.count;
+                btn.style.color = new Color(0.86f, 0.92f, 0.95f);
+                btn.style.fontSize = 11;
+                btn.style.unityTextAlign = TextAnchor.MiddleLeft;
+                btn.style.unityFontStyleAndWeight = FontStyle.Normal;
+                btn.style.height = 26;
+                btn.style.marginLeft = 8; btn.style.marginRight = 8; btn.style.marginBottom = 3;
+                btn.style.paddingLeft = 10;
+                SetRadius(btn, 4);
+                _branchColumn.Add(btn);
+                _branchButtons.Add((tab, btn));
+            }
+
+            if (_branchIndex >= _branchTabs.Count) _branchIndex = 0;
+            RefreshBranchButtons();
+        }
+
+        /// <summary>Every branch the tree has nodes in, in a stable order, with ALL first.
+        /// Building is deliberately absent (see the block comment above).</summary>
+        private void CollectBranchTabs()
+        {
+            _branchTabs.Clear();
+            var tree = ResearchManager.Instance?.tree;
+
+            int total = 0, players = 0;
+            var counts = new Dictionary<ResearchSubCategory, int>();
+            if (tree != null)
+            {
+                foreach (var n in tree.nodes)
+                {
+                    if (n == null) continue;
+                    if (n.upgradeKind == PlayerUpgradeKind.UnlockFlight || n.nodeId == "up_flight") continue;
+                    total++;
+                    if (n.category == ResearchCategory.PlayerUpgrades) { players++; continue; }
+                    counts.TryGetValue(n.subCategory, out int c);
+                    counts[n.subCategory] = c + 1;
+                }
+            }
+
+            _branchTabs.Add(new BranchTab { label = "ALL", count = total });
+
+            // Authored order, not enum order: the strip reads the way the factory grows.
+            var order = new[]
+            {
+                ResearchSubCategory.General, ResearchSubCategory.Logistics,
+                ResearchSubCategory.Production, ResearchSubCategory.Power,
+                ResearchSubCategory.Chemistry, ResearchSubCategory.Storage,
+                ResearchSubCategory.Military
+            };
+            foreach (var sub in order)
+            {
+                if (sub == ResearchSubCategory.Building) continue;   // asked for by name
+                if (!counts.TryGetValue(sub, out int c) || c <= 0) continue;
+                _branchTabs.Add(new BranchTab { label = sub.ToString().ToUpperInvariant(), sub = sub, count = c });
+            }
+
+            if (players > 0)
+                _branchTabs.Add(new BranchTab { label = PlayerTabKey, playersOnly = true, count = players });
+        }
+
+        private void SelectBranch(int index)
+        {
+            _branchIndex = Mathf.Clamp(index, 0, Mathf.Max(0, _branchTabs.Count - 1));
+            RefreshBranchButtons();
+            RebuildCanvas();
+        }
+
+        private void RefreshBranchButtons()
+        {
+            for (int i = 0; i < _branchButtons.Count; i++)
+            {
+                var (tab, btn) = _branchButtons[i];
+                bool active = i == _branchIndex;
+                btn.style.backgroundColor = new StyleColor(active
+                    ? new Color(0.10f, 0.34f, 0.44f)
+                    : new Color(0.06f, 0.10f, 0.14f));
+                btn.style.color = new Color(active ? 1f : 0.80f, active ? 1f : 0.88f, 1f);
+                btn.style.unityFontStyleAndWeight = active ? FontStyle.Bold : FontStyle.Normal;
+                ZeroBorder(btn);
+            }
+        }
+
+        /// <summary>Does the active branch accept this node?</summary>
+        private bool BranchAccepts(ResearchNode node)
+        {
+            if (_branchIndex <= 0 || _branchIndex >= _branchTabs.Count) return true;   // ALL
+            var tab = _branchTabs[_branchIndex];
+            if (tab.playersOnly) return node.category == ResearchCategory.PlayerUpgrades;
+            return node.category != ResearchCategory.PlayerUpgrades && node.subCategory == tab.sub;
+        }
 
         // ── Canvas Column ───────────────────────────────────────────────
         private void BuildCanvasColumn(VisualElement parent)
@@ -882,7 +1028,8 @@ namespace VoxelEngine.Research
                 if (n == null) continue;
                 // Flight is a jetpack, not a research unlock.
                 if (n.upgradeKind == PlayerUpgradeKind.UnlockFlight || n.nodeId == "up_flight") continue;
-                // 17.26.0-dev: no branch filter - every node in the tree is on the map.
+                // 17.27.3-dev: the strip filters by branch; ALL (index 0) filters nothing.
+                if (!BranchAccepts(n)) continue;
                 if (!string.IsNullOrEmpty(_searchQuery))
                 {
                     string q = _searchQuery.ToLowerInvariant();
@@ -894,7 +1041,9 @@ namespace VoxelEngine.Research
 
             if (nodes.Count == 0)
             {
-                var empty = new Label("No research in this filter.");
+                var empty = new Label(_branchIndex > 0 && string.IsNullOrEmpty(_searchQuery)
+                    ? "Nothing in this branch yet."
+                    : "No research in this filter.");
                 empty.style.position = Position.Absolute;
                 empty.style.left = 40; empty.style.top = 40;
                 empty.style.color = TextMuted;

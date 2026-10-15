@@ -13,6 +13,10 @@
 //     state lamp - driven by QuarryMultimeter: live draw, maximum draw, current depth and
 //     the reason there is no power (no cable / no supply).
 //
+// The cutter wheel hangs under a CutterWheelPivot so the drill can turn while it works
+// (Quarry spins that transform), and the machine's name is a measured title bar on the
+// instrument panel instead of a sticker sized by eye.
+//
 // The cluster is on the REAR on purpose. The pit is dug in FRONT of the machine, so the
 // front is the one face the player can never stand in front of: a meter mounted there was
 // a meter nobody could read. The rear also carries the service door, the vents and the
@@ -73,8 +77,8 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("[QuarryMachineSetup] Rebuilt the quarry machine at '" + path +
-                      "' with tracks, cutter wheel, conveyor, cab and a REAR instrument display " +
-                      "(screen, needle dial, power socket, state lamp). " +
+                      "' with a spinning cutter wheel (CutterWheelPivot), tracks, conveyor, cab and a " +
+                      "REAR instrument display (screen, needle dial, power socket, state lamp, name band). " +
                       "Placed quarries pick the new body up on the next load.");
         }
 
@@ -175,23 +179,33 @@ namespace VoxelEngine.EditorTools
             for (int side = -1; side <= 1; side += 2)   // hydraulic rams
                 Cyl(t, "Ram" + side, steel, new Vector3(side * 1.05f, 4.15f, 1.30f), 0.24f, 3.10f, new Vector3(72f, 0f, 0f));
 
+            // The wheel and everything that turns with it hang under one pivot, so the
+            // drill can actually cut: Quarry finds "CutterWheelPivot" and spins it about
+            // the machine's own X axis while it mines. The guard does not turn and stays
+            // on the hull. The axle is X (the disc lies in the YZ plane), which is why
+            // every part below is authored relative to the pivot's centre.
             var wheel = new Vector3(0f, 2.95f, 4.35f);
-            Cyl(t, "CutterWheel", body, wheel, 3.70f, 0.60f, new Vector3(0f, 0f, 90f));
-            Cyl(t, "CutterHub", steel, wheel, 0.90f, 0.80f, new Vector3(0f, 0f, 90f));
+            var wheelPivot = new GameObject("CutterWheelPivot");
+            wheelPivot.transform.SetParent(t, false);
+            wheelPivot.transform.localPosition = wheel;
+
+            Cyl(wheelPivot.transform, "CutterWheel", body, Vector3.zero, 3.70f, 0.60f, new Vector3(0f, 0f, 90f));
+            Cyl(wheelPivot.transform, "CutterHub", steel, Vector3.zero, 0.90f, 0.80f, new Vector3(0f, 0f, 90f));
             Box(t, "CutterGuard", paint, new Vector3(0f, 4.92f, 4.10f), new Vector3(0.90f, 0.26f, 2.70f), new Vector3(12f, 0f, 0f));
             for (int i = 0; i < 18; i++)
             {
                 float a = i * (360f / 18f);
                 float rad = a * Mathf.Deg2Rad;
-                var pos = new Vector3(0f, wheel.y + Mathf.Sin(rad) * 1.92f, wheel.z + Mathf.Cos(rad) * 1.92f);
-                Box(t, "Tooth" + i, (i % 2 == 0) ? hazard : steel, pos, new Vector3(0.66f, 0.16f, 0.30f), new Vector3(-a, 0f, 0f));
+                var pos = new Vector3(0f, Mathf.Sin(rad) * 1.92f, Mathf.Cos(rad) * 1.92f);
+                Box(wheelPivot.transform, "Tooth" + i, (i % 2 == 0) ? hazard : steel, pos,
+                    new Vector3(0.66f, 0.16f, 0.30f), new Vector3(-a, 0f, 0f));
             }
             for (int i = 0; i < 6; i++)   // spokes
             {
                 float a = i * 60f;
                 float rad = a * Mathf.Deg2Rad;
-                var pos = new Vector3(0f, wheel.y + Mathf.Sin(rad) * 0.95f, wheel.z + Mathf.Cos(rad) * 0.95f);
-                Box(t, "Spoke" + i, steel, pos, new Vector3(0.72f, 0.22f, 1.60f), new Vector3(-a, 0f, 0f));
+                var pos = new Vector3(0f, Mathf.Sin(rad) * 0.95f, Mathf.Cos(rad) * 0.95f);
+                Box(wheelPivot.transform, "Spoke" + i, steel, pos, new Vector3(0.72f, 0.22f, 1.60f), new Vector3(-a, 0f, 0f));
             }
 
             // ═══ SPOIL CONVEYOR + DISCHARGE ════════════════════════════
@@ -239,7 +253,7 @@ namespace VoxelEngine.EditorTools
             // ═══ REAR INSTRUMENT CLUSTER: DISPLAY, DIAL, SOCKET, LAMP ═══
             // Mounted on the rear face, where the player stands. See the file header: the
             // front of this machine faces a hole in the ground.
-            Box(t, "MeterCabinet", dark, new Vector3(2.35f, 2.90f, -2.80f), new Vector3(2.90f, 2.10f, 0.36f));
+            Box(t, "MeterCabinet", dark, new Vector3(2.35f, 3.10f, -2.80f), new Vector3(2.90f, 2.50f, 0.36f));
             Box(t, "MeterBezel", steel, new Vector3(2.35f, 3.28f, -2.99f), new Vector3(2.52f, 1.24f, 0.10f));
             Box(t, "ScreenGlass", screenMat, new Vector3(2.35f, 3.28f, -3.04f), new Vector3(2.30f, 1.04f, 0.05f));
             Box(t, "ScreenLipTop", steel, new Vector3(2.35f, 3.86f, -3.06f), new Vector3(2.44f, 0.08f, 0.10f));
@@ -276,18 +290,28 @@ namespace VoxelEngine.EditorTools
             var lampGo = Sphere(t, "MeterStateLamp", lampWarm, new Vector3(3.44f, 2.28f, -3.02f), 0.22f);
             Box(t, "MeterLampHood", steel, new Vector3(3.44f, 2.42f, -3.04f), new Vector3(0.30f, 0.10f, 0.16f));
 
-            // The readout is authored with no yaw: TextMesh glyphs read from their local
-            // -Z, and this one is mounted on the machine's -Z face.
-            var textScreen = Text(t, "MeterReadout", new Vector3(1.44f, 3.68f, -3.10f), "QUARRY DRILL  IDLE",
-                0.15f, TextAnchor.UpperLeft, new Color(0.62f, 1f, 0.78f));
+            // The readout is authored with no yaw (TextMesh glyphs read from their local
+            // -Z, and this one is mounted on the machine's -Z face) and FITTED to the
+            // glass: the longest line the meter can ever print - the status line with
+            // "OUTPUT FULL" - is measured, and the glyph height is derived from that
+            // width, so no state the drill can be in runs off the side of the screen.
+            const string WidestLine = "QUARRY DRILL  OUTPUT FULL";
+            float readoutGlyph = Mathf.Min(0.15f, 1.95f / Mathf.Max(0.0001f, TextWidth(WidestLine, 1f)));
+            var textScreen = Text(t, "MeterReadout", new Vector3(2.35f, 3.68f, -3.10f), "QUARRY DRILL  IDLE",
+                readoutGlyph, TextAnchor.UpperCenter, new Color(0.62f, 1f, 0.78f));
             textScreen.lineSpacing = 1.12f;
 
             // ═══ NAME PLATE + REAR SERVICE DOOR ════════════════════════
-            Box(t, "NamePlate", steel, new Vector3(-1.30f, 4.42f, 1.66f), new Vector3(2.10f, 0.46f, 0.06f));
-            // 180 degree yaw: the plate is on the +Z face, so the glyphs have to be turned
-            // to face the way the machine does (see the Text helper).
-            Text(t, "NamePlateText", new Vector3(-2.28f, 4.24f, 1.72f), "QUARRY DRILL Mk III",
-                0.20f, TextAnchor.LowerLeft, new Color(0.10f, 0.10f, 0.11f), 180f);
+            // The name plate is the instrument panel's TITLE BAR, not a sticker on the
+            // hull: the plate spans the panel, the text is measured against it and shrunk
+            // until it fits inside with a margin, so the machine's name can never spill
+            // over the edge of the machine again.
+            const float NameBandWidth = 2.70f;
+            const string MachineName = "QUARRY DRILL Mk III";
+            Box(t, "NamePlate", steel, new Vector3(2.35f, 4.11f, -2.99f), new Vector3(NameBandWidth, 0.38f, 0.10f));
+            float nameGlyph = Mathf.Min(0.19f, (NameBandWidth - 0.24f) / Mathf.Max(0.0001f, TextWidth(MachineName, 1f)));
+            Text(t, "NamePlateText", new Vector3(2.35f, 4.11f, -3.05f), MachineName,
+                nameGlyph, TextAnchor.MiddleCenter, new Color(0.10f, 0.10f, 0.11f));
             Box(t, "RearDoor", steel, new Vector3(-1.70f, 2.95f, -2.72f), new Vector3(2.40f, 2.20f, 0.14f));
             Box(t, "RearDoorFrame", paint, new Vector3(-1.70f, 4.12f, -2.72f), new Vector3(2.80f, 0.22f, 0.18f));
             Box(t, "RearHandle", dark, new Vector3(-2.60f, 2.60f, -2.84f), new Vector3(0.30f, 0.10f, 0.10f));
@@ -410,6 +434,52 @@ namespace VoxelEngine.EditorTools
                 renderer.shadowCastingMode = ShadowCastingMode.On;
             }
             return go;
+        }
+
+        private static Font _measureFont;
+
+        /// <summary>How wide a TextMesh label will actually be, in metres, for a given world
+        /// glyph height. TextMesh sizes each glyph by <c>fontSize * characterSize * 0.1</c>
+        /// and advances by the font's own metrics, so the width is measurable before the
+        /// prefab is saved - which is the only way a plate can be sized to its label (the
+        /// first version of this machine sized the plate and let the text run over the edge
+        /// of the hull). Falls back to a per-character estimate when no font is available.</summary>
+        private static float TextWidth(string content, float glyphHeight)
+        {
+            if (string.IsNullOrEmpty(content)) return 0f;
+            float advancePx = 0f;
+            var font = MeasureFont();
+            if (font != null)
+            {
+                font.RequestCharactersInTexture(content, 48, FontStyle.Normal);
+                for (int i = 0; i < content.Length; i++)
+                {
+                    if (font.GetCharacterInfo(content[i], out var info, 48, FontStyle.Normal))
+                        advancePx += info.advance;
+                    else
+                        advancePx += 24f;
+                }
+            }
+            if (advancePx <= 0f) advancePx = content.Length * 24f;   // conservative estimate
+            return advancePx * (glyphHeight / 4.8f) * 0.1f;
+        }
+
+        private static Font MeasureFont()
+        {
+            if (_measureFont != null) return _measureFont;
+            // Unity 6 ships the legacy runtime font under this name; older editors under
+            // the other. Whichever exists is used, and a temporary TextMesh is the last
+            // resort - all three give the same metrics for the default font.
+            try { _measureFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); } catch { }
+            if (_measureFont == null) { try { _measureFont = Resources.GetBuiltinResource<Font>("Arial.ttf"); } catch { } }
+            if (_measureFont == null)
+            {
+                var probe = new GameObject("QuarryMeasureProbe");
+                var tm = probe.AddComponent<TextMesh>();
+                _measureFont = tm.font;
+                UnityEngine.Object.DestroyImmediate(probe);
+            }
+            return _measureFont;
         }
 
         /// <summary>Legacy TextMesh label. TextMesh glyphs are readable from their LOCAL

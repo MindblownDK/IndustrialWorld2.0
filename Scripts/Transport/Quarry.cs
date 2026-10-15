@@ -176,20 +176,30 @@ namespace VoxelEngine.Transport
             }
         };
 
-        // Ground-probe band around the block's own plane (local metres). The
-        // original mined from the quarry's own voxel layer; columns keep that
-        // semantics by only accepting ground inside this band - after a reload
-        // an excavated column finds no ground in the band and restarts at the
-        // block plane, where the already-mined cells are simply skipped until
-        // the depth counter reaches the hole floor again.
+        // Ground-probe band around the block's own plane (local metres). A column's
+        // surface is the highest solid voxel inside this band, and the pit is cut down
+        // from there - which is why the band has to be generous:
         //
-        // 17.26.0-dev: the band is deeper below the plane than above it because the
-        // mining area now lies IN FRONT of the machine, which is regularly downhill
-        // of it. A wider band means a quarry parked on a slope still finds the
-        // surface of every column in front of it instead of mining air.
-        private const float ProbeUp = 2.0f;
-        private const float ProbeDown = 8.0f;
+        //   17.26.0-dev widened it below the plane, because the mining area lies IN FRONT
+        //   of the machine and that ground is regularly downhill of it.
+        //   17.27.3-dev widened it above the plane as well. It used to be 2 m up and 8 m
+        //   down from the machine's OWN plane, which is fine on flat ground and wrong
+        //   everywhere else: park a quarry at the foot of a slope and the terrain in the
+        //   pit area is above the band, so the column reports no surface at all, the pit
+        //   starts below the machine instead of at the ground the player can see, and the
+        //   drill begins already buried. The band now spans the sky and the bedrock a
+        //   quarry will ever meet, and the scan is two-pass - CoarseStep down to the first
+        //   solid sample, then ProbeStep back UP to the top of it - so a wide search costs
+        //   a third of the lookups of one fine sweep and still lands within 25 cm.
+        //
+        // A column that finds no ground in the band (bare sky, or a hole deeper than the
+        // band) keeps the -0.5 fallback, which is the block plane and the historical
+        // behaviour; already-empty cells are skipped by the miner until the depth counter
+        // reaches the hole floor again.
+        private const float ProbeUp = 24.0f;
+        private const float ProbeDown = 32.0f;
         private const float ProbeStep = 0.25f;
+        private const float ProbeCoarseStep = 1.0f;
 
         private float _mbY = -1.2f, _mtY = 1.2f;   // model bottom/top in LOCAL y
         private ItemContainer _out;
@@ -253,18 +263,28 @@ namespace VoxelEngine.Transport
             AreaX = sz; AreaZ = sz;
             _colTop = new float[sz * sz];
 
-            // Probe the ground band around the block's own plane per column.
+            // Probe each column's surface, top-down, over the whole band. The first solid
+            // coarse sample is walked back UP in fine steps, so a column's top is the
+            // highest solid voxel in it - the surface the player is looking at - and the
+            // pit therefore starts at the top of the terrain inside the designated area,
+            // not at whatever height the machine happens to stand at.
             for (int a = 0; a < sz; a++)
             for (int b = 0; b < sz; b++)
             {
                 float x = (a + 0.5f) - sz * 0.5f;
                 float z = forwardOffset + (b + 0.5f);
                 float top = -0.5f;
-                for (float y = ProbeUp; y >= -ProbeDown; y -= ProbeStep)
+                for (float y = ProbeUp; y >= -ProbeDown; y -= ProbeCoarseStep)
                 {
-                    Vector3 world = transform.TransformPoint(new Vector3(x, y, z));
-                    var v = _w.GetVoxelWorld(_w.WorldToVoxel(world));
-                    if (v.density > VoxelConstants.ISO_LEVEL) { top = y; break; }
+                    if (!SolidAt(x, y, z)) continue;
+                    top = y;
+                    for (int g = 0; g < 8; g++)
+                    {
+                        float up = top + ProbeStep;
+                        if (up > ProbeUp || !SolidAt(x, up, z)) break;
+                        top = up;
+                    }
+                    break;
                 }
                 _colTop[a * sz + b] = top;
             }
@@ -285,6 +305,14 @@ namespace VoxelEngine.Transport
                 else { lo = Vector3Int.Min(lo, vox); hi = Vector3Int.Max(hi, vox); }
             }
             AreaMin = lo; AreaMax = hi;
+        }
+
+        /// <summary>Is the voxel at this machine-local point solid? The raw material of the
+        /// column scan above.</summary>
+        bool SolidAt(float x, float y, float z)
+        {
+            Vector3 world = transform.TransformPoint(new Vector3(x, y, z));
+            return _w.GetVoxelWorld(_w.WorldToVoxel(world)).density > VoxelConstants.ISO_LEVEL;
         }
 
         void CalculateMaxDepth() { MaxDepth = Mathf.Clamp(maximumMiningDepth, 8, 256); }
@@ -355,6 +383,8 @@ namespace VoxelEngine.Transport
                 else if (Phase != QuarryPhase.Idle && Phase != QuarryPhase.Complete) { DA(); Phase = QuarryPhase.Idle; }
                 else CreateGhostIfUnpowered(); }
 
+            SpinCutter(Time.deltaTime, hp);
+
             switch (Phase)
             {
                 case QuarryPhase.Idle: if (hp) ETP(); break;
@@ -372,6 +402,34 @@ namespace VoxelEngine.Transport
                     break;
                 case QuarryPhase.Complete: if(_dr){Destroy(_dr);_dr=null;} if(_bm){Destroy(_bm);_bm=null;} break;
             }
+        }
+
+        // ═══ CUTTER WHEEL ═══════════════════════════════════════════
+        // The machine's own cutter wheel - the one authored into the prefab under
+        // "CutterWheelPivot" - turns while the drill works. It spins up with the work and
+        // coasts down when the phase does, at drill speed while mining and a slow turn
+        // while surveying and building the frame, so the machine reads as a machine from
+        // across the pit instead of a parked hulk. The wheel is looked up on demand: a
+        // quarry restored mid-mine, or built from an older prefab, simply has no pivot and
+        // this does nothing.
+        private Transform _cw;
+        private float _cwSpeed;
+        private const float CutterSpinMining = 165f;    // degrees/second while cutting
+        private const float CutterSpinWorking = 26f;    // degrees/second while surveying/building
+        private const float CutterSpinAccel = 240f;     // degrees/second per second
+
+        void SpinCutter(float dt, bool powered)
+        {
+            if (_cw == null) _cw = transform.Find("CutterWheelPivot");
+            if (_cw == null) return;
+
+            float target = !powered ? 0f
+                : Phase == QuarryPhase.Mining ? CutterSpinMining
+                : (Phase == QuarryPhase.TapeFrame || Phase == QuarryPhase.BuildingFrame) ? CutterSpinWorking
+                : 0f;
+
+            _cwSpeed = Mathf.MoveTowards(_cwSpeed, target, CutterSpinAccel * dt);
+            if (_cwSpeed != 0f) _cw.Rotate(Vector3.right, _cwSpeed * dt, Space.Self);
         }
 
         void CreateGhostIfUnpowered()
