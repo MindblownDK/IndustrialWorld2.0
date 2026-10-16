@@ -6,6 +6,10 @@
 //   • Separate rebindable Slide and hold-to-Crouch actions
 //   • Momentum-based SLIDE: sprinting into Slide adds a low-friction burst while
 //     preserving carry; release Slide to end it (or jump straight out of the slide).
+//   • ADVANCED TRAVERSAL: a MANTLE pulls the body up a ledge it is running into, and a
+//     WALL JUMP in mid-air pushes off a steep surface it is touching. Both are read
+//     through the same walkable-ground rule as every other probe in this file, and both
+//     are off while flying, swimming or walking a hull.
 //   • Optional FLY mode (toggleable via GameSettings.FlyMode or the ToggleFly key).
 //
 // Uses CharacterController for collision so it works on the voxel terrain meshes.
@@ -179,6 +183,36 @@ namespace VoxelEngine.Player
         [Tooltip("Maximum slide-direction steering, in degrees per second.")]
         public float slideSteerRate = 180f;
 
+        // ── Advanced traversal (17.28.0-dev) ─────────────────────────────────
+        // Two moves that turn a blocked route into a route: a MANTLE pulls the body up a
+        // ledge it is running into, and a WALL JUMP pushes off a wall in mid-air. Both are
+        // switches, both are on the ground or just off it only, and neither touches
+        // walking, the momentum slide, water or the jetpack.
+        [Tooltip("Running into a knee-to-chest-high ledge pulls you up onto it.")]
+        public bool  mantleEnabled = true;
+        [Tooltip("Highest ledge a mantle can reach, in metres above the feet. Terrain is " +
+                 "built from 1 m blocks, so anything at or above 1.0 clears one whole block.")]
+        [Range(0.5f, 2.0f)] public float mantleMaxHeight = 1.35f;
+        [Tooltip("Lowest ledge a mantle bothers with. Below this the uphill step assist " +
+                 "already walks you up and a pull-up would only add motion.")]
+        [Range(0.1f, 1.0f)] public float mantleMinHeight = 0.45f;
+        [Tooltip("How far past the capsule surface the wall probe reaches, in metres. This is " +
+                 "also how far the body may be from a face and still pull up on its top.")]
+        [Range(0.25f, 1.5f)] public float mantleProbeDistance = 0.75f;
+        [Tooltip("Seconds a pull-up takes. Long enough to read as a climb, short enough " +
+                 "that the player never waits for it.")]
+        [Range(0.1f, 1.2f)] public float mantleDuration = 0.38f;
+
+        [Tooltip("Press Jump in mid-air while touching a wall to push off it.")]
+        public bool  wallJumpEnabled = true;
+        [Tooltip("How high a wall jump lifts you, in metres. Deliberately under a standing " +
+                 "jump, so the ground jump stays the stronger move.")]
+        [Range(0.4f, 2.0f)] public float wallJumpHeight = 1.15f;
+        [Tooltip("How hard a wall jump pushes you away from the wall, in m/s.")]
+        [Range(1f, 12f)] public float wallJumpPushSpeed = 4.5f;
+        [Tooltip("Consecutive wall jumps allowed before touching down again.")]
+        [Range(1, 6)] public int   maxWallJumps = 2;
+
         [Header("Fly Mode")]
         public float flySpeed = 14f;
         public float flySprintMultiplier = 3f;
@@ -216,6 +250,19 @@ namespace VoxelEngine.Player
         private bool   _crouched;
         private bool   _sliding;
         private bool   _sprinting;
+        private bool   _mantling;               // a committed pull-up owns the body
+        private Vector3 _mantleStartPos;
+        private Vector3 _mantleForwardDir;
+        private float  _mantleForwardDelta;
+        private float  _mantleUpDelta;
+        private float  _mantleElapsed;
+        private float  _mantleDuration;
+        private float  _lastMantleAt = -999f;
+        private Vector3 _wallNormal;            // last wall this body was pressed against
+        private float  _wallContactAt = -999f;
+        private float  _lastWallJumpAt = -999f;
+        private int    _wallJumpsUsed;
+        private UnityEngine.CollisionFlags _lastMoveFlags;
         private float  _smoothedEyeHeight;
         private float  _cameraStepOffset;
         private float  _jetpackBoostCharge;
@@ -228,6 +275,10 @@ namespace VoxelEngine.Player
         {
             _spawnGraceUntil = Time.time + Mathf.Max(0.5f, seconds);
         }
+        // Reused by the mantle's landing test, which asks whether the capsule fits where the
+        // pull-up would leave it. Allocated once: a mantle is rare and the probe never runs
+        // outside a pull-up candidate.
+        private readonly Collider[] _traversalOverlaps = new Collider[16];
         // Reused by terrain support probes to avoid per-frame raycast allocations.
         // 14.24.1: 12 was not enough. This probe runs on EVERY layer and the ray is
         // over 3 m long, so inside a base or a forest the buffer overflowed - and an
@@ -244,6 +295,9 @@ namespace VoxelEngine.Player
         public bool IsCrouched => _crouched;
         public bool IsSliding => _sliding;
         public bool IsSprinting => _sprinting;
+        /// <summary>True during a pull-up: movement input is suspended and the body follows
+        /// a short scripted arc. Exposed so avatars and hooks can play along.</summary>
+        public bool IsMantling => _mantling;
         public bool IsFlying => inspectorFlyToggle;
         /// <summary>True while riding a mount: locomotion is suspended, but mouse-look + camera stay live.</summary>
         public bool IsMounted;
@@ -408,7 +462,34 @@ namespace VoxelEngine.Player
             if (Mathf.Approximately(slideFriction, 1.6f)) slideFriction = 0.7f;
             if (Mathf.Approximately(slideEndSpeed, 3f)) slideEndSpeed = 2.5f;
             if (Mathf.Approximately(slideMinSpeed, 6f)) slideMinSpeed = 6.5f;
+
+            // 17.28.0-dev - ADVANCED TRAVERSAL ARRIVES SWITCHED ON IN OLD PREFABS.
+            //
+            // Unity writes the default value of a field it has never seen into a component
+            // that was serialized before the field existed - FALSE for a bool, 0 for a
+            // float. The mantle and wall-jump switches are new, so any player prefab saved
+            // by an earlier build carries both as OFF, and the two features would ship
+            // silently disabled in exactly the prefab the game spawns. The marker below is
+            // written once per player object; after that the inspector is the truth and
+            // nothing here is applied again.
+            if (_traversalMigration < 1)
+            {
+                _traversalMigration = 1;
+                mantleEnabled = true;
+                wallJumpEnabled = true;
+                if (mantleMaxHeight <= 0f) mantleMaxHeight = 1.35f;
+                if (mantleMinHeight <= 0f) mantleMinHeight = 0.45f;
+                if (mantleProbeDistance <= 0f) mantleProbeDistance = 0.75f;
+                if (mantleDuration <= 0f) mantleDuration = 0.38f;
+                if (wallJumpHeight <= 0f) wallJumpHeight = 1.15f;
+                if (wallJumpPushSpeed <= 0f) wallJumpPushSpeed = 4.5f;
+                if (maxWallJumps <= 0) maxWallJumps = 2;
+            }
         }
+
+        /// <summary>One-time marker for fields added after this prefab was written: 0 means
+        /// "never migrated", and the traversal block above runs exactly once.</summary>
+        [SerializeField, HideInInspector] private int _traversalMigration;
 
         private void OnDestroy() => GameSettings.OnChanged -= ApplyFov;
 
@@ -632,6 +713,8 @@ namespace VoxelEngine.Player
             _onIce = _grounded && IceFrictionUtility.IsIceBelow(transform.position + up * 0.15f, up, 0.75f);
             UpdateRoadContact(up, dt);
             if (_grounded) _lastGroundedTime = Time.time;
+            // A wall-jump budget is a ladder with rungs: the ground refills it.
+            if (_grounded) _wallJumpsUsed = 0;
             bool canCoyote = (Time.time - _lastGroundedTime) <= coyoteTime;
 
             // -- input direction --
@@ -652,6 +735,17 @@ namespace VoxelEngine.Player
             bool jumpPressed = !uiLocked && GameSettings.WasPressed(InputAction.Jump);
             bool jumpHeld = !uiLocked && GameSettings.IsHeld(InputAction.Jump);
             UpdateCrouchSlide(slidePressed, slideHeld, crouchHeld, sprintHeld, up, dt);
+
+            // -- pull-up onto a ledge (17.28.0-dev) --
+            // Asked BEFORE this frame's move, because a committed mantle owns the body: the
+            // capsule must not also be driven by walking velocity in the same frame, and the
+            // walk step (friction, gravity, the ascent probe, the footing solve) has nothing
+            // to add to a scripted arc.
+            if (_mantling || TryStartMantle(up, wishDir))
+            {
+                UpdateMantle(up, dt);
+                return;
+            }
 
             // -- target horizontal speed --
             float speedMul = 1f;
@@ -777,7 +871,8 @@ namespace VoxelEngine.Player
 
             bool jumpRequested = jumpPressed || _jumpBufferTimer > 0f || (autoBunnyHop && jumpHeld);
             bool jumpAllowed = canCoyote && (!_crouched || _sliding);
-            if (jumpRequested && jumpAllowed)
+            bool groundJumpFired = jumpRequested && jumpAllowed;
+            if (groundJumpFired)
             {
                 float heldGravityMultiplier = Mathf.Max(1f, jumpHoldGravityMultiplier);
                 float launchGravity = GravVec.magnitude * heldGravityMultiplier;
@@ -800,6 +895,13 @@ namespace VoxelEngine.Player
                 // Do not queue a crouch-blocked press and fire it after standing up.
                 _jumpBufferTimer = 0f;
             }
+
+            // -- wall jump (17.28.0-dev) --
+            // Reached only when the GROUND jump did not fire: airborne, past coyote, and the
+            // controller has just been stopped by a steep surface. A fresh press only - a
+            // buffered or held jump must not spend wall contacts the player never asked for -
+            // and a frame that just launched a ground jump never launches a wall jump too.
+            if (jumpPressed && !groundJumpFired) TryWallJump(up);
 
             // -- voxel water swim (voxel-style) --
             // While submerged: WASD swims in the look direction, Space rises,
@@ -1001,6 +1103,10 @@ namespace VoxelEngine.Player
             Vector3 beforeWalkMove = transform.position;
             Vector3 intendedHoriz = Vector3.ProjectOnPlane(_velocity, up);
             _cc.Move(_velocity * dt);
+            // What did the controller actually run into this frame? Only a resolved side
+            // collision counts as touching a wall (see UpdateWallContact).
+            _lastMoveFlags = _cc.collisionFlags;
+            UpdateWallContact(up);
             if (!inWater)
                 SuppressStandingSlide(up, beforeWalkMove, intendedHoriz, wish, dt);
 
@@ -1013,6 +1119,302 @@ namespace VoxelEngine.Player
                 UpdateDeckAnchor(up, inWater);
             else
                 _hasCarryAnchor = false;   // boots own the anchor this frame
+        }
+
+        // ============================================================
+        //     ADVANCED TRAVERSAL — MANTLE & WALL JUMP (17.28.0-dev)
+        // ============================================================
+        //
+        // Two moves that turn a blocked route into a route. Both are deliberately narrow, and
+        // both are built out of questions the rest of this controller already asks:
+        //
+        //   * A WALL IS THE EXACT COMPLEMENT OF WALKABLE GROUND. Every ground probe in this
+        //     file accepts a surface only when its normal sits inside the walkable cone
+        //     (IsWalkableGroundCollider, dot > 0.45). A traversal surface is the same test
+        //     read the other way round, so a slope the player can stand on is never mistaken
+        //     for a wall, and a wall is never mistaken for ground.
+        //   * A MANTLE ENDS WHERE THE PLAYER COULD HAVE STOOD. The landing is the same
+        //     walkable-ground question the ground check asks (TryGetWalkableGround) plus a
+        //     capsule test at the pose he will arrive in. Anywhere he cannot stand is
+        //     somewhere he cannot mantle to.
+        //   * THE LADDER INTO THE AIR DOES NOT CHANGE. A standing jump is still the strongest
+        //     launch, a pull-up is slower than a jump, and the wall-jump budget refills only
+        //     on landing. Nothing here adds speed to walking, sliding, water or the jetpack.
+        //
+        // The ledge fix of 17.27.9-dev is what makes this stand on solid ground: the footing
+        // solve already trusts the RIM of a capsule, so a player left at the edge of a
+        // mantle's landing is planted there instead of slid back off it.
+
+        /// <summary>Seconds a completed pull-up waits before the next one may start.</summary>
+        private const float MantleCooldown = 0.35f;
+        /// <summary>How far above the wanted ledge the landing probe starts, in metres.</summary>
+        private const float MantleLedgeProbeRise = 0.25f;
+        /// <summary>Fastest descent a pull-up will grab at, in m/s. Kept BELOW
+        /// fallDamageStartSpeed (16 m/s) on purpose: a mantle must never be a way to cancel a
+        /// hard landing.</summary>
+        private const float MantleMaxDescentSpeed = 12f;
+        /// <summary>How long a wall touch stays valid for a wall jump, in seconds.</summary>
+        private const float WallContactWindow = 0.25f;
+        /// <summary>Shortest gap between two wall jumps, in seconds.</summary>
+        private const float WallJumpCooldown = 0.18f;
+        /// <summary>The normal cone that separates a wall from ground: the complement of the
+        /// walkable cone every ground probe accepts.</summary>
+        private const float WallSteepDot = 0.45f;
+
+        /// <summary>
+        /// Walking into a ledge: is there a wall to touch, and a walkable top just above the
+        /// feet that the body actually fits on? Everything a pull-up needs is decided HERE, so
+        /// a commit is never half-possible - if this returns false the body is untouched.
+        /// Two inset distances are tried, so a thin ledge in front of a taller wall still
+        /// gives a perch on its edge instead of being refused outright.
+        /// </summary>
+        private bool TryStartMantle(Vector3 up, Vector3 wishDir)
+        {
+            if (!mantleEnabled || _cc == null) return false;
+            if (Time.time - _lastMantleAt < MantleCooldown) return false;
+            // Only a body the controller has actually been STOPPED by counts as "walked into
+            // a ledge": the flag comes from the move of the frame before, so walking on open
+            // ground costs one comparison and never a ray.
+            if ((_lastMoveFlags & UnityEngine.CollisionFlags.Sides) == 0) return false;
+            // Walking INTO something, not idling beside it: no input, no pull-up.
+            if (wishDir.sqrMagnitude < 0.01f) return false;
+            // Rising: a jump already reaches higher than a mantle can, so let the jump finish
+            // instead of stealing its frame.
+            if (VerticalSpeed(up) > 0.5f) return false;
+            if (VerticalSpeed(up) < -MantleMaxDescentSpeed) return false;
+            // The boots own the body on a hull, and a magnetic grip is not a ledge.
+            if (_boots != null && _boots.Engaged) return false;
+
+            float maxHeight = Mathf.Max(0.35f, mantleMaxHeight);
+            float minHeight = Mathf.Clamp(mantleMinHeight, 0.05f, maxHeight - 0.05f);
+            Vector3 dir = wishDir.normalized;
+            if (!FindTraversalWall(up, dir, out RaycastHit wall)) return false;
+
+            float inset = Mathf.Clamp(_cc.radius * 0.9f, 0.22f, 0.60f);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                // The column to land in: the face the body is against, pushed past it by the
+                // inset. `dir` is horizontal, so the dot below is the horizontal distance to
+                // the face - the wall hit's own height never enters the maths, and the probe
+                // band is therefore measured from the FEET like every other ground probe.
+                float faceDistance = Vector3.Dot(wall.point - transform.position, dir);
+                Vector3 column = transform.position + dir * (faceDistance + inset);
+                if (TryGetWalkableGround(
+                        column, up, maxHeight + MantleLedgeProbeRise, maxHeight + 0.15f, out RaycastHit ledge))
+                {
+                    float ledgeHeight = Vector3.Dot(ledge.point - transform.position, up);
+                    if (ledgeHeight >= minHeight && ledgeHeight <= maxHeight)
+                    {
+                        Vector3 target = ledge.point + up * Mathf.Clamp(terrainFootClearance, 0.01f, 0.20f);
+                        if (MantleTargetClear(up, target))
+                        {
+                            BeginMantle(up, dir, target);
+                            return true;
+                        }
+                    }
+                }
+                inset *= 0.5f;   // perch on the very edge rather than refuse the ledge
+            }
+            return false;
+        }
+
+        /// <summary>Commits the pull-up. From here the arc owns the body until it lands.</summary>
+        private void BeginMantle(Vector3 up, Vector3 dir, Vector3 target)
+        {
+            _mantling = true;
+            _mantleStartPos = transform.position;
+            _mantleForwardDir = dir;
+            _mantleForwardDelta = Vector3.Dot(target - _mantleStartPos, dir);
+            _mantleUpDelta = Vector3.Dot(target - _mantleStartPos, up);
+            _mantleElapsed = 0f;
+            _mantleDuration = Mathf.Clamp(mantleDuration, 0.10f, 1.20f);
+
+            // A pull-up ends a slide and eats the buffered jump: the body is busy.
+            _sliding = false;
+            _variableJumpActive = false;
+            _jumpBufferTimer = 0f;
+            _wallContactAt = -999f;
+
+            // Enter the arc at the pace the player arrived with, so a running mantle walks
+            // straight off the ledge instead of stalling on top of it.
+            float carry = Mathf.Clamp(
+                Vector3.ProjectOnPlane(_velocity, up).magnitude, 1.5f, Mathf.Max(1.5f, walkSpeed * 2.5f));
+            _velocity = dir * carry;
+        }
+
+        /// <summary>
+        /// Advances a committed pull-up and hands the body back when it is over. The arc rises
+        /// first and moves in second, so a mantle reads as a climb rather than a teleport, and
+        /// the eye is compensated for the height actually travelled exactly as a step is.
+        /// </summary>
+        private void UpdateMantle(Vector3 up, float dt)
+        {
+            if (_cc == null) { _mantling = false; return; }
+
+            _mantleElapsed += dt;
+            float t = Mathf.Clamp01(_mantleElapsed / Mathf.Max(0.10f, _mantleDuration));
+            float rise = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t * 1.35f));
+            float step = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - 0.30f) / 0.70f));
+            Vector3 wanted = _mantleStartPos
+                + up * (_mantleUpDelta * rise)
+                + _mantleForwardDir * (_mantleForwardDelta * step);
+
+            Vector3 before = transform.position;
+            _cc.Move(wanted - transform.position);
+            float climbed = Vector3.Dot(transform.position - before, up);
+            if (climbed > CameraStepCompensationMinimum)
+                _cameraStepOffset = Mathf.Clamp(_cameraStepOffset - climbed, -0.35f, 0.35f);
+
+            if (t < 1f) return;
+
+            _mantling = false;
+            _lastMantleAt = Time.time;
+            _lastMoveFlags = UnityEngine.CollisionFlags.None;
+            _wallContactAt = -999f;
+            _wallJumpsUsed = 0;
+            _jumpBufferTimer = 0f;
+            _variableJumpActive = false;
+
+            // Land ON the ledge: the same absolute footing solve every other move ends with
+            // puts the feet at the clearance they stand at, so the walk step takes over from a
+            // body that is already standing rather than from one hovering over its landing.
+            RecoverTerrainFooting(up, true);
+            _grounded = true;
+            _wasGrounded = true;
+            _lastGroundedTime = Time.time;
+            _lastAirDownSpeed = 0f;   // the pull-up ate the last of the descent
+        }
+
+        /// <summary>
+        /// Is the landing pose free? A ledge can be walkable at the surface and still
+        /// unstandable - a one-block step against a three-block wall is a walkable top with a
+        /// wall through the space above it. The capsule is tested where it will END UP, at the
+        /// radius and height the body will arrive with, so a pull-up is never committed into a
+        /// block and the scripted move never has to fight one.
+        /// </summary>
+        private bool MantleTargetClear(Vector3 up, Vector3 target)
+        {
+            // The body the overlap is modelled on is the REAL one, lifted just off the
+            // surface and with only its sweep radius slimmed, so a capsule lying flush against
+            // the wall it just climbed can neither refuse its own landing nor be refused by
+            // the ground it is landing on.
+            float bodyRadius = Mathf.Max(0.12f, _cc.radius);
+            float radius = Mathf.Max(0.12f, bodyRadius * 0.95f);
+            float height = Mathf.Max(0.50f, _cc.height);
+            float lift = 0.05f;   // five centimetres off the surface: mesh noise cannot refuse a real landing
+            Vector3 bottom = target + up * (bodyRadius + lift);
+            Vector3 top = target + up * Mathf.Max(bodyRadius + lift, height - bodyRadius - lift);
+            int count = Physics.OverlapCapsuleNonAlloc(
+                bottom, top, radius, _traversalOverlaps, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var collider = _traversalOverlaps[i];
+                if (collider == null) continue;
+                if (collider.transform == transform || collider.transform.IsChildOf(transform)
+                    || transform.IsChildOf(collider.transform)) continue;
+                if (IsLiquidSurfaceCollider(collider)) continue;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// A reach of `radius + mantleProbeDistance` in front of the body at two heights (shin
+        /// and chest), asking for the NEAREST surface that is too steep to stand on. Two heights
+        /// because a ledge worth climbing usually sits below the chest ray; nearest because that
+        /// is the surface the body is actually against. Ground - and anything liquid - is not a
+        /// wall.
+        /// </summary>
+        private bool FindTraversalWall(Vector3 up, Vector3 dir, out RaycastHit wall)
+        {
+            wall = default;
+            if (_cc == null) return false;
+            if (dir.sqrMagnitude < 0.0001f) return false;
+            dir = dir.normalized;
+
+            float reach = _cc.radius + Mathf.Max(0.05f, mantleProbeDistance);
+            float shinHeight = Mathf.Clamp(_cc.height * 0.30f, 0.35f, 0.80f);
+            float chestHeight = Mathf.Clamp(_cc.height * 0.62f, shinHeight + 0.05f, 1.60f);
+            float best = float.PositiveInfinity;
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                Vector3 origin = transform.position + up * (pass == 0 ? shinHeight : chestHeight);
+                int count = Physics.RaycastNonAlloc(
+                    origin, dir, _terrainProbeHits, reach, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
+                {
+                    var hit = _terrainProbeHits[i];
+                    if (hit.collider == null) continue;
+                    if (hit.collider.transform == transform || hit.collider.transform.IsChildOf(transform)
+                        || transform.IsChildOf(hit.collider.transform)) continue;
+                    if (IsLiquidSurfaceCollider(hit.collider)) continue;
+                    if (Vector3.Dot(hit.normal, up) > WallSteepDot) continue;
+                    if (hit.distance >= best) continue;
+                    best = hit.distance;
+                    wall = hit;
+                }
+            }
+            return best < float.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// Records the wall this body has just been stopped by, for the wall jump. It runs
+        /// AFTER the CharacterController has resolved the frame's move, so "touching" means
+        /// the controller actually collided with a side - not that something happens to be in
+        /// front of the player - and the probe is then only used to name that surface.
+        /// </summary>
+        private void UpdateWallContact(Vector3 up)
+        {
+            if (!wallJumpEnabled || _cc == null) return;
+            if ((_lastMoveFlags & UnityEngine.CollisionFlags.Sides) == 0) return;
+
+            Vector3 dir = Vector3.ProjectOnPlane(_velocity, up);
+            if (dir.sqrMagnitude < 0.01f) dir = Vector3.ProjectOnPlane(transform.forward, up);
+            if (dir.sqrMagnitude < 0.0001f) return;
+            if (!FindTraversalWall(up, dir.normalized, out RaycastHit wall)) return;
+
+            _wallNormal = wall.normal;
+            _wallContactAt = Time.time;
+        }
+
+        /// <summary>
+        /// A wall jump, if this frame is a fresh press while a wall is still in reach. The push
+        /// is away from the wall PLUS whatever pace the body already had ALONG it, so the move
+        /// redirects momentum instead of deleting it; the part of the old velocity that went
+        /// into the wall is dropped, because the wall had already stopped it.
+        /// </summary>
+        private bool TryWallJump(Vector3 up)
+        {
+            if (!wallJumpEnabled || _cc == null) return false;
+            if (_grounded) return false;                                            // that is a ground jump
+            if (_wallJumpsUsed >= Mathf.Max(1, maxWallJumps)) return false;          // out of rungs
+            if (Time.time - _wallContactAt > WallContactWindow) return false;        // not touching
+            if (Time.time - _lastWallJumpAt < WallJumpCooldown) return false;
+            if (_boots != null && _boots.Engaged) return false;                      // the hull is not a wall
+
+            Vector3 away = Vector3.ProjectOnPlane(_wallNormal, up);
+            if (away.sqrMagnitude < 0.0001f) return false;
+            away.Normalize();
+
+            Vector3 horiz = Vector3.ProjectOnPlane(_velocity, up);
+            float intoWall = Vector3.Dot(horiz, -away);
+            if (intoWall > 0f) horiz += away * intoWall;
+
+            float launchGravity = GravVec.magnitude * Mathf.Max(1f, jumpHoldGravityMultiplier);
+            _velocity = horiz
+                + away * Mathf.Max(1f, wallJumpPushSpeed)
+                + up * Mathf.Sqrt(2f * launchGravity * Mathf.Max(0.10f, wallJumpHeight));
+
+            _wallJumpsUsed++;
+            _lastWallJumpAt = Time.time;
+            _wallContactAt = -999f;      // one push per touch: the next one needs a new wall
+            _jumpBufferTimer = 0f;
+            _lastGroundedTime = -999f;   // no coyote left - this WAS the airborne move
+            _variableJumpActive = true;
+            _sliding = false;
+            _crouched = false;
+            return true;
         }
 
         // ── standing-slide guard (17.26.0-dev) ──────────────────────────
@@ -1053,10 +1455,30 @@ namespace VoxelEngine.Player
             if (wish.sqrMagnitude > 0.0001f) return;           // the player is walking
             if (intendedHoriz.sqrMagnitude > PlantedSlideMaxSpeed * PlantedSlideMaxSpeed) return;
             if (up.sqrMagnitude < 0.0001f) return;
+            up = up.normalized;
 
-            Vector3 actualHoriz = Vector3.ProjectOnPlane(transform.position - beforeMove, up);
-            Vector3 intended = Vector3.ProjectOnPlane(intendedHoriz * dt, up);
-            Vector3 slide = actualHoriz - intended;
+            Vector3 actual = transform.position - beforeMove;
+            Vector3 intended = intendedHoriz * dt;
+            Vector3 slide = actual - intended;
+
+            // 17.27.9-dev - AND THE DESCENT. On ordinary ground the sideways half is the whole
+            // story, which is why this guard only ever projected the displacement onto the
+            // ground plane. At a LEDGE the capsule rests on its rim, and the contact there is
+            // diagonal: part of what a downward push resolves into is straight DOWN, so the
+            // player creeps off the lip a few millimetres a frame - slow, silent, and exactly
+            // "standing on a little ledge and sliding down". A planted player is a fixed point,
+            // so for a planted body the downward half of the unintended displacement is handed
+            // back as well. Only the descent: a rise is a jump, a lift or a launch and is never
+            // the still-player artifact this guard exists for.
+            if (_planted)
+            {
+                float alongUp = Vector3.Dot(slide, up);
+                if (alongUp < 0f) slide -= up * alongUp;
+            }
+            else
+            {
+                slide = Vector3.ProjectOnPlane(slide, up);
+            }
             if (slide.sqrMagnitude < PlantedSlideEpsilon * PlantedSlideEpsilon) return;
             // Cap the correction per frame: what this removes is creep measured in
             // centimetres per second, so the cap is never reached in normal play -
@@ -1752,19 +2174,60 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>Is there walkable ground within <paramref name="distance"/> below the feet?
-        /// The straight-down probe both the ground check and the planted blip test ask.</summary>
+        /// The probe both the ground check and the planted blip test ask.
+        ///
+        /// 17.27.9-dev - THE RIM COUNTS. A capsule standing on a LEDGE is held up by its RIM,
+        /// not by its axis: the player balanced on the lip of a one-block step has the surface
+        /// under the outer edge of the capsule and empty air under its centre, so a single
+        /// straight-down ray from the middle of the body reports NO GROUND while the player is
+        /// visibly, solidly standing. Everything downstream of that false "airborne" is the
+        /// reported bug: with no ground, the planted treatment never engages, the ground stick
+        /// and gravity come back, and the capsule gets pushed down into the very edge that is
+        /// holding it - so a still player creeps off a small ledge and slides down the face.
+        /// The same ray is therefore asked from a ring of points out at the capsule's own
+        /// radius. The axis probe is still first and still wins: on ordinary ground this costs
+        /// exactly the one ray it always did, and the ring runs only when the axis misses.</summary>
         private bool WalkableGroundWithin(Vector3 up, float distance)
         {
             if (_cc == null) return false;
+            if (up.sqrMagnitude < 0.0001f) return false;
+            up = up.normalized;
+            float reach = Mathf.Max(0.05f, distance);
             Vector3 origin = transform.position + up * 0.08f;
+            if (RayFindsWalkableGround(origin, -up, reach, up)) return true;
+
+            float rim = Mathf.Max(0.12f, _cc.radius * 0.72f);
+            SurfaceBasis(up, out Vector3 tangent, out Vector3 bitangent);
+            if (RayFindsWalkableGround(origin + tangent   * rim, -up, reach, up)) return true;
+            if (RayFindsWalkableGround(origin - tangent   * rim, -up, reach, up)) return true;
+            if (RayFindsWalkableGround(origin + bitangent * rim, -up, reach, up)) return true;
+            if (RayFindsWalkableGround(origin - bitangent * rim, -up, reach, up)) return true;
+            return false;
+        }
+
+        /// <summary>One downward ray, one question: walkable ground at the end of it?</summary>
+        private bool RayFindsWalkableGround(Vector3 origin, Vector3 direction, float distance, Vector3 up)
+        {
             int rays = Physics.RaycastNonAlloc(
-                origin, -up, _terrainProbeHits, Mathf.Max(0.05f, distance), ~0, QueryTriggerInteraction.Ignore);
+                origin, direction, _terrainProbeHits, distance, ~0, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < rays; i++)
             {
                 var hit = _terrainProbeHits[i];
                 if (IsWalkableGroundCollider(hit.collider, up, hit.normal)) return true;
             }
             return false;
+        }
+
+        /// <summary>Two unit vectors perpendicular to `up`, for probes that need a ring or a
+        /// side offset rather than a single axis. Falls back through the axes so a degenerate
+        /// up never produces a zero vector.</summary>
+        private void SurfaceBasis(Vector3 up, out Vector3 tangent, out Vector3 bitangent)
+        {
+            tangent = Vector3.ProjectOnPlane(transform.forward, up);
+            if (tangent.sqrMagnitude < 0.0001f) tangent = Vector3.ProjectOnPlane(Vector3.forward, up);
+            if (tangent.sqrMagnitude < 0.0001f) tangent = Vector3.ProjectOnPlane(Vector3.right, up);
+            tangent = tangent.sqrMagnitude < 0.0001f ? Vector3.right : tangent.normalized;
+            bitangent = Vector3.Cross(up, tangent).normalized;
         }
 
         /// <summary>May this collider hold the player up? Never the player's own rig, never a

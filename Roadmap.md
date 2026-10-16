@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.27.8-dev`
-**Roadmap Version:** `17.27.8-dev`
-**Date:** 2026-10-15
+**Current Version:** `17.28.0-dev`
+**Roadmap Version:** `17.28.0-dev`
+**Date:** 2026-10-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.28.0-dev - Mantle Onto Ledges, Wall Jumps
+- `PlayerController.TryStartMantle` / `UpdateMantle`: a body the `CharacterController` was stopped by on the previous move, walking into it, not rising and not descending faster than 12 m/s (below the 16 m/s fall-damage floor), pulls itself up a 0.45 - 1.35 m ledge in a 0.38 s rise-then-in arc that exits at the pace it arrived with
+- The wall in front is the COMPLEMENT of walkable ground (nearest surface at shin and chest with `dot(normal, up) <= 0.45`), the landing is the same `TryGetWalkableGround` question the ground check asks plus a capsule overlap at the arriving pose, so a mantle can only end where the player could have stood; `TryWallJump` spends one of `maxWallJumps` (2) per airtime on a fresh press against a 0.25 s wall contact recorded from the resolved side collision, launching 1.15 m up and 4.5 m/s away while keeping the momentum ALONG the wall
+- Two prefab switches (`mantleEnabled`, `wallJumpEnabled`) and their tuning, switched on once by a `_traversalMigration` marker so an older player prefab is not left with both OFF; no setup step, no save change. Wallrunning is NOT in this pass and stays open below
+
+### 17.27.9-dev - Rim-Aware Ground Probe, Planted Descent Cancelled
+- `WalkableGroundWithin` asks one straight-down ray from the body axis first, then the same ray from a RING of four points out at 0.72 x the capsule radius, so a player held up by the rim of a ledge - surface under the capsule's edge, air under its centre - reads as standing instead of airborne
+- `SuppressStandingSlide` hands back the DOWNWARD half of a planted player's unintended displacement as well as the sideways half, so a rim contact can no longer creep a still body off a lip a few millimetres a frame; only the descent, and only while planted (no input, ground underfoot, no deck carry, no boots)
+- Same probe: no setup, no prefab, no save change - the two helpers (`RayFindsWalkableGround`, `SurfaceBasis`) are the only new members, and the axis ray still short-circuits on ordinary ground so the per-frame cost is unchanged there
+
 ### 17.27.8-dev - Visible Container Load, Explained Weight Refusals, Per-Tier Chest Caps
 - The opened container's panel carries a live `CONTAINER LOAD` readout (`BuildContainerLoadReadout`) - `used / cap` over a segmented bar, amber from 85 percent, red with `FULL` at the cap - because the mass cap every `ItemContainer` enforces was only visible inside a chest's CONFIGURE overlay
 - `ExplainRefusedDrop` answers a drag or shift-click refused BY WEIGHT with one toast naming the container and the numbers (both sides: a full chest, and an inventory at its own cargo cap), on a four-second cadence, and stays silent when the refusal was a filter instead
@@ -43,16 +53,6 @@
 - `Quarry` cuts every voxel a cell's footprint covers (rasterised from the cell's eight corners in voxel space, clamped to a 3-voxel cube) instead of the voxel its centre rounds to, checks output room before each cut, raises an outline-resume request in `RestoreState` that `TryResumeOutline` completes on the first live frame with measured height (17.27.6-dev: the machine is spawned before `Start` runs, so an in-`RestoreState` rebuild was skipped), finds the cutter pivot anywhere in the machine and warns once when a prefab has none
 - The machine panel shows `Quarry.JobProgress01` / `JobProgressLabel` (survey, frame, then pit depth) rather than one cell's bite, and the rear instrument cluster with its name band sits 28 cm lower on the machine
 - `GameUIController` carries a dragged stack in hand: `BeginDrag` takes it out of the container (drawer capacity released, split leaves the remainder), a refused drop returns it, a partial drop returns the remainder, and closing a window drops it on the ground through the normal drop path (17.27.5-dev declares that handler's `out` flag before its short-circuiting test)
-
-### 17.27.3-dev / 17.27.2-dev - Cutter Wheel Motion, Surface-Started Pit, Rear Instrument Display, Branch Filter Return
-- The cutter wheel, hub, teeth and spokes hang under `CutterWheelPivot`, which `Quarry.SpinCutter` turns about its axle (165 deg/s cutting, 26 while surveying and framing, coasting down, still when unpowered or complete); the pit's column scan covers 24 m up / 32 m down in two passes, so every column starts at its own highest solid voxel, and the machine's labels and readout are sized from measured text width
-- The quarry's instruments sit on its REAR face (screen, needle dial, power socket, state lamp, measured name bar) because the pit is dug on the front; the labelled glowing power plate is gone, the port declares `NegZ` Input/Power, and machine labels are turned to face outwards and swapped onto the depth-tested font material at runtime by `WorldTextMaterial.ApplyToHierarchy`
-- `ResearchUI` has its branch strip back: only branches with nodes are listed (each with a count), ALL is always first, BUILDING is never offered, and Player Upgrades gets its own tab; `GameUIController` fills an EMPTY slot from a stack on the cursor with a one-item copy of that stack instead of writing a count with no item
-
-### 17.26.1-dev - Grid Ground Placement, Teardown Save Interlock, Standing Bob & Taller Player
-- `GridBuilder.PlacementObstructed` keeps the static builder's allowance law: terrain, the builder's own body and scatter never block a grid cell, and a refusal names its blocker on screen and in the console
-- `WorldStatePersistence.WorldTearingDown` refuses any save raised after the world starts unloading, so the scene-teardown save can no longer overwrite the complete SAVE & QUIT one; `PlayerController` holds a planted player's radial velocity at zero (no stick, no gravity) instead of letting the ground solve fight gravity
-- Player body 1.85 -> 1.95 m and eye 1.65 -> 1.74 m, enforced as a shipped-height floor at wake so existing player objects grow without being re-made; `VoxelWaterURP` parses again (three property headers carried a dotted version tag, which ShaderLab rejects)
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -97,7 +97,7 @@
 - **Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
 - **Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.
 - **Water Pump recipe report (17.10.0-dev):** source setup authors separate Water Pump and Marine Water Pump outputs/recipes; neither was removed. Confirm whether the reported repeated UI row persists after Setup before treating it as an accidental duplicate.
-- **Advanced traversal (deferred 17.7.0-dev):** wallrunning, wall-jumps, and mantling are outside the momentum-and-slide pass.
+- **Wallrunning (deferred 17.7.0-dev, still open after 17.28.0-dev):** mantling and wall-jumps shipped in the traversal pass; WALLRUNNING - sustained running ALONG a steep surface - is the one third of that deferral still open. Rule for whoever picks it up: it must build on the same recorded side-collision contact (`UpdateWallContact`) and the same steep-surface rule (`dot(normal, up) <= 0.45`), must end when the wall is lost, the input stops or the speed drops, and must not add a way to gain height for free - the two-rung wall-jump budget is the ceiling for climbing, and wallrunning is a way to keep speed, not to climb.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
 - **Pollution history and higher threat tiers** (deferred 17.3.0; slices 14.70.0 / 14.73.0 / 17.2.0 / 17.17.2 / 17.18.0): live bearings, capped packs, approach ambushes, exposed logistics raids, recruitment heat and the deadzoned hostile curve shipped earlier; 17.18.0-dev closed the deferred core - residual-load history is now read from the sidecar's slow climate channel, and organized waves, elite ghouls and a siege brute answer dirty districts on their own cooldowns. Remaining open: a dedicated siege-creature species with its own art (the brute is the ghoul rig promoted), player-facing residual-load readouts (API exists, no UI consumes it yet), residual effects on flora/ecology curves, and live-play tuning of tier thresholds.
 - **Auto-craft queue EDITS are host-echo, not intent-RPC** (accepted 14.43.0, narrowed 14.58.0): the simulation itself is host-only since 14.58.0, but a guest's queue/bank edit still applies locally and replicates through the seam - an edit landing in the same instant as a host convergence pass can be overwritten and needs re-doing. Cosmetic-rare; full intent conversion only if live play ever surfaces it.
@@ -136,6 +136,14 @@
 **Rules that bind:** C remains Crouch, Left Shift remains Sprint, and Slide is a separate held action (Left Alt by default). Movement operates on the local radial-up tangent plane; ice, road bonuses, and moving-deck/magnetic-boot carry remain in the existing controller path.
 
 **Status:** implemented in `Scripts/Player/PlayerController.cs` and `Scripts/Settings/GameSettings.cs`; `Scripts/UI/SettingsUI.cs` enumerates the new action automatically, and no Voxel Engine Setup content action is needed.
+
+### Advanced Traversal - Mantle & Wall Jump (17.28.0-dev)
+
+~~A blocked body pulls itself up a 0.45 - 1.35 m ledge, and a fresh mid-air jump against a steep surface pushes off it.~~ *(17.28.0-dev)*
+
+**Rules that bind:** a wall is the exact complement of walkable ground (a surface whose normal leaves the 0.45 walkable cone), and a mantle may only end on a top the same walkable-ground probe the ground check uses accepts, with a free capsule at the arriving pose. A pull-up is never faster than a jump (0.38 s against the standing jump's instant launch), a wall jump is never stronger than a ground jump (1.15 m against 1.65 m), and the wall-jump budget (`maxWallJumps` 2) refills only on landing. Nothing in the pass adds speed to walking, sliding, water or the jetpack, and both moves are off while flying, mounted, swimming down on a hull or while a UI owns the input. **Wallrunning is not part of it** - see the open item above.
+
+**Status:** implemented in `Scripts/Player/PlayerController.cs`; two prefab switches (`mantleEnabled`, `wallJumpEnabled`) with their tuning, migrated on once so an older player prefab is not left switched off. No Voxel Engine Setup content action is needed.
 
 ### Held Viewmodel Sizing (17.8.0-dev)
 
