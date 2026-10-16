@@ -6,10 +6,11 @@
 //   • Separate rebindable Slide and hold-to-Crouch actions
 //   • Momentum-based SLIDE: sprinting into Slide adds a low-friction burst while
 //     preserving carry; release Slide to end it (or jump straight out of the slide).
-//   • ADVANCED TRAVERSAL: a MANTLE pulls the body up a ledge it is running into, and a
-//     WALL JUMP in mid-air pushes off a steep surface it is touching. Both are read
-//     through the same walkable-ground rule as every other probe in this file, and both
-//     are off while flying, swimming or walking a hull.
+//   • ADVANCED TRAVERSAL: a MANTLE pulls the body up a ledge it is running into, a WALL
+//     JUMP in mid-air pushes off a steep surface it is touching, and a WALLRUN carries the
+//     body's speed ALONG such a surface while it sinks slowly. All three read the same
+//     steep-surface rule (the complement of walkable ground) as every other probe in this
+//     file, and all three are off while flying, swimming or walking a hull.
 //   • Optional FLY mode (toggleable via GameSettings.FlyMode or the ToggleFly key).
 //
 // Uses CharacterController for collision so it works on the voxel terrain meshes.
@@ -213,6 +214,15 @@ namespace VoxelEngine.Player
         [Tooltip("Consecutive wall jumps allowed before touching down again.")]
         [Range(1, 6)] public int   maxWallJumps = 2;
 
+        [Tooltip("Run along a wall you are touching to keep your speed and lose height slowly.")]
+        public bool  wallRunEnabled = true;
+        [Tooltip("Horizontal speed along the wall, in m/s, needed to start a run. A plain run " +
+                 "reaches it; anything slower is a hop against a wall, not a run along one.")]
+        [Range(2f, 14f)] public float wallRunMinSpeed = 5.5f;
+        [Tooltip("How fast a running body sinks, in m/s. A run SLOWS a fall - it never reverses " +
+                 "one, so the wall jump stays the only way up a wall.")]
+        [Range(0f, 6f)] public float wallRunDescent = 1.6f;
+
         [Header("Fly Mode")]
         public float flySpeed = 14f;
         public float flySprintMultiplier = 3f;
@@ -262,6 +272,7 @@ namespace VoxelEngine.Player
         private float  _wallContactAt = -999f;
         private float  _lastWallJumpAt = -999f;
         private int    _wallJumpsUsed;
+        private bool   _wallRunning;           // a live run owns the body's descent
         private UnityEngine.CollisionFlags _lastMoveFlags;
         private float  _smoothedEyeHeight;
         private float  _cameraStepOffset;
@@ -298,6 +309,9 @@ namespace VoxelEngine.Player
         /// <summary>True during a pull-up: movement input is suspended and the body follows
         /// a short scripted arc. Exposed so avatars and hooks can play along.</summary>
         public bool IsMantling => _mantling;
+        /// <summary>True while running along a wall: the body keeps its speed and sinks at
+        /// `wallRunDescent` instead of falling at gravity.</summary>
+        public bool IsWallRunning => _wallRunning;
         public bool IsFlying => inspectorFlyToggle;
         /// <summary>True while riding a mount: locomotion is suspended, but mouse-look + camera stay live.</summary>
         public bool IsMounted;
@@ -485,10 +499,20 @@ namespace VoxelEngine.Player
                 if (wallJumpPushSpeed <= 0f) wallJumpPushSpeed = 4.5f;
                 if (maxWallJumps <= 0) maxWallJumps = 2;
             }
+            // 17.29.0-dev - THE WALLRUN ARRIVES THE SAME WAY, one step later, on a prefab that
+            // has already been through the block above. The marker only ever moves forward, so
+            // a body that was migrated to 1 gets exactly the new fields and nothing else.
+            if (_traversalMigration < 2)
+            {
+                _traversalMigration = 2;
+                wallRunEnabled = true;
+                if (wallRunMinSpeed <= 0f) wallRunMinSpeed = 5.5f;
+                if (wallRunDescent <= 0f) wallRunDescent = 1.6f;
+            }
         }
 
-        /// <summary>One-time marker for fields added after this prefab was written: 0 means
-        /// "never migrated", and the traversal block above runs exactly once.</summary>
+        /// <summary>One-time marker for fields added after this prefab was written: it records
+        /// the last migration step this body has been through, and each block above runs once.</summary>
         [SerializeField, HideInInspector] private int _traversalMigration;
 
         private void OnDestroy() => GameSettings.OnChanged -= ApplyFov;
@@ -930,6 +954,8 @@ namespace VoxelEngine.Player
             bool planted = false;
             if (inWater)
             {
+                // A run is a run on a wall, not through water: the swim branch owns the body.
+                _wallRunning = false;
                 float surfY = waterState.WaterSurfaceY;
                 // Use the real local voxel-liquid depth. A mined or player-filled pool can be
                 // above/below the global sea shell, so sea-radius math alone would trap swimmers.
@@ -1026,6 +1052,13 @@ namespace VoxelEngine.Player
                     && WalkableGroundWithin(up, PlantedGroundBlipReach))
                     planted = true;
                 _planted = planted;
+
+                // -- wallrun (17.29.0-dev) --
+                // Asked here, next to the other vertical verdicts: a run owns the body's
+                // DESCENT and nothing else, so the horizontal half of the step above stays
+                // exactly as it was (air steering already preserves and steers momentum).
+                UpdateWallRun(up, wishDir);
+
                 if (planted)
                 {
                     _velocity = Vector3.ProjectOnPlane(_velocity, up);
@@ -1034,6 +1067,18 @@ namespace VoxelEngine.Player
                 else if (_grounded && VerticalSpeed(up) < 0f)
                 {
                     _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * (-2f);
+                }
+                // 17.29.0-dev - A WALLRUN REPLACES GRAVITY WITH A SINK, and only that. The
+                // clamp is one-sided by construction: it is reached only while the body is
+                // DESCENDING, so a jump or a wall jump above the sink rate falls through to the
+                // gravity branch below and is never touched. A run can therefore slow a fall
+                // and can never add height - the two-rung wall jump stays the only way up.
+                else if (_wallRunning && VerticalSpeed(up) <= 0f)
+                {
+                    float sink = Mathf.Max(0f, wallRunDescent);
+                    float vertical = VerticalSpeed(up);
+                    if (vertical < -sink)
+                        _velocity += up * (Mathf.MoveTowards(vertical, -sink, WallRunDescentEase * dt) - vertical);
                 }
                 else
                 {
@@ -1160,6 +1205,16 @@ namespace VoxelEngine.Player
         /// <summary>The normal cone that separates a wall from ground: the complement of the
         /// walkable cone every ground probe accepts.</summary>
         private const float WallSteepDot = 0.45f;
+        /// <summary>How much of the input has to point ALONG the wall for a wallrun. 0.2 is
+        /// about 78 degrees off the wall's surface - the body is travelling along it, not
+        /// throwing itself at it (that is the wall jump's job).</summary>
+        private const float WallRunSteerMin = 0.2f;
+        /// <summary>Share of `wallRunMinSpeed` a live run may fall to before it ends: start
+        /// strict, release loose, so a run at the edge of its own threshold cannot flicker.</summary>
+        private const float WallRunReleaseFraction = 0.8f;
+        /// <summary>How fast a run eases its descent into `wallRunDescent`, in m/s^2. About half
+        /// of gravity, so the fall slows into the run instead of snapping out of it.</summary>
+        private const float WallRunDescentEase = 12f;
 
         /// <summary>
         /// Walking into a ledge: is there a wall to touch, and a walkable top just above the
@@ -1229,8 +1284,9 @@ namespace VoxelEngine.Player
             _mantleElapsed = 0f;
             _mantleDuration = Mathf.Clamp(mantleDuration, 0.10f, 1.20f);
 
-            // A pull-up ends a slide and eats the buffered jump: the body is busy.
+            // A pull-up ends a slide, a wallrun and the buffered jump: the body is busy.
             _sliding = false;
+            _wallRunning = false;
             _variableJumpActive = false;
             _jumpBufferTimer = 0f;
             _wallContactAt = -999f;
@@ -1409,12 +1465,86 @@ namespace VoxelEngine.Player
             _wallJumpsUsed++;
             _lastWallJumpAt = Time.time;
             _wallContactAt = -999f;      // one push per touch: the next one needs a new wall
+            _wallRunning = false;        // the push leaves the wall; a new run needs a new touch
             _jumpBufferTimer = 0f;
             _lastGroundedTime = -999f;   // no coyote left - this WAS the airborne move
             _variableJumpActive = true;
             _sliding = false;
             _crouched = false;
             return true;
+        }
+
+        /// <summary>
+        /// THE WALLRUN, end to end. A body that was stopped by a wall, is steering ALONG it, and
+        /// arrives with real momentum runs along it instead of bouncing off it: it keeps its
+        /// speed, and the gravity branch above lets it sink at `wallRunDescent` rather than at
+        /// gravity. Every question it asks is one the wall jump already asks - the same recorded
+        /// side collision, the same steep-surface rule, and the same measurement of what the body
+        /// is doing ALONG the wall rather than INTO it - so the two moves can never disagree
+        /// about where a wall is, and the pair reads as one system rather than two.
+        ///
+        /// A run ends for exactly four reasons: the wall is gone, the input stops, the speed
+        /// drops, or the ground comes back. It has no timer on purpose - it is a way to CROSS
+        /// something, not a resource to spend, and the only thing it can do to the player's
+        /// height is slow a descent.
+        /// </summary>
+        private void UpdateWallRun(Vector3 up, Vector3 wishDir)
+        {
+            Vector3 normal = Vector3.ProjectOnPlane(_wallNormal, up);
+            Vector3 tangent = Vector3.zero;
+            float alongSpeed = 0f;
+            bool steeringAlong = false;
+            if (normal.sqrMagnitude > 0.0001f)
+            {
+                normal.Normalize();
+                Vector3 horiz = Vector3.ProjectOnPlane(_velocity, up);
+                // The run is what the wall did NOT stop: the part of the frame's motion that
+                // already lies in the wall's own plane.
+                tangent = horiz - normal * Vector3.Dot(horiz, normal);
+                alongSpeed = tangent.magnitude;
+                if (alongSpeed > 0.001f)
+                {
+                    tangent /= alongSpeed;
+                    steeringAlong = wishDir.sqrMagnitude > 0.01f
+                        && Vector3.Dot(wishDir, tangent) >= WallRunSteerMin;
+                }
+            }
+
+            // Off the ground, off the hull, and somewhere gravity exists: a run is a slower way
+            // DOWN, so weightlessness has nothing for it to slow and the boots own a hull.
+            bool allowed = !_grounded && !_mantling
+                && (_boots == null || !_boots.Engaged)
+                && GravVec.magnitude >= 0.5f;
+
+            if (!_wallRunning)
+            {
+                if (!wallRunEnabled || !allowed) return;
+                // Start on the CONTACT, not on a probe: the controller has to have been stopped
+                // by this surface. Running itself may then continue on the probe alone, below.
+                if (Time.time - _wallContactAt > WallContactWindow) return;
+                if (!steeringAlong || alongSpeed < Mathf.Max(0.5f, wallRunMinSpeed)) return;
+                _wallRunning = true;
+                return;
+            }
+
+            // A body moving EXACTLY parallel to a wall stops reporting a side collision, and a
+            // run that ended by itself after a quarter of a second of clean running would be a
+            // bug wearing a rule's clothes. So a live run asks the probe as well, and ends when
+            // the wall is measurably gone rather than when the controller stops pushing.
+            bool wallBeside = Time.time - _wallContactAt <= WallContactWindow;
+            if (!wallBeside && normal.sqrMagnitude > 0.0001f
+                && FindTraversalWall(up, -normal, out RaycastHit beside))
+            {
+                // The same probe keeps the TOUCH alive, so the wall jump stays available to a
+                // runner: run a wall, then push off it at the corner without letting go.
+                wallBeside = true;
+                _wallNormal = beside.normal;
+                _wallContactAt = Time.time;
+            }
+
+            float release = Mathf.Max(0.5f, wallRunMinSpeed) * WallRunReleaseFraction;
+            if (!allowed || !wallBeside || !steeringAlong || alongSpeed < release)
+                _wallRunning = false;
         }
 
         // ── standing-slide guard (17.26.0-dev) ──────────────────────────

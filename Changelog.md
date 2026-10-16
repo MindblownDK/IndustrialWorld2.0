@@ -1,9 +1,38 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.28.0-dev`
+**Current Version:** `17.29.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.29.0-dev] The Wall You Can Run Along
+
+**Type:** MINOR - the third and last move of the same 17.7.0-dev traversal deferral that shipped the mantle and the wall jump: a WALLRUN carries the body's speed ALONG a steep surface it is touching while it sinks slowly instead of falling. No save field, schema or public API change.
+
+**GitHub title:** `[17.29.0-dev] Keep your speed and run along a wall instead of bouncing off it`
+
+#### Added
+- **Wallrun: run along a wall, keep the speed, lose height slowly (`Scripts/Player/PlayerController.cs`).** A wall was already a place to stop: the mantle climbs one and the wall jump pushes off one. It is now also a SURFACE. A body that arrives at speed, gets stopped by a wall's side collision, and is steering along it keeps its momentum and sinks at `wallRunDescent` (1.6 m/s) instead of falling at 22 m/s - so a wall next to a chasm, a canyon face or the rim of your own pit becomes a route across, and a wall next to a fight becomes a way out of it.
+  - **It starts on the same contact the wall jump uses.** A run begins only from a recorded side collision (`_wallContactAt`, the same 0.25 s window) - the controller has to have actually been STOPPED by this surface - while airborne, off a hull, somewhere gravity exists, and steering ALONG the wall rather than into it: the input has to point along the wall's plane, within about 78 degrees of the direction of travel (`WallRunSteerMin` 0.2), and the speed along that plane has to reach `wallRunMinSpeed` (5.5 m/s, which a plain run delivers and a walk-and-hop does not). Running straight AT a wall therefore never starts a run - that is the wall jump's job - and a run is measured against what the wall did NOT stop, so the two moves can never disagree about where a wall is.
+  - **It is kept alive by the probe, not by the push.** A body moving exactly parallel to a wall stops reporting a side collision, and a run that ended by itself after a quarter of a second of clean running would be a bug wearing a rule's clothes. A live run re-probes straight into the wall with the same `FindTraversalWall` the other two moves use, which both holds the run and refreshes the touch - so a runner can push off the wall with a wall jump at any point of the run without letting go first.
+  - **The descent half is one-sided by construction.** The gravity chain gained one branch, reached only while the body is DESCENDING (`VerticalSpeed(up) <= 0f`), which eases the fall into `wallRunDescent` at 12 m/s^2 - about half of gravity, so a run begins by slowing a fall rather than snapping out of it. A rising body (a jump, a wall jump, a lift) falls through to the ordinary gravity branch and is never touched, so a run can slow a fall and can never add height: the two-rung wall jump stays the only way up a wall. The horizontal half of the walk step is untouched, because air steering already does exactly what a run needs (`AccelerateAlongWish` never decelerates and the air cap uses the existing speed as its floor, so a run neither gains nor loses pace by itself).
+  - **A run ends for exactly four reasons** - the wall is measurably gone, the input stops, the speed drops below 80 percent of the start threshold (`WallRunReleaseFraction`, start strict and release loose so the threshold cannot flicker), or the ground comes back. It deliberately has no TIMER: it is a way to cross something, not a resource to spend. It also ends in water (the swim branch owns the body) and in weightlessness (nothing to slow down), on a hull (the boots own it), and whenever a mantle or a wall jump takes the body - a push leaves the wall, so a new run needs a new touch.
+- **Three prefab switches and knobs:** `wallRunEnabled` (on), `wallRunMinSpeed` (5.5 m/s) and `wallRunDescent` (1.6 m/s), plus the read-only `IsWallRunning` for avatars and other systems. The `_traversalMigration` marker moved to 2 as a second step rather than a rewrite, so a player prefab already migrated by 17.28.0-dev receives exactly the three new fields and nothing else, and the tuning written last round is left alone.
+
+#### Deliberately not changed
+- **A run does not forgive a fall.** `_lastAirDownSpeed` keeps the worst descent an airborne body has had, and a run is not a landing - so catching a wall after a long drop slows the drop and does not erase the impact the drop already earned. That is the same line the mantle draws with its 12 m/s grab ceiling (below the 16 m/s fall-damage floor), and it is what keeps "brush a wall on the way down" from becoming a way to cancel any fall.
+- **The mantle and the wall jump are untouched.** No tuning of theirs moved, no signature changed, and both end a run rather than coexisting with one - a mantle owns the body for its arc and a wall jump leaves the wall.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: MINOR `17.29.0-dev` over `17.28.0-dev` (new movement behaviour is a feature, by the project's own rule). Save-compatible and schema-compatible in both directions: `CurrentSchemaVersion` stays `2`, no save field is added, removed or reinterpreted, no item, recipe, block or prefab asset is touched, and the only public addition is the `IsWallRunning` property plus three additive inspector fields.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. `Scripts/Player/PlayerController.cs` (2,376 lines) was checked with the string- and comment-aware brace, bracket and parenthesis scanner - every counter returns to zero, nothing negative - and every symbol the new code touches was confirmed to exist with the signature used: `FindTraversalWall`, `_wallContactAt` / `_wallNormal` (written by `UpdateWallContact` from the resolved side collision), `GravVec`, `VerticalSpeed`, `wallRunMinSpeed` / `wallRunDescent`, and the gravity chain's existing three branches (planted, ground stick, gravity) which the new branch sits between, in the same `else` of the water test that already owns the plant treatment. New members are `UpdateWallRun`, `IsWallRunning`, `_wallRunning`, three constants and three fields - all new names, checked repo-wide for a collision.
+
+#### What to run
+1. Nothing. Code only: no prefab, item, recipe, research node or wizard step is involved, and the three new knobs are on the player prefab (PlayerController) if you want to feel a different number - `wallRunDescent` is the one that decides how floaty a run feels.
+2. Sprint along a wall (diagonally into it, holding forward) and jump into it: the body should hold its speed along the face and sink slowly instead of dropping. Let go of forward mid-run: the run should end immediately and the fall should resume.
+3. Run along a wall and press Jump: the push should work from the middle of a run, and it should end the run.
+4. The two things worth a hard look: run straight at a wall (nothing should happen until you jump - the wall jump), and run a wall after a long fall (the landing should still hurt; the run slows the descent, it does not cancel it).
+
 
 ### [17.28.0-dev] The Ledge You Can Now Climb
 
