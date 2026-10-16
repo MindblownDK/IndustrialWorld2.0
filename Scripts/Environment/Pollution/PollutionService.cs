@@ -345,6 +345,21 @@ namespace VoxelEngine.Environment
                 ? Mathf.Clamp01(record.climateBurden01) : 0f;
         }
 
+        /// <summary>
+        /// 17.30.0-dev: the whole-body residual load of the body a WORLD POSITION sits on -
+        /// exactly the value <see cref="ClimateBurdenFor"/> reports, with the body resolved the
+        /// same way the local samples resolve it. Player-facing readouts use it to tell a
+        /// district's own history from the planet's without having to name the body themselves.
+        /// Returns 0 where no body resolves (deep space, or no service).
+        /// </summary>
+        public static float ClimateBurdenAt(Vector3 worldPosition)
+        {
+            var service = Instance;
+            if (service == null || !service.TryResolveBodyAt(worldPosition, out var body)
+                || body.settings == null) return 0f;
+            return ClimateBurdenFor(body.settings.bodyName);
+        }
+
         public static PollutionTelemetry TelemetryAt(Vector3 worldPosition)
         {
             var service = Instance;
@@ -588,7 +603,7 @@ namespace VoxelEngine.Environment
             var wind = WindSystem.Instance;
             float windSpeed = wind != null ? wind.GetWindSpeed() : 11.5f;
             float rain = WeatherManager.Instance != null && WeatherManager.Instance.IsPlanetPrecipitating
-                ? WeatherManager.Instance.Intensity : 0f;
+                ? WeatherManager.Instance.PlanetIntensity : 0f;
 
             _bodyNameScratch.Clear();
             foreach (string bodyName in _cells.Keys) _bodyNameScratch.Add(bodyName);

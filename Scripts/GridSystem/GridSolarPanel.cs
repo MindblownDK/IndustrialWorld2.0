@@ -62,11 +62,16 @@ namespace VoxelEngine.GridSystem
             }
 
             // Weather & Planetary Seasons affect solar output.
+            //
+            // 17.31.0-dev: a panel reads the sky above ITSELF. Before regions the body had one
+            // weather, so a panel anywhere on the planet felt the same storm; now the state's
+            // penalty only applies to the share of the weather system actually over this panel
+            // (PrecipitationAt), and a panel 2 km outside the rain band is simply in sunshine.
             var wm = Weather.WeatherManager.Instance;
             float weatherMult = 1f;
             if (wm != null)
             {
-                weatherMult = wm.CurrentState switch
+                float stateMult = wm.LocalState switch
                 {
                     Weather.WeatherState.Overcast   => 0.5f,
                     Weather.WeatherState.LightRain  => 0.3f,
@@ -75,6 +80,7 @@ namespace VoxelEngine.GridSystem
                     Weather.WeatherState.Blizzard   => 0.05f,
                     _ => 1f
                 };
+                weatherMult = Mathf.Lerp(1f, stateMult, Mathf.Clamp01(wm.PrecipitationAt(transform.position)));
             }
 
             var season = Weather.PlanetarySeasons.GetCurrentSeasonInfo();

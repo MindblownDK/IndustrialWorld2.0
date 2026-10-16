@@ -218,7 +218,9 @@ namespace VoxelEngine.GridSystem
             if (active == null || active.DisplayName != body.DisplayName) return false;
 
             state = manager.CurrentState;
-            intensity = manager.Intensity;
+            // 17.31.0-dev: a sensor looks down at the planet's weather SYSTEM, not at the patch
+            // the player happens to be standing under (which is what local Intensity reports now).
+            intensity = manager.PlanetIntensity;
 
             if (TryGetSeason(out var season)) forecast = season.forecastPrecipitation;
             return true;

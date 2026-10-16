@@ -126,7 +126,11 @@ namespace VoxelEngine.Weather
                 if (isHome)
                 {
                     coverage = HomeCoverage(wm.TargetState);
-                    storm = HomeStorm(wm.TargetState) * Mathf.Max(0.35f, wm.Intensity + 0.35f);
+                    // 17.31.0-dev: the shell is one layer for the whole planet, so it is drawn
+                    // from the SYSTEM's strength - the bands are a surface effect drawn by the
+                    // particles, and reading the player's own sky here would make the planet
+                    // flicker between stormy and clear as they walked in and out of a band.
+                    storm = HomeStorm(wm.TargetState) * Mathf.Max(0.35f, wm.PlanetIntensity + 0.35f);
                     snow = wm.IsSnowBiome;
                     layer.Tick(coverage, storm, snow, _flash, haze, coverageBlendSpeed, windScale);
                 }

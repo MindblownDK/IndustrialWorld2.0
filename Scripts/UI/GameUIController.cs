@@ -1838,6 +1838,13 @@ namespace VoxelEngine.UI
                 }
             }
 
+            // 17.30.0-dev - what this district has earned, under the emissions that fed it.
+            // The card's own current sums answer "is anything emitting here right now", which
+            // is the question the tier call has to be asked with: an idle machine must read
+            // QUIET, never the packs rung its history alone would earn.
+            AppendDistrictPressureReadout(foldout, source,
+                current > 0.0001f || currentRunoff > 0.0001f);
+
             // Machine builders generally place their scrolling content inside the panel.
             // Older compact panels did not; wrapping their ordinary content prevents an
             // expanded emissions foldout from flex-shrinking every row into an unreadable
@@ -1847,6 +1854,144 @@ namespace VoxelEngine.UI
             if (scroll == null) scroll = WrapMachinePanelInScrollView(panel);
             else if (string.IsNullOrEmpty(scroll.name)) scroll.name = "MachinePanelTelemetryScroll";
             scroll.Add(card);
+        }
+
+        /// <summary>17.30.0-dev — WHAT THIS DISTRICT HAS EARNED.
+        ///
+        /// The industrial threat tiers (17.18.0-dev) turn a dirty district into packs, an
+        /// organized wave or a siege, and they make that call from two numbers the player could
+        /// never see: the ecological pressure at the OUTLET and the residual climate load that
+        /// outlet has been feeding for hours. The spawner samples exactly those two at
+        /// `PollutionEmitter.ReleasePoint`, so this card samples the same point with the same
+        /// calls — a readout that disagreed with the thing sending the ghouls would be worse
+        /// than none at all. The one honest difference: this panel speaks for ITS OWN chimney
+        /// (the outlet the machine's card above is already reporting on), while the spawner
+        /// reads the strongest source near the PLAYER - the same two quantities, sampled at two
+        /// chimneys in a district that has more than one.
+        ///
+        /// It lives INSIDE the emissions foldout on purpose: pollution deliberately owns no
+        /// permanent HUD space in this game (see the note on the card above), and the block is
+        /// read-only — nothing here is cached, remembered or sent anywhere.
+        /// </summary>
+        private void AppendDistrictPressureReadout(VisualElement foldout, Component source, bool live)
+        {
+            if (foldout == null || source == null) return;
+
+            // The outlet, not the player: the spawner recruits off the release point, and a
+            // machine's own panel is showing its own chimney. Falls back to the machine body
+            // for a machine that has no emitter of its own (nothing on this panel emits).
+            Vector3 samplePoint = source.transform.position;
+            if (_displayPollutionEmitters.Count > 0 && _displayPollutionEmitters[0] != null)
+                samplePoint = _displayPollutionEmitters[0].ReleasePoint;
+
+            float pressure = EcologyPressure.Sample(samplePoint).Pressure01;
+            float residual = PollutionService.SampleClimate01(samplePoint);
+            float planet = PollutionService.ClimateBurdenAt(samplePoint);
+            IndustrialThreatTier earned = IndustrialPressureReadout.TierFor(live, pressure, residual);
+
+            Color signal = earned == IndustrialThreatTier.Siege ? UITheme.AccentRed
+                : earned == IndustrialThreatTier.Wave ? UITheme.AccentAmber
+                : LcdHudTheme.Phosphor;
+
+            // Same instrument as CONTAINER LOAD: one framed data card, one printed caption, one
+            // signal colour that carries the state. The bars turn amber and red on the tiers'
+            // OWN gates (PollutionThreat's constants), never on a second private scale.
+            var card = new VisualElement { name = "DistrictPressureReadout" };
+            card.style.marginTop = 8;
+            card.style.paddingTop = 6;
+            card.style.paddingBottom = 6;
+            card.style.paddingLeft = 8;
+            card.style.paddingRight = 8;
+            LcdHudTheme.ApplyDataCard(card, signal);
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+
+            var caption = LcdHudTheme.CaptionLabel("DISTRICT PRESSURE");
+            caption.style.flexGrow = 1;
+            header.Add(caption);
+
+            var answer = new Label(IndustrialPressureReadout.TierLabel(live, pressure, residual));
+            answer.style.fontSize = 10;
+            answer.style.letterSpacing = 0.45f;
+            answer.style.unityFontStyleAndWeight = FontStyle.Bold;
+            answer.style.color = new StyleColor(signal);
+            header.Add(answer);
+            card.Add(header);
+
+            AppendPressureRow(card, "PRESSURE NOW", pressure,
+                PollutionThreat.WavePressure01,
+                PollutionThreat.SiegePressure01);
+            AppendPressureRow(card, "INDUSTRIAL HISTORY", residual,
+                PollutionThreat.WaveResidual01,
+                PollutionThreat.SiegeResidual01,
+                IndustrialPressureReadout.HistoryBand(residual));
+
+            var next = new Label(IndustrialPressureReadout.NextRequirement(live, pressure, residual));
+            next.style.fontSize = 9;
+            next.style.marginTop = 6;
+            next.style.whiteSpace = WhiteSpace.Normal;
+            next.style.color = new StyleColor(new Color(0.82f, 0.86f, 0.88f));
+            card.Add(next);
+
+            // The gate the two readings cannot see, stated in words rather than guessed at.
+            var note = new Label(IndustrialPressureReadout.ActivityNote);
+            note.style.fontSize = 9;
+            note.style.marginTop = 3;
+            note.style.whiteSpace = WhiteSpace.Normal;
+            note.style.color = new StyleColor(new Color(signal.r, signal.g, signal.b, 0.80f));
+            card.Add(note);
+
+            if (planet > 0.001f)
+            {
+                var planetLabel = new Label($"PLANET HISTORY   {planet * 100f:0}%   "
+                    + IndustrialPressureReadout.HistoryBand(planet));
+                planetLabel.style.fontSize = 9;
+                planetLabel.style.marginTop = 5;
+                planetLabel.style.letterSpacing = 0.4f;
+                planetLabel.style.color = new StyleColor(new Color(0.66f, 0.70f, 0.72f));
+                planetLabel.pickingMode = PickingMode.Ignore;
+                card.Add(planetLabel);
+            }
+
+            foldout.Add(card);
+        }
+
+        /// <summary>One instrument row for the district card: a printed caption, the reading in
+        /// percent (with its band when it has one), and the segmented track under both.</summary>
+        private static void AppendPressureRow(VisualElement parent, string caption, float value01,
+            float waveGate01, float siegeGate01, string band = null)
+        {
+            float value = Mathf.Clamp01(value01);
+            Color signal = value >= siegeGate01 ? UITheme.AccentRed
+                : value >= waveGate01 ? UITheme.AccentAmber
+                : LcdHudTheme.Phosphor;
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 5;
+
+            var captionLabel = LcdHudTheme.CaptionLabel(caption);
+            captionLabel.style.flexGrow = 1;
+            row.Add(captionLabel);
+
+            var valueLabel = new Label(band == null
+                ? $"{value * 100f:0}%"
+                : $"{band}   {value * 100f:0}%");
+            valueLabel.style.fontSize = 10;
+            valueLabel.style.letterSpacing = 0.45f;
+            valueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            valueLabel.style.color = new StyleColor(signal);
+            valueLabel.pickingMode = PickingMode.Ignore;
+            row.Add(valueLabel);
+            parent.Add(row);
+
+            var track = LcdHudTheme.CreateSegmentTrack(12, out var segments, 9f);
+            track.style.marginTop = 3;
+            LcdHudTheme.SetSegments(segments, value, signal);
+            parent.Add(track);
         }
 
         private static ScrollView WrapMachinePanelInScrollView(VisualElement panel)

@@ -135,6 +135,10 @@ namespace VoxelEngine.Networking
     {
         public byte Current;
         public byte Target;
+        /// <summary>17.31.0-dev: the host's front clock, so a guest computes the same regional
+        /// weather bands over the same square metre. Additive - a client that predates the field
+        /// simply reads 0 and falls back to its own clock, which only shifts the bands.</summary>
+        public float Clock;
     }
 
     /// <summary>Server -> clients: opaque sparse pollution snapshot. Gameplay code
@@ -2991,13 +2995,15 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.Broadcast(conn, new WeatherStateBroadcast
             {
                 Current = (byte)wm.CurrentState,
-                Target = (byte)wm.TargetState
+                Target = (byte)wm.TargetState,
+                Clock = wm.WeatherClock
             }, true);
         }
 
         /// <summary>Server: poll the weather each frame; broadcast on change
         /// plus a slow keepalive so a missed packet can only mislead a client
-        /// for seconds. Costs two byte compares when nothing changed.</summary>
+        /// for seconds. Costs two byte compares when nothing changed. The front
+        /// clock rides along so the regional bands stay in step too.</summary>
         private void PollWeatherBroadcast()
         {
             if (!_serverStarted) return;
@@ -3013,17 +3019,19 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.Broadcast(new WeatherStateBroadcast
             {
                 Current = current,
-                Target = target
+                Target = target,
+                Clock = wm.WeatherClock
             }, true);
         }
 
         /// <summary>Client: adopt the host's sky. The local WeatherManager
         /// keeps doing the blend/intensity/proximity math - only the state
-        /// decisions come from the host.</summary>
+        /// decisions come from the host, and the front clock comes with them so
+        /// the regional bands are the host's bands (17.31.0-dev).</summary>
         private void OnClientWeather(WeatherStateBroadcast msg, Channel channel)
         {
             if (_serverStarted) return;
-            VoxelEngine.Weather.WeatherManager.Instance?.ApplyRemote(msg.Current, msg.Target);
+            VoxelEngine.Weather.WeatherManager.Instance?.ApplyRemote(msg.Current, msg.Target, msg.Clock);
         }
 
         private long _lastPollutionRevision = long.MinValue;

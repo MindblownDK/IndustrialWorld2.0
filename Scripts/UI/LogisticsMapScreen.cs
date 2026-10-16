@@ -27,6 +27,7 @@ using VoxelEngine.Cosmos;
 using VoxelEngine.Environment;
 using VoxelEngine.Materials;
 using VoxelEngine.Settings;
+using VoxelEngine.Weather;
 using Cursor = UnityEngine.Cursor;
 using T = VoxelEngine.UI.UITheme;
 
@@ -61,6 +62,9 @@ namespace VoxelEngine.UI
         private static bool _showDeposits = true;
         // Pollution is telemetry, not a permanent HUD treatment: explicitly opt in.
         private static bool _showPollution;
+        // 17.31.0-dev: the regional weather bands. Opt in like pollution - the layer answers
+        // "where is the rain", which is a question a player asks on purpose, not always.
+        private static bool _showWeather;
 
         private static float _refreshTimer;
         private static readonly List<PollutionMapCell> _pollutionCells = new(128);
@@ -131,6 +135,9 @@ namespace VoxelEngine.UI
         private static readonly Color PlayerInk = new(1.00f, 1.00f, 1.00f);
         private static readonly Color DepositInk = new(0.80f, 0.55f, 0.95f);
         private static readonly Color PollutionInk = new(0.88f, 0.48f, 0.20f);
+        private static readonly Color WeatherInk = new(0.46f, 0.66f, 0.95f);
+        private static readonly Color RainInk = new(0.42f, 0.62f, 0.92f);
+        private static readonly Color SnowInk = new(0.88f, 0.93f, 0.99f);
         private static readonly float[] AirAlertThresholds = { 0.05f, 0.20f, 0.45f, 0.70f };
         private static readonly float[] RunoffAlertThresholds = { 0.03f, 0.18f, 0.42f, 0.70f };
 
@@ -324,6 +331,7 @@ namespace VoxelEngine.UI
             AddLayerToggle("BUILDINGS", BuildingInk, () => _showBuildings, v => _showBuildings = v);
             AddLayerToggle("DEPOSITS", DepositInk, () => _showDeposits, v => _showDeposits = v);
             AddLayerToggle("POLLUTION", PollutionInk, () => _showPollution, v => _showPollution = v);
+            AddLayerToggle("WEATHER", WeatherInk, () => _showWeather, v => _showWeather = v);
 
             var listTitle = new Label("NETWORK");
             listTitle.style.fontSize = 10;
@@ -615,6 +623,97 @@ namespace VoxelEngine.UI
                     ecologyDetail.style.marginBottom = 2;
                     _list.Add(ecologyDetail);
                 }
+
+                // 17.30.0-dev - THE ANSWER THIS DISTRICT HAS EARNED.
+                //
+                // The pollution block above shows what the air and soil are DOING; this one
+                // shows what those readings have ADDED UP TO, which is the thing the ecology
+                // acts on: the residual history channel (hours-scale, persisted in the sidecar)
+                // and the pressure, read through the same tier call the spawner makes. The
+                // district is sampled at the viewer - the same point the air and ecology rows
+                // above already report on, and the point the spawner's own focus resolves to.
+                Vector3 viewer = ViewerPosition();
+                float districtHistory = PollutionService.SampleClimate01(viewer);
+                float planetHistory = PollutionService.ClimateBurdenAt(viewer);
+                // A map cannot see which outlet is running, so its liveness answer is the
+                // readings themselves: a district with neither current pressure nor history
+                // has nothing for the tiers to answer, and reads QUIET instead of claiming a
+                // rung off a stale number.
+                bool districtLive = ecology.Pressure01 > 0.01f || districtHistory > 0.01f;
+                IndustrialThreatTier earned =
+                    IndustrialPressureReadout.TierFor(districtLive, ecology.Pressure01, districtHistory);
+                Color earnedColour = earned == IndustrialThreatTier.Siege ? T.AccentRed
+                    : earned == IndustrialThreatTier.Wave ? T.AccentAmber
+                    : T.TextMuted;
+
+                AddSection("INDUSTRIAL PRESSURE");
+                var pressureAnswer = new Label(
+                    IndustrialPressureReadout.TierLabel(districtLive, ecology.Pressure01, districtHistory));
+                pressureAnswer.style.fontSize = 10;
+                pressureAnswer.style.unityFontStyleAndWeight = FontStyle.Bold;
+                pressureAnswer.style.letterSpacing = 0.5f;
+                pressureAnswer.style.color = new StyleColor(earnedColour);
+                pressureAnswer.style.marginBottom = 2;
+                _list.Add(pressureAnswer);
+
+                var pressureNumbers = new Label(
+                    $"HISTORY {districtHistory * 100f:0}%  ({IndustrialPressureReadout.HistoryBand(districtHistory)})"
+                    + $"   ·   PRESSURE {ecology.Pressure01 * 100f:0}%"
+                    + $"   ·   PLANET HISTORY {planetHistory * 100f:0}%");
+                pressureNumbers.style.fontSize = 9;
+                pressureNumbers.style.whiteSpace = WhiteSpace.Normal;
+                pressureNumbers.style.color = new StyleColor(T.TextMuted);
+                pressureNumbers.style.marginBottom = 2;
+                _list.Add(pressureNumbers);
+
+                var pressureNext = new Label(
+                    IndustrialPressureReadout.NextRequirement(districtLive, ecology.Pressure01, districtHistory)
+                    + (districtLive ? " " + IndustrialPressureReadout.ActivityNote : string.Empty));
+                pressureNext.style.fontSize = 9;
+                pressureNext.style.whiteSpace = WhiteSpace.Normal;
+                pressureNext.style.color = new StyleColor(T.TextMuted);
+                pressureNext.style.marginBottom = 2;
+                _list.Add(pressureNext);
+            }
+
+            // 17.31.0-dev — THE SKY, PER REGION.
+            //
+            // Same two numbers the world is living under, split the way the player experiences
+            // them: what the weather SYSTEM over the body is doing (one answer for the planet),
+            // and how much of that system is over the viewer (a different answer a few kilometres
+            // away). The WEATHER map layer draws the bands themselves.
+            var weather = WeatherManager.Instance;
+            if (weather != null && weather.IsWeatherActive)
+            {
+                float here = weather.PrecipitationAt(ViewerPosition());
+                float cover = weather.FrontCoverage;
+                bool snow = weather.SnowfallAt(ViewerPosition());
+
+                AddSection("WEATHER");
+                var weatherState = new Label(
+                    $"{WeatherLabel(weather.LocalState)}   ·   SYSTEM {weather.PlanetIntensity * 100f:0}%");
+                weatherState.style.fontSize = 10;
+                weatherState.style.color = new StyleColor(WeatherInk);
+                weatherState.style.marginBottom = 2;
+                _list.Add(weatherState);
+
+                var weatherPlace = new Label(
+                    $"LOCAL {here * 100f:0}%   ({BandLabel(cover)})   ·   {(snow ? "SNOW" : "RAIN")}"
+                    + $"   ·   BAND COVER {cover * 100f:0}%");
+                weatherPlace.style.fontSize = 9;
+                weatherPlace.style.whiteSpace = WhiteSpace.Normal;
+                weatherPlace.style.color = new StyleColor(T.TextMuted);
+                weatherPlace.style.marginBottom = 2;
+                _list.Add(weatherPlace);
+
+                var weatherNote = new Label(
+                    "Bands drift and are not body-wide: a second base can be in sunshine while this "
+                    + "one is under the rain. Solar panels read the sky directly above themselves.");
+                weatherNote.style.fontSize = 9;
+                weatherNote.style.whiteSpace = WhiteSpace.Normal;
+                weatherNote.style.color = new StyleColor(T.TextMuted);
+                weatherNote.style.marginBottom = 2;
+                _list.Add(weatherNote);
             }
 
             AddSection("RAIL");
@@ -692,8 +791,18 @@ namespace VoxelEngine.UI
             bool ecologicalDecline = ecology.SupportsNativeEcology && ecology.Pressure01 >= 0.50f;
             bool hostileEscalation = !ecology.SupportsNativeEcology
                 && ecology.Status != "NO BIOSPHERE" && ecology.Pressure01 >= 0.50f;
+            // 17.30.0-dev: the one alert that is not about air or soil quality, but about what
+            // the district's own numbers have earned over time - the rung the spawner will
+            // answer from once one outlet has held its heat.
+            float districtHistory = PollutionService.SampleClimate01(ViewerPosition());
+            bool districtLive = ecology.Pressure01 > 0.01f || districtHistory > 0.01f;
+            IndustrialThreatTier earnedTier =
+                IndustrialPressureReadout.TierFor(districtLive, ecology.Pressure01, districtHistory);
+            bool organizedAnswer = earnedTier == IndustrialThreatTier.Wave
+                || earnedTier == IndustrialThreatTier.Siege;
             if (!severeAir && !severeRunoff && !severeBodyAir && !severeBodyRunoff
-                && !airForecast && !runoffForecast && !ecologicalDecline && !hostileEscalation) return;
+                && !airForecast && !runoffForecast && !ecologicalDecline && !hostileEscalation
+                && !organizedAnswer) return;
 
             AddSection("ENVIRONMENT ALERTS");
             if (ecologicalDecline)
@@ -704,6 +813,15 @@ namespace VoxelEngine.UI
                 AddEnvironmentAlert("POLLUTION-DRIVEN HOSTILES",
                     $"Local hostile pressure is {ecology.HostilePressureMultiplier:0.00}x; remove nearby air and runoff sources.",
                     EcologyColour(ecology.Pressure01));
+            if (organizedAnswer)
+                AddEnvironmentAlert(
+                    $"INDUSTRIAL PRESSURE · {PollutionThreat.TierLabel(earnedTier)} CONDITIONS",
+                    earnedTier == IndustrialThreatTier.Siege
+                        ? "This district's history and pressure have reached the siege rung: a brute that walks past the player to dismantle machines is what answers industry here. "
+                          + IndustrialPressureReadout.ActivityNote
+                        : "This district's history and pressure have reached the organized-wave rung: an elite spearhead, flankers and logistics raids. "
+                          + IndustrialPressureReadout.ActivityNote,
+                    earnedTier == IndustrialThreatTier.Siege ? T.AccentRed : T.AccentAmber);
             if (severeAir)
                 AddEnvironmentAlert($"{AirBand(telemetry.LocalAir01)} AIR AT VIEWER",
                     "Power an Atmospheric Carbon Harvester near the orange/red cells.",
@@ -1139,6 +1257,9 @@ namespace VoxelEngine.UI
             _projectionFrame = BuildMapFrame(_anchor);
 
             DrawTerrain(painter, r, centre, metresPerPixel, _projectionFrame);
+            // Weather goes UNDER the map's content: it is a haze over the world, and a rain band
+            // drawn on top of buildings, roads and markers would make the map unreadable.
+            if (_showWeather) DrawWeather(painter, r, centre, metresPerPixel, _projectionFrame);
             if (_showBuildings) DrawBuildings(painter, r, centre, metresPerPixel);
             DrawGrid(painter, r, centre, metresPerPixel);
             if (_showPollution) DrawPollution(painter, r, centre, metresPerPixel);
@@ -1356,6 +1477,103 @@ namespace VoxelEngine.UI
             minimumMetres = Mathf.Max(1f, minimumMetres);
             return Mathf.Pow(2f, Mathf.Ceil(Mathf.Log(minimumMetres, 2f)));
         }
+
+        /// <summary>
+        /// 17.31.0-dev — the regional weather bands, drawn as the shape they really have.
+        ///
+        /// The field is a function of surface DIRECTION, so the overlay walks the canvas on a
+        /// coarse grid, unprojects each cell onto the body's sphere through the map's own tangent
+        /// frame, and asks the weather manager what is over that piece of ground. Nothing here is
+        /// simulated or cached: panning the map costs a few hundred field samples and always shows
+        /// the bands as they are this second.
+        /// </summary>
+        private static void DrawWeather(Painter2D painter, Rect r, Vector2 centre,
+            float metresPerPixel, in MapFrame frame)
+        {
+            var weather = WeatherManager.Instance;
+            if (weather == null || !weather.IsWeatherActive || frame.Body == null) return;
+
+            float radius = Mathf.Max(50f, frame.Body.SurfaceRadius);
+            Vector3 bodyCentre = frame.Body.transform.position;
+            float cell = WeatherDrawCellPixels;
+            int cols = Mathf.CeilToInt(r.width / cell) + 1;
+            int rows = Mathf.CeilToInt(r.height / cell) + 1;
+            Vector3 viewer = ViewerPosition();
+
+            for (int gy = 0; gy < rows; gy++)
+            {
+                float pY = gy * cell + cell * 0.5f;
+                float north = (centre.y - pY) * metresPerPixel;
+                for (int gx = 0; gx < cols; gx++)
+                {
+                    float pX = gx * cell + cell * 0.5f;
+                    float east = (pX - centre.x) * metresPerPixel;
+
+                    // Tangent-plane point lifted back onto the sphere, which is what the player
+                    // would find walking to that spot on the map.
+                    Vector3 direction = (frame.Up * radius + frame.East * east + frame.North * north);
+                    if (direction.sqrMagnitude < 1e-6f) continue;
+                    direction.Normalize();
+
+                    float coverage = weather.CoverageForDirection(direction);
+                    if (coverage < 0.06f) continue;
+
+                    // Snow or rain is a property of the ground under the band, and only worth
+                    // asking about where there IS a band.
+                    bool snow = weather.SnowfallAt(bodyCentre + direction * radius);
+                    Color ink = snow ? SnowInk : RainInk;
+                    ink.a = Mathf.Lerp(0.06f, 0.32f, coverage);
+
+                    painter.fillColor = ink;
+                    painter.BeginPath();
+                    painter.MoveTo(new Vector2(pX - cell * 0.5f, pY - cell * 0.5f));
+                    painter.LineTo(new Vector2(pX + cell * 0.5f, pY - cell * 0.5f));
+                    painter.LineTo(new Vector2(pX + cell * 0.5f, pY + cell * 0.5f));
+                    painter.LineTo(new Vector2(pX - cell * 0.5f, pY + cell * 0.5f));
+                    painter.ClosePath();
+                    painter.Fill();
+                }
+            }
+
+            // The viewer's own square, so a player can always find the sky they are standing in.
+            Vector2 self = Project(viewer, centre, metresPerPixel, frame);
+            if (OnScreen(self, r, 6f))
+            {
+                Color marker = weather.FrontCoverage >= 0.5f ? WeatherInk : T.TextMuted;
+                marker.a = 0.85f;
+                painter.strokeColor = marker;
+                painter.lineWidth = 1f;
+                painter.BeginPath();
+                painter.MoveTo(self + new Vector2(-5f, -5f));
+                painter.LineTo(self + new Vector2(5f, -5f));
+                painter.LineTo(self + new Vector2(5f, 5f));
+                painter.LineTo(self + new Vector2(-5f, 5f));
+                painter.ClosePath();
+                painter.Stroke();
+            }
+        }
+
+        /// <summary>Canvas grid step for the weather overlay, in pixels.</summary>
+        private const float WeatherDrawCellPixels = 24f;
+
+        /// <summary>What the coverage number means in words.</summary>
+        private static string BandLabel(float coverage01)
+        {
+            if (coverage01 >= 0.85f) return "UNDER THE BAND";
+            if (coverage01 >= 0.20f) return "AT THE BAND EDGE";
+            return "CLEAR OF THE BAND";
+        }
+
+        /// <summary>Readable weather state name (the enum packs the words together).</summary>
+        private static string WeatherLabel(WeatherState state) => state switch
+        {
+            WeatherState.Overcast  => "OVERCAST",
+            WeatherState.LightRain => "LIGHT RAIN",
+            WeatherState.HeavyRain => "HEAVY RAIN",
+            WeatherState.Snow      => "SNOW",
+            WeatherState.Blizzard  => "BLIZZARD",
+            _                      => "CLEAR"
+        };
 
         private static void DrawPollution(Painter2D painter, Rect r, Vector2 centre,
             float metresPerPixel)

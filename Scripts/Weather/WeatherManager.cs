@@ -12,6 +12,16 @@
 // equivalents in cold biomes / during winter seasons / on frozen worlds). Thunder is unified here:
 // a single scheduler fires OnThunder, which the audio and lightning sub-systems both honour so
 // the flash and the rumble are always in sync.
+//
+// 17.31.0-dev — PER-REGION WEATHER. The state machine above is the weather SYSTEM of the body:
+// whether the world is in a clear spell, a rain phase or a storm. WHERE that system is depositing
+// is a place, decided by WeatherFronts' drifting field, and that is what a player experiences:
+// the bands pass over some ground and not other ground, so a base under a band gets the rain
+// while the mine two kilometres upwind stays dry. Intensity below is the PLAYER'S sky (system
+// strength x the coverage over them); PlanetIntensity is the system's own strength, which is what
+// the cloud shell, an orbiting sensor and the smog washout want. Every consumer that asks about
+// some other place (a solar panel asks about the sky above itself) uses PrecipitationAt /
+// CoverageAt, so no system has to pretend the world has one weather.
 
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -61,10 +71,27 @@ namespace VoxelEngine.Weather
         /// <summary>Client-side: adopt the host's sky. Values outside the
         /// enum are ignored (a newer host than this build knows states we
         /// cannot render). A fresh target restarts the blend; a repeat
-        /// keepalive changes nothing.</summary>
-        public void ApplyRemote(byte current, byte target)
+        /// keepalive changes nothing.
+        ///
+        /// 17.31.0-dev: the host also publishes its front clock, because the regional field is a
+        /// function of that clock. A first packet that is far out of step (more than 30 seconds,
+        /// i.e. a guest joining a host that has been running for a while) snaps onto it - once,
+        /// at the moment of joining, which is already a load hitch - and from then on the client
+        /// keeps counting between packets and eases onto each published value, so the bands drift
+        /// smoothly instead of stepping once every keepalive. A clock of 0 or less means an older
+        /// host and is ignored: the sky still arrives, the bands are then the client's own.</summary>
+        public void ApplyRemote(byte current, byte target, float clock = 0f)
         {
             if (!RemoteDriven) return;
+            if (clock > 0f)
+            {
+                // A host that has been running for a while is far out of step, and easing that gap
+                // would leave a guest looking at the wrong bands for half a minute: snap once, then
+                // correct the remaining drift half a gap per packet.
+                _weatherClock = Mathf.Abs(clock - _weatherClock) > 30f
+                    ? clock
+                    : Mathf.Lerp(_weatherClock, clock, 0.5f);
+            }
             if (!System.Enum.IsDefined(typeof(WeatherState), (int)current) ||
                 !System.Enum.IsDefined(typeof(WeatherState), (int)target)) return;
             var newCurrent = (WeatherState)current;
@@ -86,9 +113,11 @@ namespace VoxelEngine.Weather
         public PlanetSeasonInfo CurrentSeasonInfo => PlanetarySeasons.GetCurrentSeasonInfo();
 
         /// <summary>
-        /// Planet-wide precipitation intensity (0 = none, 1 = max). This is the WEATHER of the
-        /// world and stays valid no matter where the player is — the cloud shells use it so a
-        /// storm still rages on the planet while you watch it from orbit.
+        /// Precipitation intensity reaching the PLAYER (0 = none, 1 = max): the body's weather
+        /// system multiplied by how much of it is over the player (17.31.0-dev — the regional
+        /// bands). Everything the player sees or hears reads this, which is what makes walking
+        /// out of a rain band silent it. For the system's own strength, which is what the cloud
+        /// shells and an orbiting sensor want, use <see cref="PlanetIntensity"/>.
         /// </summary>
         public float Intensity { get; private set; }
 
@@ -103,6 +132,42 @@ namespace VoxelEngine.Weather
         public float LocalIntensity { get; private set; }
 
         /// <summary>
+        /// 17.31.0-dev — the weather SYSTEM's strength over the whole body, without the regional
+        /// coverage: the cloud shell, an orbiting sensor and the planet-wide smog washout ask this
+        /// question, because a storm is a storm even where its bands happen to be clear. Equal to
+        /// the old `Intensity` before regions existed.
+        /// </summary>
+        public float PlanetIntensity { get; private set; }
+
+        /// <summary>
+        /// How much of the weather system is over the PLAYER right now, 0..1 (see
+        /// <see cref="WeatherFronts.Coverage01"/>). 0 = standing in a gap between bands,
+        /// 1 = fully under one. 1 on a body with no weather, so nothing else has to special-case it.
+        /// </summary>
+        public float FrontCoverage => _frontCoverage;
+
+        /// <summary>
+        /// The coverage actually applied to the player's sky: forced test weather
+        /// (<see cref="IsManuallyHeld"/>) is deliberately exempt, so Ctrl+Alt+R really does give a
+        /// full storm instead of whatever the bands were doing at the time.
+        /// </summary>
+        public float EffectiveCoverage => _manualHold ? 1f : FrontCoverage;
+
+        /// <summary>
+        /// 17.31.0-dev — the front clock, in seconds. The regional field is a pure function of it,
+        /// so every machine that shares this number shares the same bands: the host publishes it in
+        /// the weather broadcast and guests ease onto it.
+        /// </summary>
+        public float WeatherClock => _weatherClock;
+
+        /// <summary>
+        /// The state the player is under (the state the blend is closer to). Position does not
+        /// enter into it: which state the body is in is the system's decision, only its strength
+        /// and coverage vary by place.
+        /// </summary>
+        public WeatherState LocalState => TransitionProgress >= 0.5f ? TargetState : CurrentState;
+
+        /// <summary>
         /// Live multiplier weather applies to wind (1 = calm). Storms and seasonal gales drive it up.
         /// Consumed by <see cref="VoxelEngine.Cosmos.WindField"/> (grass / particles / audio)
         /// and by <see cref="VoxelEngine.Power.Wind.WindSystem"/> (wind turbines).
@@ -115,8 +180,11 @@ namespace VoxelEngine.Weather
         /// <summary>True if precipitation is currently reaching the player (rain or snow).</summary>
         public bool IsPrecipitating => IsWeatherActive && LocalIntensity > 0.05f;
 
-        /// <summary>True if the planet is precipitating, whether or not the player is under it.</summary>
-        public bool IsPlanetPrecipitating => IsWeatherActive && Intensity > 0.05f;
+        /// <summary>True if the planet is precipitating, whether or not the player is under it.
+        /// 17.31.0-dev: this asks the SYSTEM (PlanetIntensity), not the player's sky - the whole
+        /// point of the property is to say what the world is doing somewhere the player may not
+        /// be, and it is what the smog washout reads.</summary>
+        public bool IsPlanetPrecipitating => IsWeatherActive && PlanetIntensity > 0.05f;
 
         /// <summary>
         /// True only while standing on a body that is allowed to have weather (designer toggle on
@@ -149,6 +217,11 @@ namespace VoxelEngine.Weather
         private bool _manualHold;
         private BodySettings _lastAppliedSettings;
         private bool _pendingFirstCycle;
+        private float _weatherClock;          // 17.31.0-dev front clock (seconds)
+        private float _frontCoverage = 1f;
+        private float _frontSurfaceRadius;
+        private float _frontBandMetres;
+        private int _frontSeed;
 
         // Sub-systems (created as children)
         private WeatherParticles _particles;
@@ -270,6 +343,13 @@ namespace VoxelEngine.Weather
                 transform.rotation = Quaternion.LookRotation(fwd, up);
             }
 
+            // 17.31.0-dev — per-region weather. The clock advances on every machine (a guest's
+            // own clock is corrected by the host's broadcast), and the coverage over the player is
+            // re-read every frame: two 3D value-noise samples, which is the entire runtime cost of
+            // regions. The biome / snow check below keeps its own 2-second cadence.
+            _weatherClock += Time.deltaTime;
+            UpdateFrontCoverage();
+
             HandleDebugHotkeys();
 
             // Check biome and seasonal climate every 2 seconds.
@@ -301,14 +381,16 @@ namespace VoxelEngine.Weather
                 var season = PlanetarySeasons.GetCurrentSeasonInfo();
                 Debug.Log($"[Weather] Heartbeat: active={IsWeatherActive} " +
                           $"state={CurrentState}->{TargetState} intensity={Intensity:F2} " +
+                          $"(system {PlanetIntensity:F2}, band {EffectiveCoverage:F2}) " +
                           $"snow={IsSnowBiome} season={season.SeasonName} ({season.effectiveTemperature:F1}°C) " +
                           $"body={(body != null ? body.DisplayName : "none")}");
             }
 
-            // Update intensity based on current/target blend.
-            float fromIntensity = GetIntensity(CurrentState);
-            float toIntensity = GetIntensity(TargetState);
-            Intensity = IsWeatherActive ? Mathf.Lerp(fromIntensity, toIntensity, TransitionProgress) : 0f;
+            // Update intensity based on current/target blend, then apply PLACE: the system's
+            // strength is one number for the body, and what lands on the player is that strength
+            // multiplied by how much of the system is over them.
+            PlanetIntensity = SystemIntensity();
+            Intensity = PlanetIntensity * EffectiveCoverage;
 
             UpdateSurfaceProximity();
             LocalIntensity = Intensity * SurfaceProximity;
@@ -459,14 +541,109 @@ namespace VoxelEngine.Weather
                 return;
             }
 
-            var pos = world.Viewer.position;
-            int wx = Mathf.FloorToInt(pos.x);
-            int wz = Mathf.FloorToInt(pos.z);
-            var climate = BiomePicker.SampleClimate(world.Seed, wx, wz);
-            float seasonalTempShift = seasonInfo.seasonalTemperatureOffset / 50f;
-            float effectiveTempFraction = Mathf.Clamp01(climate.x + seasonalTempShift);
-            IsSnowBiome = effectiveTempFraction < 0.28f; // cold biomes / cold season
+            // 17.31.0-dev: the same question the map's weather overlay asks about other places,
+            // answered through one helper so a region and the player can never disagree.
+            IsSnowBiome = IsSnowAt(world.Viewer.position); // cold biomes / cold season
         }
+
+        /// <summary>
+        /// 17.31.0-dev — does precipitation at THIS place fall as snow? A forced precipitation type
+        /// always wins (that is the body's climate talking), then a freezing season, then the local
+        /// biome temperature. This is the per-place version of <see cref="IsSnowBiome"/>, which the
+        /// player's own sky keeps using.
+        /// </summary>
+        private static bool IsSnowAt(Vector3 position)
+        {
+            var manager = Instance;
+            var profile = manager != null ? manager.Profile : null;
+            profile ??= WeatherClimateProfile.Default();
+
+            if (profile.precipitation == WeatherClimateProfile.Precipitation.Snow) return true;
+            if (profile.precipitation == WeatherClimateProfile.Precipitation.Rain) return false;
+            if (profile.precipitation == WeatherClimateProfile.Precipitation.None) return false;
+
+            var seasonInfo = PlanetarySeasons.GetCurrentSeasonInfo();
+            if (seasonInfo.isFreezing) return true;
+
+            var world = ActiveWorld.Current;
+            if (world == null || world.Viewer == null) return seasonInfo.effectiveTemperature < 2f;
+
+            var climate = BiomePicker.SampleClimate(world.Seed,
+                Mathf.FloorToInt(position.x), Mathf.FloorToInt(position.z));
+            float seasonalTempShift = seasonInfo.seasonalTemperatureOffset / 50f;
+            return Mathf.Clamp01(climate.x + seasonalTempShift) < 0.28f;
+        }
+
+        /// <summary>
+        /// 17.31.0-dev — the body's weather system at its own strength, ignoring where its bands
+        /// happen to be. Zero on a body with no weather.
+        /// </summary>
+        private float SystemIntensity()
+        {
+            if (!IsWeatherActive) return 0f;
+            return Mathf.Lerp(GetIntensity(CurrentState), GetIntensity(TargetState), TransitionProgress);
+        }
+
+        /// <summary>
+        /// 17.31.0-dev — re-read the body's front parameters and the coverage over the player.
+        /// Called every frame from <see cref="Update"/>; it also keeps the parameters current for
+        /// every other caller of <see cref="CoverageForDirection"/>, including the map overlay
+        /// while the player is standing somewhere else entirely.
+        /// </summary>
+        private void UpdateFrontCoverage()
+        {
+            var body = GravityProvider.ActiveBody;
+            if (body == null)
+            {
+                _frontSurfaceRadius = 0f;
+                _frontBandMetres = 0f;
+                _frontSeed = 0;
+                _frontCoverage = 1f;
+                return;
+            }
+
+            // The body's own runtime seed decides where its bands sit, so two worlds never share a
+            // sky and every machine in THIS world computes the same bands from the same seed.
+            _frontSurfaceRadius = Mathf.Max(50f, body.SurfaceRadius);
+            _frontBandMetres = WeatherFronts.BandMetresFor(_frontSurfaceRadius);
+            _frontSeed = body.genParams.seed;
+
+            if (!IsWeatherActive || playerCamera == null) { _frontCoverage = 1f; return; }
+            _frontCoverage = CoverageForDirection(GravityProvider.GetUp(playerCamera.position));
+        }
+
+        /// <summary>
+        /// 17.31.0-dev — how much of the weather system sits over a piece of the surface, given the
+        /// surface direction at that piece. Public because the map draws the bands with it; every
+        /// gameplay question about another place should go through <see cref="CoverageAt"/> or
+        /// <see cref="PrecipitationAt"/> instead, which start from a world position.
+        /// </summary>
+        public float CoverageForDirection(Vector3 up)
+        {
+            if (!IsWeatherActive || _frontBandMetres <= 0f) return 1f;
+            var profile = Profile ?? WeatherClimateProfile.Default();
+            return WeatherFronts.Coverage01(up, _frontSurfaceRadius, _frontBandMetres, _frontSeed,
+                _weatherClock, WeatherFronts.CoverageBiasFor(profile.overcastBias));
+        }
+
+        /// <summary>17.31.0-dev — coverage of the weather system over a WORLD position.</summary>
+        public float CoverageAt(Vector3 worldPosition)
+            => CoverageForDirection(GravityProvider.GetUp(worldPosition));
+
+        /// <summary>
+        /// 17.31.0-dev — what is actually falling at a WORLD position, 0..1: the body's system
+        /// strength multiplied by the coverage over that place. This is the question a solar panel,
+        /// a machine or any other system that is not the player has to ask, and it is the reason
+        /// per-region weather is worth having: the sky above the panel is the panel's business.
+        /// No surface proximity is applied - callers here are on the ground or in a hull.
+        /// </summary>
+        public float PrecipitationAt(Vector3 worldPosition)
+            => IsWeatherActive
+                ? SystemIntensity() * (IsManuallyHeld ? 1f : CoverageAt(worldPosition))
+                : 0f;
+
+        /// <summary>17.31.0-dev — does precipitation at a WORLD position fall as snow?</summary>
+        public bool SnowfallAt(Vector3 worldPosition) => IsSnowAt(worldPosition);
 
         private void PickNextState()
         {
@@ -669,7 +846,8 @@ namespace VoxelEngine.Weather
             CurrentState = state;
             TargetState = state;
             TransitionProgress = 1f;
-            Intensity = IsWeatherActive ? GetIntensity(state) : 0f;
+            PlanetIntensity = IsWeatherActive ? GetIntensity(state) : 0f;
+            Intensity = PlanetIntensity * EffectiveCoverage;
         }
 
         private void OnDestroy()
