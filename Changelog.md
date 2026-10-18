@@ -1,9 +1,44 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.35.0-dev`
+**Current Version:** `17.35.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.35.1-dev] Text That Stays On The Glass
+
+**Type:** PATCH - three things were wrong with 17.35.0 in use, and none of them needed a new system: the text a screen drew was not on the screen, the editor that configures a screen used a sixth of the window, and a screen ghost gave no clue which face was the front. No save field, schema, prefab asset or balance change, and `Voxel Engine Setup` does not need to be run for existing screens - the correction is applied at runtime.
+
+**GitHub title:** `[17.35.1-dev] Screens you can actually read, a real editor, and a FRONT marker on the ghost`
+
+#### Fixed
+
+- **A screen showed a dark box instead of its text: the glass was buried inside the frame.** `Generated_Frame` is a SOLID CUBE, not a bezel with an opening, so the surface mounted "slightly recessed" 5 mm inside it was not recessed at all - it was behind an opaque wall, and so were the glow strip and the four corner dots. Every screen in the game has been a closed box.
+  - The glass, glow strip and corner dots are now nudged forward at runtime until each clears the frame's front face, in layers: glass at 4 mm, glow at 8 mm, dots at 11 mm. A shared plane would have z-fought at 60 Hz, which is why they are layered rather than stacked.
+  - The same correction was made in `GridScreenSetup`, so a prefab generated from now on is built proud from the start. Runtime correction stays because it fixes every screen already placed in an existing world without a Setup run or a prefab rebuild.
+- **Screen text hung in the air beside the panel instead of sitting on it.** The display root was parented to `Generated_ScreenSurface`, which is a unit cube scaled up to the panel's size - every child inherited that scale, so a Medium screen drew its type about four times too large. Only the parts that spilled past the frame's silhouette were ever visible, which is exactly what "some text floating beside the screen" was. The root's local offset was also multiplied by the surface's own depth scale, which put the text inside the glass, and the type size was a constant derived from a font metric that does not describe what the font actually produced.
+  - The display root now hangs off the block itself, at scale one, positioned on the glass's front face, and its child text is sized **from the mesh it actually built**: after every text change the mesh bounds are measured and the text is scaled to fit the panel. No font constant, no per-size tuning, and a font change cannot break it.
+  - The glass is **measured, not assumed**: the surface renderer's own local bounds and lossy scale give the panel's true width and height in block metres, so an authored or resized prefab reports what it really is. A screen whose prefab has lost its surface now grows a real cube at the size its `ScreenSize` promises instead of an invisible empty object.
+  - The panel is divided into three bands - title across the top 0.11, body centred in 0.64, status in the bottom 0.10 - so a full twelve-line page can no longer collide with the title or the LIVE marker.
+  - The display root also sits 3 cm proud of the glass, clear of the glow strip, the corner dots and the camera-feed quad, so none of them can cut through a line of text.
+- **The camera feed and team banner quads hovered 24 cm off the panel.** Both sat at a hand-tuned `z = -0.24` on every screen size - and, once the glass moved forward, that offset put them further from the panel than the depth of a whole block. They now sit 1.2 cm behind the text and just in front of the decor, on every size.
+- **`CharsPerLine()` now reads the same measured glass and the same 0.62 band the fit pass uses**, so the page layouts that choose their own column count and bar width agree with the type that ends up on the panel instead of guessing a line height.
+
+#### Changed
+
+- **The screen editor was rebuilt as a full-window tool** (`GridScreenConfigUI`). It was a 540-pixel card down the middle of the screen with everything stacked in one column: eleven pages wrapping across the top, then colours, borders, fonts, and a two-line preview at the very bottom. On any modern display most of the window was empty black.
+  - **Three columns and a hero preview.** Pages on the left with the search box above them and one full-width button per page under a category heading; a live preview of the panel in the middle, drawn at the panel's own aspect ratio (1.12 for Small, 2.18 for Wide, square for the rest) and sized to whatever room the window has, resizing with it; data sources, text colour, border and font on the right.
+  - **The preview is the real thing, mirrored.** It shows the actual `FormattedDisplay` text, the page's own title across the top, `LIVE` or `NO PWR` in the corner, the player's text colour, and the border they picked at the weight they picked - so the colour and border buttons now show their effect instead of only tinting a button.
+  - **The preview's type is fitted by the same rule as the panel**: longest line and line count decide the size, so what fits in the editor is what fits on the wall.
+  - **The page description moved under the preview** and now names the page, says what it answers, and warns when the panel is too small for it or a source is missing.
+  - **Custom text is a slot in the right column and only appears when Custom is the chosen page**, instead of being appended below everything for every page.
+
+#### Added
+
+- **`Scripts/GridSystem/GridGhostOrientation.cs` (new) - the ghost tells you which way is front.** While a screen (or cockpit) is being placed, its preview carries a translucent box on the front face that reads `FRONT`, with three chevrons above it marking the up edge.
+  - Sized from the **ghost's own renderer bounds**, not from the item's cell, so the marker sits on the glass of a screen that is 12 percent smaller than its cell; the type inside is fitted the same measured way as everywhere else.
+  - It is built on the throwaway preview object and dies with it, so no saved construct can ever inherit one; the ghost's own material pass skips it by component, so the marker keeps its legible colour instead of being tinted into another translucent copy of the block.
+  - `GridBuilder.HasFrontFace` is the one place that decides which items get one - screens and cockpits today - so adding a thruster or a door later is a single line.
 
 ### [17.35.0-dev] Every Screen Names What It Shows
 

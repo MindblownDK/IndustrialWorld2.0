@@ -1953,7 +1953,23 @@ namespace VoxelEngine.GridSystem
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
             _ghost.transform.rotation = rotation;
+
+            // 17.35.1-dev: a block with a FRONT says where its front is while it is still a
+            // ghost. Screens are the reason - a panel facing into a wall is a mistake you
+            // only notice after it is built - and the marker lives on the preview object,
+            // so it can never end up in a saved construct.
+            GridGhostOrientation.Attach(_ghost, HasFrontFace(item));
+
             TraceGhost("showing '" + item.displayName + "'");
+        }
+
+        /// <summary>Does this item's block have a face that has to point somewhere? Screens
+        /// do; their glass is on -Z and the whole panel is unreadable from behind.</summary>
+        private static bool HasFrontFace(GridBlockItem item)
+        {
+            if (item == null || item.blockPrefab == null) return false;
+            return item.blockPrefab.GetComponent<GridScreenBlock>() != null
+                || item.blockPrefab.GetComponent<VoxelEngine.GridSystem.GridCockpit>() != null;
         }
 
         private GameObject BuildShapeGhost(VoxelEngine.UI.GridShapeVariant shape, GridSize size)
@@ -1982,6 +1998,9 @@ namespace VoxelEngine.GridSystem
             _ghostMat.color = c;
             foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
             {
+                // The orientation marker is not part of the block: tinting it would turn a
+                // sign that says FRONT into another translucent copy of the shape.
+                if (GridGhostOrientation.IsMarker(r)) continue;
                 r.sharedMaterial = _ghostMat;
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }

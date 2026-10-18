@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.35.0-dev`
-**Roadmap Version:** `17.35.0-dev`
+**Current Version:** `17.35.1-dev`
+**Roadmap Version:** `17.35.1-dev`
 **Date:** 2026-10-18
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.35.1-dev - Text That Stays On The Glass
+- `GridScreenBlock.EnsureGlassProudOfFrame` moves the glass, glow strip and corner dots out of the solid `Generated_Frame` cube they were buried inside (glass 4 mm, glow 8 mm, dots 11 mm proud), and the display root no longer hangs off the scaled surface - together these are why a screen used to be a closed dark box with text spilling out beside it; text meshes are now sized from their own measured bounds against a measured glass, split into title, body and status bands
+- `GridScreenConfigUI` is a full-window three-column editor: page list on the left, a live preview at the panel's own aspect ratio in the middle showing the real text, colour, title and border, sources and appearance on the right
+- `GridGhostOrientation` (new) puts a `FRONT` box and three up chevrons on the front face of a screen or cockpit preview, sized from the ghost's own renderer bounds and skipped by the ghost material pass. No setup step, no prefab, no save change
+
 ### 17.35.0-dev - Every Screen Names What It Shows
 - `ScreenPageCatalog` (new) is the one list of the 18 pages a screen can show: name, category, a line about what it answers, the smallest panel it fits, search keywords, plus `Next`/`Previous`/`NeedsSource`/`FitsOn`; the config panel, the block's own title and any later surface read it instead of each keeping their own idea of the list
 - `GridScreenBlock.Pages.cs` (new partial) renders nine pages the block did not have: Environment (room and ambient pressure, gravity, temperature, altitude), Batteries (per-battery cells plus bank total), Power Graph (three-minute generation and draw traces), Manifest, Fill Bars, Farm (plots within 24 m), Mining (lift against weight, hold fill, heaviest cargo), Inventory Grid and Planet Map; every page is a pure formatter over a snapshot, cached for half a second
@@ -48,11 +53,6 @@
 - The smog washout is sampled per CELL (`PollutionService.Simulate` asks `WeatherManager.PrecipitationAt` at each body-local cell centre): a cell under a band is scrubbed at the rate the whole body used to receive, a cell in a gap between bands keeps its smog, and the rain-driven half of runoff spreading follows the same sample
 - `PollutionService.AirWashPerSecondAt` computes the simulation's own number for readouts, and `IndustrialPressureReadout.WashLineAt` prints it once for both the machine card's `RAIN SCRUB` row and the map's `INDUSTRIAL PRESSURE` section; `WeatherFronts.CoverageWord` is the only band-word list now
 - Coefficients unchanged (`WashRatePerIntensity` 0.004 is the one lever if live play shows smog lingering too long). No setup step, no prefab, no save or schema change
-
-### 17.31.0-dev - Weather That Belongs To A Place
-- `WeatherFronts` (new) is a pure function of (body seed, surface direction, front clock): drifting rain bands a quarter of the body's radius (500 - 2400 m) with faded edges, so a band arrives, passes and leaves
-- `WeatherManager.Intensity` is still what reaches the PLAYER while `PlanetIntensity` is the system's own strength (cloud shell, orbiting sensor); `PrecipitationAt` / `CoverageAt` / `SnowfallAt` answer about any place, and `GridSolarPanel` reads the sky above itself
-- The map's opt-in `WEATHER` layer paints the bands and the sidebar gained a `WEATHER` section; `WeatherStateBroadcast` carries a `Clock` so guests drift the host's bands. No setup step, no save or tuning change
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

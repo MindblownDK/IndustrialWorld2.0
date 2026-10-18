@@ -740,16 +740,18 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>
         /// How many of the screen font's characters fit across this panel before a line runs
-        /// off the edge. Derived from the numbers the block already uses to place its text -
-        /// the display area and the per-line height - so a page lays itself out for the panel
-        /// it is actually on instead of assuming one size. A glyph in the screen font is a
-        /// little under half a line tall.
+        /// off the edge. Derived from the real glass size the block measures off its surface
+        /// (17.35.1-dev) and the per-line height the fit pass produces, so a page lays itself
+        /// out for the panel it is actually on instead of assuming one size.
         /// </summary>
         private int CharsPerLine()
         {
-            var (width, _) = DisplayArea();
-            float charWidth = Mathf.Max(0.001f, CharHeight() * 0.42f);
-            return Mathf.Clamp(Mathf.FloorToInt(width / charWidth), 10, 48);
+            var (width, height) = GlassSize();
+            // A line of the screen font is a fixed fraction of the panel's height once the
+            // page has been fitted to it, and a glyph is a little under half a line wide.
+            float lineHeight = (height * 0.62f) / Mathf.Max(1, MaxDisplayLines);
+            float charWidth = Mathf.Max(0.001f, lineHeight * 0.42f);
+            return Mathf.Clamp(Mathf.FloorToInt(width / charWidth), 8, 64);
         }
 
         /// <summary>Ten-segment bar with a percentage, the house style of the older pages.</summary>

@@ -78,6 +78,16 @@ namespace VoxelEngine.GridSystem
         private Material _cameraFeedMaterial;
         private MaterialPropertyBlock _appearanceBlock;
         private float _baseCharSize;
+        // 17.35.1-dev — the glass, in block-local metres, and where its front face is.
+        // Read from the surface renderer rather than assumed: the surface cube is 1 m at
+        // scale 1, so its actual size is what the text has to fit inside.
+        private float _glassWidth;
+        private float _glassHeight;
+        private float _faceZ = -0.02f;
+        // Last strings the text was fitted to, so a fit is only recomputed when the
+        // characters actually change (Update runs every frame).
+        private string _fittedBody, _fittedTitle, _fittedStatus;
+        private bool _textFitDirty;
         private bool _cameraFeedVisible;
         private bool _initialized;
         private PowerConsumer _power;
@@ -351,7 +361,7 @@ namespace VoxelEngine.GridSystem
 
             if (_power != null) _power.wattsPerSecond = Enabled ? PowerDraw : 0f;
 
-            var (dw, dh) = DisplayArea();
+            var (dw, dh) = GlassSize();
 
             if (!Enabled)
             {
@@ -423,8 +433,12 @@ namespace VoxelEngine.GridSystem
                 if (_statusText != null) { _statusText.text = dataMode == ScreenDataMode.Camera ? "CAM" : "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }
             }
 
-            if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.38f, 0);
-            if (_statusText != null) _statusText.transform.localPosition = new Vector3(dw * 0.42f, -dh * 0.38f, 0);
+            if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.455f, 0);
+            if (_statusText != null) _statusText.transform.localPosition = new Vector3(dw * 0.455f, -dh * 0.455f, 0);
+
+            // 17.35.1-dev: the type is measured against the glass after the text is set,
+            // so it fits the panel it is actually on rather than a fixed guess.
+            RefreshTextFit();
         }
 
         private void EnsureDisplay()
@@ -441,32 +455,45 @@ namespace VoxelEngine.GridSystem
             Transform surface = transform.Find("Generated_ScreenSurface");
             if (surface == null)
             {
-                var s = new GameObject("Generated_ScreenSurface");
+                // A screen without its glass has nothing to show on: build one at the size
+                // this block's ScreenSize promises, so an authored or migrated prefab that
+                // lost the surface still renders instead of swallowing its own text.
+                var s = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                s.name = "Generated_ScreenSurface";
                 s.transform.SetParent(transform, false);
+                var (fw, fh) = DisplayArea();
+                s.transform.localScale = new Vector3(fw, fh, 0.06f);
+                var c = s.GetComponent<Collider>();
+                if (c != null) Destroy(c);
                 surface = s.transform;
             }
 
-            var oldRoot = surface.Find("DisplayRoot");
-            if (oldRoot != null) DestroyImmediate(oldRoot.gameObject);
-
-            var (dw, dh) = DisplayArea();
-            float charSize = CharHeight() / 24f;
-            _baseCharSize = charSize;
+            var staleRoot = surface.Find("DisplayRoot");
+            if (staleRoot != null) DestroyImmediate(staleRoot.gameObject);
+            staleRoot = transform.Find("DisplayRoot");
+            if (staleRoot != null) DestroyImmediate(staleRoot.gameObject);
 
             _screenSurfaceRenderer = surface.GetComponent<Renderer>();
             if (_screenSurfaceRenderer != null && _screenSurfaceBaseMaterial == null)
                 _screenSurfaceBaseMaterial = _screenSurfaceRenderer.sharedMaterial;
             CacheAppearanceRenderers();
+            EnsureGlassProudOfFrame(surface);
 
+            // The root exists before the glass is measured, because measuring is what puts
+            // it on the front face - a root created afterwards would sit at the block's
+            // origin, inside the frame, with its text buried in the middle of the block.
             var root = new GameObject("DisplayRoot");
-            root.transform.SetParent(surface, false);
-            // Keep text in front of the physical screen surface. After enabling depth testing,
-            // the old tiny offset could sit inside the screen cube and be self-occluded.
-            root.transform.localPosition = new Vector3(0, 0, -0.12f);
+            root.transform.SetParent(transform, false);
+            root.transform.localRotation = surface.localRotation;
+            root.transform.localScale = Vector3.one;
+            MeasureGlass(surface);
+
+            float charSize = CharHeight() / 24f;
+            _baseCharSize = charSize;
 
             var tObj = new GameObject("ScreenTitleText");
             tObj.transform.SetParent(root.transform, false);
-            tObj.transform.localPosition = new Vector3(0, dh * 0.38f, 0);
+            tObj.transform.localPosition = new Vector3(0, _glassHeight * 0.44f, 0);
             _titleText = tObj.AddComponent<TextMesh>();
             _titleText.text = "NO SOURCE"; _titleText.fontSize = 20;
             _titleText.characterSize = charSize;
@@ -487,13 +514,196 @@ namespace VoxelEngine.GridSystem
 
             var sObj = new GameObject("ScreenStatusText");
             sObj.transform.SetParent(root.transform, false);
-            sObj.transform.localPosition = new Vector3(dw * 0.42f, -dh * 0.38f, 0);
+            sObj.transform.localPosition = new Vector3(_glassWidth * 0.455f, -_glassHeight * 0.44f, 0);
             _statusText = sObj.AddComponent<TextMesh>();
             _statusText.text = "BOOT"; _statusText.fontSize = 12;
             _statusText.characterSize = charSize;
             _statusText.color = new Color(0.30f, 0.35f, 0.45f);
             _statusText.anchor = TextAnchor.LowerRight; _statusText.alignment = TextAlignment.Right;
             MakeTextOpaque(_statusText);
+
+            // Everything above was created at the right scale for the first time; the fit
+            // pass below then measures the meshes and corrects them.
+            _textFitDirty = true;
+            FitScreenText();
+        }
+
+        // ── Fitting the text to the glass ───────────────────────────────────────
+        // WHY THIS EXISTS (17.35.1-dev): the DisplayRoot used to be parented to the
+        // Generated_ScreenSurface cube, which is scaled up to the size of the panel. Every
+        // child inherited that scale, so a Medium screen drew text four times too large that
+        // spilled out of the frame and hung in the air beside it. Two things were wrong and
+        // both are fixed here: the root no longer lives under a scaled object, and the size
+        // of the type is now MEASURED from the mesh it produced instead of guessed from a
+        // font-metric constant. Whatever the font does, the text lands on the glass.
+
+        /// <summary>
+        /// The generated frame is a SOLID CUBE, not a bezel with a hole in it. The setup
+        /// script mounts the glass 5 mm "recessed" inside it, which on a solid cube does not
+        /// mean recessed - it means buried. That is the real reason a screen showed nothing
+        /// but a dark box: the glass, the glow strip and the corner dots were all sitting
+        /// behind an opaque wall, and the only thing that ever escaped was text that was so
+        /// oversized it spilled out past the frame's silhouette.
+        ///
+        /// The fix is a nudge, done at runtime so every prefab ever generated is corrected
+        /// without being rebuilt: whatever is meant to be seen is moved until its front face
+        /// clears the frame's by a few millimetres.
+        /// </summary>
+        private void EnsureGlassProudOfFrame(Transform surface)
+        {
+            Transform frame = transform.Find("Generated_Frame");
+            if (frame == null) return;
+            var frameRenderer = frame.GetComponent<Renderer>();
+            if (frameRenderer == null) return;
+
+            float frameFront = FrontZ(frame, frameRenderer);
+            // Layered, not stacked on one plane: the glow strip and the corner dots are
+            // decoration on top of the glass, so each one clears the last by a few
+            // millimetres. At 60 Hz a shared plane is a shimmering mess.
+            BringProud(surface, frameFront, 0.004f);
+            var glow = transform.Find("Generated_GlowStrip");
+            if (glow != null) BringProud(glow, frameFront, 0.008f);
+
+            var renderers = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (r != null && r.name == "Generated_CornerDot") BringProud(r.transform, frameFront, 0.011f);
+            }
+        }
+
+        /// <summary>The most forward (most negative) local Z of a child's geometry.</summary>
+        private static float FrontZ(Transform child, Renderer renderer)
+            => child.localPosition.z - Mathf.Abs(child.localScale.z) * renderer.localBounds.size.z * 0.5f;
+
+        /// <summary>Slide a child forward along its local Z until its front clears the glass
+        /// plane by <paramref name="clearance"/>; never slide it backwards.</summary>
+        private static void BringProud(Transform child, float frameFront, float clearance)
+        {
+            var renderer = child.GetComponent<Renderer>();
+            if (renderer == null) return;
+
+            float wanted = frameFront - clearance;
+            float current = FrontZ(child, renderer);
+            if (current <= wanted) return;
+
+            Vector3 local = child.localPosition;
+            local.z -= (current - wanted);
+            child.localPosition = local;
+        }
+
+        /// <summary>Read the real glass size and front face off the surface renderer, in
+        /// block-local metres, and put the display root just proud of that face.</summary>
+        private void MeasureGlass(Transform surface)
+        {
+            var (fallbackW, fallbackH) = DisplayArea();
+            _glassWidth = fallbackW;
+            _glassHeight = fallbackH;
+
+            var renderer = surface.GetComponent<Renderer>();
+            Vector3 boundsSize = renderer != null ? renderer.localBounds.size : new Vector3(1f, 1f, 0.06f);
+            if (boundsSize.x < 0.0001f || boundsSize.y < 0.0001f)
+                boundsSize = new Vector3(1f, 1f, 0.06f);
+
+            Vector3 lossy = surface.lossyScale;
+            Vector3 blockScale = transform.lossyScale;
+            float blockX = Mathf.Max(0.0001f, Mathf.Abs(blockScale.x));
+            float blockY = Mathf.Max(0.0001f, Mathf.Abs(blockScale.y));
+
+            // A cube is 1 m at scale 1, so size-on-screen is localBounds times lossy scale.
+            _glassWidth = Mathf.Max(0.05f, Mathf.Abs(lossy.x) * boundsSize.x / blockX);
+            _glassHeight = Mathf.Max(0.05f, Mathf.Abs(lossy.y) * boundsSize.y / blockY);
+
+            // Front face centre, converted through the surface's own transform so a rotated
+            // or offset screen still puts its text on its own glass.
+            Vector3 faceWorld = surface.TransformPoint(new Vector3(0f, 0f, -boundsSize.z * 0.5f));
+            Vector3 faceLocal = transform.InverseTransformPoint(faceWorld);
+            // 3 cm proud of the glass: in front of the glow strip, the corner dots and the
+            // camera-feed quad, and still visually part of the panel.
+            Vector3 outward = transform.InverseTransformDirection(
+                surface.TransformDirection(Vector3.back)).normalized;
+            Vector3 rootLocal = faceLocal + outward * 0.03f;
+            _faceZ = rootLocal.z;
+
+            var root = transform.Find("DisplayRoot");
+            if (root != null)
+            {
+                root.localPosition = rootLocal;
+                root.localRotation = surface.localRotation;
+            }
+        }
+
+        private (float w, float h) GlassSize()
+        {
+            var (fw, fh) = DisplayArea();
+            return (_glassWidth > 0.001f ? _glassWidth : fw,
+                    _glassHeight > 0.001f ? _glassHeight : fh);
+        }
+
+        /// <summary>Refit the three text meshes when their character content has changed.</summary>
+        private void RefreshTextFit()
+        {
+            string body = _screenText != null ? _screenText.text : null;
+            string title = _titleText != null ? _titleText.text : null;
+            string status = _statusText != null ? _statusText.text : null;
+
+            if (!_textFitDirty
+                && body == _fittedBody && title == _fittedTitle && status == _fittedStatus) return;
+
+            _textFitDirty = false;
+            if (!FitScreenText())
+            {
+                // The TextMesh had not built its mesh yet this frame; ask again next frame
+                // rather than recording a fit that never happened.
+                _textFitDirty = true;
+                return;
+            }
+            _fittedBody = body; _fittedTitle = title; _fittedStatus = status;
+        }
+
+        /// <summary>Fit all three texts; returns false when the body mesh was not ready.</summary>
+        private bool FitScreenText()
+        {
+            var (gw, gh) = GlassSize();
+            // Three stacked bands, so nothing can ever spill into the title or the status:
+            // title 0.455 down 0.11, body centred in 0.64, status -0.455 up 0.10.
+            bool fitted = FitTextMesh(_screenText, gw * 0.94f, gh * 0.64f, gh * 0.62f / Mathf.Max(1, MaxDisplayLines));
+            FitTextMesh(_titleText, gw * 0.94f, gh * 0.11f);
+            FitTextMesh(_statusText, gw * 0.36f, gh * 0.10f);
+            return fitted;
+        }
+
+        /// <summary>
+        /// Scale one TextMesh so its rendered mesh fits a box. The mesh is measured after
+        /// the text has been built, which is the only number that is true for the actual
+        /// font: no constant about how many metres a character is, no assumption that
+        /// fontSize 24 means anything in particular.
+        /// </summary>
+        /// <param name="lineCapHeight">When positive, no single line may be taller than
+        /// this - that is what stops a two-word page from filling the panel with giant
+        /// letters while a twelve-line page is squeezed to fit.</param>
+        private static bool FitTextMesh(TextMesh tm, float maxWidth, float maxHeight, float lineCapHeight = 0f)
+        {
+            if (tm == null) return false;
+
+            var filter = tm.GetComponent<MeshFilter>();
+            Mesh mesh = filter != null ? filter.sharedMesh : null;
+            if (mesh == null) return false;
+
+            Bounds bounds = mesh.bounds;
+            if (bounds.size.x <= 0.0001f || bounds.size.y <= 0.0001f) return false;
+
+            float scale = Mathf.Min(maxWidth / bounds.size.x, maxHeight / bounds.size.y);
+
+            if (lineCapHeight > 0.0001f)
+            {
+                int lines = Mathf.Max(1, CountLines(tm.text));
+                float perLine = bounds.size.y / lines;
+                if (perLine > 0.0001f) scale = Mathf.Min(scale, lineCapHeight / perLine);
+            }
+
+            tm.transform.localScale = Vector3.one * Mathf.Max(0.0001f, scale);
+            return true;
         }
 
         private void CacheAppearanceRenderers()
@@ -545,10 +755,17 @@ namespace VoxelEngine.GridSystem
             renderer.SetPropertyBlock(_appearanceBlock);
         }
 
+        private int _appliedFontStyle = -1;
+
         private void ApplyFontStyle()
         {
             float baseSize = _baseCharSize > 0f ? _baseCharSize : CharHeight() / 24f;
             int safeFontStyle = Mathf.Clamp(fontStyle, 0, 3);
+            // ApplyLiveAppearance calls this every frame; rebuilding three TextMeshes at
+            // 60 Hz costs more than the whole page renderer does.
+            if (safeFontStyle == _appliedFontStyle) return;
+            _appliedFontStyle = safeFontStyle;
+            _textFitDirty = true;
             int displayFontSize = safeFontStyle switch
             {
                 1 => 22,
@@ -722,10 +939,12 @@ namespace VoxelEngine.GridSystem
             GameObject quad = existing != null ? existing.gameObject : GameObject.CreatePrimitive(PrimitiveType.Quad);
             quad.name = "CameraFeedQuad_Runtime";
             quad.transform.SetParent(transform, false);
-            var (dw, dh) = DisplayArea();
-            quad.transform.localPosition = new Vector3(0f, 0f, -0.24f);
+            var (dw, dh) = GlassSize();
+            // Just proud of the glass and behind the text: 1.2 cm clears the bezel without
+            // the feed appearing to hover off the panel the way a -0.24 offset did.
+            quad.transform.localPosition = new Vector3(0f, 0f, _faceZ + 0.012f);
             quad.transform.localRotation = Quaternion.identity;
-            quad.transform.localScale = new Vector3(dw * 0.96f, dh * 0.96f, 1f);
+            quad.transform.localScale = new Vector3(dw * 0.97f, dh * 0.97f, 1f);
 
             var collider = quad.GetComponent<Collider>();
             if (collider != null) Destroy(collider);

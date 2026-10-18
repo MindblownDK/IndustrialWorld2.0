@@ -104,28 +104,39 @@ namespace VoxelEngine.EditorTools
                 // Dark frame/bezel
                 Primitive("Generated_Frame", PrimitiveType.Cube, Vector3.zero, screenScale * 0.96f, frameMat);
 
-                // Screen surface (dark, slightly recessed)
+                // Screen surface (dark). 17.35.1-dev: the frame is a SOLID cube, so a
+                // surface mounted "slightly recessed" was simply buried inside it - the
+                // glass has to sit a few millimetres PROUD of the frame's front face or
+                // there is nothing to read. Same correction GridScreenBlock applies at
+                // runtime to prefabs that were generated before this change.
+                float frameFront = -screenScale.z * 0.5f;
+                float surfaceFront = frameFront - 0.004f;
+                float glowFront = frameFront - 0.008f;
+                float dotFront = frameFront - 0.011f;
+                float surfaceDepth = screenScale.z * 0.88f;
                 Primitive("Generated_ScreenSurface", PrimitiveType.Cube,
-                    new Vector3(0, 0, -screenScale.z * 0.02f), screenScale * 0.88f, screenOff);
+                    new Vector3(0, 0, surfaceFront + surfaceDepth * 0.5f), screenScale * 0.88f, screenOff);
 
                 // Solid back panel (dark, fills the full cell so screens are never see-through)
                 Primitive("Generated_BackPanel", PrimitiveType.Cube,
                     new Vector3(0, 0, screenScale.z * 0.02f), screenScale * 0.98f, frameMat);
 
-                // Glow strip at bottom
+                // Glow strip at bottom, on the same proud plane as the glass.
+                float glowDepth = screenScale.z * 0.04f;
                 Primitive("Generated_GlowStrip", PrimitiveType.Cube,
-                    new Vector3(0, -screenScale.y * 0.35f, -screenScale.z * 0.05f),
-                    new Vector3(screenScale.x * 0.7f, screenScale.y * 0.04f, screenScale.z * 0.04f), screenGlow);
+                    new Vector3(0, -screenScale.y * 0.35f, glowFront + glowDepth * 0.5f),
+                    new Vector3(screenScale.x * 0.7f, screenScale.y * 0.04f, glowDepth), screenGlow);
 
                 // Accent corner dots
                 float dotSize = cs * 0.04f;
                 float cornerOffset = screenScale.x * 0.42f;
+                float dotZ = dotFront + dotSize * 0.5f;
                 foreach (var x in new[] { -cornerOffset, cornerOffset })
                 {
                     foreach (var y in new[] { screenScale.y * 0.42f, -screenScale.y * 0.42f })
                     {
                         Primitive("Generated_CornerDot", PrimitiveType.Sphere,
-                            new Vector3(x, y, -screenScale.z * 0.06f), Vector3.one * dotSize, accentMat);
+                            new Vector3(x, y, dotZ), Vector3.one * dotSize, accentMat);
                     }
                 }
 
