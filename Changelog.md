@@ -1,9 +1,52 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.35.1-dev`
+**Current Version:** `17.36.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.36.0-dev] Pages Drawn, Panes Split, Beds Planted
+
+**Type:** MINOR - the pages worked, and most of them were still wrong, because they were written as strings: a battery bank was twelve numbers in a column, a power history was two solid bars, and a storage monitor was a word list. This round gives the screen a drawing surface and rebuilds every page on it, adds item pictures to the panels that need them, splits one glass into two or four panes, adds the seed planter a base was missing, and fixes the three things that were simply broken - text that would not size itself, fonts that could not be told apart, and borders that did nothing. The saved screen config gains four page names and a layout number; older saves load as single-page screens, so it is additive and nothing needs a fresh world.
+
+**GitHub title:** `[17.36.0-dev] Screens that draw, screens that split, and planters that report`
+
+#### Added
+
+- **`Scripts/GridSystem/UI/ScreenCanvas.cs` (new) - the screen as a character grid.** A page draws into a canvas of columns and rows with `Text`, `TextClipped`, `Box`, `HeavyBox`, `Bar`, `Battery`, `Plot` and `Icon`, and the canvas clips everything that would run off the panel. This is what makes alignment a property of the layout instead of a hope: the old pages concatenated strings, so a name one letter longer than expected pushed the rest of the row out of true.
+- **`Scripts/GridSystem/GridScreenBlock.Icons.cs` (new partial) - item pictures on the glass.** A page asks the canvas for an icon in a cell; the block lays a small quad there, textured from that item's own sprite through a transparent unlit material with the sprite's atlas window applied. Positions come from the body text's own measurement - one row is the mesh height divided by the rows actually printed, one column is a row times the glyph aspect the page was laid out with - so a picture cannot drift away from the count it belongs to when the panel changes size or the font stretches.
+- **The power graph is a chart.** Generation and draw are plotted as two traces inside a frame, sampled every two seconds over three minutes, with the peak and "3m - now" on the axis line. The old version drew each value as a ramp character, which at any real value saturated to a solid bar - which is exactly what a player saw: no graph.
+- **The battery bank is batteries.** Every cell on the construct is drawn as a case with a cap and a fill that rises from the base, laid out as a grid, with `[cell] x N | 60 MWh` across the header - the cell drawn as a one-row battery so the line is readable before any of the numbers are - and `+n` when the panel cannot show them all. A panel too short for one row of cells falls back to a single bank bar and a count rather than a header over nothing.
+- **A storage monitor page** on `Inventory`: every item as a picture with its count under it, and the container's own name in the bottom-right corner, where a real monitor puts its label.
+- **A mining cargo page** (`MiningCargo`, appended): what the hold is carrying while digging, heaviest first, with pictures and masses - built to be paired under the mining gauge.
+- **Split panels.** A screen can now show two or four pages at once: `Two across`, `Two tall`, or `Quarters`, with a page chosen per pane in the screen editor. The panes are equal by construction and the joins are ruled. Each page draws into its own canvas sized to its pane and is blitted into the panel's canvas at that pane's corner, so a page written for a whole glass cannot spill into its neighbour, and no page had to learn what a pane is. Each pane carries its own title in its own corner, because there is one title mesh on the whole screen.
+- **`Scripts/Farming/CropPlanter.cs` (new) - the seed planter.** One metre of soil in a steel tray: RMB with a seed to plant, RMB when ripe to harvest, one fertilizer application per crop, water from a sprinkler within six metres or from water voxels beside it, and a crop that follows its own `CropDefinition` growth stages in scale and colour. No power, no ports, no belts - soil, water and time. It reports to the Farm page on the wall above it.
+- **`Scripts/Farming/IFarmBed.cs` (new) - one shape for every bed.** Soil plots, seed planters and sapling beds now answer the same questions (name, crop, growth, ready, thirsty, empty), and the Farm page scans for the interface instead of for one component type.
+- **The hold, three ways.** `Inventory Grid` is the dense wall of pictures and counts for a busy panel; `Manifest` is the heaviest items with their masses; `Fill Bars` stays one bar per linked container. They answer different questions on purpose.
+
+#### Changed
+
+- **Font styles are four fonts now.** The old options changed the TextMesh size by two points and the line spacing by a tenth, and the fit pass then normalised the size straight back - which is why all four looked identical. A screen font has three dials that survive being fitted: case, weight and proportion. The buttons are named for what they do, because a button called Mono that is not monospaced is a small lie: Default is mixed case and regular, Bold is mixed case and heavy with a little tracking, Wide is uppercase and stretched with open lines, Compact is uppercase, bold and closed up. The fit compensates for the stretch, so a wide font is still guaranteed to fit, and the editor preview shows the same case, weight and tracking.
+- **Borders are drawn on the glass.** `borderStyle` used to tint the case's glow strip and corner dots and nothing else, so from the front the button did nothing. It now draws four quads around the edge of the display in the player's own colour - Thin, Thick and Glow differ in weight and in how lit they are - and the editor preview draws the same border at the same weight.
+- **Text sizes itself to the page it is showing.** The fit pass capped each line at the panel's maximum line count divided into the body band, so a two-line page on a sixteen-line panel printed as a caption in a black box. The cap now counts the page's own lines: it still stops a two-word page filling the glass with giant letters, but a short page is allowed to be readable.
+- **The body is left-aligned from the left edge of the glass.** Centre alignment centres each line independently, so two rows of different lengths stop sharing a column grid - which is fatal for a page with pictures in it. Left alignment is also how a monitor reads.
+- **The editor preview is fixed.** It cached on the text alone, so the first pass - made before the layout had a size - set the type to its floor and nothing ever corrected it: that is the "tiny text in a huge black box" in the report. The cache key now includes the box size, the type has a readable floor, the page title, the player's colour, the font weight and the border all update live, and the team banner previews as cloth with dark lettering instead of as a blank panel.
+- **Source selection is by identity, not by address.** Two blocks can report the same grid address - every chest bolted to the same wall reported the wall's cell - so ticking one container ticked all of them, and the second click added a source instead of removing the first. `HasSource` and `ToggleSource` now take the instance id, `ResolveAllProviders` resolves by id first, and the config panel highlights a button by the block it points at rather than by matching the printed name.
+- **The provider pages lost their furniture.** The `--┘` rule between sources and the `=SECTION=` banner above each one are gone; a source is introduced by its own name and nothing else. `Power` draws its two figures against the larger of them. `Speed` is now a pilot's page: speed, vertical speed and three thrust bars, instead of a provider dump.
+- **The Farm page finds beds, not plots.** It now lists tilled soil, seed planters and sapling beds within 24 m, sorted by distance, with the crop clipped against the state so a long name can never push `READY` off the panel. An empty bed prints what kind of bed it is, so a row of bare planters reads as a row of planters rather than as a row of blanks. Biofarms are deliberately not in the list: a biofarm is an oxygen machine that consumes biomass, not a bed with a crop in it, and counting it would misreport what a base owns.
+- **`NeedsSource` in the catalogue** no longer claims the hold pages need a linked block, because they read the construct themselves. The Farm page's description names planters and saplings, because it now shows them.
+- **Split panels are edited where they are configured.** The screen editor gains a LAYOUT row, four pane pickers, and a focused pane: while a screen is split, clicking a page on the left puts it in the highlighted pane, because writing it into the single-page setting looked like the click had done nothing. A pane that is given a page which cannot draw itself says `NOT AVAILABLE IN A PANE` rather than printing a clipped dump.
+- **A split on a Small or Wide panel says so.** Those panels have three and four rows, so a pane is a title and a line. The editor says it in words instead of letting the wall look broken.
+
+#### Setup
+
+- The screen work is code only: no prefab, no asset, no wizard step, and an existing save loads with `splitMode` at zero, which is a single-page screen.
+- The planter is content, so it is written by `Tools -> Voxel Engine -> Voxel Engine Setup` - the existing biofuel and tree-farm step now also writes `Farming/Prefabs/SeedPlanter.prefab`, `Farming/Blocks/Block_SeedPlanter.asset`, `Farming/Recipes/Recipe_SeedPlanter.asset` and registers the block in the item persistence catalog. Running it again is safe: the prefab is regenerated from code, the block item keeps its id and description, and the recipe keeps its name and ingredients, with its output re-pointed at the block.
+
+#### Notes
+
+- **Splits are text, not windows.** Every pane is characters on the same glass, so a pane at half width has half the columns and no more rows than its share. That is why the editor warns on short panels, and why `Large` and `ExtraLarge` are where a split is worth reading.
+- **Biofarms are unchanged.** They were never a farm type and still are not one.
 
 ### [17.35.1-dev] Text That Stays On The Glass
 

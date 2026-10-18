@@ -188,6 +188,12 @@ namespace VoxelEngine.EditorTools
                 woodLog, treeSapling, biomass,
                 out var blockTreePlot);
 
+            // 17.36.0-dev - the one-metre seed planter. Soil needs a hoe and a field; a base
+            // needs a tray that fits between two walls and reports to the screen above it.
+            EnsureSeedPlanterPrefab(
+                $"{FarmPrefabsFolder}/SeedPlanter.prefab",
+                out var blockSeedPlanter);
+
             var autoTreeFarmPrefab = EnsureAutoTreeFarmPrefab(
                 $"{PrefabsFolder}/AutoTreeFarm.prefab",
                 woodLog, treeSapling, biomass, woodChips,
@@ -241,6 +247,15 @@ namespace VoxelEngine.EditorTools
                 new[] { (woodLog, 4), (clay, 2), (ironIngot, 2) },
                 registry);
 
+            _ = EnsureCraftRecipe(
+                $"{FarmRecipesFolder}/Recipe_SeedPlanter.asset",
+                "Seed Planter",
+                blockSeedPlanter, 1, 2.0f,
+                StationTier.CraftingBench,
+                unlockedByDefault: true,
+                new[] { (woodLog, 2), (clay, 2) },
+                registry);
+
             var recFertilizer = EnsureCraftRecipe(
                 $"{FarmRecipesFolder}/Recipe_OrganicFertilizer.asset",
                 "Organic Fertilizer x3",
@@ -283,12 +298,12 @@ namespace VoxelEngine.EditorTools
 
             RegisterInPersistenceCatalog(
                 treeSapling, biomass, woodChips, biofuelBriquette, fertilizer,
-                blockTreePlot, blockAutoTreeFarm, blockBiomassPress);
+                blockTreePlot, blockSeedPlanter, blockAutoTreeFarm, blockBiomassPress);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log("[BiofuelAndTreeFarmSetup] 17.25.0-dev Biofuel Chain, Biomass Press & Automatic Tree Farm setup complete.");
+            Debug.Log("[BiofuelAndTreeFarmSetup] 17.36.0-dev Biofuel chain, biomass press, automatic tree farm and seed planter setup complete.");
             if (interactive)
             {
                 EditorUtility.DisplayDialog(
@@ -297,6 +312,7 @@ namespace VoxelEngine.EditorTools
                     "• LiquidType.Biofuel (34.5 MJ/L combustible biofuel)\n" +
                     "• Tree Sapling, Wood Chips, Biofuel Briquette (65s fuel), Organic Fertilizer\n" +
                     "• Tree Farming Plot (3x1x3 arboricultural timber planter)\n" +
+                    "• Seed Planter (1x1x1 irrigated crop tray + BlockItem + recipe)\n" +
                     "• Automatic Tree Farm (4x3x4 gantry harvester + irrigation + 10m plot tending)\n" +
                     "• Biomass Press (2x2x2 screw-press & liquid Biofuel refinery)\n" +
                     "• ProcessingRecipes, Crafting Recipes, Research Node & Persistence Catalog",
@@ -352,6 +368,53 @@ namespace VoxelEngine.EditorTools
                     if (prev != null && prev.baseGrowTimeSeconds > 1f)
                         plot.baseGrowTimeSeconds = prev.baseGrowTimeSeconds;
                 }
+
+                var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                blockItem.placedPrefab = saved;
+                EditorUtility.SetDirty(blockItem);
+                return saved;
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// One metre of soil in a steel tray. Built here rather than as a hand-authored
+        /// prefab so the geometry, the materials and the block item can never drift apart,
+        /// and so a project that already has the prefab keeps its own tuning.
+        /// </summary>
+        private static GameObject EnsureSeedPlanterPrefab(string prefabPath, out BlockItem blockItem)
+        {
+            blockItem = EnsureBlockItem(
+                $"{FarmBlocksFolder}/Block_SeedPlanter.asset",
+                "block_seed_planter",
+                "Seed Planter",
+                "One-metre irrigated soil tray for a single crop. Right-click with a seed to plant, "
+                + "right-click again when it is ripe to harvest, and fertilize once with biomass or "
+                + "Organic Fertilizer for faster growth and a bonus unit. Water it with a Sprinkler "
+                + "or a water source within six metres. Reports its crop to any Farm screen on the "
+                + "same construct.",
+                new Color(0.32f, 0.66f, 0.30f),
+                new Vector3Int(1, 1, 1),
+                maxHp: 80,
+                category: "Farming");
+
+            var root = new GameObject("SeedPlanter");
+            try
+            {
+                var box = root.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.18f, 0f);
+                box.size = new Vector3(0.96f, 0.36f, 0.96f);
+
+                var pb = root.AddComponent<PlacedBlock>();
+                pb.Item = blockItem;
+                pb.Hp = 80;
+
+                var planter = root.AddComponent<CropPlanter>();
+                planter.RebuildVisuals();
+                AssignForestryMaterials(root);
 
                 var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 blockItem.placedPrefab = saved;

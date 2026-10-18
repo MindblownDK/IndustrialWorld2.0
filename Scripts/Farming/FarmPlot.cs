@@ -14,7 +14,7 @@ namespace VoxelEngine.Farming
     /// A tilled farm plot that can hold one crop.
     /// Place via the Hoe tool or a "Tilled Soil" block item.
     /// </summary>
-    public class FarmPlot : MonoBehaviour
+    public class FarmPlot : MonoBehaviour, IFarmBed
     {
         [Header("State")]
         public CropDefinition plantedCrop;
@@ -25,6 +25,16 @@ namespace VoxelEngine.Farming
         [Header("Settings")]
         public float irrigationCheckRadius = 6f;
         public float irrigationCheckInterval = 2f;
+
+        // ── IFarmBed (17.36.0-dev) ───────────────────────────────────────────
+        // Soil was the only bed a screen could see. It now reports through the
+        // same interface as the planters, so one page lists all of them.
+        public string BedName => "SOIL";
+        public string CropName => plantedCrop != null ? plantedCrop.cropName : string.Empty;
+        public float Growth01 => plantedCrop != null ? Mathf.Clamp01(growthProgress) : 0f;
+        public bool IsReady => plantedCrop != null && growthProgress >= 0.999f;
+        public bool NeedsWater => plantedCrop != null && plantedCrop.requiresWater && !isIrrigated;
+        public bool IsEmpty => plantedCrop == null;
 
         // Visual
         private GameObject _cropVisual;

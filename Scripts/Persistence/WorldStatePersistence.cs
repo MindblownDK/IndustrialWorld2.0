@@ -1398,6 +1398,13 @@ namespace VoxelEngine.Persistence
                 scfg.textColorB = screenBlock.textColor.b;
                 scfg.borderStyle = screenBlock.borderStyle;
                 scfg.fontStyle = screenBlock.fontStyle;
+                // 17.36.0-dev - the split layout and the page in each pane. Stored by name
+                // like dataMode, so reordering the enum can never re-point an old save.
+                scfg.splitMode = screenBlock.splitMode;
+                scfg.splitPageA = screenBlock.splitPageA.ToString();
+                scfg.splitPageB = screenBlock.splitPageB.ToString();
+                scfg.splitPageC = screenBlock.splitPageC.ToString();
+                scfg.splitPageD = screenBlock.splitPageD.ToString();
                 var xs = new System.Collections.Generic.List<string>();
                 var ys = new System.Collections.Generic.List<string>();
                 var zs = new System.Collections.Generic.List<string>();
@@ -4817,6 +4824,13 @@ namespace VoxelEngine.Persistence
                 screenBlock.textColor = new Color(sc.textColorR, sc.textColorG, sc.textColorB);
                 screenBlock.borderStyle = sc.borderStyle;
                 screenBlock.fontStyle = sc.fontStyle;
+                // 17.36.0-dev. Older saves carry no split fields: splitMode stays 0 and the
+                // pane names stay at their defaults, which is exactly a single-page screen.
+                screenBlock.splitMode = Mathf.Clamp(sc.splitMode, 0, 3);
+                screenBlock.splitPageA = ParseScreenPage(sc.splitPageA, screenBlock.splitPageA);
+                screenBlock.splitPageB = ParseScreenPage(sc.splitPageB, screenBlock.splitPageB);
+                screenBlock.splitPageC = ParseScreenPage(sc.splitPageC, screenBlock.splitPageC);
+                screenBlock.splitPageD = ParseScreenPage(sc.splitPageD, screenBlock.splitPageD);
                 if (!string.IsNullOrEmpty(sc.sourcePositionsX))
                 {
                     var xs = sc.sourcePositionsX.Split(',');
@@ -6323,6 +6337,25 @@ namespace VoxelEngine.Persistence
             public System.Collections.Generic.List<string> outputFilterItemIds = new System.Collections.Generic.List<string>();
             public System.Collections.Generic.List<SavedTransportItem> bufferItems = new System.Collections.Generic.List<SavedTransportItem>();
         }
+        /// <summary>
+        /// A saved page name, or the block's current page when the name is missing - which
+        /// is every save written before 17.36.0-dev - or no longer exists in the enum.
+        /// </summary>
+        private static VoxelEngine.GridSystem.ScreenDataMode ParseScreenPage(
+            string saved, VoxelEngine.GridSystem.ScreenDataMode fallback)
+        {
+            if (string.IsNullOrEmpty(saved)) return fallback;
+            try
+            {
+                return (VoxelEngine.GridSystem.ScreenDataMode)System.Enum.Parse(
+                    typeof(VoxelEngine.GridSystem.ScreenDataMode), saved);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
         [Serializable] private class SavedScreenConfig
         {
             public string dataMode;
@@ -6334,6 +6367,12 @@ namespace VoxelEngine.Persistence
             public float textColorB;
             public int borderStyle;
             public int fontStyle;
+            // 17.36.0-dev split layout. Legacy saves omit them -> single page, default panes.
+            public int splitMode;
+            public string splitPageA;
+            public string splitPageB;
+            public string splitPageC;
+            public string splitPageD;
             // Source positions stored as comma-separated strings for JSON compatibility
             public string sourcePositionsX;
             public string sourcePositionsY;

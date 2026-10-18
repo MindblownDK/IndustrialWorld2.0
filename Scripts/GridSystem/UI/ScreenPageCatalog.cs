@@ -133,10 +133,10 @@ namespace VoxelEngine.GridSystem
                 ScreenPageCategory.Cargo,
                 "Every item on the construct, heaviest first, with its mass and the total fill.",
                 ScreenSize.Medium, "manifest cargo storage contents items mass heavy inventory list"),
-            new(ScreenDataMode.Inventory, "Inventory",
+            new(ScreenDataMode.Inventory, "Storage Monitor",
                 ScreenPageCategory.Cargo,
-                "The linked container's slots as a grid, so a wall can show what is in the box.",
-                ScreenSize.Medium, "inventory slots container chest box grid items"),
+                "A monitor for one container: every item as a picture with its count, and the container's name in the corner.",
+                ScreenSize.Medium, "storage monitor inventory chest container box items pictures counts"),
             new(ScreenDataMode.FillBars, "Fill Bars",
                 ScreenPageCategory.Cargo,
                 "One percentage bar per linked container. Built for the long wide panel.",
@@ -145,19 +145,23 @@ namespace VoxelEngine.GridSystem
             // ── Production ────────────────────────────────────────────────────────
             new(ScreenDataMode.InventoryGrid, "Inventory Grid",
                 ScreenPageCategory.Cargo,
-                "The whole hold as a grid of names and counts - what is in there, at a glance.",
+                "The whole hold as a dense wall of item pictures and counts - what is aboard, at a glance.",
                 ScreenSize.Medium, "inventory grid items counts list hold contents stock"),
 
             new(ScreenDataMode.Farm, "Farm",
                 ScreenPageCategory.Production,
-                "Every farm plot near this screen: what is planted, how far along, and whether it has water.",
-                ScreenSize.Medium, "farm crops plots growth water harvest agriculture"),
+                "Every bed near this screen - tilled soil, seed planters and sapling beds: what is planted, how far along, and whether it has water.",
+                ScreenSize.Medium, "farm crops plots planters saplings growth water harvest agriculture seeds"),
 
             // ── Flight / work ─────────────────────────────────────────────────────
             new(ScreenDataMode.Mining, "Mining",
                 ScreenPageCategory.Flight,
-                "Lift against weight, how full the hold is, and the heaviest things in it - the mining overlay.",
-                ScreenSize.Medium, "mining lift thrust cargo hold ore drill excavation"),
+                "The mining gauge: lift thrust against the ship's own weight, and how full the hold is.",
+                ScreenSize.Small, "mining lift thrust cargo hold ore drill excavation gauge"),
+            new(ScreenDataMode.MiningCargo, "Mining Cargo",
+                ScreenPageCategory.Flight,
+                "What the hold is carrying while mining - heaviest first, with pictures and masses. Pair it under the gauge.",
+                ScreenSize.Medium, "mining cargo hold ore weight heaviest load freight"),
 
             // ── Media and text ────────────────────────────────────────────────────
             new(ScreenDataMode.PlanetMap, "Planet Map",
@@ -268,8 +272,10 @@ namespace VoxelEngine.GridSystem
                 or ScreenDataMode.Farm or ScreenDataMode.Custom or ScreenDataMode.Camera
                 or ScreenDataMode.TeamBanner or ScreenDataMode.Speed => false,
             // These are a view ON a linked container.
-            ScreenDataMode.Inventory or ScreenDataMode.FillBars => true,
-            ScreenDataMode.InventoryGrid or ScreenDataMode.PlanetMap => false,
+            ScreenDataMode.FillBars => true,
+            // These read the construct and the world by themselves.
+            ScreenDataMode.Inventory or ScreenDataMode.InventoryGrid
+                or ScreenDataMode.PlanetMap or ScreenDataMode.MiningCargo => false,
             _ => true,
         };
 

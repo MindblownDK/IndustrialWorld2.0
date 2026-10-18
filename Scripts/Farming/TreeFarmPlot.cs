@@ -14,7 +14,7 @@ using VoxelEngine.Items;
 namespace VoxelEngine.Farming
 {
     [RequireComponent(typeof(PlacedBlock))]
-    public class TreeFarmPlot : MonoBehaviour, IMachineProcessState
+    public class TreeFarmPlot : MonoBehaviour, IMachineProcessState, IFarmBed
     {
         [Header("Tree Growth State")]
         public bool isPlanted = true;
@@ -47,6 +47,25 @@ namespace VoxelEngine.Farming
 
         public bool IsMature => isPlanted && growthProgress >= 1f;
         public bool HasTree => isPlanted;
+
+        // ── IFarmBed (17.36.0-dev) ───────────────────────────────────────────
+        // A sapling bed is a planter too, and it was missing from the farm page
+        // because the page only asked for soil. Now every bed answers the same
+        // four questions and the panel prints whatever it is given.
+        public string BedName => "TREE BED";
+        public string CropName
+        {
+            get
+            {
+                if (!isPlanted) return string.Empty;
+                if (saplingItem != null && !string.IsNullOrEmpty(saplingItem.displayName)) return saplingItem.displayName;
+                return "TIMBER";
+            }
+        }
+        public float Growth01 => isPlanted ? Mathf.Clamp01(growthProgress) : 0f;
+        public bool IsReady => IsMature;
+        public bool NeedsWater => isPlanted && !isIrrigated;
+        public bool IsEmpty => !isPlanted;
         public bool IsIrrigated => isIrrigated;
         public string GrowthStageLabel => StageLabel;
 

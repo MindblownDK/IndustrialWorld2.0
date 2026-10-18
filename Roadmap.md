@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.35.1-dev`
-**Roadmap Version:** `17.35.1-dev`
+**Current Version:** `17.36.0-dev`
+**Roadmap Version:** `17.36.0-dev`
 **Date:** 2026-10-18
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,13 @@
 
 ## 0. Recently Done
 
+### 17.36.0-dev - Pages Drawn, Panes Split, Beds Planted
+- `ScreenCanvas` (new) is the character grid every page draws on - boxes, bars, batteries, line plots and icon cells with clipping, so alignment is layout instead of string luck; `GridScreenBlock.Icons.cs` (new partial) turns icon requests into sprite quads placed from the body's measured line height, so a picture always sits over its own count
+- Power Graph is a real two-trace chart over three minutes; Batteries draws a case per cell; Storage Monitor (`Inventory`) and Inventory Grid show item pictures with counts; Mining Cargo (new page) pairs under the Mining gauge; Manifest, Environment and Speed are single-column readings with no furniture
+- A screen splits into two across, two tall or four equal quarters with a page per pane; each pane draws into a canvas sized to its pane and is blitted at that pane's corner, so no page had to learn what a pane is. The editor gains a LAYOUT row, pane pickers and a focused pane
+- `CropPlanter` (new) is a one-metre seed tray with its own growth, water, fertilizer and harvest, written into the world by the existing farming setup step; `IFarmBed` (new) lets the Farm page list tilled soil, seed planters and sapling beds together, sorted by distance, with biofarms deliberately not counted
+- Font styles are case + weight + proportion and the fit compensates for the stretch; borders draw four quads on the glass; the fit pass caps by the page's own line count; source selection keys on instance id, so one chest no longer ticks every chest
+
 ### 17.35.1-dev - Text That Stays On The Glass
 - `GridScreenBlock.EnsureGlassProudOfFrame` moves the glass, glow strip and corner dots out of the solid `Generated_Frame` cube they were buried inside (glass 4 mm, glow 8 mm, dots 11 mm proud), and the display root no longer hangs off the scaled surface - together these are why a screen used to be a closed dark box with text spilling out beside it; text meshes are now sized from their own measured bounds against a measured glass, split into title, body and status bands
 - `GridScreenConfigUI` is a full-window three-column editor: page list on the left, a live preview at the panel's own aspect ratio in the middle showing the real text, colour, title and border, sources and appearance on the right
@@ -45,14 +52,9 @@
 - Symmetric around the climate field's own midpoint, so a body's average rainfall moves about +0.2%; shared `WeatherFronts.PercentChange` is the one rounding. No setup step, no prefab, no save or schema change
 
 ### 17.33.0-dev - The Ground Has A Vote
-- `WeatherTerrain` (new) multiplies a band's coverage by the terrain under it: three `PlanetField.SurfaceRadius` samples along the drift direction give the slope the air actually meets, so a rising windward flank lands up to 1.55x and the lee side behind a ridge drops to 0.45x; elevation adds the last 20 percent and flat ground is neutral by construction (calibrated mean 1.00 within a percent on every body)
-- `WeatherManager.CoverageForDirection` applies the multiplier to COVERAGE, never to intensity, so a clear spell stays clear over a peak and the state machine is untouched; the map's painted bands inherit the rain shadow for free, the `WEATHER` section gained a `TERRAIN` line through the new `TerrainBiasAt`
-- Memoised on a 150 m bucket keyed by (seed, direction) and dropped when the body changes, so a place pays for three height samples once. No setup step, no prefab, no save or schema change
-
-### 17.32.0-dev - Rain Washes Where It Falls
-- The smog washout is sampled per CELL (`PollutionService.Simulate` asks `WeatherManager.PrecipitationAt` at each body-local cell centre): a cell under a band is scrubbed at the rate the whole body used to receive, a cell in a gap between bands keeps its smog, and the rain-driven half of runoff spreading follows the same sample
-- `PollutionService.AirWashPerSecondAt` computes the simulation's own number for readouts, and `IndustrialPressureReadout.WashLineAt` prints it once for both the machine card's `RAIN SCRUB` row and the map's `INDUSTRIAL PRESSURE` section; `WeatherFronts.CoverageWord` is the only band-word list now
-- Coefficients unchanged (`WashRatePerIntensity` 0.004 is the one lever if live play shows smog lingering too long). No setup step, no prefab, no save or schema change
+- `WeatherTerrain` (new) samples the terrain along the direction fronts actually drift and turns the upwind/downwind slope into a coverage multiplier: rising ground takes 45 percent more weather, the lee side gets a rain shadow down to 55 percent. The multiplier is memoised on a 150 m bucket keyed by seed and direction, and the samples come from the same analytic field the GPU mirror follows, so a guest computes what a host computes
+- The curve was calibrated offline against a stand-in elevation stack at the real sampling step: mean 1.00 on mountainous, hilly and flat bodies, 5th/95th percentiles 0.77x/1.28x on a mountainous world. The first iteration centred the elevation term on the ocean floor and dragged every coastal base to 0.86x, which is why the reference is the land plateau
+- The weather map draws which side of a ridge a place is on, and no save field, prefab or weather state machine was touched
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,7 +84,9 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
-- **Cockpit interior and the two cockpit shells (17.35.0-dev):** the screen round rebuilt what a panel says, not what the pilot sits in. Next round (`17.36.0-dev`) replaces the current cockpit with a seated view that has three screens across the top and panels low enough to glance at: style 1 is a wide angular land-crawler nose with wraparound glazing, style 2 a boxy cab with yellow accents, a satellite dome and a roof grille. Two shells, one interior layout, chosen per cockpit block.
+- **Per-pane sources (17.36.0-dev):** a split screen links one source list, and its panes share it. A pane that could be pointed at its own container is a genuinely different feature - it changes the saved shape from a list to a list per pane - and no page currently needs it: the canvas pages read the construct themselves.
+- **Planter automation (17.36.0-dev):** `CropPlanter` is manual on purpose - plant, harvest, fertilize by hand. A harvester that empties a row of trays, and a conveyor port on the tray itself, are the next step for a farm that runs while the player is away.
+- **Cockpit interior and the two cockpit shells (17.35.0-dev):** the screen round rebuilt what a panel says, not what the pilot sits in. Next round (`17.37.0-dev`) replaces the current cockpit with a seated view that has three screens across the top and panels low enough to glance at: style 1 is a wide angular land-crawler nose with wraparound glazing, style 2 a boxy cab with yellow accents, a satellite dome and a roof grille. Two shells, one interior layout, chosen per cockpit block.
 - **Threat tiers, waves, elites and the siege brute acceptance (17.18.0-dev):** confirm in Unity that a dirty district draws an announced organized wave (elite leader, flankers, logistics targets) once spawner heat and residual load qualify, that the siege brute walks past the player to dismantle machines with its double-damage bite, that elite/brute health bars and loot scale, that stopping industry bleeds the response back to ordinary scouts, and that guest replicas show the tier visuals and scaled health. The 17.30.0-dev district pressure card reports the same two readings this row has to be judged against (open an emitting machine while a wave is due), so the rung on the card and the answer that arrives can be compared directly. Tier thresholds and cooldowns await live-play tuning.
 - **Tree persistence, open-container crafting and ghoul-curve acceptance (17.17.2-dev):** confirm in Unity that felled or otherwise destroyed trees stay absent across save-load and chunk streaming, that recipes count and consume chest/drawer/bag/pen/pad contents only while their panel is open, and that a running furnace no longer accelerates spawns or recruits packs within minutes while a heavily polluted area still escalates toward the 2.15x ceiling.
 - **RecipeRegistry recovery and research audit (17.16.0-dev):** append-only Setup results and the follow-up Recipe Graph Validator report remain unverified; confirm skipped invalid/ambiguous assets and recipes gated without a ResearchNode reference, with recipe/research tuning unchanged.

@@ -1016,6 +1016,56 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Seed planter: the one-metre tray. Harvest, plant, fertilize, or inspect -
+                // the same four verbs as the sapling bed, in the order a player tries them.
+                var seedPlanter = hit.collider.GetComponentInParent<VoxelEngine.Farming.CropPlanter>();
+                if (seedPlanter != null)
+                {
+                    if (seedPlanter.IsReady)
+                    {
+                        seedPlanter.TryHarvest(inventory);
+                        return;
+                    }
+
+                    var heldSeed = inventory.ActiveStack;
+                    if (!heldSeed.IsEmpty && heldSeed.item is VoxelEngine.Farming.SeedItem heldSeedItem
+                        && heldSeedItem.crop != null && seedPlanter.IsEmpty)
+                    {
+                        if (seedPlanter.TryPlant(heldSeedItem.crop))
+                        {
+                            inventory.container.Remove(heldSeedItem, 1);
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Planted " + heldSeedItem.crop.cropName,
+                                seedPlanter.IsIrrigated ? "Irrigated" : "Dry - place a Sprinkler nearby",
+                                heldSeedItem.icon,
+                                new Color(0.40f, 0.75f, 0.30f));
+                        }
+                        return;
+                    }
+
+                    if (!heldSeed.IsEmpty && heldSeed.item != null
+                        && seedPlanter.TryApplyFertilizer(heldSeed.item))
+                    {
+                        inventory.container.Remove(heldSeed.item, 1);
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Fertilized Planter",
+                            "Faster growth, one extra unit at harvest",
+                            heldSeed.item.icon,
+                            new Color(0.45f, 0.85f, 0.30f));
+                        return;
+                    }
+
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        "Seed Planter",
+                        seedPlanter.IsEmpty
+                            ? "Right-click with a seed to plant"
+                            : seedPlanter.CropName + " - " + seedPlanter.StateLabel
+                              + (seedPlanter.IsFertilized ? " - Fertilized" : ""),
+                        null,
+                        new Color(0.38f, 0.72f, 0.36f));
+                    return;
+                }
+
                 // Tree farm plot (3x3 arboricultural timber planter): harvest, plant sapling, fertilize, or inspect.
                 var treeFarmPlot = hit.collider.GetComponentInParent<VoxelEngine.Farming.TreeFarmPlot>();
                 if (treeFarmPlot != null)

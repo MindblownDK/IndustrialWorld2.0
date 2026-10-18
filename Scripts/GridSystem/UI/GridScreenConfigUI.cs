@@ -34,14 +34,31 @@ namespace VoxelEngine.GridSystem.UI
         private Label _previewTitle, _previewStatus;
         private Label _pageInfoTitle, _pageInfoBlurb, _pageInfoHint;
         private string _lastPreviewText;
+        private float _lastPreviewWidth = -1f, _lastPreviewHeight = -1f;
         private bool _open;
         private readonly List<Button> _sourceBtns = new();
+        // 17.36.0-dev: the address AND the instance id of the block each button links.
+        // Addresses collide (a chest bolted to a wall reports the wall's cell), which is
+        // why ticking one container used to tick every container on the construct.
+        private readonly List<Vector3Int> _sourcePositions = new();
+        private readonly List<EntityId> _sourceIds = new();
         private readonly List<Button> _modeBtns = new();
         // 17.35.0-dev: the page each mode button selects, so the highlight never has to
         // guess a mode from a button's text again (the old "Mixed" special case).
         private readonly List<ScreenDataMode> _modeBtnModes = new();
         private readonly List<Button> _borderBtns = new();
         private readonly List<Button> _fontBtns = new();
+
+        // 17.36.0-dev: layout and per-pane pages. A split panel is edited here, not on the
+        // wall: four dropdowns over one glass would be four keypresses in Build mode.
+        private readonly List<Button> _layoutBtns = new();
+        private readonly List<DropdownField> _paneFields = new();
+        private readonly List<ScreenDataMode> _drawablePages = new();
+        private readonly List<Button> _paneLabels = new();
+        private VisualElement _paneSection;
+        // Which pane the page list writes into while the screen is split. Set by clicking
+        // a pane's own label; 1 for a single page, where there is nothing to choose.
+        private int _activePane;
 
         // ── Auto-create if missing from scene ─────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -132,8 +149,11 @@ namespace VoxelEngine.GridSystem.UI
             _root.style.alignItems = Align.Center;
             _root.style.justifyContent = Justify.Center;
             UIState.PushBlock();
-            _sourceBtns.Clear(); _modeBtns.Clear(); _modeBtnModes.Clear();
+            _sourceBtns.Clear(); _sourcePositions.Clear(); _sourceIds.Clear();
+            _modeBtns.Clear(); _modeBtnModes.Clear();
             _borderBtns.Clear(); _fontBtns.Clear();
+            _layoutBtns.Clear(); _paneFields.Clear(); _paneLabels.Clear(); _drawablePages.Clear();
+            _activePane = 0;
             Build();
         }
 
@@ -313,7 +333,9 @@ namespace VoxelEngine.GridSystem.UI
             _previewText = new Label(string.Empty);
             _previewText.style.flexGrow = 1;
             _previewText.style.whiteSpace = WhiteSpace.Normal;
-            _previewText.style.unityTextAlign = TextAnchor.MiddleCenter;
+            // Left-aligned, exactly like the glass: a page is a character grid, and the
+            // preview has to be honest about where each line starts.
+            _previewText.style.unityTextAlign = TextAnchor.MiddleLeft;
             _previewText.style.marginTop = 12; _previewText.style.marginBottom = 12;
             _previewBox.Add(_previewText);
 
@@ -357,7 +379,65 @@ namespace VoxelEngine.GridSystem.UI
             _pageInfoHint.style.color = new Color(0.96f, 0.74f, 0.36f);
             pageInfo.Add(_pageInfoHint);
 
-            // ── Right: sources, appearance, custom text ────────────────────────
+            // ── Right: layout, sources, appearance, custom text ───────────────
+            right.Add(SectionHeader("LAYOUT", 12));
+
+            string[] layoutNames = { "Single", "Two across", "Two tall", "Quarters" };
+            var layoutRow = new VisualElement();
+            layoutRow.style.flexDirection = FlexDirection.Row;
+            layoutRow.style.flexWrap = Wrap.Wrap;
+            layoutRow.style.marginBottom = 4;
+            right.Add(layoutRow);
+
+            for (int li = 0; li < layoutNames.Length; li++)
+            {
+                int chosenLayout = li;
+                var layoutBtn = new Button(() =>
+                {
+                    _target.splitMode = chosenLayout;
+                    RefreshAppearanceHighlights();
+                    RefreshAll();
+                    RefreshPageInfo();
+                })
+                {
+                    text = layoutNames[li],
+                    tooltip = chosenLayout == 0
+                        ? "One page on the whole glass."
+                        : chosenLayout == 1
+                            ? "Two pages side by side, split down the middle."
+                            : chosenLayout == 2
+                                ? "Two pages stacked, split across the middle."
+                                : "Four pages in equal quarters."
+                };
+                layoutBtn.style.minHeight = 24;
+                layoutBtn.style.marginRight = 4;
+                layoutBtn.style.marginBottom = 4;
+                layoutBtn.style.fontSize = 10;
+                layoutBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+                layoutBtn.style.paddingLeft = 10; layoutBtn.style.paddingRight = 10;
+                layoutBtn.style.color = new Color(0.92f, 0.94f, 0.97f);
+                UITheme.Radius(layoutBtn, 4);
+                layoutBtn.style.borderLeftWidth = layoutBtn.style.borderRightWidth =
+                layoutBtn.style.borderTopWidth = layoutBtn.style.borderBottomWidth = 0;
+                layoutRow.Add(layoutBtn);
+                _layoutBtns.Add(layoutBtn);
+            }
+
+            // Pane pickers, built once and shown only while a layout is not Single.
+            _paneSection = new VisualElement { name = "ScreenPanePickers" };
+            right.Add(_paneSection);
+
+            BuildDrawablePageList();
+            for (int pi = 0; pi < 4; pi++) BuildPanePicker(pi);
+
+            var paneHint = new Label("Click a page on the left to put it in the highlighted pane.");
+            paneHint.name = "ScreenPaneHint";
+            paneHint.style.fontSize = 9;
+            paneHint.style.whiteSpace = WhiteSpace.Normal;
+            paneHint.style.color = new Color(0.52f, 0.57f, 0.65f);
+            paneHint.style.marginBottom = 6;
+            _paneSection.Add(paneHint);
+
             right.Add(SectionHeader("DATA SOURCES"));
 
             var sources = _target.GetAvailableSources();
@@ -381,7 +461,7 @@ namespace VoxelEngine.GridSystem.UI
                 {
                     var idx = pos;
                     EntityId instId = (provider as GridBlock)?.GetEntityId() ?? EntityId.None;
-                    bool isOn = _target.HasSource(pos);
+                    bool isOn = _target.HasSource(pos, instId);
                     bool isCameraSource = provider is IGridCameraFeedProvider;
 
                     var btn = MakeToggleButton(isOn, provider.SourceName, provider.DataCategory, () =>
@@ -401,6 +481,8 @@ namespace VoxelEngine.GridSystem.UI
                     });
                     srcScroll.Add(btn);
                     _sourceBtns.Add(btn);
+                    _sourcePositions.Add(idx);
+                    _sourceIds.Add(instId);
                 }
 
                 var clearBtn = new Button(() =>
@@ -491,7 +573,7 @@ namespace VoxelEngine.GridSystem.UI
             fontRow.style.flexWrap = Wrap.Wrap;
             right.Add(fontRow);
 
-            string[] fontNames = { "Default", "Mono", "LCD", "Terminal" };
+            string[] fontNames = { "Default", "Bold", "Wide", "Compact" };
             for (int fi = 0; fi < fontNames.Length; fi++)
             {
                 int fv = fi;
@@ -526,7 +608,15 @@ namespace VoxelEngine.GridSystem.UI
                 _pageInfoBlurb.text = info.Blurb;
 
                 string hint = string.Empty;
-                if (!ScreenPageCatalog.FitsOn(_target.screenSize, info.MinSize))
+                // A split halves the rows, and a Small panel has three of them: the pane
+                // would be a title and nothing else. Say it here rather than on the wall.
+                if (_target.splitMode > 0
+                    && (_target.screenSize == ScreenSize.Small || _target.screenSize == ScreenSize.Wide))
+                {
+                    hint = "This panel has too few rows to split - a pane would be one line. "
+                         + "Splits are worth reading on a Large or ExtraLarge screen.";
+                }
+                else if (!ScreenPageCatalog.FitsOn(_target.screenSize, info.MinSize))
                 {
                     hint = "Built for a " + ScreenPageCatalog.SizeLabel(info.MinSize).ToLowerInvariant()
                          + " panel; on this " + ScreenPageCatalog.SizeLabel(_target.screenSize).ToLowerInvariant()
@@ -545,6 +635,14 @@ namespace VoxelEngine.GridSystem.UI
             void Select(ScreenDataMode mode)
             {
                 _target.dataMode = mode;
+                // 17.36.0-dev: while the glass is split, choosing a page means choosing it
+                // FOR A PANE. Writing it into dataMode alone looked like the click did
+                // nothing, because a split panel never reads dataMode.
+                if (_target.splitMode > 0 && GridScreenBlock.DrawsItsOwnPage(mode))
+                {
+                    _target.SetPanePage(Mathf.Clamp(_activePane, 0, 3), mode);
+                    RefreshPanePickers();
+                }
                 // Team Banner (14.37.0): the screen mirrors the chooser's OWN team banner.
                 // The banner itself is edited in PAUSE > TEAMS - this is a display.
                 if (mode == ScreenDataMode.TeamBanner)
@@ -672,39 +770,71 @@ namespace VoxelEngine.GridSystem.UI
             if (_previewBox == null || _previewText == null || _target == null) return;
 
             string body = _target.FormattedDisplay;
-            if (!force && body == _lastPreviewText) return;
-            _lastPreviewText = body;
+            string styled = GridScreenBlock.StyleText(body, _target.fontStyle);
+
+            // 17.36.0-dev: the box size is part of the cache key. The old check only looked
+            // at the text, so the first refresh - made before the layout had a size - set the
+            // type to its 7-point floor and nothing ever corrected it. That is why every
+            // preview looked like a caption on a billboard.
+            Rect box = _previewBox.contentRect;
+            bool sizeChanged = !Mathf.Approximately(box.width, _lastPreviewWidth)
+                            || !Mathf.Approximately(box.height, _lastPreviewHeight);
+            if (!force && !sizeChanged && styled == _lastPreviewText) return;
+
+            _lastPreviewText = styled;
+            _lastPreviewWidth = box.width;
+            _lastPreviewHeight = box.height;
 
             var info = ScreenPageCatalog.For(_target.dataMode);
-            _previewTitle.text = info.Label.ToUpperInvariant();
+            // A split names its layout on the title bar; each pane names itself inside it.
+            _previewTitle.text = _target.splitMode > 0
+                ? "SPLIT x" + (_target.splitMode == 3 ? 4 : 2)
+                : info.Label.ToUpperInvariant();
             _previewTitle.style.color = new StyleColor(new Color(
                 _target.textColor.r * 0.7f, _target.textColor.g * 0.7f, _target.textColor.b * 0.7f, 0.85f));
 
-            _previewText.text = body;
-            _previewText.style.color = new StyleColor(_target.textColor);
+            // Team banner: the preview shows the cloth, because the cloth is the page.
+            bool banner = _target.dataMode == ScreenDataMode.TeamBanner;
+            _previewBox.style.backgroundColor = new StyleColor(banner
+                ? new Color(0.62f, 0.52f, 0.32f, 1f)
+                : new Color(0.015f, 0.018f, 0.028f));
+
+            _previewText.text = styled;
+            _previewText.style.color = new StyleColor(banner ? new Color(0.12f, 0.09f, 0.06f) : _target.textColor);
+            _previewText.style.unityFontStyleAndWeight =
+                (_target.fontStyle == 1 || _target.fontStyle == 3) ? FontStyle.Bold : FontStyle.Normal;
+            // The wide styles track out; the condensed one closes up. It is the closest the
+            // editor can get to the wall's own stretch, and it makes the four options read
+            // as four options instead of four identical button presses.
+            _previewText.style.letterSpacing = _target.fontStyle == 2 ? 1.6f
+                : _target.fontStyle == 1 ? 0.5f
+                : _target.fontStyle == 3 ? -0.4f : 0f;
 
             _previewStatus.text = _target.IsPowered ? "LIVE" : "NO PWR";
             _previewStatus.style.color = new StyleColor(new Color(
                 _target.textColor.r * 0.55f, _target.textColor.g * 0.55f, _target.textColor.b * 0.55f));
 
-            // The same rule the block uses: the longest line and the line count decide the
-            // type size, so what fits here fits on the wall.
+            // Type size by the same rule the wall uses: the longest line and the line count
+            // decide, so what fits in the editor is what fits on the glass.
             int longest = 1, lineLength = 0, lines = 1;
-            for (int i = 0; i < body.Length; i++)
+            for (int i = 0; i < styled.Length; i++)
             {
-                if (body[i] == '\n') { lines++; lineLength = 0; continue; }
+                if (styled[i] == '\n') { lines++; lineLength = 0; continue; }
                 lineLength++;
                 if (lineLength > longest) longest = lineLength;
             }
 
-            float boxW = Mathf.Max(60f, _previewBox.contentRect.width - 24f);
-            float boxH = Mathf.Max(40f, _previewBox.contentRect.height - 20f);
+            float boxW = Mathf.Max(60f, box.width - 24f);
+            float boxH = Mathf.Max(40f, box.height - 20f);
             float byWidth = boxW / (longest * 0.62f);
             float byHeight = boxH / (lines * 1.30f);
-            _previewText.style.fontSize = Mathf.Clamp(Mathf.Min(byWidth, byHeight), 7f, 30f);
+            // No floor below the point a player can read: a preview that has to shrink past
+            // 9 points is telling you the page is too long for the panel, and the hint below
+            // says so in words.
+            _previewText.style.fontSize = Mathf.Clamp(Mathf.Min(byWidth, byHeight), 9f, 34f);
 
             // Border: the block's own borderStyle, drawn in the player's own colour.
-            float weight = _target.borderStyle <= 0 ? 1f : _target.borderStyle == 1 ? 2f : 3f;
+            float weight = _target.borderStyle <= 0 ? 1f : _target.borderStyle == 1 ? 2f : _target.borderStyle == 2 ? 3f : 4f;
             var accent = _target.borderStyle <= 0
                 ? new Color(0.22f, 0.25f, 0.30f, 0.85f)
                 : new Color(_target.textColor.r, _target.textColor.g, _target.textColor.b,
@@ -758,23 +888,18 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (_target == null) return;
 
-            // Rebuild source buttons with current state
-            foreach (var btn in _sourceBtns)
+            // Rebuild source buttons with current state, by identity. Matching on the
+            // printed NAME was the second half of the same bug: six cargo containers with
+            // the same name all read as selected when one of them was.
+            for (int i = 0; i < _sourceBtns.Count && i < _sourcePositions.Count; i++)
             {
+                var btn = _sourceBtns[i];
                 var check = btn.Q("ToggleCheck") as Label;
                 var nameL = btn.Q("SourceName") as Label;
                 if (check == null || nameL == null) continue;
 
-                bool nowOn = false;
-                var sources = _target.GetAvailableSources();
-                foreach (var (pos, p) in sources)
-                {
-                    if (nameL.text == p.SourceName)
-                    {
-                        nowOn = _target.HasSource(pos);
-                        break;
-                    }
-                }
+                EntityId id = i < _sourceIds.Count ? _sourceIds[i] : EntityId.None;
+                bool nowOn = _target.HasSource(_sourcePositions[i], id);
 
                 check.text = nowOn ? "\u2611" : "\u2610";
                 check.style.color = nowOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
@@ -792,22 +917,131 @@ namespace VoxelEngine.GridSystem.UI
             RefreshHighlights();
             RefreshModeHighlights();
             RefreshAppearanceHighlights();
+            RefreshPanePickers();
         }
 
         private void RefreshModeHighlights()
         {
             for (int i = 0; i < _modeBtns.Count; i++)
             {
-                bool active = i < _modeBtnModes.Count && _modeBtnModes[i] == _target.dataMode;
+                // Split: the list highlights the focused pane's page, because that is the
+                // page a click would replace.
+                ScreenDataMode shown = _target.splitMode > 0
+                    ? _target.PanePage(Mathf.Clamp(_activePane, 0, 3))
+                    : _target.dataMode;
+                bool active = i < _modeBtnModes.Count && _modeBtnModes[i] == shown;
                 _modeBtns[i].style.backgroundColor = new StyleColor(
                     active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
             }
             RefreshPreview(true);
         }
 
+        /// <summary>
+        /// The pages that draw themselves on a pane. A pane shares the glass with its
+        /// neighbours, so a provider page that dumps another block's raw text has no room
+        /// and no columns to lay out in; the catalogue's canvas pages do.
+        /// </summary>
+        private void BuildDrawablePageList()
+        {
+            _drawablePages.Clear();
+            for (int i = 0; i < ScreenPageCatalog.All.Length; i++)
+            {
+                var page = ScreenPageCatalog.All[i];
+                if (GridScreenBlock.DrawsItsOwnPage(page.Mode)) _drawablePages.Add(page.Mode);
+            }
+        }
+
+        private void BuildPanePicker(int index)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 2;
+
+            // The label is the pane's focus button: with four panes on one glass, "which
+            // pane is the page list talking to" has to be answerable at a glance.
+            var label = new Button(() =>
+            {
+                _activePane = index;
+                RefreshPanePickers();
+                RefreshModeHighlights();
+            })
+            {
+                text = "PANE " + (index + 1),
+                tooltip = "Click to send the page list to this pane."
+            };
+            label.style.width = 58;
+            label.style.paddingLeft = 0; label.style.paddingRight = 0;
+            label.style.fontSize = 9;
+            label.style.letterSpacing = 1;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.unityTextAlign = TextAnchor.MiddleLeft;
+            label.style.backgroundColor = new StyleColor(Color.clear);
+            label.style.borderLeftWidth = label.style.borderRightWidth =
+            label.style.borderTopWidth = label.style.borderBottomWidth = 0;
+            label.style.color = new Color(0.46f, 0.51f, 0.60f);
+            row.Add(label);
+            _paneLabels.Add(label);
+
+            var names = new List<string>(_drawablePages.Count);
+            for (int i = 0; i < _drawablePages.Count; i++)
+                names.Add(ScreenPageCatalog.For(_drawablePages[i]).Label);
+
+            var field = new DropdownField(null, names, 0);
+            field.style.flexGrow = 1;
+            field.style.fontSize = 10;
+            field.RegisterValueChangedCallback(evt =>
+            {
+                int picked = field.index;
+                if (picked < 0 || picked >= _drawablePages.Count) return;
+                _target.SetPanePage(index, _drawablePages[picked]);
+                RefreshPreview(true);
+            });
+            row.Add(field);
+
+            _paneSection.Add(row);
+            _paneFields.Add(field);
+        }
+
+        /// <summary>Show the pickers a layout actually uses, and point them at its pages.</summary>
+        private void RefreshPanePickers()
+        {
+            if (_target == null || _paneSection == null) return;
+
+            int panes = _target.splitMode <= 0 ? 0 : _target.splitMode == 3 ? 4 : 2;
+            _paneSection.style.display = panes == 0 ? DisplayStyle.None : DisplayStyle.Flex;
+
+            for (int i = 0; i < _paneFields.Count; i++)
+            {
+                var field = _paneFields[i];
+                field.parent.style.display = i < panes ? DisplayStyle.Flex : DisplayStyle.None;
+                if (i >= panes) continue;
+
+                int found = _drawablePages.IndexOf(_target.PanePage(i));
+                if (found >= 0 && found != field.index) field.SetValueWithoutNotify(
+                    ScreenPageCatalog.For(_drawablePages[found]).Label);
+
+                if (i < _paneLabels.Count)
+                {
+                    bool focused = i == Mathf.Clamp(_activePane, 0, panes - 1);
+                    _paneLabels[i].style.color = focused
+                        ? new Color(0.42f, 0.76f, 1f)
+                        : new Color(0.46f, 0.51f, 0.60f);
+                }
+            }
+        }
+
         private void RefreshAppearanceHighlights()
         {
             if (_target == null) return;
+
+            string[] layoutNames = { "Single", "Two across", "Two tall", "Quarters" };
+            for (int i = 0; i < _layoutBtns.Count; i++)
+            {
+                bool active = i < layoutNames.Length && i == Mathf.Clamp(_target.splitMode, 0, 3);
+                _layoutBtns[i].style.backgroundColor = new StyleColor(active
+                    ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
+            }
 
             string[] borderNames = { "None", "Thin", "Thick", "Glow" };
             for (int i = 0; i < _borderBtns.Count; i++)
@@ -816,7 +1050,7 @@ namespace VoxelEngine.GridSystem.UI
                 _borderBtns[i].style.backgroundColor = new StyleColor(active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
             }
 
-            string[] fontNames = { "Default", "Mono", "LCD", "Terminal" };
+            string[] fontNames = { "Default", "Bold", "Wide", "Compact" };
             for (int i = 0; i < _fontBtns.Count; i++)
             {
                 bool active = i < fontNames.Length && i == Mathf.Clamp(_target.fontStyle, 0, 3);
@@ -835,8 +1069,9 @@ namespace VoxelEngine.GridSystem.UI
             // 17.35.1-dev: custom text is only offered when Custom is the page being edited.
             // It used to be appended to the bottom of the whole panel, which meant a text
             // box sat under the preview telling the player about a page they had not chosen.
-            slot.style.display = _target.dataMode == ScreenDataMode.Custom ? DisplayStyle.Flex : DisplayStyle.None;
-            if (_target.dataMode != ScreenDataMode.Custom) return;
+            bool wantsCustom = _target.dataMode == ScreenDataMode.Custom && _target.splitMode <= 0;
+            slot.style.display = wantsCustom ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!wantsCustom) return;
 
             var sec = new VisualElement { name = "CustomTextSection" };
             var h = new Label("CUSTOM TEXT");

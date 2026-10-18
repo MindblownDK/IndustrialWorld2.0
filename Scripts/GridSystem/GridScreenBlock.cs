@@ -19,7 +19,9 @@ namespace VoxelEngine.GridSystem
         // ScreenPageCatalog describes every one of them to the picker; the ones this
         // block renders itself are in GridScreenBlock.Pages.cs.
         Environment, BatteryBank, PowerGraph, Manifest, FillBars, Farm, Mining,
-        InventoryGrid, PlanetMap
+        InventoryGrid, PlanetMap,
+        // 17.36.0-dev — the second mining page, for pairing across a split panel.
+        MiningCargo
     }
 
     public enum ScreenSize
@@ -33,6 +35,24 @@ namespace VoxelEngine.GridSystem
         public ScreenSize screenSize = ScreenSize.Small;
         public ScreenDataMode dataMode = ScreenDataMode.Summary;
         public Color textColor = new Color(0.18f, 0.72f, 0.88f);
+
+        /// <summary>
+        /// 17.36.0-dev - one glass, up to four pages. 0 is the whole panel on one page;
+        /// 1 is two side by side, 2 is two stacked, 3 is four quarters. The panes are equal
+        /// by design: a screen is an instrument, and an instrument with an uneven split is
+        /// just a window with a mullion in the wrong place.
+        /// </summary>
+        [Tooltip("Split layout: 0=One page, 1=Two side by side, 2=Two stacked, 3=Four quarters")]
+        [Range(0, 3)] public int splitMode;
+
+        [Tooltip("Page in pane 1 (left, or top when stacked)")]
+        public ScreenDataMode splitPageA = ScreenDataMode.PowerGraph;
+        [Tooltip("Page in pane 2 (right, or bottom when stacked)")]
+        public ScreenDataMode splitPageB = ScreenDataMode.BatteryBank;
+        [Tooltip("Page in pane 3 (bottom left, quadrants only)")]
+        public ScreenDataMode splitPageC = ScreenDataMode.Manifest;
+        [Tooltip("Page in pane 4 (bottom right, quadrants only)")]
+        public ScreenDataMode splitPageD = ScreenDataMode.Environment;
         public string customText = "CUSTOM DISPLAY";
         /// <summary>TeamBanner mode (14.37.0): whose banner the screen shows.
         /// Set when the mode is chosen in the config panel - the banner itself
@@ -41,7 +61,7 @@ namespace VoxelEngine.GridSystem
         [Header("Appearance")]
         [Tooltip("Border style: 0=None, 1=Thin, 2=Thick, 3=Glow")]
         public int borderStyle = 1;
-        [Tooltip("Font style: 0=Default, 1=Monospace, 2=LCD, 3=Terminal")]
+        [Tooltip("Font style: 0=Default, 1=Bold, 2=Wide, 3=Compact")]
         public int fontStyle = 0;
 
         [Header("Data Sources")]
@@ -117,7 +137,9 @@ namespace VoxelEngine.GridSystem
         /// <summary>True when this screen has something to show: a linked source, or a page
         /// that reads the construct and the world by itself. Which pages those are is the
         /// catalogue's answer, not a list kept here.</summary>
-        public bool HasAnySource => ResolveAllProviders().Count > 0 || !ScreenPageCatalog.NeedsSource(dataMode);
+        public bool HasAnySource => IsSplit
+                                 || ResolveAllProviders().Count > 0
+                                 || !ScreenPageCatalog.NeedsSource(dataMode);
         public int SourceCount
         {
             get
@@ -138,7 +160,9 @@ namespace VoxelEngine.GridSystem
             {
                 if (!Enabled) return "DISABLED";
                 if (!IsPowered) return "OFFLINE";
-                if (dataMode == ScreenDataMode.Custom) return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
+                // A split panel shows its panes; customText belongs to a single-page screen.
+                if (dataMode == ScreenDataMode.Custom && !IsSplit)
+                    return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
                 // 17.35.0-dev — the pages that read the construct and the world directly.
                 // GridScreenBlock.Pages.cs owns them; RenderManagedPage returns null for every
                 // page it does not own, so the older formatters below are untouched.
@@ -148,6 +172,13 @@ namespace VoxelEngine.GridSystem
                 if (dataMode == ScreenDataMode.TeamBanner) return BannerTextDisplay();
                 if (dataMode == ScreenDataMode.Power) return PowerDisplay();
 
+                // 17.36.0-dev — LESS FURNITURE, MORE READING.
+                //
+                // The old page drew a `──┘` rule between every source and repeated the
+                // section name in capitals above each one. On a Small panel that was half
+                // the glass spent on decoration, and on a Large panel it still read as a
+                // form rather than an instrument. A source is now introduced by its own
+                // name and nothing else, and the rules are gone.
                 var sources = ResolveAllProviders();
                 if (sources.Count == 0) return "ONLINE\nNO DATA\nRight-click to configure";
 
@@ -161,19 +192,16 @@ namespace VoxelEngine.GridSystem
                     string raw = p.GetDisplayData();
                     if (string.IsNullOrEmpty(raw)) continue;
 
-                    if (s > 0) result.AppendLine("──┘");
                     int remaining = max - CountLines(result.ToString());
+                    if (remaining <= 0) break;
 
                     switch (dataMode)
                     {
                         case ScreenDataMode.Bars:
                             result.AppendLine(FormatBars(raw, p.SourceName, Mathf.Min(linesPerSource, remaining)));
                             break;
-                        case ScreenDataMode.Power:
-                        case ScreenDataMode.Inventory:
-                        case ScreenDataMode.Speed:
                         case ScreenDataMode.System:
-                            result.AppendLine(FormatSection(raw, dataMode.ToString(), Mathf.Min(linesPerSource, remaining)));
+                            result.AppendLine(FormatSection(raw, p.SourceName.ToUpperInvariant(), Mathf.Min(linesPerSource, remaining)));
                             break;
                         default:
                             result.AppendLine(TruncateLines(p.SourceName + "\n" + raw, Mathf.Min(linesPerSource, remaining)));
@@ -224,6 +252,11 @@ namespace VoxelEngine.GridSystem
             return "CAMERA\n" + (cameraProvider.IsFeedInUse ? "LIVE FEED" : "READY") + "\n" + cameraProvider.SourceName;
         }
 
+        /// <summary>
+        /// The instant power reading, with the two figures drawn against the larger of them
+        /// so a deficit is visible before the number is read. The graph page next to it in
+        /// the picker is the same question over time; this one is "right now".
+        /// </summary>
         private string PowerDisplay()
         {
             if (Grid == null)
@@ -232,11 +265,13 @@ namespace VoxelEngine.GridSystem
             float gain = Mathf.Max(0f, Grid.PowerGenerated);
             float loss = Mathf.Max(0f, Grid.PowerConsumed);
             float net = gain - loss;
+            float scale = Mathf.Max(1f, Mathf.Max(gain, loss));
             string state = net >= -0.1f ? "STABLE" : "DEFICIT";
+
             return "POWER " + state + "\n" +
-                   "Gain +" + FormatWatts(gain) + "\n" +
-                   "Loss -" + FormatWatts(loss) + "\n" +
-                   "Net " + (net >= 0f ? "+" : "") + FormatWatts(net);
+                   "GEN " + PlainBar(gain / scale) + " " + FormatWatts(gain) + "\n" +
+                   "USE " + PlainBar(loss / scale) + " " + FormatWatts(loss) + "\n" +
+                   "NET " + (net >= 0f ? "+" : "-") + FormatWatts(Mathf.Abs(net));
         }
 
         private static string FormatWatts(float watts)
@@ -248,6 +283,7 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── Formatting ────────────────────────────────────────────────
+        /// <summary>One source's lines under its own name, with no decoration around them.</summary>
         private string FormatSection(string raw, string section, int max)
         {
             var lines = raw.Split('\n');
@@ -257,9 +293,7 @@ namespace VoxelEngine.GridSystem
             {
                 string t = l.Trim();
                 if (t.Length == 0) continue;
-                if (c == 0 && !t.Contains(section, System.StringComparison.OrdinalIgnoreCase))
-                    r.AppendLine("=" + section + "=");
-                else r.AppendLine(" " + t);
+                r.AppendLine(t);
                 c++; if (c >= max) break;
             }
             return r.ToString().Trim();
@@ -306,6 +340,17 @@ namespace VoxelEngine.GridSystem
                 System.Globalization.CultureInfo.InvariantCulture, out float val))
                 return Mathf.Clamp01(val / 100f);
             return -1f;
+        }
+
+        /// <summary>Ten block steps and nothing else - no percentage, for the rows that
+        /// already print their own number.</summary>
+        private static string PlainBar(float v01)
+        {
+            int full = Mathf.Clamp(Mathf.FloorToInt(Mathf.Clamp01(v01) * 10f), 0, 10);
+            var sb = new System.Text.StringBuilder(10);
+            for (int i = 0; i < full; i++) sb.Append('\u2588');
+            for (int i = full; i < 10; i++) sb.Append('\u2591');
+            return sb.ToString();
         }
 
         private static string BarString(float v01)
@@ -356,8 +401,13 @@ namespace VoxelEngine.GridSystem
             SetMainTextVisible(!showCameraFeed);
             ApplyLiveAppearance(showCameraFeed || showBanner);
 
-            string text = showCameraFeed ? string.Empty : FormattedDisplay;
-            if (_screenText.text != text) _screenText.text = text;
+            string text = showCameraFeed ? string.Empty : StyleText(FormattedDisplay, fontStyle);
+            if (_screenText.text != text)
+            {
+                _screenText.text = text;
+                _textFitDirty = true;
+                _iconsDirty = true;
+            }
 
             if (_power != null) _power.wattsPerSecond = Enabled ? PowerDraw : 0f;
 
@@ -425,9 +475,13 @@ namespace VoxelEngine.GridSystem
                     // 17.35.0-dev: a managed page names itself along the top. "2 sources"
                     // told a player nothing about what they were looking at; "BATTERIES"
                     // does, and the page is the same on every screen that shows it.
-                    _titleText.text = IsManagedPage(dataMode)
-                        ? ScreenPageCatalog.For(dataMode).Label.ToUpperInvariant()
-                        : sources.Count + " source" + (sources.Count != 1 ? "s" : "");
+                    // A split panel is named after its layout, not after one of its pages:
+                    // the pages name themselves inside their own corners.
+                    _titleText.text = IsSplit
+                        ? "SPLIT x" + SplitPaneCount
+                        : IsManagedPage(dataMode)
+                            ? ScreenPageCatalog.For(dataMode).Label.ToUpperInvariant()
+                            : sources.Count + " source" + (sources.Count != 1 ? "s" : "");
                     _titleText.color = new Color(textColor.r * 0.7f, textColor.g * 0.7f, textColor.b * 0.7f, 0.8f);
                 }
                 if (_statusText != null) { _statusText.text = dataMode == ScreenDataMode.Camera ? "CAM" : "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }
@@ -435,10 +489,14 @@ namespace VoxelEngine.GridSystem
 
             if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.455f, 0);
             if (_statusText != null) _statusText.transform.localPosition = new Vector3(dw * 0.455f, -dh * 0.455f, 0);
+            if (_screenText != null) _screenText.transform.localPosition = new Vector3(-dw * 0.47f, 0f, 0f);
 
             // 17.35.1-dev: the type is measured against the glass after the text is set,
             // so it fits the panel it is actually on rather than a fixed guess.
             RefreshTextFit();
+            // 17.36.0-dev: item pictures are placed from that same measurement, so a
+            // picture can never drift away from the count it belongs to.
+            RefreshPageIcons();
         }
 
         private void EnsureDisplay()
@@ -505,11 +563,18 @@ namespace VoxelEngine.GridSystem
 
             var dObj = new GameObject("ScreenDisplayText");
             dObj.transform.SetParent(root.transform, false);
-            dObj.transform.localPosition = Vector3.zero;
+            // 17.36.0-dev — LEFT-ALIGNED, FROM THE LEFT EDGE.
+            //
+            // A page is a character grid: a bar starts at column zero and an item picture
+            // sits above the column its count was printed in. Centre-aligned text centres
+            // EACH LINE separately, so two rows of different lengths no longer share a
+            // column grid and the pictures have nothing to line up with. The body is now
+            // anchored at the left edge of the glass, which is also how a monitor reads.
+            dObj.transform.localPosition = new Vector3(-_glassWidth * 0.47f, 0f, 0f);
             _screenText = dObj.AddComponent<TextMesh>();
             _screenText.text = "STARTING"; _screenText.fontSize = 24;
             _screenText.characterSize = charSize; _screenText.color = textColor;
-            _screenText.anchor = TextAnchor.MiddleCenter; _screenText.alignment = TextAlignment.Center;
+            _screenText.anchor = TextAnchor.MiddleLeft; _screenText.alignment = TextAlignment.Left;
             MakeTextOpaque(_screenText);
 
             var sObj = new GameObject("ScreenStatusText");
@@ -665,9 +730,18 @@ namespace VoxelEngine.GridSystem
         private bool FitScreenText()
         {
             var (gw, gh) = GlassSize();
-            // Three stacked bands, so nothing can ever spill into the title or the status:
-            // title 0.455 down 0.11, body centred in 0.64, status -0.455 up 0.10.
-            bool fitted = FitTextMesh(_screenText, gw * 0.94f, gh * 0.64f, gh * 0.62f / Mathf.Max(1, MaxDisplayLines));
+            float stretch = StyleStretch(fontStyle);
+
+            // 17.36.1-dev — THE LINE CAP COUNTS THE LINES THAT ARE THERE.
+            //
+            // It used to divide the panel's maximum line count (3, 4, 6, 10, 16) into the
+            // body band, which meant a two-line page on a sixteen-line panel was capped at
+            // one sixteenth of the glass and printed as a caption floating in a black box.
+            // The cap exists to stop a two-word page filling the panel with giant letters,
+            // so it has to count the page's own lines.
+            int bodyLines = _screenText != null ? Mathf.Max(1, CountLines(_screenText.text)) : 1;
+            bool fitted = FitTextMesh(_screenText, gw * 0.94f, gh * 0.64f,
+                gh * 0.62f / bodyLines, stretch);
             FitTextMesh(_titleText, gw * 0.94f, gh * 0.11f);
             FitTextMesh(_statusText, gw * 0.36f, gh * 0.10f);
             return fitted;
@@ -682,7 +756,8 @@ namespace VoxelEngine.GridSystem
         /// <param name="lineCapHeight">When positive, no single line may be taller than
         /// this - that is what stops a two-word page from filling the panel with giant
         /// letters while a twelve-line page is squeezed to fit.</param>
-        private static bool FitTextMesh(TextMesh tm, float maxWidth, float maxHeight, float lineCapHeight = 0f)
+        private static bool FitTextMesh(TextMesh tm, float maxWidth, float maxHeight,
+            float lineCapHeight = 0f, float xStretch = 1f)
         {
             if (tm == null) return false;
 
@@ -693,7 +768,9 @@ namespace VoxelEngine.GridSystem
             Bounds bounds = mesh.bounds;
             if (bounds.size.x <= 0.0001f || bounds.size.y <= 0.0001f) return false;
 
-            float scale = Mathf.Min(maxWidth / bounds.size.x, maxHeight / bounds.size.y);
+            // The style may stretch the glyphs horizontally; fit the stretched width.
+            float scale = Mathf.Min(maxWidth / (bounds.size.x * Mathf.Max(0.01f, xStretch)),
+                                    maxHeight / bounds.size.y);
 
             if (lineCapHeight > 0.0001f)
             {
@@ -702,7 +779,8 @@ namespace VoxelEngine.GridSystem
                 if (perLine > 0.0001f) scale = Mathf.Min(scale, lineCapHeight / perLine);
             }
 
-            tm.transform.localScale = Vector3.one * Mathf.Max(0.0001f, scale);
+            scale = Mathf.Max(0.0001f, scale);
+            tm.transform.localScale = new Vector3(scale * Mathf.Max(0.01f, xStretch), scale, scale);
             return true;
         }
 
@@ -739,7 +817,124 @@ namespace VoxelEngine.GridSystem
             for (int i = 0; i < _cornerDotRenderers.Count; i++)
                 ApplyRendererAccent(_cornerDotRenderers[i], borderVisible && safeBorderStyle >= 2, baseColor, emission);
 
+            // 17.36.0-dev: the border is drawn ON the glass, not only on the case. The old
+            // border setting tinted the case glow strip and the corner dots and nothing else,
+            // which from the front read as "the border button does nothing".
+            UpdateBorderFrame(safeBorderStyle, accent);
+
             ApplyFontStyle();
+        }
+
+        // ── The border on the glass (17.36.0-dev) ───────────────────────────────
+
+        private readonly Renderer[] _borderQuads = new Renderer[4];
+        private Material _borderMaterial;
+
+        /// <summary>
+        /// Four thin quads around the edge of the glass, in the player's own text colour.
+        /// A screen's border is the one piece of styling you can read from across a room, so
+        /// it belongs on the panel where the page is, at the weight the player picked:
+        /// Thin 0.8 percent of the panel, Thick 1.6, Glow 2.4 and fully lit.
+        /// </summary>
+        private void UpdateBorderFrame(int style, Color accent)
+        {
+            Transform root = transform.Find("DisplayRoot");
+            if (root == null) return;
+
+            if (style <= 0)
+            {
+                for (int i = 0; i < _borderQuads.Length; i++)
+                    if (_borderQuads[i] != null) _borderQuads[i].enabled = false;
+                return;
+            }
+
+            EnsureBorderQuads(root);
+
+            var (gw, gh) = GlassSize();
+            float thickness = style == 1 ? gw * 0.008f : style == 2 ? gw * 0.016f : gw * 0.024f;
+            thickness = Mathf.Max(0.012f, thickness);
+            float inset = thickness * 0.5f;
+
+            float alpha = style == 3 ? 1f : style == 2 ? 0.85f : 0.6f;
+            Color colour = new Color(accent.r, accent.g, accent.b, alpha);
+            ApplyBorderMaterial(colour, style == 3);
+
+            float halfW = gw * 0.5f, halfH = gh * 0.5f;
+            PlaceBorder(_borderQuads[0], new Vector3(0f, halfH - inset, 0.02f),
+                new Vector3(gw, thickness, 1f));                              // top
+            PlaceBorder(_borderQuads[1], new Vector3(0f, -halfH + inset, 0.02f),
+                new Vector3(gw, thickness, 1f));                              // bottom
+            PlaceBorder(_borderQuads[2], new Vector3(-halfW + inset, 0f, 0.02f),
+                new Vector3(thickness, gh, 1f));                              // left
+            PlaceBorder(_borderQuads[3], new Vector3(halfW - inset, 0f, 0.02f),
+                new Vector3(thickness, gh, 1f));                              // right
+        }
+
+        private void EnsureBorderQuads(Transform root)
+        {
+            Transform holder = root.Find("PageBorder");
+            if (holder == null)
+            {
+                var go = new GameObject("PageBorder");
+                go.transform.SetParent(root, false);
+                holder = go.transform;
+            }
+
+            for (int i = 0; i < _borderQuads.Length; i++)
+            {
+                if (_borderQuads[i] != null) continue;
+                var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                quad.name = "BorderEdge" + i;
+                quad.transform.SetParent(holder, false);
+                var collider = quad.GetComponent<Collider>();
+                if (collider != null) Destroy(collider);
+                var renderer = quad.GetComponent<MeshRenderer>();
+                if (renderer != null)
+                {
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                }
+                _borderQuads[i] = renderer;
+            }
+        }
+
+        private void PlaceBorder(Renderer quad, Vector3 localPosition, Vector3 localScale)
+        {
+            if (quad == null) return;
+            quad.transform.localPosition = localPosition;
+            quad.transform.localRotation = Quaternion.identity;
+            quad.transform.localScale = localScale;
+            quad.enabled = true;
+        }
+
+        private void ApplyBorderMaterial(Color colour, bool glow)
+        {
+            if (_borderMaterial == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Unlit/Color")
+                    ?? Shader.Find("Sprites/Default")
+                    ?? Shader.Find("Standard");
+                _borderMaterial = new Material(shader) { name = "ScreenBorder_Runtime" };
+                _borderMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                _borderMaterial.SetOverrideTag("RenderType", "Transparent");
+                if (_borderMaterial.HasProperty("_Surface")) _borderMaterial.SetFloat("_Surface", 1f);
+                _borderMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                _borderMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                _borderMaterial.SetInt("_ZWrite", 0);
+                _borderMaterial.renderQueue = (int)UnityEngine.RenderQueue.Transparent;
+            }
+
+            _borderMaterial.color = colour;
+            if (_borderMaterial.HasProperty("_BaseColor")) _borderMaterial.SetColor("_BaseColor", colour);
+            if (_borderMaterial.HasProperty("_EmissionColor"))
+            {
+                if (glow) _borderMaterial.EnableKeyword("_EMISSION");
+                _borderMaterial.SetColor("_EmissionColor", glow ? colour * 1.6f : Color.black);
+            }
+
+            for (int i = 0; i < _borderQuads.Length; i++)
+                if (_borderQuads[i] != null) _borderQuads[i].sharedMaterial = _borderMaterial;
         }
 
         private void ApplyRendererAccent(Renderer renderer, bool visible, Color baseColor, Color emission)
@@ -757,54 +952,80 @@ namespace VoxelEngine.GridSystem
 
         private int _appliedFontStyle = -1;
 
+        /// <summary>
+        /// 17.36.0-dev — FONT STYLES THAT ARE ACTUALLY DIFFERENT.
+        ///
+        /// The old four options changed the TextMesh font size by two points and the line
+        /// spacing by a tenth. The fit pass then normalised the size back to the glass, so
+        /// all four landed on the panel looking identical - which is why "the font doesn't
+        /// work" was exactly right. A screen font has only three dials that survive being
+        /// fitted: CASE, WEIGHT and PROPORTION. Those are the dials used here.
+        ///
+        ///   Default   mixed case, regular, natural width
+        ///   Mono      mixed case, bold, slightly wide
+        ///   LCD       UPPERCASE, regular, wide and airy - a display panel
+        ///   Terminal  UPPERCASE, bold, condensed and tight - a status terminal
+        /// </summary>
+        private int _appliedFontStyle = -1;
+
+        /// <summary>The text a font style actually prints. Public because the config
+        /// panel's preview has to show the same glyphs the wall will.</summary>
+        public static string StyleText(string text, int style)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            return style == 2 || style == 3 ? text.ToUpperInvariant() : text;
+        }
+
+        /// <summary>How much wider the style draws its glyphs, as a multiplier on the fit.
+        /// Fit compensates for it, so a wide font is still guaranteed to fit the panel.</summary>
+        public static float StyleStretch(int style) => style switch
+        {
+            1 => 1.06f,
+            2 => 1.22f,
+            3 => 0.90f,
+            _ => 1f,
+        };
+
         private void ApplyFontStyle()
         {
-            float baseSize = _baseCharSize > 0f ? _baseCharSize : CharHeight() / 24f;
             int safeFontStyle = Mathf.Clamp(fontStyle, 0, 3);
             // ApplyLiveAppearance calls this every frame; rebuilding three TextMeshes at
             // 60 Hz costs more than the whole page renderer does.
             if (safeFontStyle == _appliedFontStyle) return;
             _appliedFontStyle = safeFontStyle;
             _textFitDirty = true;
-            int displayFontSize = safeFontStyle switch
-            {
-                1 => 22,
-                2 => 26,
-                3 => 22,
-                _ => 24
-            };
-            float charScale = safeFontStyle switch
-            {
-                1 => 0.92f,
-                2 => 0.95f,
-                3 => 0.86f,
-                _ => 1f
-            };
-            FontStyle displayStyle = safeFontStyle switch
-            {
-                2 => FontStyle.Bold,
-                3 => FontStyle.Bold,
-                _ => FontStyle.Normal
-            };
+
+            bool bold = safeFontStyle == 1 || safeFontStyle == 3;
+            FontStyle displayStyle = bold ? FontStyle.Bold : FontStyle.Normal;
             float lineSpacing = safeFontStyle switch
             {
-                1 => 0.85f,
-                2 => 0.80f,
-                3 => 0.90f,
-                _ => 1.00f
+                1 => 0.90f,
+                2 => 1.05f,
+                3 => 0.82f,
+                _ => 1.00f,
             };
+
+            // fontSize is the glyph resolution in the atlas, not the size on the panel -
+            // the fit pass decides that. A higher value gives the bold/uppercase styles
+            // cleaner edges, which is the only thing this number is good for here.
+            int displayFontSize = bold ? 28 : 24;
 
             if (_screenText != null)
             {
                 _screenText.fontSize = displayFontSize;
-                _screenText.characterSize = baseSize * charScale;
                 _screenText.fontStyle = displayStyle;
                 _screenText.lineSpacing = lineSpacing;
             }
             if (_titleText != null)
-                _titleText.fontStyle = safeFontStyle == 0 ? FontStyle.Bold : displayStyle;
+            {
+                _titleText.fontSize = 22;
+                _titleText.fontStyle = bold ? FontStyle.Bold : FontStyle.Bold;
+            }
             if (_statusText != null)
-                _statusText.fontStyle = safeFontStyle == 0 ? FontStyle.Normal : displayStyle;
+            {
+                _statusText.fontSize = 14;
+                _statusText.fontStyle = displayStyle;
+            }
         }
 
         /// <summary>The three banner text lines as the screen's text block.
@@ -988,50 +1209,92 @@ namespace VoxelEngine.GridSystem
                 var pos = dataSourcePositions[i];
                 EntityId storedId = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : EntityId.None;
 
-                IGridDataProvider provider = null;
-                if (UnifiedGridTopology.TryResolveAddress(Grid, pos, out var block))
+                // 17.36.0-dev: IDENTITY, NOT JUST ADDRESS.
+                //
+                // Two blocks can report the same grid address - a chest bolted to a wall
+                // reports the wall's cell, and every one of them resolved to the first
+                // match. That is why selecting one cargo container lit up all of them and
+                // why a second click added a source instead of removing the first: the
+                // selection was stored by address, so every container shared one entry.
+                // The instance id is the thing the player actually clicked.
+                IGridDataProvider provider = ResolveByInstanceId(storedId);
+                if (provider == null && UnifiedGridTopology.TryResolveAddress(Grid, pos, out var block))
                 {
                     provider = ResolveProviderComponent(block);
-                    if (provider != null)
-                    {
-                        EntityId currentId = block.GetEntityId();
-                        if (currentId != storedId)
-                        {
-                            // Block was replaced — update instance id
-                            dataSourceInstanceIds[i] = currentId;
-                        }
-                        _cachedProviders.Add(provider);
-                        continue;
-                    }
+                    if (provider != null && block is GridBlock resolved && !IsDefaultId(storedId))
+                        dataSourceInstanceIds[i] = resolved.GetEntityId();
                 }
 
-                // Source no longer valid — remove it
+                if (provider != null)
+                {
+                    _cachedProviders.Add(provider);
+                    continue;
+                }
+
+                // Source no longer valid - remove it.
                 dataSourcePositions.RemoveAt(i);
                 if (i < dataSourceInstanceIds.Count) dataSourceInstanceIds.RemoveAt(i);
             }
             return _cachedProviders;
         }
 
+        /// <summary>The provider whose block carries this instance id, if it is still on the
+        /// construct. The only lookup that can tell two blocks in one cell apart.</summary>
+        private IGridDataProvider ResolveByInstanceId(EntityId id)
+        {
+            if (Grid == null || IsDefaultId(id)) return null;
+            foreach (var block in Grid.AllBlocks)
+            {
+                if (block == null || block == this) continue;
+                if (block.GetEntityId() != id) continue;
+                return ResolveProviderComponent(block);
+            }
+            return null;
+        }
+
+        private static bool IsDefaultId(EntityId id) => id.Equals(EntityId.None);
+
+        /// <summary>Is this exact block linked? Address-only, kept for the legacy callers
+        /// and for a saved screen that predates instance ids.</summary>
         public bool HasSource(Vector3Int pos)
         {
             if (!_migrated) MigrateLegacy();
             return dataSourcePositions.Contains(pos);
         }
 
+        /// <summary>Is this exact block linked? Address AND instance id, which is the only
+        /// question that gives the right answer when two blocks share a cell.</summary>
+        public bool HasSource(Vector3Int pos, EntityId instanceId)
+        {
+            if (!_migrated) MigrateLegacy();
+            for (int i = 0; i < dataSourcePositions.Count; i++)
+            {
+                if (dataSourcePositions[i] != pos) continue;
+                EntityId stored = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : EntityId.None;
+                if (IsDefaultId(stored) || stored == instanceId) return true;
+            }
+            return false;
+        }
+
         public void ToggleSource(Vector3Int pos, EntityId instanceId)
         {
             if (!_migrated) MigrateLegacy();
-            if (dataSourcePositions.Contains(pos))
+
+            // Remove the one that matches BOTH address and identity; add only if nothing
+            // matched. A container that shares a cell with three others now toggles itself.
+            for (int i = dataSourcePositions.Count - 1; i >= 0; i--)
             {
-                int idx = dataSourcePositions.IndexOf(pos);
-                dataSourcePositions.RemoveAt(idx);
-                if (idx < dataSourceInstanceIds.Count) dataSourceInstanceIds.RemoveAt(idx);
+                if (dataSourcePositions[i] != pos) continue;
+                EntityId stored = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : EntityId.None;
+                if (!IsDefaultId(stored) && stored != instanceId) continue;
+
+                dataSourcePositions.RemoveAt(i);
+                if (i < dataSourceInstanceIds.Count) dataSourceInstanceIds.RemoveAt(i);
+                return;
             }
-            else
-            {
-                dataSourcePositions.Add(pos);
-                dataSourceInstanceIds.Add(instanceId);
-            }
+
+            dataSourcePositions.Add(pos);
+            dataSourceInstanceIds.Add(instanceId);
         }
 
         public void SetPrimarySource(Vector3Int pos, EntityId instanceId)
@@ -1109,6 +1372,8 @@ namespace VoxelEngine.GridSystem
         {
             if (_cameraFeedMaterial != null)
                 Destroy(_cameraFeedMaterial);
+            if (_borderMaterial != null) Destroy(_borderMaterial);
+            ReleaseIconResources();
         }
 
         public override void OnPlaced()
