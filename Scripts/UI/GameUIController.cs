@@ -1928,6 +1928,14 @@ namespace VoxelEngine.UI
                 PollutionThreat.SiegeResidual01,
                 IndustrialPressureReadout.HistoryBand(residual));
 
+            // 17.32.0-dev — the sky over THIS chimney, in the numbers the washout actually
+            // applies. Rain now scrubs only the cells it falls on, so two machines in one
+            // district can genuinely read different rates: the one under the band is being
+            // washed, the one in the gap keeps its smog until the band drifts over it. Read
+            // through the same helper the map uses, so the two surfaces speak one language.
+            AppendPressureNoteRow(card, "RAIN SCRUB",
+                IndustrialPressureReadout.WashLineAt(samplePoint));
+
             var next = new Label(IndustrialPressureReadout.NextRequirement(live, pressure, residual));
             next.style.fontSize = 9;
             next.style.marginTop = 6;
@@ -1992,6 +2000,35 @@ namespace VoxelEngine.UI
             track.style.marginTop = 3;
             LcdHudTheme.SetSegments(segments, value, signal);
             parent.Add(track);
+        }
+
+        /// <summary>17.32.0-dev — a caption/value line without a track, for readings that are
+        /// words as often as numbers (the rain's washout over this chimney). Styled in the same
+        /// instrument family as <see cref="AppendPressureRow"/> so the card stays one object.</summary>
+        private static void AppendPressureNoteRow(VisualElement parent, string caption, string value)
+        {
+            if (parent == null) return;
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 5;
+
+            var captionLabel = LcdHudTheme.CaptionLabel(caption);
+            captionLabel.style.flexGrow = 1;
+            row.Add(captionLabel);
+
+            var valueLabel = new Label(value ?? string.Empty);
+            valueLabel.style.fontSize = 9;
+            valueLabel.style.letterSpacing = 0.35f;
+            valueLabel.style.whiteSpace = WhiteSpace.Normal;
+            valueLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            valueLabel.style.maxWidth = new Length(62f, LengthUnit.Percent);
+            valueLabel.style.color = new StyleColor(new Color(0.72f, 0.86f, 0.78f));
+            valueLabel.pickingMode = PickingMode.Ignore;
+            row.Add(valueLabel);
+
+            parent.Add(row);
         }
 
         private static ScrollView WrapMachinePanelInScrollView(VisualElement panel)

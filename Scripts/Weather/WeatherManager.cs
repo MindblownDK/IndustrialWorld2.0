@@ -183,7 +183,10 @@ namespace VoxelEngine.Weather
         /// <summary>True if the planet is precipitating, whether or not the player is under it.
         /// 17.31.0-dev: this asks the SYSTEM (PlanetIntensity), not the player's sky - the whole
         /// point of the property is to say what the world is doing somewhere the player may not
-        /// be, and it is what the smog washout reads.</summary>
+        /// be. 17.32.0-dev: the smog washout no longer reads it (rain now scrubs only the cells
+        /// it actually falls on, through <see cref="PrecipitationAt"/>); this stays as the
+        /// body-wide answer for telemetry and anything that genuinely means "the whole planet".
+        /// </summary>
         public bool IsPlanetPrecipitating => IsWeatherActive && PlanetIntensity > 0.05f;
 
         /// <summary>

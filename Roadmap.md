@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.31.0-dev`
-**Roadmap Version:** `17.31.0-dev`
-**Date:** 2026-10-16
+**Current Version:** `17.32.0-dev`
+**Roadmap Version:** `17.32.0-dev`
+**Date:** 2026-10-18
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,30 +29,30 @@
 
 ## 0. Recently Done
 
+### 17.32.0-dev - Rain Washes Where It Falls
+- The smog washout is sampled per CELL (`PollutionService.Simulate` asks `WeatherManager.PrecipitationAt` at each body-local cell centre): a cell under a band is scrubbed at the rate the whole body used to receive, a cell in a gap between bands keeps its smog, and the rain-driven half of runoff spreading follows the same sample
+- `PollutionService.AirWashPerSecondAt` computes the simulation's own number for readouts, and `IndustrialPressureReadout.WashLineAt` prints it once for both the machine card's `RAIN SCRUB` row and the map's `INDUSTRIAL PRESSURE` section; `WeatherFronts.CoverageWord` is the only band-word list now
+- Coefficients unchanged (`WashRatePerIntensity` 0.004 is the one lever if live play shows smog lingering too long). No setup step, no prefab, no save or schema change
+
 ### 17.31.0-dev - Weather That Belongs To A Place
-- `WeatherFronts` (new) is a pure function of (body seed, surface direction, front clock): a drifting field of rain bands whose size scales with the body (a quarter of its radius, 500 - 2400 m) and whose edges fade over a few hundred metres, so a band arrives, passes and leaves instead of the whole world sharing one intensity
-- `WeatherManager` split the sky in two without moving the state machine - `Intensity` is still what reaches the PLAYER (system strength × the coverage over them) while the new `PlanetIntensity` is the system's own strength, which the cloud shell, the orbiting sensor and the smog washout read; `PrecipitationAt` / `CoverageAt` / `SnowfallAt` answer about any place, and `GridSolarPanel` now reads the sky directly above itself instead of the body-wide one
-- The map's opt-in `WEATHER` layer paints the bands (blue rain, white snow) by unprojecting a 24 px canvas grid onto the body's sphere through the map's own tangent frame, snow or rain per place from `SnowfallAt`; `WeatherStateBroadcast` gained a `Clock` so guests drift the host's bands. No setup step, no save or tuning change
+- `WeatherFronts` (new) is a pure function of (body seed, surface direction, front clock): drifting rain bands a quarter of the body's radius (500 - 2400 m) with faded edges, so a band arrives, passes and leaves
+- `WeatherManager.Intensity` is still what reaches the PLAYER while `PlanetIntensity` is the system's own strength (cloud shell, orbiting sensor); `PrecipitationAt` / `CoverageAt` / `SnowfallAt` answer about any place, and `GridSolarPanel` reads the sky above itself
+- The map's opt-in `WEATHER` layer paints the bands and the sidebar gained a `WEATHER` section; `WeatherStateBroadcast` carries a `Clock` so guests drift the host's bands. No setup step, no save or tuning change
 
 ### 17.30.0-dev - The District Pressure Readout
-- `GameUIController.AppendDistrictPressureReadout` ends every emitting machine's emissions foldout with a `DISTRICT PRESSURE` data card in the CONTAINER LOAD instrument family - the earned rung as the headline value, two segmented bars (`PRESSURE NOW` from `EcologyPressure.Sample(outlet).Pressure01`, `INDUSTRIAL HISTORY` from `PollutionService.SampleClimate01(outlet)`), the next requirement with its shortfall in percent, and the four-minute recruitment-heat rule in words because that ramp is spawner-private
-- Every threshold on the card IS the tiers' own gate (`PollutionThreat.WavePressure01` / `SiegePressure01` / `WaveResidual01` / `SiegeResidual01`) and the rung is `PollutionThreat.ResolveTier` itself, sampled at `PollutionEmitter.ReleasePoint` the way `EnemySpawner` samples it - so the panel can never claim a rung the spawner would not answer from; `IndustrialPressureReadout` is the one translation of those numbers
-- The logistics map gained the same reading at `LogisticsMapScreen`'s pollution block (`INDUSTRIAL PRESSURE` section: rung, history with band, pressure, planet history, next requirement) and one ENVIRONMENT ALERTS entry at the organized-wave and siege rungs; `PollutionService.ClimateBurdenAt(Vector3)` is the only public addition. No setup step, no save or tuning change
+- `GameUIController.AppendDistrictPressureReadout` ends every emitting machine's emissions foldout with a `DISTRICT PRESSURE` card: earned rung, pressure and history bars on the tiers' own gates, next requirement, four-minute activity rule
+- The logistics map got the same reading in an `INDUSTRIAL PRESSURE` section plus ENVIRONMENT ALERTS entries at the wave and siege rungs; `IndustrialPressureReadout` is the one translation and `PollutionService.ClimateBurdenAt` the only public addition
+- No setup step, no save or tuning change
 
 ### 17.29.0-dev - Wallrun
-- `PlayerController.UpdateWallRun` starts a run on the SAME recorded side collision the wall jump uses, provided the body is airborne, off a hull, somewhere gravity exists, steering within about 78 degrees of the direction of travel along the wall (`WallRunSteerMin` 0.2) and travelling along it at `wallRunMinSpeed` (5.5 m/s) or more - running straight at a wall never starts a run
-- The gravity chain gained one branch, reached only while the body is DESCENDING, which eases the fall into `wallRunDescent` (1.6 m/s) at 12 m/s^2, so a run can slow a fall and can never add height; the horizontal half of the walk step is untouched because air steering already preserves momentum
-- A live run is kept alive by the same `FindTraversalWall` probe (which also refreshes the touch, so the wall jump works from the middle of a run) and ends for exactly four reasons - wall gone, input stopped, speed below 80 percent of the threshold, ground back - with no timer; three prefab knobs (`wallRunEnabled`, `wallRunMinSpeed`, `wallRunDescent`) arrive through migration step 2, so a prefab already migrated by 17.28.0-dev receives only the new fields. This closes the 17.7.0-dev traversal deferral
+- `PlayerController.UpdateWallRun` starts on the same recorded side collision the wall jump uses (airborne, off a hull, gravity present, steering within ~78 degrees, at least 5.5 m/s along the wall) and ends only for wall-gone, input-stop, speed-drop or ground
+- The descending gravity branch eases a fall to `wallRunDescent` (1.6 m/s) and can never add height; the wall-jump probe keeps the touch fresh mid-run
+- Three prefab knobs arrive through migration step 2. No setup step, no save change; closes the 17.7.0-dev traversal deferral
 
 ### 17.28.0-dev - Mantle Onto Ledges, Wall Jumps
-- `PlayerController.TryStartMantle` / `UpdateMantle`: a body the `CharacterController` was stopped by on the previous move, walking into it, not rising and not descending faster than 12 m/s (below the 16 m/s fall-damage floor), pulls itself up a 0.45 - 1.35 m ledge in a 0.38 s rise-then-in arc that exits at the pace it arrived with
-- The wall in front is the COMPLEMENT of walkable ground (nearest surface at shin and chest with `dot(normal, up) <= 0.45`), the landing is the same `TryGetWalkableGround` question the ground check asks plus a capsule overlap at the arriving pose, so a mantle can only end where the player could have stood; `TryWallJump` spends one of `maxWallJumps` (2) per airtime on a fresh press against a 0.25 s wall contact recorded from the resolved side collision, launching 1.15 m up and 4.5 m/s away while keeping the momentum ALONG the wall
-- Two prefab switches (`mantleEnabled`, `wallJumpEnabled`) and their tuning, switched on once by a `_traversalMigration` marker so an older player prefab is not left with both OFF; no setup step, no save change; wallrunning followed in 17.29.0-dev
-
-### 17.27.9-dev - Rim-Aware Ground Probe, Planted Descent Cancelled
-- `WalkableGroundWithin` asks one straight-down ray from the body axis first, then the same ray from a RING of four points out at 0.72 x the capsule radius, so a player held up by the rim of a ledge - surface under the capsule's edge, air under its centre - reads as standing instead of airborne
-- `SuppressStandingSlide` hands back the DOWNWARD half of a planted player's unintended displacement as well as the sideways half, so a rim contact can no longer creep a still body off a lip a few millimetres a frame; only the descent, and only while planted (no input, ground underfoot, no deck carry, no boots)
-- Same probe: no setup, no prefab, no save change - the two helpers (`RayFindsWalkableGround`, `SurfaceBasis`) are the only new members, and the axis ray still short-circuits on ordinary ground so the per-frame cost is unchanged there
+- `PlayerController.TryStartMantle` / `UpdateMantle` pulls a blocked body up a 0.45 - 1.35 m ledge in a 0.38 s arc that lands only where the walkable-ground probe and a capsule overlap accept
+- `TryWallJump` spends one of `maxWallJumps` (2) per airtime on a fresh press against a recorded wall contact, launching 1.15 m up and 4.5 m/s away while keeping momentum along the wall
+- Two prefab switches plus tuning are set once by `_traversalMigration`. No setup step, no save change
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -109,7 +109,7 @@
 - **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
 - **Gust knockback stays local** (accepted 14.55.0): the Roc's wing gust damages remote players victim-side, but the knockback impulse only applies to the host's own player - replicating impulses is a future polish round. Replayed enemy volleys (fireballs, spikes) roll their own cosmetic spread on each guest.
 - **Same-instant double mount** (accepted 14.54.0): two players taking the same horse in the same wire instant - the later mount announce wins the glue; the earlier rider dismounts into a horse that is no longer theirs. Same vanishingly small window as the drop/loot races.
-- **Weather is no longer one sky for the whole body** (17.31.0-dev closed the 14.46.0 edge): the state machine still rolls where the host stands - one weather SYSTEM per body, host-authoritative as 14.46.0 decided - and `WeatherFronts`' drifting field decides where that system is actually depositing, so the bands are places and every machine that shares the front clock computes the same ones. Remaining: per-cell smog washout (the washout still reads the system, `PlanetIntensity`, so pollution balance is unchanged) and fronts that respond to terrain or biomes (a band crosses a mountain range exactly as it crosses a plain).
+- **Weather is no longer one sky for the whole body** (17.31.0-dev closed the 14.46.0 edge; per-cell washout landed 17.32.0-dev): the state machine still rolls where the host stands - one weather SYSTEM per body, host-authoritative as 14.46.0 decided - and `WeatherFronts`' drifting field decides where that system is actually depositing, so the bands are places and every machine that shares the front clock computes the same ones. The smog washout now reads the same field per cell, so a district in a gap between bands keeps its smog while one under a band is scrubbed. Remaining: fronts that respond to terrain or biomes (a band crosses a mountain range exactly as it crosses a plain), and live-play tuning of `WashRatePerIntensity` - total scrub across a body is now proportional to the covered area rather than body-wide, so a long polluted stretch out of the rain clears slower than it used to by design.
 - **Dedicated headless server** (milestone 12, part 1 shipped 14.45.0): boot path, config and save carry-forward are live; remaining are the security hardening pass and converting client requests to intents, plus hardening every system that still assumes a local player at runtime (surfaced by dedicated-session testing).
 - **Security hardening** (deferred 14.6.0): SHIPPED across 14.56.0 (code hashing + keypad intents), 14.57.0 (verified identity, door and storage enforcement) and 14.58.0 (host-only machine simulation).
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
@@ -616,21 +616,6 @@ changes what the existing block visuals mean, never what the ship does.
    - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.
 
 4. **Settled**
-   - One a research unlock, not a settings toggle. The three modes are unlocked in
-     sequence by their own nodes so the reader tier follows the machinery tier: damage first
-     (structural awareness), heat second (engine-room awareness), centre of mass last (ship design).
-   - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.
-
-4. **Settled**
-   - One feature per round, each with its own version, changelog and setup step. Order, as decided
-     with the shuttle design: **waymarks + connector + auto-run first** (the next round after
-     9.34.0-dev), then the inspector overlay, then the petroleum chain, then asphalt, then the
-     Engine Works. The shuttle round goes first on purpose: it makea settings toggle. The three modes are unlocked in
-     sequence by their own nodes so the reader tier follows the machinery tier: damage first
-     (structural awareness), heat second (engine-room awareness), centre of mass last (ship design).
-   - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.
-
-4. **Settled**
    - One feature per round, each with its own version, changelog and setup step. Order, as decided
      with the shuttle design: **waymarks + connector + auto-run first** (the next round after
      9.34.0-dev), then the inspector overlay, then the petroleum chain, then asphalt, then the
@@ -816,12 +801,6 @@ spends the thing the route book was built to hold.
 ### Crude Fractionation, Product Use & Flare Disposal
 
 *(shipped in 9.38.0-dev, first part — `Scripts/Crafting/DistillationPlant.cs`: the dedicated plant
-machine, one feed tank + six typed product tanks + `PlantFluidStore`; `Scripts/Crafting/OilRefinery.cs`
-walked back to its legacy machine and both refineries lost the retired fuel chain (refined oil / heavy
-fuel oil / marine gas oil); `Scripts/Items/LiquidType.cs`: LPG/Naphtha/Kerosene/Diesel/Gasoline
-appended with densities and gauge colours; Setup Step 69 (`PetroleumColumnSetup.cs`) authors the
-plant-hall model with an analog dial above every outlet and inlet, the Atmospheric Cut, the Refined Oil
-re-runistillationPlant.cs`: the dedicated plant
 machine, one feed tank + six typed product tanks + `PlantFluidStore`; `Scripts/Crafting/OilRefinery.cs`
 walked back to its legacy machine and both refineries lost the retired fuel chain (refined oil / heavy
 fuel oil / marine gas oil); `Scripts/Items/LiquidType.cs`: LPG/Naphtha/Kerosene/Diesel/Gasoline
@@ -1783,7 +1762,8 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Gas giant moons: ion storms.
    - Weather affects:
      - Wind speed → turbine output and degradation.
-     - Solar panel efficiency.
+     - Solar panel efficiency (per panel, from the sky above it — 17.31.0-dev).
+     - Pollution washout: rain scrubs only the cells its band is over (17.32.0-dev).
      - Player exposure/hazard levels.
      - Visibility and flight handling.
 
@@ -2283,308 +2263,9 @@ Discover bottleneck → Optimize → Unlock next tier → Repeat
 
 ---
 
-## 9. Manual Unity Steps Guide
+## 9. Added Roadmap Requirements — Save Safety, Mobility & Multiplayer
 
-For each version, these are the high-level Unity tasks you will perform manually. Detailed per-step instructions will be provided when we implement each feature.
-
-### For 4.5.0 (Factory Foundations)
-
-1. **Create conveyor prefabs** using the voxel mesh builder.
-   - Basic, fast, express tiers.
-   - Add animated belt texture / scrolling UV material.
-2. **Create conveyor chute prefabs**
-   - Single straight chute only; do not create chute variants.
-   - Sliding item animation and sound.
-3. **Create machine prefabs**
-   - Furnace, crusher, assembler.
-   - Add emissive status lights.
-4. **Create grid light, static flood light, and LED strip prefabs**
-   - Configurable color, range, intensity, and pulse patterns.
-5. **Create power pole and electrical substation prefabs**
-   - Pole with 6 connection points; substation with long-range relay logic.
-6. **Create wire item and cable input/output socket prefabs**
-   - Wire is crafted and placed between poles, generators, and machines.
-8. **Set up ScriptableObjects**
-   - `ConveyorDefinition`, `ChuteDefinition`, `MachineDefinition`, `LightDefinition`, `PowerPoleDefinition`, `WireDefinition`.
-9. **Wire UI Toolkit panels**
-   - `MachinePanel.uxml`, `MachinePanel.uss`.
-10. **Add sounds & particles**
-    - Belt hum, chute clatter, machine thump, item drop poof, wire hum.
-11. **Run setup wizard step (non-destructive)**
-    - Extend `VoxelEngineSetupWindow` with Step 16 for factory blocks.
-    - Verify existing power values are preserved.
-
-### For 4.6.0 (Production Lines & UI Revolution)
-
-1. Author new recipe ScriptableObjects.
-2. Create chemical plant prefab with fluid ports.
-3. Add component item icons and visuals.
-4. Expand research tree nodes.
-5. Build recipe browser UI.
-6. Create 10 `ThemeDefinition` ScriptableObjects.
-7. Refactor all panels to use `ThemedPanel` base class.
-8. Rebuild Research UI as a spatial canvas with pan/zoom.
-9. Add custom theme editor panel.
-10. **Run setup wizard step (non-destructive)**
-    - Add recipes, items, and research nodes via Step 17.
-    - Ensure existing recipe costs are not reset.
-
-### For 4.7.0 (Power, Vehicles & Combat)
-
-1. Build combustion engine and battery block prefabs.
-2. Update rover/ship grid recipes to use electric motors.
-3. Add biofuel chain farming machines.
-4. Create vehicle bay prefab.
-5. Create personal weapon prefabs (sword, pistol, rifle, shotgun, grenade launcher).
-6. Create grid/base defense prefabs: light gun, heavy ballistic, flamethrower, mortar, giant-shell, anti-air, missile launcher, and railgun.
-7. Author ammunition items, magazines, shell/fuel recipes, special planetary ammunition, turret buffers, and automated requester/provider replenishment routes.
-8. Create bomb / explosive charge / remote-detonated charge prefabs.
-8. Create shape variant prefabs: slope, half block, half slope, corner, inverted slope for light and heavy armor.
-9. Implement the shape variant wheel UI, reusing the build hammer wheel.
-10. Improve small-grid snap and maritime grid buoyancy blocks.
-11. Add damage VFX: sparks, smoke, fire, debris.
-12. Set up collision damage thresholds for grids and terrain.
-13. Run **Tools > Voxel Engine > Voxel Engine Setup > 48. Build Armor Stations + Timed Upgrades**. It non-destructively creates/repairs the six armor definitions, Armor Station, anvil-style Armor Upgrade Station, module items, recipes, and research links; do not manually create those prefabs or assets.
-14. Run Step 48 a second time and confirm the Console reports preserved/repaired links without resetting recipe costs, craft times, materials, or custom prefab children.
-15. Create jetpack prefab with fuel slot and upgrade tiers through the applicable Voxel Engine Setup step.
-16. Create hazmat suit and Hazmat module content through Step 48; verify the module appears in the Armor Station after its research unlock.
-17. Create space helmet and oxygen tank prefabs with visor toggle through the Voxel Engine Setup workflow.
-18. Create geiger counter item/tool.
-19. Create painting tool item and 15 material finish variants.
-20. Add fall damage system and oxygen underwater system.
-21. **Run setup wizard steps (non-destructive)**
-    - Step 13 for maritime prefabs after drivetrain/port changes. **7.3.2-dev:** run it twice to refresh the v26 Watertight Shaft Housing mesh plus gearbox/generator/propeller/shaft port markers without overwriting ship balance or custom prefab work. Step 13 explicitly repairs the Mechanical Belt recipe/Hydro-Mechanics unlock and creates the Resources persistence catalog that prevents Portable Battery and Portable Hydrogen Tank save-loss. The removed Encased Chain Drive content stays absent by design.
-    - Step 18 for power/vehicle/combat/painting blocks.
-    - Step 48 for the complete armor workflow, including both station prefabs, items, recipes, research links, timed installation setup, and T1→1-slot/T1-module through T6→6-slot/T5-module progression gates.
-    - Preserve existing grid power values, weapon damage, recipe costs, craft times, materials, and custom prefab work.
-
-### For 4.8.0 (Logistics 2.0, Screens & Trajectory)
-
-1. Design rail blocks and train vehicle grid.
-2. Build drone port prefab with landing pad.
-3. Implement logistics chest models.
-4. Create map/radar UI.
-5. Build configurable screen prefabs in multiple sizes.
-6. Add camera block that feeds render texture to screens.
-7. Add trajectory camera rig and predicted path renderer.
-8. Build star map UI with orbit lines and body labels.
-9. ~~Build route recording, waypoint editing, destination calculation, ship capability report, and
-   Autopilot controls.~~ *(9.34.0-dev: recording, waypoint capture, destination calculation, the
-   capability report and the panel are shipped; the Autopilot controls remain open on purpose — a
-   route can be costed and flown by hand, nothing flies it yet)*
-10. Add cargo-stop actions for docking, loading, unloading, charging, refueling, waiting, and return trips.
-11. Configure input bindings for trajectory toggle, star map, route calculation, and Autopilot override.
-12. **Run setup wizard step (non-destructive)**
-    - Step 19 for trains, drones, screens, and trajectory blocks.
-
-### For 4.9.0 (Living Worlds)
-
-1. Create new biome definitions and materials.
-2. Author ore deposit prefabs and nodes.
-3. Add hazard zones and suit modules.
-4. Update world generation settings.
-5. Build ruined warehouse/factory prefabs (rusted variants of real blocks).
-6. Create blueprint data core item and research restoration UI.
-7. Author weather VFX and climate profiles per planet type.
-8. Implement water flow materials and simulation settings.
-9. 🚧 **6.43.0-dev** delivered passive livestock prefabs (Cow/Sheep/Pig) + spawner + products (meat/hide/wool). Remaining: breeding needs, husbandry definitions, and population limits.
-10. Create mythical enemy prefabs and AI profiles: Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Cockatrice/Basilisk.
-11. Author tiered enemy loot tables, guaranteed Boss Relic Cores, boss research gates, and first-kill progression records.
-12. Build static missile turret and flak cannon prefabs.
-13. Set up planet-specific skybox / atmosphere shaders.
-14. Fix gravity for players, grids, dropped items, and projectiles.
-15. Implement orbital mechanics and atmospheric drag.
-16. Overhaul space ambiance: starfield, nebulae, sun glare, vacuum audio.
-17. Add environmental radiation zones and heat zones to biomes.
-18. Create sliding airtight door and vent prefabs.
-19. Author pollution values for every emitting machine, vehicle, fuel, waste source, and cleanup system.
-20. Create planet Ecology Profiles with passive mobs, hostiles, elites, bosses, hazard resistances, and loot tiers.
-21. Build Fallen Crusader, Dead Priest, and Rogue Space Crusader prefabs, territories, ships, warnings, and commander encounters.
-22. **Run setup wizard step (non-destructive)**
-    - Step 20 for ruins, livestock, mythical enemies, pollution, ecology profiles, territorial factions, bosses, weather, water, sky, and life-support systems.
-
-### For 5.0.0 (Orbital Expansion)
-
-1. Build rocket parts and launch pad prefabs.
-2. Implement orbital station scene/zone.
-3. Add the research-locked Orbital Station family to the Building Hammer wheel.
-4. Generate pressurized station foundations, walls, floors, ceilings, curved corridors, junctions, windows, domes, airlocks, docking frames, radiators, and utility attachment panels.
-5. Create buildable station grid systems (docking port, gravity ring, solar array, life support).
-6. Create asteroid field zone and mining ship recipes.
-7. Build star map UI.
-8. **Run setup wizard step (non-destructive)**
-   - Step 21 for rockets, space stations, and orbital cargo.
-
-### For 5.1.0 (Interplanetary Age)
-
-1. Build planetary base kit prefabs.
-2. Author exo-alloy recipes requiring multi-world inputs.
-3. Create mass driver / orbital cannon prefab.
-4. Create nuclear warhead and missile silo prefabs.
-5. Create uranium reactor prefab as large container-style block.
-6. Create thorium material and thorium reactor prefab.
-7. Create radioactive waste item and radiation-sealed container block.
-8. Create radiation sealing block prefab.
-9. ~~Create heatshield block prefab.~~ *(9.29.0-dev, Step 61)*
-10. ~~Add heat tolerance values to all grid block descriptions.~~ *(9.31.0-dev)*
-11. ~~Implement heat generation for engines, thrusters, reactors, and exhaust pipes.~~ *(9.29.0 to 9.31.0-dev)*
-12. ~~Build cockpit heat indicator UI.~~ *(9.30.0-dev hull line; 9.32.0-dev adds the engine room line)*
-13. ~~Build player heat UI with green/yellow/red indicator.~~ *(9.30.0-dev suit strip; 9.32.0-dev reports the crew's compartment on the same panel)*
-14. ~~Implement atmospheric entry heat simulation.~~ *(9.29.0-dev; concealed-space exhaust and room heat closed by 9.32.0-dev, Step 63)*
-14b. ~~Grid Route Recorder & Energy Calculator: manual route calculation and recorded routes.~~ *(9.34.0-dev, Step 65 — distance, travel time, gravity wells, atmosphere segments, required thrust, power and hydrogen use, reserve margin and named warnings, with routes saved as waypoint lists on the grid. Autopilot remains open.)*
-15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; 12.23.0-dev ships the Autopilot legs for nav-target flights (auto-aim/charge/fire with cruise resume); 12.24.0-dev adds the internal-battery fuel model (pooled range, proportional drain, persisted) and the drive panel. 12.32.0-dev ships the destination-select UI for charted bodies and powered beacons on the drive panel. route-book autopilot warp legs shipped 12.37.0-dev — 9.34.0-dev shipped the route book both build on)*
-16. Build empire dashboard UI.
-17. **Run setup wizard step (non-destructive)**
-    - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.
-    - Step 63 (9.32.0-dev) authors the engine room atmosphere set, Step 64 (9.33.0-dev) tunes its
-      ventilation against compartment volume, and Step 65 (9.34.0-dev) authors the Route Recorder and
-      Nav Plotter for the route book; all three are re-runnable and preserve authored balance.
-18. ~~Ship the **Grid Inspector Overlay** (heat / damage / centre of mass): one shared overlay pass,
-    three modes on one rebindable hotkey, three research nodes in sequence.~~ *(9.37.0-dev —
-    `Scripts/UI/GridInspectorHud.cs` runs one shared per-renderer `MaterialPropertyBlock` pass that
-    tints block renderers and restores them on exit, degrading to the 24 blocks nearest the camera
-    above 240 blocks; `GameSettings` gains the `GridInspector` action, default K; Setup Step 68
-    authors INTEGRITY SCAN / THERMAL SCAN / CENTRE OF MASS under Grid Utilities. Unity validation of
-    the pass budget and the degrade readout is pending.)*
-19. ~~Convert crude into a **column of products** on a machine built for it.~~ *(9.38.0-dev —
-    the playtest decided the column is a dedicated plant, not a refinery refit: the NEW
-    `DistillationPlant` block carries one feed tank plus one typed tank per product (LPG, naphtha,
-    kerosene, diesel, gasoline, heavy fuel oil), each readable by its own run, with an analog dial
-    above every outlet and inlet; the refineries keep their plastics work and lose the old fuel
-    chain. `LiquidType` gained the five new liquids with densities and gauge colours. Still open
-    within this design: per-world crude assays from `OilSiteSampler`, freezing points, where
-    Refined Oil is produced from now on, and the burn-value table the fuel-ladder round needs.)*
-20. ~~Spend the fractions: recipes and engine fuel preferences per fraction, with `RefinedOil` recipes
-    kept alive through a conversion step so an old base does not wake up broken.~~ *(9.39.0-dev —
-    `LiquidType` gains `BurnEnergyMJPerL()`, `FreezingPointC()`, and `IsCombustible()`; `StationaryMaritimeEngine`
-    and `GridMaritimeEngine` burn fractionated cuts with realistic energy and efficiency scaling)*
-21. ~~Author the **Flare Stack** (small + tower) as a gas/liquid run terminator with oxygen draw, room
-    heat and an optional waste-heat recovery attachment.~~ *(9.39.0-dev — `Industrial/Prefabs/FlareStack.prefab`
-    derrick tower and Large/Small `GridFlareStack` vents dispose of excess liquids and gases, convert
-    thermal energy to electric watts via waste-heat recovery, and simulate room oxygen draw; Step 70)*
-22. ~~Author **asphalt roads** as terrain-placed surface blocks (straight, bend, junction, crossing,
-    ramp) with movement, traction and wear rules~~, then the road *network* readout that autopilot and
-    drone routing hang on. *(9.41.0-dev, Step 72 — surface, drag-to-pave, per-run wear, grade pricing,
-    movement/traction/grip and repair all shipped, but **without a shape set**: the cell drapes the
-    ground so the drape is the ramp, and a neighbour mask only decides where the kerb rises. 9.44.0-dev
-    added the crossings (Step 73), 9.44.1-dev the drawbridges, 9.44.2-dev their automation, 9.44.3-dev
-    the wheel fix that made the drawbridge card selectable, 9.45.0-dev the freeboard deck, the stone
-    substructure and commit-time grading — all
-    runtime behaviour with no new setup step of their own. 9.46.0-dev adds approach barriers,
-    9.47.0-dev driver guidance, and 9.48.0-dev named loaded-network snapshots.
-    Still open: global network membership, traffic scheduling, drones, creature and stamina bonuses,
-    rolling resistance and roadside lamps/furniture; the per-span automation switch shipped in 9.49.0-dev.)*
-23. Author the **Engine Works** block: parameter set, balance sheet, refusal reasons, craft cost by
-    specification, artefact requirements at the large end, and template storage.
-24. ~~Author **grid waymarks and the named connector block** (the cross-grid power/liquid/gas/item
-    bridge is the hard part; it does not exist yet), then the **auto-run shuttle loop** on top of the
-    existing autonomous thrust channel, with armed stop conditions and a reservation rule per leg.~~
-    *(9.35.0-dev, Step 66 — the bridge was the hard part, and it now exists in
-    `GridConnectorBlock`; still open: terrain avoidance, dock approaches, cargo schedules)*
-25. ~~Author the **static refuel pad** for ground bases — a waymark you place on dirt, not on a hull.~~
-    *(9.36.0-dev, Step 67: `Scripts/Navigation/StaticRefuelPad.cs`, `IRefuelPad`, metered
-    `PowerConsumer` draw, and a pad that is a real member of the base's power, fluid, gas and item graphs
-    rather than a block standing near them; ground rigs are served because a car here is a grid with
-    wheels. Still open: the pad pumping back into a world run, and cargo schedules.)*
-26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66–72 are used
-    (69 = 9.38.0-dev's Distillation Plant content, 70 = 9.39.0-dev's Flare Stack content,
-    71 = 9.40.0-dev's Catalytic Cracking & Petrochemicals content, 72 = 9.41.0-dev's Asphalt Roads
-    content) and each of these features takes its own step.
-
-### For 5.2.0 (Architect Era)
-
-1. Design world forge megastructure prefab.
-2. Create custom planet creation UI (body type + resource signature).
-3. Implement resource-signature validation rules.
-4. Build staged Dyson solar-swarm and sphere construction prefabs, orbital lanes, beam relays, and control UI.
-5. Build the Star Builder / Stellar Forge megastructure and stellar safety UI.
-6. Author Boss Relic Core items and relic-gated Architect research nodes.
-7. Add warp gate prototype prefab. *(12.38.0-dev — `GridWarpGate` + Setup Step 98: prefab, item, recipe, research.)*
-8. Finalize save schema v2 migration for boss progression, relics, custom stars, and Dyson construction stages.
-9. **Run setup wizard step (non-destructive)**
-   - Step 23 for world forge, Star Builder, Dyson Sphere, boss relic gates, and megastructures.
-
-### For 11.0.0-dev (Parked Hulls, the Water Probe, and the Tank-Only Jack Pump)
-
-1. Replace `Scripts/Persistence/WorldStatePersistence.cs`, `Scripts/WaterSim/FluidManager.cs`, `Scripts/Crafting/Pumpjack.cs`, `Scripts/Crafting/Furnace.cs`, `Scripts/Crafting/ElectricFurnace.cs`, `Scripts/UI/MachineUIs.cs`, `Scripts/UI/GameUIController.cs` and `Scripts/Editor/VoxelEngineSetupWindow.cs`, and add `Scripts/Editor/PumpjackTankSetup.cs`. Let Unity compile; the console should be clean.
-2. Run `Tools > Voxel Engine > Voxel Engine Setup`, then press **4. Build Crafting Content** and **10. Build Industrial Content**. These repair the smelting recipe assets: `Smelt_Iron`, `Smelt_Copper`, `Smelt_Steel` and `Smelt_Glass` are on disk with a null `input` and `output`, so no furnace can match them. Expect one `[Setup] Smelt_Iron: Iron x1 -> Iron Ingot x1 in 4s.` line per recipe. Both steps are non-destructive - they load the existing asset and repair its links.
-3. Then press **76. Convert the Jack Pump to a Tank-Only Crude Producer**. It is non-destructive: an authored tank capacity, litres per batch, power draw, scan depth or scan radius is never reset, and every change it makes is logged. It finds the prefab through the placed-block reference on `Block_Pumpjack` first, then the authored `Industrial/Prefabs/Pumpjack.prefab` path, then any prefab carrying a `Pumpjack` component - and it logs which one it used. If none exists it stops and says so rather than writing a stub, so run the industrial content step first. The block's own description is re-authored by the industrial step: crude goes into the tank, no barrels, and the Pirate Jack Pump Head is still required to build one.
-4. Park a ship or rover on the ground, save, quit and rejoin. It must be exactly where it was left, and it must stay there on the next two rejoins. Before this round it sank a little further each time.
-5. Sail or walk a hull through water with the maritime propulsion running. The console must be clean: the `SphereChunkGenJob ... JobHandle.Complete()` exception that came out of the water probe every physics step is gone.
-6. Open the Jack Pump panel. It now shows a crude tank gauge and no item slots. Right-click it with a liquid canister to draw crude off, or pipe the tank into the refinery. The pump draws power, stops when the tank is full, and needs crude under the derrick.
-7. Start a Jack Pump batch, save mid-cycle and rejoin: the tank holds the crude it had, and the stroke picks up rather than starting over.
-8. Put ore and fuel in a Furnace. The progress bar must move. If it does not, the console now logs one line per change and it says which of three cases this is: `no smelting recipe is assigned to this furnace` (the prefab has none), `N smelting recipe(s) assigned but M of them have no input or output item, so they can never match - re-run the crafting content setup step to repair the links` (the assets exist but lost their links), or `N smelting recipe(s) assigned, all linked` (the recipes are sound and the reason at the front of the line - No power, No input, No recipe for this input, No fuel, Fuel slot holds something that does not burn, Output full - is the real one). Send that line and the fix is determined by it.
-9. Load a world saved before this round. Hulls restore at their saved scene velocity, so a hull that was parked comes back parked. A pumpjack's crude and part-batch come back through the machine-process record; barrels left in its old slots do not, because those slots no longer exist.
-
-### For 10.2.0-dev (Smelter and Pumpjack Process Persistence)
-
-1. Replace `Scripts/Crafting/MachineProcessState.cs`, `Scripts/Crafting/Furnace.cs`, `Scripts/Crafting/ElectricFurnace.cs` and `Scripts/Crafting/Pumpjack.cs`. Let Unity compile; the console should be clean.
-2. Run `Tools > Voxel Engine > Voxel Engine Setup`. This round authors no prefab, item, recipe or research node, so the run is only the standing non-destructive check. No step needs to be re-run.
-3. Load a Furnace with ore and fuel and let it get part-way through a batch, then save and quit. Rejoin: the progress bar is where it was, the fuel bar is still burning down from the same point, and the batch completes without a second fuel item being eaten.
-4. Turn an Electric Furnace OFF from its ENABLED pill, switch auto-pull ON, save and quit. Rejoin: it is still OFF and drawing no power, and auto-pull is still ON. Before this round both reset to their prefab defaults on load.
-5. Start a Jack Pump cycle over a Pirate oil node, save mid-cycle and rejoin: the walking beam picks the stroke back up rather than starting the 14 s lift over.
-6. Load a world saved before 10.2.0-dev: every machine loads idle and on its prefab defaults, with no console error. A missing record is the expected legacy case.
-
-### For 10.1.0-dev (Movable-Grid Body Anchor)
-
-1. Replace `Scripts/Persistence/WorldStatePersistence.cs`. Let Unity compile; the console should be clean.
-2. Run `Tools > Voxel Engine > Voxel Engine Setup`. This round authors no prefab, item, recipe or research node, so the run is only the standing non-destructive check that every earlier authored asset is still connected. No step needs to be re-run for the new save fields to work.
-3. Park a ship or rover on the ground near your base, note which way it faces, save and quit.
-4. Rejoin: the hull must be where you parked it and facing the same way. The load line now reads `[WorldState] Loaded N tiered + M blocks + G movable grids (A from a body anchor) from ...`, and `A` must equal the number of hulls you had.
-5. Rejoin twice more, with time passing between joins so the planet has orbited on: same spot, same heading, every time.
-6. Save a hull drifting in deep space, then rejoin: it comes back where it was, with `0 from a body anchor` for that hull. A hull with no anchoring body keeps using its scene coordinate, which is what it did before this round.
-7. Load a world saved before 10.1.0-dev: every hull restores exactly as it did before, at its scene coordinate, with no new console warning. A missing anchor is the expected legacy case.
-8. If a hull still comes back in the wrong place, send the `[WorldState] Loaded ...` line and any `[WorldState] A movable grid ...` warning from the load — the warning names the body and the reason.
-
-### For 10.0.0-dev (Stored-Chunk Payload)
-
-1. Replace `Scripts/Persistence/ChunkSaveData.cs`, `Scripts/Persistence/RegionFile.cs`, `Scripts/Persistence/ChunkStorage.cs` and `Scripts/Persistence/ChunkStoreIdentity.cs`. Let Unity compile.
-2. Load the world that was broken. Expect one `[ChunkStorage] ... (store format 1 -> 2) - moved N stored region file(s) to a 'stale_' folder ...` line, then the normal verified line on every load after it.
-3. Return to where you stood when you left: the ground is there, the speckled slabs are gone, and the blocks restored from `world_state.json` still stand where they were placed.
-4. Rejoin twice more: the seed, the store state and the terrain must be identical, with no `[RegionFile]` or `[ChunkStorage]` warning in the console.
-5. Delete `stale_<utc>/` once the world has been healthy for a session — it holds terrain that was never whole.
-
-### For 9.59.0-dev (Chunk Store Identity Guard, Placed-Block Body Anchor)
-
-1. Replace `Scripts/Persistence/ChunkStoreIdentity.cs` (new, with its `.meta`), `Scripts/Persistence/ChunkStorage.cs`, `Scripts/Cosmos/SphereWorld.cs` and `Scripts/Persistence/WorldStatePersistence.cs`. Let Unity compile.
-2. A world that is already broken: close the game, open `VoxelWorlds/<worldName>/Bodies/<BodyName>` (the folder the console prints as `[ChunkStorage] World folder:`), rename it to `<BodyName>_old` and load the world. The chunks regenerate; blocks, machines, grids, containers and the inventory come back from `world_state.json`.
-3. Every load prints one line: `[SphereWorld] World '<world>' streaming '<Body>' (seed N, store <Adopted|Verified|Quarantined>, M region file(s))`. On an existing world the first load reports `Adopted` (it predates the guard) and writes `store.json`; later loads report `Verified`.
-4. Place a block, save, quit, rejoin: the console must report `[WorldState] Restored N placed block(s) — M from a body anchor, ...` and the block must stand where it was placed.
-5. If a join still breaks, send the `[SphereWorld] World ... streaming ...` line, the `[ChunkStorage] World folder:` line and any `[ChunkStorage]` warning from both a good join and the bad one — the seed and the store state are the whole question.
-
-### For 9.58.1-dev (Compile Fix)
-
-1. Replace `Scripts/Persistence/WorldStatePersistence.cs` and `Scripts/Player/PlayerSpawner.cs`; the rest of the round is unchanged. Let Unity compile — the console should be clean.
-2. Continue with the 9.58.0-dev acceptance run: Step 75 for the universal modules, the Catalytic Cracker panel, and three rejoins from your base.
-
-### For 9.58.0-dev (Rejoin Spawn, Live Reactor Panel, Universal Modules)
-
-1. Replace the eight edited scripts plus the new `Scripts/Editor/UniversalUpgradeSetup.cs` (and its `.meta` if meta files are tracked). Let Unity compile.
-2. Run `Tools > Voxel Engine > Voxel Engine Setup` and click **75. Author Universal Machine Upgrade Modules**. It creates only what is missing; a missing ingredient stops it by name instead of authoring a module nobody could craft. Existing multipliers, icons, recipe quantities and research settings are preserved.
-3. Search crafting near an Assembler for `Machine Speed Module` / `Machine Efficiency Module`; if they are absent, research **Advanced Manufacturing** first (the recipes are gated by that node).
-4. Shift-click one of each into an Oil Refinery's upgrade slots and check the multiplier readout reads x1.25 throughput / x0.8 power draw before a new batch starts.
-5. Watch a Catalytic Cracker's panel while the reactor warms: temperature, catalyst bed and efficiency should move every frame, and scrolling the panel should never be interrupted.
-6. Save and quit at your base, then rejoin three times: same spot, same planet, ground streamed under you, no deep-space line in the console, and the base exactly where you left it.
-7. Fly into deep space, save and quit, then rejoin: same place in space, zero-g, no falling through a planet.
-8. Load a world saved before 9.58.0-dev: the bed/world-spawn path places the player, the system starts at t = 0 as before, and no console error is reported.
-
-### For 9.57.0-dev (Machine Process Persistence)
-
-1. Replace the eight edited scripts plus the new `Scripts/Crafting/MachineProcessState.cs` (and its `.meta` if meta files are tracked). Let Unity compile.
-2. Run `Tools > Voxel Engine > Voxel Engine Setup`. This round authors nothing, so the run is only the standing non-destructive check that every earlier authored asset is still connected — no step needs to be re-run for the new save record to work.
-3. Fill a Distillation Plant's feed tank, let a batch finish, save and reload: feed and all six cuts return at their levels, the panel keeps its recipe and progress, and the world dials ease back to the same readings.
-4. Heat a Catalytic Cracker and let the bed drop, save and reload: reactor temperature and catalyst bed percentage return, and cracking efficiency reads the same value before the first new tick.
-5. Shut a Flare Stack, enable waste-heat recovery, target kerosene, save and reload: all three settings return and the status line still reads Shut.
-6. Install a speed and an efficiency module in an Oil Refinery, save and reload: the multipliers are already applied before any new batch starts.
-7. Pick a recipe on a ship refinery, save and reload: the panel still shows that recipe instead of Auto.
-8. Load a world saved before 9.57.0-dev: every machine loads empty and idle with no console error. A missing record is the expected legacy case.
-
----
-
-
-## 11. Added Roadmap Requirements — Save Safety, Mobility & Multiplayer
-
-### 11.1 Player Save Safety — ✅ COMPLETED
+### 9.1 Player Save Safety — ✅ COMPLETED
 - Player position is captured only while the player object, Inventory, and a valid planetary/space position still exist.
 - A missing player record is ignored safely and is never interpreted as a static block position.
 - Invalid player coordinates now fall back to a safe bed/world/body spawn without overwriting the last known-good save.
@@ -2594,13 +2275,13 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.14.7-dev:** `WorldStatePersistence.RestorePlayer` validates saved player position and rotation before touching the live player transform, restores inventory at the safe fallback when needed, and logs the recovery as non-destructive.
 - **6.80.3-dev:** `PlayerSpawner` now validates the complete player volume for water on fresh, bed, saved, and respawn targets; wet candidates stream/search for dry terrain while control is disabled. PlayerController also gains capped uphill terrain assistance and post-move footing recovery to prevent mountain-mesh penetration. Unity testing confirmed this behavior works in Unity.
 
-### 11.2 Ice Friction — ✅ COMPLETED
+### 9.2 Ice Friction — ✅ COMPLETED
 - Ice surfaces use low-friction physics for players, static loose blocks, and movable Grids.
 - **6.21.0-dev:** Player movement detects solid Ice voxels underfoot and applies low-friction, reduced-steering movement on ice.
 - **6.21.1-dev:** Physical dropped items use low Rigidbody damping and delayed settling on ice, and movable Grids reduce dampener/angular braking while touching Ice.
 - **6.21.2-dev:** Movable Grids keep gravity active for a short grace period after ice contact, dampen only tangent drift during that recovery, and fall back toward the planet instead of hanging upward after tilting off ice. Current ice-friction scope is complete after Unity Unity validation.
 
-### 11.3 Jetpack Families — 🛠️ WORKING ON
+### 9.3 Jetpack Families — 🛠️ WORKING ON
 - Add two dedicated jetpack equipment slots.
 - Hydrogen boost pack: Shift activates a boost; hydrogen-only flight remains possible with no power draw.
 - Atmospheric jetpack: atmospheric propulsion role.
@@ -2610,7 +2291,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.22.2-dev:** Jetpack slot UX polish: shift-click from hotbar/backpack equips into the first free slot, shift-click from equipment returns to inventory, the Sort button is removed from equipment slots, the Jetpack Bay panel has an ONLINE/EMPTY visual state, and flight mode shuts off immediately when the last usable jetpack is removed.
 - **6.22.3-dev:** Jetpack Bay no longer uses a heavy boxed frame, the ONLINE/EMPTY pill sits beside the title on the left, drag/drop slot changes refresh immediately, and Hydrogen Boost Pack sprint boost has a short subtle spool-up. **6.72.0–6.73.0-dev:** Fuel/power accounting shipped. **6.73.0:** refillable Hydrogen Canisters (fill from world H₂ Gas Tanks); H₂/Hybrid packs auto-recharge from inventory canisters at ≤10% fuel; Charged Cells for power packs; Jetpack Bay fuel bar; empty-pack flight cut. **6.80.0-dev** adds the dedicated Armor Station plus a separate timed Armor Upgrade Station: Mobility Servos (jetpack speed +6%/tier, fuel drain −6%/tier), Heat Tolerance / Radiation Shielding / Oxygen Efficiency / Impact Padding (5 tiers each), and Hazmat sealing. Installation runs from 30 seconds at T1 to 150 seconds at T5/Hazmat; Unity validation confirmed the complete armor-station flow in 6.80.4-dev.
 
-### 11.4 Cryobeds, Offline Survival & Oxygen — ✅ COMPLETED (6.28.0-dev)
+### 9.4 Cryobeds, Offline Survival & Oxygen — ✅ COMPLETED (6.28.0-dev)
 - Add static and Grid cryobed items/blocks.
 - An offline player requires an active cryobed or oxygen-rich environment.
 - If oxygen depletes or no valid offline-survival condition exists, the player dies.
@@ -2624,7 +2305,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **17.4.0-dev:** Offline death is a world rule, default on. *(See Changelog.)*
 - **6.28.0-dev:** Completed offline survival: new `OfflineSurvivalService` saves UTC logout time/pos/cryobed to `offline_state.json` on every save/quit, on next login computes offline hours (clamped 0-720h, <2 min ignored), consumes `offlineOxygenPerHour * hours` from claimed `GridCryobed.oxygenStored` (or checks `Cryobed.IsPowered + HasOxygenEnvironment` for static), checks oxygen-rich environment (powered biofarm producing within 10 m, O₂ tank >5-10 L within 6-7 m, powered cryobed with O₂ within 6 m) when no claimed cryobed, and kills player offline (clears bed spawn, triggers `Die()` with feedback HUD showing reason) if O₂ depleted / no power / no O₂-rich env / cryobed destroyed. Room O₂ for static cryobed now checks nearby biofarm/tank/cryobed via `Cryobed.IsOxygenRichAt()` instead of always true.
 
-### 11.5 Passive Oxygen Generation — ✅ COMPLETED (6.27.0-dev) + PATCHES 6.27.1 & 6.27.2
+### 9.5 Passive Oxygen Generation — ✅ COMPLETED (6.27.0-dev) + PATCHES 6.27.1 & 6.27.2
 - Add an expensive Biofarm / oxygen garden system that passively generates oxygen over time.
 - The Biofarm should require power, water, biomass or plant inputs, and enough physical space to prevent cheap oxygen spam.
 - Static and Grid variants should connect to gas pipes and feed oxygen tanks, cryobeds, life support rooms, and future airtight spaces.
@@ -2633,7 +2314,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.27.1-dev:** Fixed grid biofarm UI not opening (missing from `GridBlockHasUI`), added variable ports on all biofarms like grid tanks (`GridTankVariablePorts` for liquid+gas on `GridBiofarm` + `GridH2O2Generator`, port markers for gas+liquid, visual arms in `WaterPipe`/`GasPipe` for both static `Building.Biofarm` and grid `GridBiofarm`), and fixed vertical pipe connection on land (`PipeAdjacency` vertical tolerance 0.65m, `IsPlacementValid` allows thin stacking blocks to ignore terrain for vertical shafts).
 - **6.27.2-dev:** Enforced pipe-only water for biofarm (removed adjacent-tank cheat + voxel water fallback, now requires nearby `WaterPipe` whose network has a `WaterTank`), fixed diagonal pipe connections on grid and land by switching `PipeAdjacency` to Euclidean `sqrt(other1²+other2²)` checks for all axes (prevents diagonal with both offsets 0.5), and fixed grid ghost port not committing (added `GridBiofarm` to `TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` in both `BuildSystem` and `GridBuilder`, ensured `EnsureGridTankPorts` creates gas+liquid fixed ports and variable `Port_*_V` ports persist via `WorldStatePersistence`).
 
-### 11.6 Multiplayer — SUPERSEDED BY SECTION 1 — 🚧 IN PROGRESS
+### 9.6 Multiplayer — SUPERSEDED BY SECTION 1 — 🚧 IN PROGRESS
 - Live plan, status and open scope: **section 1, Multiplayer Strategy**. Milestones 1-10 are shipped; milestones 11-12 (teams, dedicated server) are open.
 - This is the final roadmap milestone after all single-player systems are complete.
 - Support self-hosted server creation on Windows and Linux.
@@ -2641,7 +2322,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Add player teams with invitations and team-only interaction permissions for Grid blocks and static blocks.
 - Add pirate and merchant NPC roles.
 
-### 11.7 World Management, Autosaves & Item Limits — ✅ COMPLETED
+### 9.7 World Management, Autosaves & Item Limits — ✅ COMPLETED
 - Add three visible autosave slots in the Saves panel, with safe load/restore flow.
 - Add Edit World for non-generation settings only: world name and dropped-item limit.
 - Default maximum active physical dropped items is 1000 and must be configurable in both Create World and Edit World.
@@ -2666,4 +2347,3 @@ For each version, these are the high-level Unity tasks you will perform manually
 - [ ] Grass/streaming/fluid frame-time and texture-memory profiling *(16.0.0-dev)*
 
 - [ ] 16.0.1-dev Editor profiling, shoreline acceptance and existing floating-scenery repair
-repair

@@ -87,6 +87,21 @@ namespace VoxelEngine.Weather
         public static float CoverageBiasFor(float overcastBias01)
             => Mathf.Lerp(MinCoverageBias, MaxCoverageBias, Mathf.Clamp01(overcastBias01));
 
+        // ── Words ────────────────────────────────────────────────────────────────
+        /// <summary>
+        /// 17.32.0-dev - the three places a player can be relative to a band, named once so the
+        /// map, the machine card and any later surface cannot say three different things about
+        /// the same square metre. A place is UNDER a band when the system is essentially fully
+        /// over it, AT THE EDGE while the fade is still blending, and CLEAR when the nearest
+        /// band is a walk away.
+        /// </summary>
+        public static string CoverageWord(float coverage01)
+        {
+            if (coverage01 >= 0.85f) return "UNDER THE BAND";
+            if (coverage01 >= 0.20f) return "AT THE BAND EDGE";
+            return "CLEAR OF THE BAND";
+        }
+
         /// <summary>
         /// How much of the weather system is over a place, 0..1. 0 means this square metre is
         /// in one of the gaps between bands and gets nothing; 1 means it is fully inside one.

@@ -1,9 +1,50 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.31.0-dev`
+**Current Version:** `17.32.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.32.0-dev] Rain Washes Where It Falls
+
+**Type:** MINOR - the smog washout was the last system still treating weather as one number for a whole world. It now reads the sky over each pollution CELL: rain scrubs the ground its band is over and leaves the gaps between bands alone, which is what 17.31.0-dev's bands are for. No save field, schema or public API was removed, no prefab or asset is touched, and none of the wash coefficients changed.
+
+**GitHub title:** `[17.32.0-dev] Rain scrubs only the cells it falls on, and the panel says which ones`
+
+#### Added
+- **The washout is sampled per cell (`Scripts/Environment/Pollution/PollutionService.cs`).** `Simulate` used to ask the body for one number (the system's `PlanetIntensity`) and apply it to every polluted cell on the planet, so a rain phase cleared smog under a band the player could see arriving three kilometres away. It now asks `WeatherManager.PrecipitationAt` at each body-local CELL CENTRE once per simulation step (one step per second). A cell under a band is scrubbed at exactly the rate the whole body used to receive; a cell in a gap between bands is not scrubbed at all and keeps its smog until a band drifts over it.
+  - **The 64 m cell is the unit the model already had** - pollution cells have been the simulation's atom since the service was written, so the rain now acts at the same scale the smog is stored at instead of at the scale of the planet. No new grid, no per-region state, no save data: the sample is a pure function of the same front clock every other weather caller uses.
+  - **The rain-driven half of runoff spreading follows the same sample.** The 0.008 rain term in `runoffSpreadShare` is per cell too, so a downpour pushes contamination down its own slope where it falls, rather than everywhere on the body at once. The dry term (0.0008) is unchanged, so soil and water seep at the speed they always did when it is not raining.
+  - **Cells are only sampled on the active body**, exactly as before: pollution on a body the player is not standing on has never been wind- or rain-driven, and this round does not change that.
+- **A public way to ask what the sky is doing to a spot (`PollutionService.AirWashPerSecondAt(Vector3)`).** Returns the share of a cell's airborne smog the sky directly over a world position removes in one second, computed from the same `PrecipitationAt` sample and the SAME coefficient (`WashRatePerIntensity`, 0.004) the simulation applies. One formula, two callers: a panel built on it cannot drift away from the simulation it describes. Zero in a gap between bands, zero on an airless body, and - per the deliberate debug exemption - the full old rate while test weather is held.
+- **One band-word list (`WeatherFronts.CoverageWord(float)`).** UNDER THE BAND / AT THE BAND EDGE / CLEAR OF THE BAND moved out of the logistics map's private helper and into the front field itself, because the map, the machine card and any later surface now all name the same three situations. The map's copy is deleted and it calls the shared one.
+- **One wash line, two surfaces (`IndustrialPressureReadout.WashLineAt(Vector3)`).** Turns the rate into the player's units - percent per minute - plus the band word, and says so plainly when nothing is falling: `NO RAIN - nothing is being scrubbed here`, or `NO WEATHER` on a body that has none.
+- **`RAIN SCRUB` on the district pressure card (`Scripts/UI/GameUIController.cs`).** The 17.30.0-dev card ends every emitting machine's emissions foldout with the readings its threat tier is made from; it now also carries the sky over THAT chimney. Two machines in one district can honestly read different rates - the one under the band is being washed, the one in the gap is not - and the row is a caption/value line in the same instrument family as the two bars above it, with no track because this reading is a rate, not a fill.
+- **`RAIN SCRUB` in the map's pressure block (`Scripts/UI/LogisticsMapScreen.cs`).** The logistics map's `INDUSTRIAL PRESSURE` section gains the same line beside the rung, the history and the pressure, so the two things a player compares - what the district has earned and what the sky is doing about it - sit together. The `WEATHER` section still reports the raw local precipitation; the pressure section now reports its industrial consequence.
+
+#### Balance, stated plainly
+- **Every coefficient is unchanged** - `0.004` per intensity-second for the air wash, `0.0008` base and `0.008` rain for runoff spreading, the 0.85 airborne-to-runoff conversion, and every retention half-life. A cell under a band clears at exactly the speed the whole body used to clear at.
+- **What DID change is how much of the body is scrubbed.** 17.31.0-dev measured roughly 37-46 percent of a surface under a band at any moment, so total scrub across a planet is now proportional to the covered area instead of body-wide: a polluted district in a gap keeps its smog (and its threat tier) until a band arrives, and a body-wide total washes out more slowly than it used to. That is the feature's honest reading, not a side effect - the rain that reaches the ground is the same rain it was before, and it can only clean the ground it reaches. `WashRatePerIntensity` is the single lever if live play shows smog lingering too long; it is a private constant in `PollutionService`, so moving it is a one-line change and needs no prefab.
+- **Manual test weather stays body-wide on purpose.** `EffectiveCoverage` is 1 while `IsManuallyHeld`, and `PrecipitationAt` follows it, so Ctrl+Alt+R / Ctrl+Alt+W still scrub the whole planet while held. The debug chords exist to produce the storm they name, not whatever the bands happened to be doing.
+
+#### Deliberately not changed
+- **The weather state machine, the cloud shell, the orbiting sensor, the solar panels and the map's band layer** are untouched. This round is the pollution simulation changing WHICH sky it reads, not the sky changing.
+- **The smog-to-weather nudge stays player-sampled.** `PickNextState` still biases its roll from the air at the player's camera. Regionalising that feedback is its own question (it should read the body record's burden, not a player position) and is not needed for this round to be correct.
+- **`IsPlanetPrecipitating` stays.** It is still the honest body-wide answer for telemetry and anything that means "the whole planet"; only its doc note changed, to say the washout no longer reads it. Removing a public property would be a breaking change for no gain.
+- **No inspector field, no setup step.** The new numbers are private constants and the new behaviour is a sample, so no serialized prefab can be left holding a stale default and no wizard step is involved.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: MINOR `17.32.0-dev` over `17.31.0-dev`. A change in how an existing system behaves is a MINOR by the project's own rule, and it is save-compatible in both directions: `CurrentSchemaVersion` stays `2`, `pollution.json` keeps format 1 and its exact cell and body records, no save field is added, removed or reinterpreted, and no item, recipe, block or prefab asset is touched.
+- Multiplayer: the washout stays host/offline-authoritative exactly as it was (`CanSimulate` is untouched) and needs no new message - the bands are already computed from a clock the host publishes (17.31.0-dev), so a guest converging on the host's pollution state sees the same scrub the host applied. A guest's own machine never runs this step.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. All seven touched files (`PollutionService.cs`, `IndustrialPressureReadout.cs`, `WeatherManager.cs`, `WeatherFronts.cs`, `GameUIController.cs`, `LogisticsMapScreen.cs`, `GameVersion.cs`) were checked with the string- and comment-aware brace, bracket and parenthesis scanner - every counter returns to zero, nothing negative. Every symbol the new code calls was confirmed to exist with the signature used: `WeatherManager.Instance`, `PrecipitationAt(Vector3)`, `CoverageAt(Vector3)`, `IsWeatherActive`, `CelestialBody.transform`, `CellCentre(Vector3Int)`, `LcdHudTheme.CaptionLabel`, `AppendPressureRow`. New members are `AirWashPerSecondAt`, `CoverageWord`, `WashLineAt`, `AppendPressureNoteRow` and the four named constants - all new names, checked repo-wide for a collision.
+
+#### What to run
+1. Nothing to author. This is code only: no prefab, item, recipe, research node or wizard step is involved. The one number worth moving if you want to feel a difference is `WashRatePerIntensity` in `PollutionService`.
+2. Put a smoker (furnace, pumpjack, refinery) somewhere and open its emissions foldout. Clear sky: `RAIN SCRUB` reads `NO RAIN - nothing is being scrubbed here`. When a band arrives: a percent per minute and `UNDER THE BAND`. Walk the machine in and out of the rain and the line should follow the sky, not the weather state.
+3. Place two smoking machines one to two kilometres apart and wait for rain. While one is under a band the two cards should read different rates - that is the whole round. Before 17.32.0-dev they could not.
+4. Open the logistics map (`L`) during rain: `RAIN SCRUB` in the INDUSTRIAL PRESSURE block and `LOCAL` / `BAND COVER` in the WEATHER block should describe the same square metre, and the band words should match.
+5. Press Ctrl+Alt+R and confirm the washout reads full strength, then let the forced weather end: the card should drop back to whatever the bands are doing. This is the debug exemption, working.
+6. Save mid-rain and reload: the pollution sidecar is unchanged in format, the cells restore, and the scrub resumes from the sky over each cell at the moment of load.
 
 ### [17.31.0-dev] Weather That Belongs To A Place
 

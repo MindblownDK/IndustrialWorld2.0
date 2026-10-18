@@ -3,6 +3,16 @@
 // Host/offline-authoritative, sparse, body-local pollution simulation. Cells are
 // anchored to a celestial body's transform so floating-origin shifts and orbital
 // motion cannot move a plume away from the factory that created it.
+//
+// 17.32.0-dev — RAIN WASHES WHERE IT FALLS. Until this round the washout read the
+// body's weather SYSTEM (PlanetIntensity), so a single rain phase scrubbed every
+// polluted cell on the planet at the same rate while the player could walk out of
+// the rain band overhead. The washout now samples the sky over each CELL through
+// WeatherManager.PrecipitationAt: a cell under a band is scrubbed at exactly the
+// rate the whole body used to receive, a cell in a gap between bands is not
+// scrubbed at all, and the rain-driven half of runoff spreading follows the same
+// sample. Nothing about the weather state machine, the coefficients or the save
+// format moves — only WHICH cells the sky is allowed to act on.
 
 using System;
 using System.Collections.Generic;
@@ -26,6 +36,13 @@ namespace VoxelEngine.Environment
         private const float SaveIntervalSeconds = 60f;
         private const float LocalAirScale = 80f;
         private const float LocalRunoffScale = 110f;
+        // 17.32.0-dev: the washout's coefficients, named because a public readout
+        // (AirWashPerSecondAt) has to compute the SAME number the simulation applies -
+        // one formula, two callers, so a panel can never disagree with the sim.
+        private const float WashRatePerIntensity = 0.004f;
+        private const float RunoffSpreadBasePerSecond = 0.0008f;
+        private const float RunoffSpreadRainPerSecond = 0.008f;
+        private const float MaxRunoffSpreadShare = 0.03f;
         // 17.18.0-dev: the residual-history channel reads on a much wider scale
         // than the live channels - climate load accumulates over hours, so one
         // heavy source left running saturates around 0.6-0.7 and a factory
@@ -266,6 +283,21 @@ namespace VoxelEngine.Environment
         /// </summary>
         public static float SampleClimate01(Vector3 worldPosition)
             => SampleLocal01(worldPosition, LoadChannel.Climate);
+
+        /// <summary>
+        /// 17.32.0-dev — the share of a cell's airborne smog that the sky DIRECTLY OVER a world
+        /// position removes in one second (0..1). Computed from the same
+        /// <see cref="WeatherManager.PrecipitationAt"/> sample and the same coefficient the
+        /// simulation uses, so a readout built on it can never disagree with the washout it
+        /// describes. Zero in the gaps between rain bands and on a body with no weather, which
+        /// is now a real answer rather than an approximation: in a gap the smog genuinely stays.
+        /// </summary>
+        public static float AirWashPerSecondAt(Vector3 worldPosition)
+        {
+            var weather = WeatherManager.Instance;
+            if (weather == null) return 0f;
+            return 1f - Mathf.Exp(-WashRatePerIntensity * weather.PrecipitationAt(worldPosition));
+        }
 
         private enum LoadChannel { Airborne, Runoff, Climate }
 
@@ -602,8 +634,11 @@ namespace VoxelEngine.Environment
             string activeName = active != null && active.settings != null ? active.settings.bodyName : string.Empty;
             var wind = WindSystem.Instance;
             float windSpeed = wind != null ? wind.GetWindSpeed() : 11.5f;
-            float rain = WeatherManager.Instance != null && WeatherManager.Instance.IsPlanetPrecipitating
-                ? WeatherManager.Instance.PlanetIntensity : 0f;
+            // 17.32.0-dev — the sky is asked per CELL. `skyIsLocal` only says whether there is
+            // weather to ask about at all; the answer itself belongs to the cell's own square
+            // metre (WeatherManager.PrecipitationAt), which is the whole point of the bands.
+            var weather = WeatherManager.Instance;
+            bool skyIsLocal = weather != null && weather.IsWeatherActive;
 
             _bodyNameScratch.Clear();
             foreach (string bodyName in _cells.Keys) _bodyNameScratch.Add(bodyName);
@@ -625,17 +660,28 @@ namespace VoxelEngine.Environment
                     : 0f;
 
                 float airRetention = Mathf.Exp(-0.00096f * dt);
-                float washShare = isActive && rain > 0f
-                    ? 1f - Mathf.Exp(-0.004f * rain * dt)
-                    : 0f;
                 float runoffRetention = Mathf.Exp(-0.00026f * dt);
-                float runoffSpreadShare = Mathf.Clamp((0.0008f + (isActive ? rain * 0.008f : 0f)) * dt,
-                    0f, 0.03f);
                 float climateRetention = Mathf.Exp(-0.000048f * dt);
                 float debrisRetention = Mathf.Exp(-0.000016f * dt);
+                bool sampleSky = isActive && skyIsLocal && active != null;
 
                 foreach (var pair in source)
                 {
+                    // 17.32.0-dev — what is falling on THIS cell, not on the body: 0 inside a
+                    // gap between bands, rising to the system's own strength under one. The
+                    // coefficients below are unchanged, so a cell under a band is scrubbed at
+                    // exactly the rate the whole planet used to receive and a dry cell keeps
+                    // its smog until the band drifts over it.
+                    float rain = sampleSky
+                        ? weather.PrecipitationAt(active.transform.TransformPoint(CellCentre(pair.Key)))
+                        : 0f;
+                    float washShare = rain > 0f
+                        ? 1f - Mathf.Exp(-WashRatePerIntensity * rain * dt)
+                        : 0f;
+                    float runoffSpreadShare = Mathf.Clamp(
+                        (RunoffSpreadBasePerSecond + rain * RunoffSpreadRainPerSecond) * dt,
+                        0f, MaxRunoffSpreadShare);
+
                     float naturallyRetainedAir = pair.Value.airborneSmog * airRetention;
                     float washedFromAir = naturallyRetainedAir * washShare;
                     PollutionLoad retained = new()

@@ -674,6 +674,18 @@ namespace VoxelEngine.UI
                 pressureNext.style.color = new StyleColor(T.TextMuted);
                 pressureNext.style.marginBottom = 2;
                 _list.Add(pressureNext);
+
+                // 17.32.0-dev — the sky is part of the district's arithmetic now: rain scrubs
+                // only the cells its band is over, so the same polluted district can be
+                // washing out here and standing still a few kilometres away. One line, the
+                // same helper the machine card prints, so the two never disagree.
+                var pressureRain = new Label(
+                    "RAIN SCRUB   " + IndustrialPressureReadout.WashLineAt(ViewerPosition()));
+                pressureRain.style.fontSize = 9;
+                pressureRain.style.whiteSpace = WhiteSpace.Normal;
+                pressureRain.style.color = new StyleColor(T.TextMuted);
+                pressureRain.style.marginBottom = 2;
+                _list.Add(pressureRain);
             }
 
             // 17.31.0-dev — THE SKY, PER REGION.
@@ -698,7 +710,7 @@ namespace VoxelEngine.UI
                 _list.Add(weatherState);
 
                 var weatherPlace = new Label(
-                    $"LOCAL {here * 100f:0}%   ({BandLabel(cover)})   ·   {(snow ? "SNOW" : "RAIN")}"
+                    $"LOCAL {here * 100f:0}%   ({WeatherFronts.CoverageWord(cover)})   ·   {(snow ? "SNOW" : "RAIN")}"
                     + $"   ·   BAND COVER {cover * 100f:0}%");
                 weatherPlace.style.fontSize = 9;
                 weatherPlace.style.whiteSpace = WhiteSpace.Normal;
@@ -1555,14 +1567,6 @@ namespace VoxelEngine.UI
 
         /// <summary>Canvas grid step for the weather overlay, in pixels.</summary>
         private const float WeatherDrawCellPixels = 24f;
-
-        /// <summary>What the coverage number means in words.</summary>
-        private static string BandLabel(float coverage01)
-        {
-            if (coverage01 >= 0.85f) return "UNDER THE BAND";
-            if (coverage01 >= 0.20f) return "AT THE BAND EDGE";
-            return "CLEAR OF THE BAND";
-        }
 
         /// <summary>Readable weather state name (the enum packs the words together).</summary>
         private static string WeatherLabel(WeatherState state) => state switch

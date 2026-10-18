@@ -23,6 +23,7 @@
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using UnityEngine;
+using VoxelEngine.Weather;
 
 namespace VoxelEngine.Environment
 {
@@ -119,6 +120,29 @@ namespace VoxelEngine.Environment
         public const string ActivityNote =
             "One outlet has to run about four minutes before the tiers apply here; until then "
             + "this district answers with its ordinary, smaller presence.";
+
+        /// <summary>
+        /// 17.32.0-dev — WHAT THE SKY IS DOING TO THIS DISTRICT, in one line: the share of the
+        /// district's airborne smog the rain removes per minute, and which band word applies.
+        /// Built on PollutionService.AirWashPerSecondAt (the simulation's own formula) and the
+        /// weather's own coverage, so the machine card and the map cannot describe the same
+        /// rain differently. A clear spell is a real answer, not a zero rate under a band word:
+        /// when nothing is falling the line says so.
+        /// </summary>
+        public static string WashLineAt(Vector3 worldPosition)
+        {
+            var weather = WeatherManager.Instance;
+            if (weather == null || !weather.IsWeatherActive)
+                return "NO WEATHER   ·   the sky is not scrubbing this district";
+
+            float precipitation = weather.PrecipitationAt(worldPosition);
+            if (precipitation <= 0.02f)
+                return "NO RAIN   ·   nothing is being scrubbed here";
+
+            float perMinute = PollutionService.AirWashPerSecondAt(worldPosition) * 60f;
+            return $"{perMinute * 100f:0.#}% / MIN   ·   "
+                 + WeatherFronts.CoverageWord(weather.CoverageAt(worldPosition));
+        }
 
         /// <summary>
         /// One line for a survey surface: the rung, then both readings in percent.
