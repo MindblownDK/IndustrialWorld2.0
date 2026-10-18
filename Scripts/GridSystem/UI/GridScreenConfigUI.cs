@@ -32,6 +32,9 @@ namespace VoxelEngine.GridSystem.UI
         private bool _open;
         private readonly List<Button> _sourceBtns = new();
         private readonly List<Button> _modeBtns = new();
+        // 17.35.0-dev: the page each mode button selects, so the highlight never has to
+        // guess a mode from a button's text again (the old "Mixed" special case).
+        private readonly List<ScreenDataMode> _modeBtnModes = new();
         private readonly List<Button> _borderBtns = new();
         private readonly List<Button> _fontBtns = new();
 
@@ -123,7 +126,8 @@ namespace VoxelEngine.GridSystem.UI
             _root.style.alignItems = Align.Center;
             _root.style.justifyContent = Justify.Center;
             UIState.PushBlock();
-            _sourceBtns.Clear(); _modeBtns.Clear(); _borderBtns.Clear(); _fontBtns.Clear();
+            _sourceBtns.Clear(); _modeBtns.Clear(); _modeBtnModes.Clear();
+            _borderBtns.Clear(); _fontBtns.Clear();
             Build();
         }
 
@@ -164,7 +168,10 @@ namespace VoxelEngine.GridSystem.UI
 
             _panel = new VisualElement();
             _panel.style.width = 540;
-            _panel.style.maxHeight = new StyleLength(new Length(88f, LengthUnit.Percent));
+            // No height cap on the card itself: it lives in the scroll view below and may
+            // be as tall as its content. A picker that adds a hundred pixels must not push
+            // the preview off the bottom of a 1080p screen.
+            _panel.style.flexShrink = 0;
             _panel.style.backgroundColor = new StyleColor(new Color(0.08f, 0.09f, 0.12f, 0.98f));
             _panel.style.paddingTop = 14; _panel.style.paddingBottom = 14;
             _panel.style.paddingLeft = 16; _panel.style.paddingRight = 16;
@@ -173,7 +180,15 @@ namespace VoxelEngine.GridSystem.UI
             _panel.style.borderTopColor = _panel.style.borderBottomColor =
             _panel.style.borderLeftColor = _panel.style.borderRightColor = new StyleColor(new Color(0.20f, 0.23f, 0.28f));
             UITheme.Radius(_panel, 10);
-            _root.Add(_panel);
+
+            // 17.35.0-dev: the panel grew a page picker (search, categories, description),
+            // so it now scrolls as a whole rather than trusting its content to fit.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.width = 556;
+            scroll.style.maxHeight = new StyleLength(new Length(90f, LengthUnit.Percent));
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.Add(_panel);
+            _root.Add(scroll);
 
             // ── Header ──
             var hdr = new VisualElement();
@@ -292,40 +307,155 @@ namespace VoxelEngine.GridSystem.UI
             mHdr.style.marginTop = 8; mHdr.style.marginBottom = 3;
             _panel.Add(mHdr);
 
-            var modeRow = new VisualElement();
-            modeRow.style.flexDirection = FlexDirection.Row; modeRow.style.flexWrap = Wrap.Wrap;
-            _panel.Add(modeRow);
+            // 17.35.0-dev — THE PICKER, REBUILT.
+            //
+            // Nine identical buttons in one wrap told a player nothing: not what a page
+            // showed, not which belonged together, and the active one was worked out by
+            // comparing button TEXT to the enum name (which is why "Mixed" needed a special
+            // case). The picker now reads ScreenPageCatalog: a search box, one section per
+            // category, the page's own name on its button, and a description panel that
+            // says what the page answers and whether this panel is big enough for it.
+            var searchRow = new VisualElement();
+            searchRow.style.flexDirection = FlexDirection.Row;
+            searchRow.style.alignItems = Align.Center;
+            searchRow.style.marginBottom = 4;
+            _panel.Add(searchRow);
 
-            foreach (ScreenDataMode mode in System.Enum.GetValues(typeof(ScreenDataMode)))
+            var search = new TextField { name = "ScreenPageSearch" };
+            search.style.flexGrow = 1;
+            search.style.height = 22;
+            search.label = string.Empty;
+            search.tooltip = "Filter the pages by name or by what they show.";
+            search.style.marginRight = 0;
+            searchRow.Add(search);
+
+            var pageList = new ScrollView(ScrollViewMode.Vertical) { name = "ScreenPageList" };
+            pageList.style.maxHeight = 210;
+            pageList.style.marginBottom = 4;
+            pageList.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            _panel.Add(pageList);
+
+            // The description panel: one page described, never a wall of unknown names.
+            var pageInfo = new VisualElement { name = "ScreenPageInfo" };
+            pageInfo.style.paddingLeft = 7;
+            pageInfo.style.paddingRight = 7;
+            pageInfo.style.paddingTop = 5;
+            pageInfo.style.paddingBottom = 5;
+            pageInfo.style.marginBottom = 4;
+            pageInfo.style.backgroundColor = new Color(0.10f, 0.12f, 0.15f);
+            UITheme.Radius(pageInfo, 4);
+            var pageInfoTitle = new Label(string.Empty) { name = "ScreenPageInfoTitle" };
+            pageInfoTitle.style.fontSize = 11;
+            pageInfoTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pageInfoTitle.style.color = new Color(0.90f, 0.93f, 0.96f);
+            pageInfo.Add(pageInfoTitle);
+            var pageInfoBlurb = new Label(string.Empty) { name = "ScreenPageInfoBlurb" };
+            pageInfoBlurb.style.fontSize = 9;
+            pageInfoBlurb.style.whiteSpace = WhiteSpace.Normal;
+            pageInfoBlurb.style.color = new Color(0.66f, 0.70f, 0.76f);
+            pageInfoBlurb.style.marginTop = 2;
+            pageInfo.Add(pageInfoBlurb);
+            var pageInfoHint = new Label(string.Empty) { name = "ScreenPageInfoHint" };
+            pageInfoHint.style.fontSize = 9;
+            pageInfoHint.style.whiteSpace = WhiteSpace.Normal;
+            pageInfoHint.style.marginTop = 3;
+            pageInfoHint.style.color = new Color(0.96f, 0.74f, 0.36f);
+            pageInfo.Add(pageInfoHint);
+            _panel.Add(pageInfo);
+
+            void RefreshPageInfo()
             {
-                var captured = mode;
-                var mBtn = new Button(() =>
+                var info = ScreenPageCatalog.For(_target.dataMode);
+                pageInfoTitle.text = info.Label.ToUpperInvariant();
+                pageInfoBlurb.text = info.Blurb;
+
+                string hint = string.Empty;
+                if (!ScreenPageCatalog.FitsOn(_target.screenSize, info.MinSize))
                 {
-                    _target.dataMode = captured;
-                    // Team Banner (14.37.0): the screen mirrors the chooser's
-                    // OWN team banner. The banner itself is edited in
-                    // PAUSE > TEAMS - this screen is a display, not an editor.
-                    if (captured == ScreenDataMode.TeamBanner)
-                    {
-                        var myTeam = VoxelEngine.Networking.TeamRegistry.TeamOf(
-                            VoxelEngine.Networking.NetworkSession.LocalPlayerId);
-                        _target.bannerTeamId = myTeam != null ? myTeam.teamId : "";
-                    }
-                    RefreshModeHighlights();
-                    RefreshCustomTextField();
-                }) { text = captured == ScreenDataMode.Summary ? "Mixed"
-                        : captured == ScreenDataMode.TeamBanner ? "Team Banner" : mode.ToString() };
-                mBtn.style.minHeight = 22; mBtn.style.marginRight = 4; mBtn.style.marginBottom = 4;
-                mBtn.style.fontSize = 10; mBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-                mBtn.style.paddingLeft = 8; mBtn.style.paddingRight = 8;
-                mBtn.style.color = new Color(0.92f, 0.94f, 0.97f);
-                UITheme.Radius(mBtn, 4);
-                mBtn.style.borderLeftWidth = mBtn.style.borderRightWidth =
-                mBtn.style.borderTopWidth = mBtn.style.borderBottomWidth = 0;
-                modeRow.Add(mBtn);
-                _modeBtns.Add(mBtn);
+                    hint = "This page is built for a " + ScreenPageCatalog.SizeLabel(info.MinSize)
+                         + " screen; it will show less on this "
+                         + ScreenPageCatalog.SizeLabel(_target.screenSize) + " one.";
+                }
+                else if (ScreenPageCatalog.NeedsSource(_target.dataMode) && _target.SourceCount == 0)
+                {
+                    hint = "Needs a linked source - pick one under DATA SOURCES above.";
+                }
+                pageInfoHint.text = hint;
+                pageInfoHint.style.display = string.IsNullOrEmpty(hint) ? DisplayStyle.None : DisplayStyle.Flex;
             }
-            RefreshModeHighlights();
+
+            void Select(ScreenDataMode mode)
+            {
+                _target.dataMode = mode;
+                // Team Banner (14.37.0): the screen mirrors the chooser's OWN team banner.
+                // The banner itself is edited in PAUSE > TEAMS - this is a display.
+                if (mode == ScreenDataMode.TeamBanner)
+                {
+                    var myTeam = VoxelEngine.Networking.TeamRegistry.TeamOf(
+                        VoxelEngine.Networking.NetworkSession.LocalPlayerId);
+                    _target.bannerTeamId = myTeam != null ? myTeam.teamId : "";
+                }
+                RefreshModeHighlights();
+                RefreshCustomTextField();
+                RefreshPageInfo();
+            }
+
+            void RebuildPageList(string query)
+            {
+                pageList.Clear();
+                _modeBtns.Clear();
+                _modeBtnModes.Clear();
+
+                foreach (var category in ScreenPageCatalog.Categories)
+                {
+                    var pages = ScreenPageCatalog.InCategory(category);
+                    var matching = new List<ScreenPageInfo>();
+                    for (int i = 0; i < pages.Count; i++)
+                        if (pages[i].Matches(query)) matching.Add(pages[i]);
+                    if (matching.Count == 0) continue;
+
+                    var header = new Label(ScreenPageCatalog.CategoryLabel(category));
+                    header.style.fontSize = 8;
+                    header.style.letterSpacing = 1.6f;
+                    header.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    header.style.color = new Color(0.40f, 0.44f, 0.52f);
+                    header.style.marginTop = 4;
+                    header.style.marginBottom = 2;
+                    pageList.Add(header);
+
+                    var row = new VisualElement();
+                    row.style.flexDirection = FlexDirection.Row;
+                    row.style.flexWrap = Wrap.Wrap;
+                    pageList.Add(row);
+
+                    for (int i = 0; i < matching.Count; i++)
+                    {
+                        var page = matching[i];
+                        var captured = page.Mode;
+                        var button = new Button(() => Select(captured)) { text = page.Label };
+                        button.style.minHeight = 22;
+                        button.style.marginRight = 4;
+                        button.style.marginBottom = 4;
+                        button.style.fontSize = 10;
+                        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+                        button.style.paddingLeft = 8;
+                        button.style.paddingRight = 8;
+                        button.style.color = new Color(0.92f, 0.94f, 0.97f);
+                        button.tooltip = page.Blurb;
+                        UITheme.Radius(button, 4);
+                        button.style.borderLeftWidth = button.style.borderRightWidth =
+                        button.style.borderTopWidth = button.style.borderBottomWidth = 0;
+                        row.Add(button);
+                        _modeBtns.Add(button);
+                        _modeBtnModes.Add(page.Mode);
+                    }
+                }
+                RefreshModeHighlights();
+            }
+
+            search.RegisterValueChangedCallback(evt => RebuildPageList(evt.newValue));
+            RebuildPageList(string.Empty);
+            RefreshPageInfo();
 
             // ── Text color picker ──
             var cHdr = new Label("TEXT COLOR");
@@ -538,11 +668,11 @@ namespace VoxelEngine.GridSystem.UI
 
         private void RefreshModeHighlights()
         {
-            foreach (var btn in _modeBtns)
+            for (int i = 0; i < _modeBtns.Count; i++)
             {
-                string modeName = btn.text == "Mixed" ? "Summary" : btn.text;
-                bool active = modeName == _target.dataMode.ToString();
-                btn.style.backgroundColor = new StyleColor(active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
+                bool active = i < _modeBtnModes.Count && _modeBtnModes[i] == _target.dataMode;
+                _modeBtns[i].style.backgroundColor = new StyleColor(
+                    active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
             }
             if (_previewText != null)
             {

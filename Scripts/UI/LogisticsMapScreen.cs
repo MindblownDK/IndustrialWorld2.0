@@ -723,7 +723,7 @@ namespace VoxelEngine.UI
                 // does to it, so a base against a windward slope and one in the lee of the same
                 // ridge read differently while the same band is over both.
                 float terrain = weather.TerrainBiasAt(ViewerPosition());
-                int terrainPercent = WeatherTerrain.Percent(terrain);
+                int terrainPercent = WeatherFronts.PercentChange(terrain);
                 var weatherGround = new Label(
                     $"TERRAIN {WeatherTerrain.Word(terrain)}"
                     + $"   ·   {(terrainPercent >= 0 ? "+" : string.Empty)}{terrainPercent}% RAIN");
@@ -732,6 +732,21 @@ namespace VoxelEngine.UI
                 weatherGround.style.color = new StyleColor(T.TextMuted);
                 weatherGround.style.marginBottom = 2;
                 _list.Add(weatherGround);
+
+                // 17.34.0-dev — THE AIR OVER THE BIOME. The terrain line answers "what shape is
+                // the ground", this one answers "what is the ground". A rainforest keeps its
+                // rain; a desert dries it before it lands - which is why the climate field's own
+                // desert belts now read dry on a day the rest of the planet is wet.
+                float air = weather.BiomeBiasAt(ViewerPosition());
+                int airPercent = WeatherFronts.PercentChange(air);
+                var weatherAir = new Label(
+                    $"AIR {WeatherBiome.Word(air)}"
+                    + $"   ·   {(airPercent >= 0 ? "+" : string.Empty)}{airPercent}% RAIN");
+                weatherAir.style.fontSize = 9;
+                weatherAir.style.whiteSpace = WhiteSpace.Normal;
+                weatherAir.style.color = new StyleColor(T.TextMuted);
+                weatherAir.style.marginBottom = 2;
+                _list.Add(weatherAir);
 
                 var weatherNote = new Label(
                     "Bands drift and are not body-wide: a second base can be in sunshine while this "

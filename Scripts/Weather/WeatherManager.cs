@@ -621,7 +621,9 @@ namespace VoxelEngine.Weather
                 // 17.33.0-dev: a different world underneath means different ground, and the
                 // terrain memo is keyed by seed - dropping it here keeps a reused process from
                 // ever answering one planet's question with another planet's mountain.
+                // 17.34.0-dev: the climate response is memoised the same way and dropped with it.
                 WeatherTerrain.ClearCache();
+                WeatherBiome.ClearCache();
             }
             _frontSeed = seed;
             _frontGen = body.genParams;
@@ -650,7 +652,27 @@ namespace VoxelEngine.Weather
             float coverage = WeatherFronts.Coverage01(up, _frontSurfaceRadius, _frontBandMetres, _frontSeed,
                 _weatherClock, WeatherFronts.CoverageBiasFor(profile.overcastBias));
             if (coverage <= 0f || !_frontHasBody) return coverage;
-            return Mathf.Clamp01(coverage * WeatherTerrain.Multiplier(_frontGen, up));
+
+            // 17.33.0-dev - the SHAPE of the ground, then 17.34.0-dev - the AIR over it. Both
+            // are multipliers on coverage and both are pure functions of (seed, direction), so
+            // the order between them cannot matter and a guest reaches the host's number with
+            // no message. They are kept as two calls rather than folded into one factor so a
+            // readout can still name which half moved.
+            float ground = WeatherTerrain.Multiplier(_frontGen, up);
+            float air = WeatherBiome.Multiplier(_frontSeed, up, _frontSurfaceRadius);
+            return Mathf.Clamp01(coverage * ground * air);
+        }
+
+        /// <summary>
+        /// 17.34.0-dev — how the AIR over a WORLD position treats the band arriving on it:
+        /// 1 = ordinary humidity, above 1 = moist air that keeps its rain, below 1 = dry air
+        /// that evaporates it before it lands. Public for readouts only; the gameplay path
+        /// never calls it separately - <see cref="CoverageForDirection"/> already applied it.
+        /// </summary>
+        public float BiomeBiasAt(Vector3 worldPosition)
+        {
+            if (!_frontHasBody) return 1f;
+            return WeatherBiome.Multiplier(_frontSeed, GravityProvider.GetUp(worldPosition), _frontSurfaceRadius);
         }
 
         /// <summary>

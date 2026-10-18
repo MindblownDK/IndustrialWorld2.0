@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.33.0-dev`
-**Roadmap Version:** `17.33.0-dev`
+**Current Version:** `17.35.0-dev`
+**Roadmap Version:** `17.35.0-dev`
 **Date:** 2026-10-18
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.35.0-dev - Every Screen Names What It Shows
+- `ScreenPageCatalog` (new) is the one list of the 18 pages a screen can show: name, category, a line about what it answers, the smallest panel it fits, search keywords, plus `Next`/`Previous`/`NeedsSource`/`FitsOn`; the config panel, the block's own title and any later surface read it instead of each keeping their own idea of the list
+- `GridScreenBlock.Pages.cs` (new partial) renders nine pages the block did not have: Environment (room and ambient pressure, gravity, temperature, altitude), Batteries (per-battery cells plus bank total), Power Graph (three-minute generation and draw traces), Manifest, Fill Bars, Farm (plots within 24 m), Mining (lift against weight, hold fill, heaviest cargo), Inventory Grid and Planet Map; every page is a pure formatter over a snapshot, cached for half a second
+- The display-mode picker was rebuilt around that catalogue - search box, one section per category, a description of the highlighted page and a warning when the panel is too small - and each button now carries its own mode instead of the panel guessing it back from the button's text. `ScreenDataMode` grew nine values, all appended. No setup step, no prefab, no save or schema change
+
+### 17.34.0-dev - The Air Over A Biome
+- `WeatherBiome` (new) multiplies coverage by the planet's own humidity at a place, read through `SphereDensity.SampleClimate` - the same call the scatter system uses to choose biomes - so moist air keeps its rain (up to 1.20x), dry air eats it before it lands (down to 0.80x) and the desert belts the climate field already draws read dry on a wet day
+- `WeatherManager.CoverageForDirection` now applies shape (17.33) and climate (17.34) as two named multipliers on coverage, kept separate so a readout can say which half moved; the map's `WEATHER` section gained an `AIR` line through the new `BiomeBiasAt`
+- Symmetric around the climate field's own midpoint, so a body's average rainfall moves about +0.2%; shared `WeatherFronts.PercentChange` is the one rounding. No setup step, no prefab, no save or schema change
+
 ### 17.33.0-dev - The Ground Has A Vote
 - `WeatherTerrain` (new) multiplies a band's coverage by the terrain under it: three `PlanetField.SurfaceRadius` samples along the drift direction give the slope the air actually meets, so a rising windward flank lands up to 1.55x and the lee side behind a ridge drops to 0.45x; elevation adds the last 20 percent and flat ground is neutral by construction (calibrated mean 1.00 within a percent on every body)
 - `WeatherManager.CoverageForDirection` applies the multiplier to COVERAGE, never to intensity, so a clear spell stays clear over a peak and the state machine is untouched; the map's painted bands inherit the rain shadow for free, the `WEATHER` section gained a `TERRAIN` line through the new `TerrainBiasAt`
@@ -43,16 +53,6 @@
 - `WeatherFronts` (new) is a pure function of (body seed, surface direction, front clock): drifting rain bands a quarter of the body's radius (500 - 2400 m) with faded edges, so a band arrives, passes and leaves
 - `WeatherManager.Intensity` is still what reaches the PLAYER while `PlanetIntensity` is the system's own strength (cloud shell, orbiting sensor); `PrecipitationAt` / `CoverageAt` / `SnowfallAt` answer about any place, and `GridSolarPanel` reads the sky above itself
 - The map's opt-in `WEATHER` layer paints the bands and the sidebar gained a `WEATHER` section; `WeatherStateBroadcast` carries a `Clock` so guests drift the host's bands. No setup step, no save or tuning change
-
-### 17.30.0-dev - The District Pressure Readout
-- `GameUIController.AppendDistrictPressureReadout` ends every emitting machine's emissions foldout with a `DISTRICT PRESSURE` card: earned rung, pressure and history bars on the tiers' own gates, next requirement, four-minute activity rule
-- The logistics map got the same reading in an `INDUSTRIAL PRESSURE` section plus ENVIRONMENT ALERTS entries at the wave and siege rungs; `IndustrialPressureReadout` is the one translation and `PollutionService.ClimateBurdenAt` the only public addition
-- No setup step, no save or tuning change
-
-### 17.29.0-dev - Wallrun
-- `PlayerController.UpdateWallRun` starts on the same recorded side collision the wall jump uses (airborne, off a hull, gravity present, steering within ~78 degrees, at least 5.5 m/s along the wall) and ends only for wall-gone, input-stop, speed-drop or ground
-- The descending gravity branch eases a fall to `wallRunDescent` (1.6 m/s) and can never add height; the wall-jump probe keeps the touch fresh mid-run
-- Three prefab knobs arrive through migration step 2. No setup step, no save change; closes the 17.7.0-dev traversal deferral
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -82,6 +82,7 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Cockpit interior and the two cockpit shells (17.35.0-dev):** the screen round rebuilt what a panel says, not what the pilot sits in. Next round (`17.36.0-dev`) replaces the current cockpit with a seated view that has three screens across the top and panels low enough to glance at: style 1 is a wide angular land-crawler nose with wraparound glazing, style 2 a boxy cab with yellow accents, a satellite dome and a roof grille. Two shells, one interior layout, chosen per cockpit block.
 - **Threat tiers, waves, elites and the siege brute acceptance (17.18.0-dev):** confirm in Unity that a dirty district draws an announced organized wave (elite leader, flankers, logistics targets) once spawner heat and residual load qualify, that the siege brute walks past the player to dismantle machines with its double-damage bite, that elite/brute health bars and loot scale, that stopping industry bleeds the response back to ordinary scouts, and that guest replicas show the tier visuals and scaled health. The 17.30.0-dev district pressure card reports the same two readings this row has to be judged against (open an emitting machine while a wave is due), so the rung on the card and the answer that arrives can be compared directly. Tier thresholds and cooldowns await live-play tuning.
 - **Tree persistence, open-container crafting and ghoul-curve acceptance (17.17.2-dev):** confirm in Unity that felled or otherwise destroyed trees stay absent across save-load and chunk streaming, that recipes count and consume chest/drawer/bag/pen/pad contents only while their panel is open, and that a running furnace no longer accelerates spawns or recruits packs within minutes while a heavily polluted area still escalates toward the 2.15x ceiling.
 - **RecipeRegistry recovery and research audit (17.16.0-dev):** append-only Setup results and the follow-up Recipe Graph Validator report remain unverified; confirm skipped invalid/ambiguous assets and recipes gated without a ResearchNode reference, with recipe/research tuning unchanged.
@@ -109,7 +110,7 @@
 - **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
 - **Gust knockback stays local** (accepted 14.55.0): the Roc's wing gust damages remote players victim-side, but the knockback impulse only applies to the host's own player - replicating impulses is a future polish round. Replayed enemy volleys (fireballs, spikes) roll their own cosmetic spread on each guest.
 - **Same-instant double mount** (accepted 14.54.0): two players taking the same horse in the same wire instant - the later mount announce wins the glue; the earlier rider dismounts into a horse that is no longer theirs. Same vanishingly small window as the drop/loot races.
-- **Weather is no longer one sky for the whole body** (17.31.0-dev closed the 14.46.0 edge; per-cell washout landed 17.32.0-dev): the state machine still rolls where the host stands - one weather SYSTEM per body, host-authoritative as 14.46.0 decided - and `WeatherFronts`' drifting field decides where that system is actually depositing, so the bands are places and every machine that shares the front clock computes the same ones. The smog washout now reads the same field per cell, so a district in a gap between bands keeps its smog while one under a band is scrubbed. Fronts now respond to TERRAIN (17.33.0-dev - `WeatherTerrain` gives every place a windward/lee multiplier from the analytic field, so a range casts a rain shadow and the map paints it). Remaining: biome response (a band over a rainforest and one over a desert still drop the same amount), and live-play tuning of both `WashRatePerIntensity` (total scrub is proportional to covered area, not body-wide) and `WeatherTerrain.OrographicGain`.
+- **Weather is no longer one sky for the whole body** (17.31.0-dev closed the 14.46.0 edge; per-cell washout landed 17.32.0-dev): the state machine still rolls where the host stands - one weather SYSTEM per body, host-authoritative as 14.46.0 decided - and `WeatherFronts`' drifting field decides where that system is actually depositing, so the bands are places and every machine that shares the front clock computes the same ones. The smog washout now reads the same field per cell, so a district in a gap between bands keeps its smog while one under a band is scrubbed. Fronts now respond to TERRAIN (17.33.0-dev - `WeatherTerrain` gives every place a windward/lee multiplier from the analytic field, so a range casts a rain shadow and the map paints it). Climate response landed in 17.34.0-dev (`WeatherBiome` - humidity decides how much of a band reaches the ground, so biomes and skies now agree). Remaining: live-play tuning of `WashRatePerIntensity` (total scrub is proportional to covered area, not body-wide), `WeatherTerrain.OrographicGain` and `WeatherBiome.ClimateGain`, and a front field that carries its own moisture so a band can genuinely dry out as it crosses a continent instead of reading each place independently.
 - **Dedicated headless server** (milestone 12, part 1 shipped 14.45.0): boot path, config and save carry-forward are live; remaining are the security hardening pass and converting client requests to intents, plus hardening every system that still assumes a local player at runtime (surfaced by dedicated-session testing).
 - **Security hardening** (deferred 14.6.0): SHIPPED across 14.56.0 (code hashing + keypad intents), 14.57.0 (verified identity, door and storage enforcement) and 14.58.0 (host-only machine simulation).
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
@@ -1530,7 +1531,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Configurable grid screens / displays | ✅ COMPLETED | All sizes, live text/power/data modes, right-click and terminal config, custom text/colors/border/font, visual bar charts, multi-source selection, live camera feeds, power gain/loss/net mode, persistence, and camera block integration are implemented and validated. |
+| Configurable grid screens / displays | ✅ COMPLETED | All sizes, live text/power/data modes, right-click and terminal config, custom text/colors/border/font, visual bar charts, multi-source selection, live camera feeds, power gain/loss/net mode, persistence, and camera block integration are implemented and validated. **17.35.0-dev** added `ScreenPageCatalog` (18 pages, categorised, searchable) and nine construct- and world-reading pages in `GridScreenBlock.Pages.cs`; the picker is catalogue-driven. |
 | Camera block live feed | ✅ COMPLETED | `GridCameraBlock` exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface with correct online/idle/offline LED states and validated screen-source behavior. |
 | Trajectory camera / orbit tools | ✅ COMPLETED (trajectory) | `TrajectoryPredictor` + `TrajectoryOverlay` (11.12.0-dev) give the predicted path, terrain impact marker and time/speed-to-impact in the wide exterior view. The separate Star Map / orbit overlay (item 7) is complete (12.19.0-dev). |
 
@@ -1765,6 +1766,7 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Solar panel efficiency (per panel, from the sky above it — 17.31.0-dev).
      - Pollution washout: rain scrubs only the cells its band is over (17.32.0-dev).
      - Terrain: rising ground wets its windward face and shadows its lee (17.33.0-dev).
+     - Climate: humid biomes keep their rain, arid ones dry it before it lands (17.34.0-dev).
      - Player exposure/hazard levels.
      - Visibility and flight handling.
 

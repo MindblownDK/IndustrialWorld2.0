@@ -103,6 +103,14 @@ namespace VoxelEngine.Weather
         }
 
         /// <summary>
+        /// 17.34.0-dev - a multiplier expressed as the whole percent change a player reads,
+        /// e.g. 1.18 -> +18, 0.81 -> -19, 1.00 -> 0. Lives here with the other shared weather
+        /// vocabulary so the terrain response, the climate response and every surface that
+        /// prints them round the same way.
+        /// </summary>
+        public static int PercentChange(float multiplier) => Mathf.RoundToInt((multiplier - 1f) * 100f);
+
+        /// <summary>
         /// How much of the weather system is over a place, 0..1. 0 means this square metre is
         /// in one of the gaps between bands and gets nothing; 1 means it is fully inside one.
         /// Callers multiply their precipitation by this, so a clear spell stays clear

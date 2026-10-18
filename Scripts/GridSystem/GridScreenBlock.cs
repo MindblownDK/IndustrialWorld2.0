@@ -14,7 +14,12 @@ namespace VoxelEngine.GridSystem
     {
         // TeamBanner (14.37.0) sits at the end: the mode persists as its
         // enum NAME, so appending is save-compatible either way.
-        Summary, Power, Inventory, Speed, System, Bars, Custom, Camera, TeamBanner
+        Summary, Power, Inventory, Speed, System, Bars, Custom, Camera, TeamBanner,
+        // 17.35.0-dev — the second wave of pages, APPENDED for the same reason.
+        // ScreenPageCatalog describes every one of them to the picker; the ones this
+        // block renders itself are in GridScreenBlock.Pages.cs.
+        Environment, BatteryBank, PowerGraph, Manifest, FillBars, Farm, Mining,
+        InventoryGrid, PlanetMap
     }
 
     public enum ScreenSize
@@ -22,7 +27,7 @@ namespace VoxelEngine.GridSystem
         Small, Medium, Large, ExtraLarge, Wide
     }
 
-    public class GridScreenBlock : GridBlock, IGridDataProvider
+    public partial class GridScreenBlock : GridBlock, IGridDataProvider
     {
         [Header("Screen")]
         public ScreenSize screenSize = ScreenSize.Small;
@@ -99,7 +104,10 @@ namespace VoxelEngine.GridSystem
         }
 
         public bool IsPowered => Enabled && Grid != null && Grid.HasPower;
-        public bool HasAnySource => ResolveAllProviders().Count > 0 || dataMode == ScreenDataMode.Custom || dataMode == ScreenDataMode.TeamBanner;
+        /// <summary>True when this screen has something to show: a linked source, or a page
+        /// that reads the construct and the world by itself. Which pages those are is the
+        /// catalogue's answer, not a list kept here.</summary>
+        public bool HasAnySource => ResolveAllProviders().Count > 0 || !ScreenPageCatalog.NeedsSource(dataMode);
         public int SourceCount
         {
             get
@@ -121,6 +129,11 @@ namespace VoxelEngine.GridSystem
                 if (!Enabled) return "DISABLED";
                 if (!IsPowered) return "OFFLINE";
                 if (dataMode == ScreenDataMode.Custom) return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
+                // 17.35.0-dev — the pages that read the construct and the world directly.
+                // GridScreenBlock.Pages.cs owns them; RenderManagedPage returns null for every
+                // page it does not own, so the older formatters below are untouched.
+                string managed = RenderManagedPage(dataMode);
+                if (managed != null) return managed;
                 if (dataMode == ScreenDataMode.Camera) return CameraStatusDisplay();
                 if (dataMode == ScreenDataMode.TeamBanner) return BannerTextDisplay();
                 if (dataMode == ScreenDataMode.Power) return PowerDisplay();
@@ -399,7 +412,12 @@ namespace VoxelEngine.GridSystem
                 var sources = ResolveAllProviders();
                 if (_titleText != null)
                 {
-                    _titleText.text = sources.Count + " source" + (sources.Count != 1 ? "s" : "");
+                    // 17.35.0-dev: a managed page names itself along the top. "2 sources"
+                    // told a player nothing about what they were looking at; "BATTERIES"
+                    // does, and the page is the same on every screen that shows it.
+                    _titleText.text = IsManagedPage(dataMode)
+                        ? ScreenPageCatalog.For(dataMode).Label.ToUpperInvariant()
+                        : sources.Count + " source" + (sources.Count != 1 ? "s" : "");
                     _titleText.color = new Color(textColor.r * 0.7f, textColor.g * 0.7f, textColor.b * 0.7f, 0.8f);
                 }
                 if (_statusText != null) { _statusText.text = dataMode == ScreenDataMode.Camera ? "CAM" : "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }

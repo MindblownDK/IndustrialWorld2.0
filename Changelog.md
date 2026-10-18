@@ -1,9 +1,90 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.33.0-dev`
+**Current Version:** `17.35.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.35.0-dev] Every Screen Names What It Shows
+
+**Type:** MINOR - a screen already had nine display types, and eight of them were a view ON a linked block: a panel said what a container held, never what the ship was doing. This round gives the panel its own eyes - pressure, gravity, batteries, power over time, the hold, the farm, the sky above, the planet below - and, just as importantly, gives the player a way to find them. No save field removed, no schema change, no prefab touched, no setup step.
+
+**GitHub title:** `[17.35.0-dev] Nine new screen pages and a picker that explains them`
+
+#### Added
+
+- **`Scripts/GridSystem/UI/ScreenPageCatalog.cs` (new) - the one list of pages a screen can show.**
+  - Eighteen entries, each with a name, a category (Overview, Vitals, Power, Cargo, Production, Flight, Navigation, Media), one line answering "what is this for", the smallest panel it fits on, and the words a player would type looking for it. `For`, `Next`, `Previous`, `NeedsSource`, `FitsOn` and `SizeLabel` are the only questions anyone has to ask.
+  - **`FitsOn` ranks by usable room, not by the enum's numbering.** `ScreenSize` is declared Small, Medium, Large, ExtraLarge, Wide, but a Wide panel is short and 1.4 m across, so the real order of usable space is Small, Wide, Medium, Large, ExtraLarge. Comparing the enum values directly would have told a player that a Medium panel is too small for a page that fits on a Wide one, which is the wrong way round.
+  - `NeedsSource` is the catalogue's answer to "can this page say anything on its own", so `GridScreenBlock.HasAnySource` no longer carries a hard-coded exception for Custom and Team Banner - a page that reads the construct is added in one place and is instantly understood by the block, the picker and anything that comes later.
+- **`Scripts/GridSystem/GridScreenBlock.Pages.cs` (new) - the pages that read the construct and the world.** A second half of the class, so the original file stays about how a screen is BUILT (frame, glow strip, camera quad, TextMesh) and this one stays about what it SAYS. Every page is a pure formatter over a snapshot: nothing here mutates the ship, which is what keeps it honest in multiplayer - a display that writes would need an authority story it does not have.
+  - **Environment** - pressure, gravity, temperature and altitude in one panel. Pressure reads the SEALED ROOM the screen stands in when there is one and the ambient air otherwise, and says which of the two it read (`SEALED ROOM` / `AMBIENT`), because those are two different numbers and a player about to open a door needs to know which one they are looking at. Gravity is `GravityProvider.GetGravity` at the panel itself, printed in m/s2 and in g. Altitude is measured to the active body's mean surface and reads `DEEP SPACE` when there is no body.
+  - **Batteries** - one five-step cell per battery on the construct, a bank total in Wh/kWh/MWh and a percentage. The cell count is capped by the panel (rows times how many cells fit across), and when the cap bites the header still carries the true count and total plus `[n of m shown]`, so a hundred-battery freighter is honest rather than truncated silently.
+  - **Power Graph** - generation and draw as two sparklines over block characters with the current value and the peak of each trace. This is the only page that keeps state: a history has to be accumulated, so it is sampled every 2 s and holds 90 samples - three minutes - per screen. Each panel keeps its own trace, which costs 90 floats and means a panel shows what IT has seen.
+  - **Manifest** - the whole construct's contents aggregated by item type across every container, sorted heaviest first, with the top six named and their mass. A freighter captain's answer to "where did my cobalt go".
+  - **Fill Bars** - one bar per LINKED container or gas tank, in link order. It deliberately reads the sources the player picked rather than the whole construct: the point of a fill strip is "these tanks", not "everything".
+  - **Farm** - every `FarmPlot` within 24 m of the panel, with crop, growth, a four-step bar and a water mark (`W` irrigated, `!` thirsty, `w` needs none), plus ready and dry counts in the header. The scan touches the scene, so it runs every 3 s rather than every page refresh.
+  - **Mining** - the overlay a pilot wants while digging: upward thrust against the weight the construct currently has, hold fill, mass on board, and the three heaviest items with their weights. Loading the hold visibly eats the lift margin, which is the number that matters when the ship is full of ore and the shaft is deep.
+  - **Inventory Grid** - the hold as a grid of names and abbreviated counts (`773`, `2.74k`, `1.2M`) rather than a column of rows: walk past a wall panel, see what you are short of. Column count comes from the panel's width, so a Wide panel gets three narrow columns and an ExtraLarge square gets four.
+  - **Planet Map** - the active body drawn as a disc of block characters with a latitude/longitude grid, the construct's own position marked `X` on it, and the numbers underneath. Drawn from real geometry: the pole is the body's up, the marker sits at the construct's actual latitude and longitude and moves as it crosses the planet. A panel too narrow for a round disc gets fewer rows rather than a squashed ellipse.
+- **`GridScreenBlock.CharsPerLine()` (new)** - how many of the screen font's characters fit across a panel before a line runs off the edge, derived from the same display area and line height the block already uses to place its text. The grid, the sparklines, the fill strips and the map all lay themselves out from it, so a page composed for an ExtraLarge panel degrades to a readable column on a Small one instead of running off the glass.
+- **The screen's title now names the page** (`BATTERIES`, `PLANET MAP`, ...) on every page that renders itself. `2 sources` told a player nothing about what they were looking at; the page name is the same on every screen that shows it.
+
+#### Changed
+
+- **The display-mode picker was rebuilt around the catalogue** (`GridScreenConfigUI`). It was one wrapping row of nine identical buttons; it is now a search box, one labelled section per category, and a description panel that names the highlighted page, says what it answers, and warns when the panel is too small for it or when a page needs a linked source that has not been picked yet. The active page is highlighted by comparing the mode each button actually carries - the old panel worked it out by comparing button TEXT to the enum name, which is why "Mixed" needed a special case in the highlight loop. That case is gone.
+- **`ScreenDataMode` grew nine values** - `Environment`, `BatteryBank`, `PowerGraph`, `Manifest`, `FillBars`, `Farm`, `Mining`, `InventoryGrid`, `PlanetMap` - all APPENDED to the end, because a screen persists its page as the enum NAME and renumbering is never save-compatible.
+- **`FormattedDisplay` routes through `RenderManagedPage` first**, which returns null for every page it does not own, so the older formatters keep rendering exactly what they rendered before and the two halves can never disagree about who owns a page.
+
+#### Performance and safety
+
+- **No page runs per frame.** Each page's text is cached and rebuilt at most twice a second, keyed on a wall-clock stamp rather than an accumulated frame delta - `FormattedDisplay` is a property and a screen read twice in one frame must not age its cache twice. The power trace samples on its own 2 s cadence and the scene-touching farm scan on 3 s.
+- **All snapshot walks are allocation-free per call** - one fixed 256-entry scratch for item aggregation, an insertion sort (a typical hold has a handful of item types), and no LINQ anywhere in the path.
+- **Power draw, sizes, borders, fonts, colours and every persistence field are untouched.** Nine new pages cost nothing when they are not shown, and a screen showing an old page pays one null check.
+
+### [17.34.0-dev] The Air Over A Biome
+
+**Type:** MINOR - the last asymmetry in the weather: 17.33.0-dev made the SHAPE of the ground matter (a ridge casts a rain shadow) but the ground itself still did not. A band over a rainforest and a band over a desert dropped exactly the same amount. Now the planet's own climate field decides how much of a band reaches the ground, so the skies and the biomes finally agree. No save field, schema or public API removed, no prefab or asset touched, and the weather state machine is not consulted.
+
+**GitHub title:** `[17.34.0-dev] Wet biomes keep the rain, dry ones eat it before it lands`
+
+#### Added
+- **`Scripts/Weather/WeatherBiome.cs` (new) - the climate's answer to a band.** For a place, sample the planet's humidity and turn it into a multiplier on that place's coverage: ordinary humidity is 1.00, saturated air reaches 1.20, arid air falls to 0.80.
+  - **The physical story, because the rule should be explainable in one breath:** in dry air, light rain evaporates before it reaches the ground (virga) - that is why a desert can sit under a dark cloud and stay dry. In moist air, and over wet ground, water is recycled back into the next band. The result reads the right way round: it rains in the rainforest because the air is wet, and the air is wet because it rains.
+  - **Read from the field the biomes are actually chosen from.** `SphereDensity.SampleClimate` is the same call `ChunkScatter` uses to decide which `BiomeDefinition` grows at a place, so "the biome here" and "the air here" are one answer rather than two systems that can drift apart. It also means the climate field's own shape shows up in the sky for free: its desert belts sit at about 22 degrees latitude and its wet belts at the equator and the mid-latitudes, and those are now the dry and wet parts of a rain day.
+  - **Symmetric by construction, not by tuning.** The curve is `1 + ClimateGain * (2 * humidity - 1)` with `ClimateGain` 0.20, centred on the field's own midpoint of 0.5, so the multiplier spans exactly 0.80 - 1.20 and the clamps are that envelope rather than an active limiter. The climate field's mean humidity over a sphere is 0.505 - `SampleClimate` blends a mean-zero noise field 38.5% with a latitude term whose area-weighted mean is `0.28 * sin(9) / 9 + 0.5 = 0.5128` - so a whole body's average precipitation moves by about **+0.2%**, the width of a rounding step. That is the property that lets this ship without a balance pass.
+  - **Deliberately half of what terrain can do.** Terrain reaches 0.45 - 1.55 because a ridge is a hard physical barrier; climate reaches 0.80 - 1.20 because it is a tint on the sky, not an override of the land. A mountain in a rainforest is still wetter than a plain in a desert.
+  - **Memoised on the same 150 m bucket as the terrain response**, keyed by (seed, direction) with a 4096-entry cap that clears wholesale, and dropped with the terrain memo when the body underneath changes. A place pays one climate sample the first time it is asked about; every later ask - the per-frame player query, the per-second pollution sweep over hundreds of cells, and a full map repaint - is a dictionary hit.
+- **`WeatherManager.CoverageForDirection` now composes both responses, as two named multipliers (`17.33.0-dev` shape, `17.34.0-dev` climate).** They stay separate calls rather than being folded into one factor so a readout can still say which half moved, and because both are pure functions of (seed, direction) the order between them cannot matter and a guest reaches the host's number with no message.
+- **`WeatherManager.BiomeBiasAt(Vector3)` (new)** - the climate multiplier at a world position, for readouts only. The gameplay path never calls it separately.
+- **`AIR` line in the map's `WEATHER` section (`Scripts/UI/LogisticsMapScreen.cs`)**, under the `TERRAIN` line: `AIR HUMID · +16% RAIN`, `AIR DRY · -18% RAIN` or `AIR TEMPERATE · +0% RAIN`. The terrain line answers "what shape is the ground", this one answers "what the ground is" - and the two can disagree in the same square metre, which is exactly the interesting case (a wet biome on the lee of a ridge).
+- **`WeatherFronts.PercentChange(float)`** - one rounding for every multiplier printed anywhere, now used by the terrain line, the air line and `WeatherTerrain.Percent` (which delegates to it). Two surfaces can no longer round the same number two ways.
+
+#### Balance, stated plainly
+- **Every body's average rainfall is unchanged to within a rounding step** (+0.2%, computed from the climate field's own area-weighted mean rather than measured in play, and reported as such).
+- **Ordinary humidity is genuinely neutral**, so a base on ordinary ground in an ordinary biome keeps the weather it had two rounds ago; only genuinely wet or genuinely arid places read differently, and only by up to a fifth.
+- **`WeatherBiome.ClimateGain` (0.20) is the single lever**, one private constant, no prefab. Set it to 0 and the round is a no-op.
+- **The debug chords still give a full storm**: `PrecipitationAt` returns the system's own strength while `IsManuallyHeld`, and both responses ride the coverage path that branch skips.
+
+#### Deliberately not changed
+- **The weather state machine, the storm timer, the cloud shell and the satellite sensor** are untouched: climate changes how much of a system lands where, never what the system is.
+- **A band does not dry out as it travels.** Each place still reads its own humidity, so a band crossing a continent does not lose moisture kilometre by kilometre. That is a genuinely different (and much heavier) model - a stateful, direction-aware moisture advection field - and it is named as the next open item in `Roadmap.md` rather than faked here.
+- **Temperature does not enter it.** Rain-versus-snow is already `IsSnowAt`'s job and is left alone; a cold, humid place gets its snow at its old rate.
+- **The flat-world `BiomePicker` climate is not used.** `SphereDensity.SampleClimate` is the planet's per-direction field, the one the scatter pass uses; mixing in a second climate source would have made two answers for one place.
+- **No inspector field, no setup step.**
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: MINOR `17.34.0-dev` over `17.33.0-dev`. Save-compatible in both directions: `CurrentSchemaVersion` stays `2`, weather is still not persisted, no item, recipe, block or prefab asset is touched. `CoverageForDirection` keeps its signature and 0..1 range; the new public members are `WeatherBiome` (whole class), `WeatherManager.BiomeBiasAt` and `WeatherFronts.PercentChange` - all additive.
+- Multiplayer: deterministic in (seed, direction) with no wire traffic, exactly like the terrain response - guests already share the host's front clock and compute the rest themselves.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. All 956 script files pass the string- and comment-aware brace, bracket and parenthesis scanner with zero problems. Every symbol the new code calls was confirmed to exist with the signature used: `SphereDensity.SampleClimate(int, in float3)` (returns `float2`, humidity is `.y`), `WeatherFronts.PercentChange`, `Mathf.Clamp`, `GravityProvider.GetUp`. New names - `WeatherBiome`, `ClimateGain`, `MinMultiplier`, `MaxMultiplier`, `NeutralHumidity`, `CacheCellMetres`, `CacheKey`, `s_cache`, `Multiplier`, `ClearCache`, `HumidityAt`, `Word`, `Evaluate`, `KeyFor`, `BiomeBiasAt` - checked repo-wide for collisions. The new script ships with a `.meta` (guid `48aeb92de82b49c580d9453ed58ea9bc`, verified unique).
+
+#### What to run
+1. Nothing to author. Code only: no prefab, item, recipe, research node or wizard step.
+2. Open the map (`L`) with the `WEATHER` layer on during rain and walk a line from the equator to about 25 degrees of latitude. `AIR` should go from `HUMID` and a positive percentage, through `TEMPERATE` near the desert belt's edge, to `DRY` and a negative one inside it - while `LOCAL` precipitation falls with it and `SYSTEM` strength does not change.
+3. Stand in a rainforest: `AIR HUMID`, positive percentage, and the rain should feel heavier than the same system does over a plain.
+4. Stand in a desert during the same storm: `AIR DRY`, negative percentage, and a visibly lighter rain than the band overhead would suggest. That is virga, and it is the round.
+5. Find a wet biome on the lee side of a ridge (17.33 + 17.34 disagreeing): `TERRAIN RAIN SHADOW -20%` next to `AIR HUMID +15%` on the same two lines, and the total is their product. If the two never cancel anywhere on your world, the gains are too far apart - tell me and I will rebalance them against each other.
+6. If either effect is too strong, `WeatherBiome.ClimateGain` and `WeatherTerrain.OrographicGain` are the two constants, and setting either to 0 cleanly removes that half.
 
 ### [17.33.0-dev] The Ground Has A Vote
 

@@ -146,8 +146,10 @@ namespace VoxelEngine.Weather
         /// <summary>
         /// The multiplier for a place expressed as a whole percent change, for readouts:
         /// "+18" / "-24" / "0". Never the raw float - a panel says what a player can feel.
+        /// The rounding itself lives in <see cref="WeatherFronts.PercentChange"/>, shared with
+        /// the climate response so two surfaces cannot round the same number differently.
         /// </summary>
-        public static int Percent(float multiplier) => Mathf.RoundToInt((multiplier - 1f) * 100f);
+        public static int Percent(float multiplier) => WeatherFronts.PercentChange(multiplier);
 
         /// <summary>
         /// The three names the ground can earn, in the same spirit as the band words: a place
