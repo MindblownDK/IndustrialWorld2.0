@@ -376,11 +376,12 @@ namespace VoxelEngine.GridSystem
             if (canvas.Rows > 1)
                 canvas.Text(0, 1, "VERT " + (vertical >= 0f ? "+" : "-") + Mathf.Abs(vertical).ToString("0.0") + " m/s");
 
-            // Thrust split: forward, back, up, down as three bars. This is the number that
-            // tells a pilot why a loaded ship is climbing slowly.
+            // Three bars - forward, up and the side total - all scaled against the strongest
+            // axis, so a loaded ship that climbs slowly shows it as a short UP bar rather
+            // than as a number the pilot has to compare in their head.
             if (canvas.Rows > 2 && Grid != null)
             {
-                var (fwd, _, right, left, up, _) = Grid.GetThrustByDirection();
+                var (fwd, back, right, left, up, down) = Grid.GetThrustByDirection();
                 float thrustMax = Mathf.Max(1f, Mathf.Max(fwd + back, Mathf.Max(up + down, right + left)));
 
                 int row = 2;
@@ -868,13 +869,13 @@ namespace VoxelEngine.GridSystem
             // Three searches rather than one: a bed type that does not exist in this save
             // costs one empty array, and a bed type that has been added since never has to
             // be remembered here again.
-            var soil = UnityEngine.Object.FindObjectsByType<FarmPlot>(FindObjectsSortMode.None);
+            var soil = UnityEngine.Object.FindObjectsByType<FarmPlot>(FindObjectsInactive.Exclude);
             for (int i = 0; i < soil.Length; i++) AddFarmBed(soil[i], here, radiusSq);
 
-            var planters = UnityEngine.Object.FindObjectsByType<CropPlanter>(FindObjectsSortMode.None);
+            var planters = UnityEngine.Object.FindObjectsByType<CropPlanter>(FindObjectsInactive.Exclude);
             for (int i = 0; i < planters.Length; i++) AddFarmBed(planters[i], here, radiusSq);
 
-            var trees = UnityEngine.Object.FindObjectsByType<TreeFarmPlot>(FindObjectsSortMode.None);
+            var trees = UnityEngine.Object.FindObjectsByType<TreeFarmPlot>(FindObjectsInactive.Exclude);
             for (int i = 0; i < trees.Length; i++) AddFarmBed(trees[i], here, radiusSq);
 
             _farmFound.Sort((a, b) => a.distanceSq.CompareTo(b.distanceSq));

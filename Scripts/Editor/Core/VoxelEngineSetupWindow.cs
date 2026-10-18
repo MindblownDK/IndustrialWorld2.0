@@ -1289,7 +1289,15 @@ namespace VoxelEngine.EditorTools
         private static VoxelEngine.GridSystem.GridBlockMeshBuilder.Style GridStyleFor(string name)
         {
             string n = name.ToLower();
-            if (n.Contains("cockpit"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Cockpit;
+            // 17.38.0-dev — two cockpit shells, both seated cabins. Anything that still
+            // carries the retired "Cockpit_Small" name keeps the legacy dome so an old
+            // prefab rebuilds instead of turning into a second crawler.
+            if (n.Contains("cockpit"))
+            {
+                if (n.Contains("cab")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.CockpitCab;
+                if (n.Contains("crawler") || n.Contains("large")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.CockpitCrawler;
+                return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Cockpit;
+            }
             if (n.Contains("thruster"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Thruster;
             if (n.Contains("battery"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Battery;
             if (n.Contains("armor"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Armor;
@@ -6797,6 +6805,10 @@ namespace VoxelEngine.EditorTools
                         bool needsVisualRebuild = lowerPrefabName.Contains("wheel")
                             || lowerPrefabName.Contains("gaspipe")
                             || lowerPrefabName.Contains("liquidpipe")
+                            // 17.37.0-dev: cockpits are rebuilt on every setup run. Their
+                            // shells are code, and a prefab that still has the old dome is a
+                            // cockpit the pilot cannot see out of.
+                            || lowerPrefabName.Contains("cockpit")
                             || root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null;
                         if (!needsVisualRebuild)
                         {
@@ -7044,18 +7056,54 @@ namespace VoxelEngine.EditorTools
             EnsureGridTankPorts(gridBiofarmPref, "Biofarm_LiquidPortMarker", new Color(0.20f, 0.55f, 1.00f, 1f), "Port_LiquidIO", includeBottom: true);
 
             // -- 1) Cockpits --
-            var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f),
-                c => { c.idleWatts = 50f; });
+            //
+            // 17.38.0-dev — the small cockpit is retired, not deleted. Its recipe is removed
+            // (nothing may craft one), its item is renamed so it can never be mistaken for a
+            // buildable cockpit, and its prefab and item assets are left on disk because a
+            // save written before this version names them: deleting the item would blank the
+            // cockpit out of every ship that already has one, which is worse than a retired
+            // hull in a crate. Delete the three assets by hand if no save of yours uses one.
+            void RetireCockpitPod()
+            {
+                string recipePath = $"{RECIPES}/Recipe_GCockpitSmall.asset";
+                if (AssetDatabase.LoadMainAssetAtPath(recipePath) != null)
+                    AssetDatabase.DeleteAsset(recipePath);
+
+                // Same idiom as the pipe retirement above: the asset goes, and the registry
+                // loses its entry, or crafting keeps offering a recipe with nothing behind it.
+                if (registry != null)
+                {
+                    registry.recipes.RemoveAll(r => r == null || r.name == "Recipe_GCockpitSmall");
+                    EditorUtility.SetDirty(registry);
+                }
+
+                string itemPath = $"{ITEMS}/GItem_CockpitSmall.asset";
+                var retired = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(itemPath);
+                if (retired == null) return;
+
+                retired.displayName = "Cockpit Pod (retired)";
+                retired.description = "Retired in 17.38.0-dev. The seated cockpits replaced it: a Crusader cannot fit inside a pod this size. Kept so ships built with one still load.";
+                EditorUtility.SetDirty(retired);
+            }
+
+
+            // Two shells, one flight model. The small pod is gone: a Crusader cannot fit
+            // inside one, and a cockpit nobody can sit in is a decoration pretending to be a
+            // control station.
+            RetireCockpitPod();
+
             var cockLargePref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 3f),
-                c => { c.idleWatts = 50f; });
-            var itemCockSmall = MakeGItem("GItem_CockpitSmall", "Small Cockpit", Color.white, cockSmallPref, VoxelEngine.GridSystem.GridSize.Small, 200, 500);
-            itemCockSmall.description = "Detail-scale pilot seat and flight control computer for the unified Grid. Requires 50 W idle power; if the cockpit or Grid power is offline, flight controls are disabled.";
-            EditorUtility.SetDirty(itemCockSmall);
-            var itemCockLarge = MakeGItem("GItem_CockpitLarge", "Large Cockpit", Color.white, cockLargePref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
-            itemCockLarge.description = "Pilot seat and flight control computer for large ships. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+                c => { c.idleWatts = 50f; c.shellStyle = VoxelEngine.GridSystem.CockpitShellBuilder.StyleCrawler; });
+            var cockCabPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Cab", new Color(0.42f, 0.38f, 0.30f), new Vector3(2f, 2f, 2.4f),
+                c => { c.idleWatts = 50f; c.shellStyle = VoxelEngine.GridSystem.CockpitShellBuilder.StyleCab; });
+            var itemCockLarge = MakeGItem("GItem_CockpitLarge", "Crawler Cockpit", Color.white, cockLargePref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
+            itemCockLarge.description = "Seated cockpit with a wide, low crawler nose and wraparound glazing: three displays across the top, a console low enough to glance at, and glass down to the sill so the ground is visible from the seat. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
             EditorUtility.SetDirty(itemCockLarge);
-            AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
-            AddGRecipe("Recipe_GCockpitLarge", "Large Cockpit", itemCockLarge, (steelPlate, 10), (circuit, 6), (glass, 6));
+            var itemCockCab = MakeGItem("GItem_CockpitCab", "Cab Cockpit", Color.white, cockCabPref, VoxelEngine.GridSystem.GridSize.Large, 1600, 2100);
+            itemCockCab.description = "Seated cockpit in a boxy survey cab: upright windscreen, yellow hazard accents, roof grille and a satellite dome for the instruments inside. Same seat and same three displays as the crawler cockpit, with a squarer view out. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+            EditorUtility.SetDirty(itemCockCab);
+            AddGRecipe("Recipe_GCockpitLarge", "Crawler Cockpit", itemCockLarge, (steelPlate, 10), (circuit, 6), (glass, 6));
+            AddGRecipe("Recipe_GCockpitCab", "Cab Cockpit", itemCockCab, (steelPlate, 12), (circuit, 6), (glass, 8));
 
             // -- 2) Thrusters (Atmospheric / Ion / Hydrogen × Small & Large) --
             void MakeThruster(string id, string display, VoxelEngine.GridSystem.GridSize sz, Color col,
@@ -7543,7 +7591,7 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Grid System",
                 $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{GRID_ROOT}\n\n" +
-                "• Cockpit, Thruster, Battery (Small + Large + Giant), Armor\n" +
+                "• Cockpit (Crawler cabin, Cab cabin), Thruster, Battery (Small + Large + Giant), Armor\n" +
                 "• Drill, Grinder, Refinery, Weapon, Demolisher (Large)\n" +
                 "• Cargo, Docking Port, 2x2 / 3x3 / 5x5 Wheel Hubs + Tires, Landing Gear\n" +
                 "• Solar Panel, Portable Reactor, Hydrogen Engine, Water/Fuel/Gas Tanks, H2/O2 Gen\n" +

@@ -922,7 +922,7 @@ namespace VoxelEngine.GridSystem
                 _borderMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
                 _borderMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
                 _borderMaterial.SetInt("_ZWrite", 0);
-                _borderMaterial.renderQueue = (int)UnityEngine.RenderQueue.Transparent;
+                _borderMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
             }
 
             _borderMaterial.color = colour;
@@ -962,11 +962,10 @@ namespace VoxelEngine.GridSystem
         /// fitted: CASE, WEIGHT and PROPORTION. Those are the dials used here.
         ///
         ///   Default   mixed case, regular, natural width
-        ///   Mono      mixed case, bold, slightly wide
-        ///   LCD       UPPERCASE, regular, wide and airy - a display panel
-        ///   Terminal  UPPERCASE, bold, condensed and tight - a status terminal
+        ///   Bold      mixed case, heavy, a little tracking
+        ///   Wide      UPPERCASE, regular, wide and airy - a display panel
+        ///   Compact   UPPERCASE, bold, condensed and tight - a status terminal
         /// </summary>
-        private int _appliedFontStyle = -1;
 
         /// <summary>The text a font style actually prints. Public because the config
         /// panel's preview has to show the same glyphs the wall will.</summary>

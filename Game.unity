@@ -256,6 +256,7 @@ GameObject:
   - component: {fileID: 200235776}
   - component: {fileID: 200235775}
   - component: {fileID: 200235774}
+  - component: {fileID: 200235779}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -449,6 +450,18 @@ MonoBehaviour:
   slideMinSpeed: 6
   slideSpeedCap: 18
   slideSteerRate: 180
+  mantleEnabled: 1
+  mantleMaxHeight: 1.35
+  mantleMinHeight: 0.45
+  mantleProbeDistance: 0.75
+  mantleDuration: 0.38
+  wallJumpEnabled: 1
+  wallJumpHeight: 1.15
+  wallJumpPushSpeed: 4.5
+  maxWallJumps: 2
+  wallRunEnabled: 1
+  wallRunMinSpeed: 5.5
+  wallRunDescent: 1.6
   flySpeed: 14
   flySprintMultiplier: 3
   standEyeHeight: 1.65
@@ -457,6 +470,7 @@ MonoBehaviour:
   playerCamera: {fileID: 1359400585}
   inspectorFlyToggle: 0
   IsMounted: 0
+  _traversalMigration: 0
 --- !u!143 &200235772
 CharacterController:
   m_ObjectHideFlags: 0
@@ -562,6 +576,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f7a8b9c0d1e4f25a6b7c8d9e0f1a2b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.ConveyorShapeWheel
+--- !u!114 &200235779
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200235763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31dc20f7ff8f48b7be30887b0943eafb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.GridBuildWheel
 --- !u!1 &262155986
 GameObject:
   m_ObjectHideFlags: 0

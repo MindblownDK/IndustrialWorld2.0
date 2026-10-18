@@ -1,9 +1,93 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.36.0-dev`
+**Current Version:** `17.38.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.38.0-dev] The Cockpit You Sit In, and the Build Wheel
+
+**Type:** MINOR - a cockpit is the one block a player spends hours inside, and the 17.37 shell was only just good enough: a seat to sit on and a roof to look through. This round builds the cabin as a room, folds both shells into one prefab so a cockpit can change character without changing item, retires the small pod that a Crusader cannot fit inside, turns the list of buildable blocks into a dial, and clears every error and warning the 17.37 round left behind - two CS0234 sites, a CS0103 pair, three CS0618 warnings and two properties the planter never exposed. No save field, schema or item id changes; an old cockpit still loads and still flies.
+
+**GitHub title:** `[17.38.0-dev] The cockpit you sit in, the small pod retired, and the build wheel`
+
+#### Fixed
+
+- **`error CS0234: The type or namespace name 'RenderQueue' does not exist in the namespace 'UnityEngine'`** at `GridScreenBlock.Icons.cs:236` and `GridScreenBlock.cs:925`. The render queue enum lives in `UnityEngine.Rendering`, which nine other files in the project already import correctly. Both casts now name it.
+- **`error CS0103: The name 'back' does not exist` / `'down'`** at `GridScreenBlock.Pages.cs:384`. The thrust read destructured six values while naming only four, so the flight page could not print the two it actually used. All six are named now.
+- **`warning CS0618: 'FindObjectsSortMode' is obsolete`** in `GridScreenBlock.Pages.cs` (three calls) - the farm, planter and sapling scans now use the sort-mode-free overload with `FindObjectsInactive.Exclude`, which is the same result the obsolete overload produced.
+- **`error CS1061: 'CropPlanter' does not contain a definition for 'IsIrrigated' / 'IsFertilized'`** at `PlayerInteractionTool.cs:1039` and `:1063`. The interaction prompt reads both to tell a player whether a planted tray is being watered and whether it was fertilised; `CropPlanter` only exposed the serialized fields. Both are now read-only properties over those fields, so a Sprinkler switching irrigation off still switches the prompt.
+
+#### Changed
+
+- **Both cockpit shells now live in one prefab, and one of them is enabled.** The crawler nose and the survey cab are siblings under `Generated_CockpitShell`, so a cockpit carries its whole identity in a single prefab, a shell can be switched in place without touching the item, and the cabin exists once instead of twice. `shellStyle` still decides which one a block shows: 1 for the crawler, 2 for the cab.
+- **The cabin is built as a room, not as a hull with a seat bolted in.**
+  - **Seat:** pedestal, pan, back and headrest, two bolsters, two armrests, two floor rails, and a four-part harness - two shoulder straps and a lap strap across the pilot.
+  - **Console:** a knee wall and an angled deck whose top lands at a glance when seated, a lit strip along its leading edge, three switch rows with indicator lamps, and a throttle quadrant with two levers beside them.
+  - **Controls:** a side stick in the left hand with a trigger, and rudder pedals in the footwell, because a cockpit with nothing to hold is a passenger seat.
+  - **Displays:** three tilted frames with three lit panels and two bezel knobs each, sitting just above eye level so the numbers are readable without looking down.
+  - **Overhead:** a switch panel row, four status lamps and a cabin light strip, plus a real point light inside the cabin - so a pilot can read the console with the ship's own lighting off.
+  - **Room:** a ribbed floor, a rear bulkhead and a numbered hatch with six dogs, so the way out is visible from the seat. Grab handles over both shoulders.
+- **Both exteriors were rebuilt with the details that read at walking distance.** The crawler gains a tow hook, marker lamps, two wipers, roll-bar posts, roof work lamps, an antenna, glass dividers, flank seams, a grab rail and a step. The cab gains a five-bar grille, three roof markers, a roof rack, mirror stalks and mirrors, mudguards, a rear ladder and tail lights. Both keep their glass down to the sill, which is the thing that makes the view out worth the trip.
+- **Cockpit geometry is authored against the 2 m cell and scaled with the block.** The cabin and both shells sit under a scaled group, so a cockpit on a small cell is a smaller cockpit rather than a cabin with a roof through it.
+- **`GridStyleFor` keeps the legacy route for the retired name.** A prefab still called `Cockpit_Small` rebuilds as the compact dome it always was rather than turning into a second crawler, so the asset that old saves resolve is not quietly re-skinned.
+
+#### Removed
+
+- **The small cockpit is retired.** A Crusader cannot fit inside a 0.5 m pod, so the block is gone from generation, its recipe is deleted, and its item is renamed `Cockpit Pod (retired)` so it cannot be mistaken for a cockpit a player can build. The prefab and item assets stay on disk on purpose: a save written before this version names them, and deleting the item would blank those cockpits out of ships that already have one. Nothing can craft a new one.
+- **`Cockpit_Small`, `GItem_CockpitSmall` and `Recipe_GCockpitSmall` are no longer written by Setup.** If none of your saves contains one, the three assets can be deleted by hand.
+
+#### Added
+
+- **`Scripts/UI/GridBuildWheel.cs` (new) - the build menu, as a dial.** Hold the build key with a grid block in hand and the ring lists every grid block you are carrying, grouped by what the block is for: Flight (cockpits, thrusters, gyros, wheels), Power, Structure, Industry and Utility. Tab or the scroll wheel pages between groups; a group holding more than twelve block types splits into pages, so nothing is ever silently missing from the ring. Releasing over a wedge puts that block in your hand.
+- **The wheel only moves what you already own.** It never crafts and never grants: a block on the hotbar is selected in place, and a block dug out of the backpack swaps slots with the active one. That is why a block you do not carry is a wedge that is not there rather than a free one.
+- **Blocks are grouped by the component on their prefab, not by a hand-kept list.** A block authored later lands in the right group without this file being touched; an unrecognised block reads as a Utility fitting, and a plain hull block whose name says armour, hull, glass, plate or frame reads as Structure.
+- **The shape wheels keep their key.** A block that carries armour shape variants still opens the shape wheel, which is the more specific choice for it; everything else opens the build wheel.
+
+#### Setup
+
+- Run `Tools -> Voxel Engine -> Voxel Engine Setup -> Grids, Ships & Navigation -> "Build the grid ship and vehicle system"`. It rebuilds `Cockpit_Large` and `Cockpit_Cab` with the new cabin and both shells, deletes the small cockpit recipe, renames its item, and leaves every other block alone.
+- Run `Tools -> Voxel Engine -> Voxel Engine Setup -> Construction & Building Tools -> "Wire conveyor, armour, pipe, road and jump-drive wheels"`. It adds the build wheel to the player if it is not there yet and changes nothing that already exists.
+
+#### Notes
+
+- **A cockpit prefab that has not been rebuilt through Setup still works.** No seat anchor means no seated pose, so the pilot keeps the standing camera instead of being pushed into geometry. Rebuilding is what gives the cockpit its seat.
+- **The interior has no colliders.** The cabin is a shell of primitives with every collider stripped, so the seated player is never pushed out of the seat by their own cockpit. The block keeps its single cell collider, which is what placement, damage and the ghost all measure against.
+
+### [17.37.0-dev] Two Cockpits You Can Sit In
+
+**Type:** MINOR - every cockpit in the game was a sphere on a box, and the pilot floated above the roof of it, because a cockpit is one cell tall and a standing eye is not. This round replaces the large cockpit with a seated cabin, adds a second shell a player can choose instead, and gives both the same interior: a seat, a console low enough to glance at, and three displays across the top. It also fixes the duplicate field that stopped 17.36.0 compiling. No save field or schema change, and no existing item id moves.
+
+**GitHub title:** `[17.37.0-dev] Two cockpits you can sit in, and the 17.36.0 compile fix`
+
+#### Fixed
+
+- **`error CS0102: 'GridScreenBlock' already contains a definition for '_appliedFontStyle'`.** The field was declared twice in the same file - once above the font-style summary and once inside it - so the class had two fields with one name. Removed the second declaration and corrected the summary to the four font names the buttons actually carry.
+
+#### Added
+
+- **`Scripts/GridSystem/CockpitShellBuilder.cs` (new) - the two shells and the cabin they share.** Authored into the prefab by Setup, so a built cockpit costs no runtime meshes and no runtime materials.
+  - **Crawler:** a wide, low nose with a heavy bumper and stripe, headlights, a glacis carrying one centre pane and two corner panes wrapped back along the flanks, four pillars between them, a roof with a crown and a roll bar, side glass down to the waistline, fenders, a grab rail and a step. The shell reads as a land vehicle's cab because the glass goes down to the sill.
+  - **Cab:** an upright front under a square windscreen, a five-bar grille, yellow hazard stripes on the nose and both flanks, headlights, upright pillars, a flat roof with six louvers, a satellite dome on the roof, mirror stalks, a step and mudguards. Squarer, taller and plainer - a survey workhorse.
+  - **One interior, in both.** Floor and rear bulkhead so the cabin is enclosed; a seat with pan, back, headrest, post and rails; a console knee wall and an angled deck whose top sits at about shoulder height when seated, with three switch rows and a throttle quadrant; three displays across the top, tilted twenty degrees back so their faces look down at the pilot; side consoles with three status lamps each; and a `SeatAnchor` that states where the pilot's eyes belong.
+- **A seated camera, driven by the shell.** On entering, the cockpit reads its own `SeatAnchor` and moves the camera pivot to it - the pivot only, never the player rig - so the pilot sits at the seat with the console at a glance and the displays in the upper view. Leaving restores the standing eye. A cockpit prefab that predates the shells has no anchor, keeps the standing pose, and behaves exactly as it did.
+- **`Cab Cockpit`** - a second large cockpit block with its own item and recipe (steel plate, circuits, glass), so the shell is chosen where a player chooses anything else: at the build menu.
+
+#### Changed
+
+- **`Large Cockpit` is now `Crawler Cockpit`.** Display name only: the item id, the prefab path and the recipe asset are untouched, so placed cockpits, blueprints and saves keep working. The description now says what it is.
+- **Setup rebuilds cockpit prefabs on every run.** Their shells are code, and a prefab still carrying the old dome is a cockpit the player cannot see out of. The rebuild is limited to the generated shell child; anything else in the prefab is left alone.
+- **Cockpit materials come from the block factory.** Every part is created through `GridBlockMeshBuilder.CreateMaterial`, so the materials are written to disk during Setup and the saved prefab references assets rather than transient objects - the failure mode that leaves a block magenta after a domain reload. Glass is authored as genuine URP transparency (surface type, blend, keyword, render queue) instead of a tinted opaque slab.
+
+#### Setup
+
+- Run `Tools -> Voxel Engine -> Voxel Engine Setup -> Grids, Ships & Navigation -> "Build the grid ship and vehicle system"`. It rebuilds `Cockpit_Large` with the crawler shell, writes `Cockpit_Cab`, its item and its recipe, and leaves every other block alone.
+- Nothing has to be deleted first, and a placed cockpit picks up its new shell on the next load - the block is the same item.
+
+#### Notes
+
+- **The small cockpit is unchanged in this version.** A 0.5 m cell has no room for a seat, let alone three displays; it stays the compact pod it was. Superseded by 17.38.0-dev, which retires it.
+- **Flight code is identical for both shells.** The choice is cosmetic, plus a slightly different view out - the crawler is glassier, the cab is squarer.
 
 ### [17.36.0-dev] Pages Drawn, Panes Split, Beds Planted
 

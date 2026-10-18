@@ -47,6 +47,13 @@ namespace VoxelEngine.Farming
         public bool NeedsWater => plantedCrop != null && plantedCrop.requiresWater && !isIrrigated;
         public bool IsEmpty => plantedCrop == null;
 
+        /// <summary>True while the tray is being watered. Public because the interaction
+        /// prompt reads it; the field stays the serialized one.</summary>
+        public bool IsIrrigated => isIrrigated;
+
+        /// <summary>True once fertilizer has been applied to the current crop.</summary>
+        public bool IsFertilized => isFertilized;
+
         /// <summary>"Growing", "Ripe", "Dry", "Empty" - the word the panel prints.</summary>
         public string StateLabel
         {

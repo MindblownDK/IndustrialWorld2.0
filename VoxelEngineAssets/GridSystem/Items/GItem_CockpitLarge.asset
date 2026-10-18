@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: GItem_CockpitLarge
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
   itemId: gitem_cockpitlarge
-  displayName: Large Cockpit
-  description: Pilot seat and flight control computer for large ships. Requires 50
-    W idle power; if the cockpit or grid power is offline, flight controls are disabled.
-  icon: {fileID: 21300000, guid: df6078a450d5fe3eeb1f5c432d3e5bab, type: 3}
+  displayName: Crawler Cockpit
+  description: 'Seated cockpit with a wide, low crawler nose and wraparound glazing:
+    three displays across the top, a console low enough to glance at, and glass down
+    to the sill so the ground is visible from the seat. Requires 50 W idle power;
+    if the cockpit or grid power is offline, flight controls are disabled.'
+  icon: {fileID: 0}
   iconTint: {r: 1, g: 1, b: 1, a: 1}
   maxStack: 20
   massPerUnit: 1
@@ -25,8 +27,10 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   gridSize: 1
-  blockPrefab: {fileID: 1846199261265272936, guid: d5df258d08589454aa2448f48df2c1e9, type: 3}
+  blockPrefab: {fileID: 9164120701977560044, guid: d5df258d08589454aa2448f48df2c1e9, type: 3}
   blockMass: 12000
   blockHP: 2000
   supportsShapeVariants: 0

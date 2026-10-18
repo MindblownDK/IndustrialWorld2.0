@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.36.0-dev`
-**Roadmap Version:** `17.36.0-dev`
+**Current Version:** `17.38.0-dev`
+**Roadmap Version:** `17.38.0-dev`
 **Date:** 2026-10-18
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,19 @@
 
 ## 0. Recently Done
 
+### 17.38.0-dev - The Cockpit You Sit In
+- `CockpitShellBuilder` now builds the cabin as a room - seat and harness, angled console with a lit leading edge and a throttle quadrant, side stick, rudder pedals, three tilted displays, overhead panel, bulkhead hatch, and a cabin point light - authored at the 2 m cell and scaled with the block
+- Both shells live in one prefab and `ApplyShell` decides which is on, so a cockpit carries its whole identity in one asset; both exteriors gained the details that read at walking distance (tow hook, wipers, roll-bar posts, roof lamps, grille, mirrors, ladder)
+- The small cockpit is retired - no longer generated, recipe deleted, item renamed, prefab and item kept so saves that already contain one still load
+- `GridBuildWheel` (new) turns the build menu into a dial: every grid block the player carries, grouped Flight / Power / Structure / Industry / Utility, twelve wedges a page with group paging; blocks with shape variants keep the shape wheel
+- Cleared CS0234 (`UnityEngine.Rendering.RenderQueue`), CS0103 (thrust tuple), CS0618 (`FindObjectsByType`) and CS1061 (`CropPlanter.IsIrrigated` / `IsFertilized`)
+
+### 17.37.0-dev - Two Cockpits You Can Sit In
+- `CockpitShellBuilder` (new) authors two shells and one shared cabin into the prefab: a crawler nose with wraparound glazing, fenders and a roll bar, and a boxy cab with yellow accents, a grille, a roof louver bank and a satellite dome. Both get a seat, side consoles, a console deck at glance height and three displays across the top. Nothing is built at play time
+- A seated camera reads the shell's own `SeatAnchor` on entry and moves the camera pivot there - never the player rig - so the pilot sits behind the console with the displays in the upper view; leaving restores the standing eye, and a cockpit without a shell keeps the old pose
+- `Cab Cockpit` is a second large cockpit block with its own item and recipe; `Large Cockpit` is renamed `Crawler Cockpit` with its id and recipe asset unchanged. Setup rebuilds cockpit prefabs on every run, and all cockpit materials are persisted so a saved prefab never holds a transient one
+- Fixed the duplicate `_appliedFontStyle` field in `GridScreenBlock.cs` that stopped 17.36.0 compiling (CS0102)
+
 ### 17.36.0-dev - Pages Drawn, Panes Split, Beds Planted
 - `ScreenCanvas` (new) is the character grid every page draws on - boxes, bars, batteries, line plots and icon cells with clipping, so alignment is layout instead of string luck; `GridScreenBlock.Icons.cs` (new partial) turns icon requests into sprite quads placed from the body's measured line height, so a picture always sits over its own count
 - Power Graph is a real two-trace chart over three minutes; Batteries draws a case per cell; Storage Monitor (`Inventory`) and Inventory Grid show item pictures with counts; Mining Cargo (new page) pairs under the Mining gauge; Manifest, Environment and Speed are single-column readings with no furniture
@@ -45,16 +58,6 @@
 - `ScreenPageCatalog` (new) is the one list of the 18 pages a screen can show: name, category, a line about what it answers, the smallest panel it fits, search keywords, plus `Next`/`Previous`/`NeedsSource`/`FitsOn`; the config panel, the block's own title and any later surface read it instead of each keeping their own idea of the list
 - `GridScreenBlock.Pages.cs` (new partial) renders nine pages the block did not have: Environment (room and ambient pressure, gravity, temperature, altitude), Batteries (per-battery cells plus bank total), Power Graph (three-minute generation and draw traces), Manifest, Fill Bars, Farm (plots within 24 m), Mining (lift against weight, hold fill, heaviest cargo), Inventory Grid and Planet Map; every page is a pure formatter over a snapshot, cached for half a second
 - The display-mode picker was rebuilt around that catalogue - search box, one section per category, a description of the highlighted page and a warning when the panel is too small - and each button now carries its own mode instead of the panel guessing it back from the button's text. `ScreenDataMode` grew nine values, all appended. No setup step, no prefab, no save or schema change
-
-### 17.34.0-dev - The Air Over A Biome
-- `WeatherBiome` (new) multiplies coverage by the planet's own humidity at a place, read through `SphereDensity.SampleClimate` - the same call the scatter system uses to choose biomes - so moist air keeps its rain (up to 1.20x), dry air eats it before it lands (down to 0.80x) and the desert belts the climate field already draws read dry on a wet day
-- `WeatherManager.CoverageForDirection` now applies shape (17.33) and climate (17.34) as two named multipliers on coverage, kept separate so a readout can say which half moved; the map's `WEATHER` section gained an `AIR` line through the new `BiomeBiasAt`
-- Symmetric around the climate field's own midpoint, so a body's average rainfall moves about +0.2%; shared `WeatherFronts.PercentChange` is the one rounding. No setup step, no prefab, no save or schema change
-
-### 17.33.0-dev - The Ground Has A Vote
-- `WeatherTerrain` (new) samples the terrain along the direction fronts actually drift and turns the upwind/downwind slope into a coverage multiplier: rising ground takes 45 percent more weather, the lee side gets a rain shadow down to 55 percent. The multiplier is memoised on a 150 m bucket keyed by seed and direction, and the samples come from the same analytic field the GPU mirror follows, so a guest computes what a host computes
-- The curve was calibrated offline against a stand-in elevation stack at the real sampling step: mean 1.00 on mountainous, hilly and flat bodies, 5th/95th percentiles 0.77x/1.28x on a mountainous world. The first iteration centred the elevation term on the ocean floor and dragged every coastal base to 0.86x, which is why the reference is the land plateau
-- The weather map draws which side of a ridge a place is on, and no save field, prefab or weather state machine was touched
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -86,7 +89,9 @@
 ### Open Scope (named with the version that deferred it)
 - **Per-pane sources (17.36.0-dev):** a split screen links one source list, and its panes share it. A pane that could be pointed at its own container is a genuinely different feature - it changes the saved shape from a list to a list per pane - and no page currently needs it: the canvas pages read the construct themselves.
 - **Planter automation (17.36.0-dev):** `CropPlanter` is manual on purpose - plant, harvest, fertilize by hand. A harvester that empties a row of trays, and a conveyor port on the tray itself, are the next step for a farm that runs while the player is away.
-- **Cockpit interior and the two cockpit shells (17.35.0-dev):** the screen round rebuilt what a panel says, not what the pilot sits in. Next round (`17.37.0-dev`) replaces the current cockpit with a seated view that has three screens across the top and panels low enough to glance at: style 1 is a wide angular land-crawler nose with wraparound glazing, style 2 a boxy cab with yellow accents, a satellite dome and a roof grille. Two shells, one interior layout, chosen per cockpit block.
+- **Cockpit shell switching in place (17.37.0-dev, half done in 17.38.0-dev):** both shells now ship inside one prefab and `CockpitShellBuilder.ApplyShell` flips which one is on, so the prefab half is finished and a block's `shellStyle` is already saved. What is still open is a player-facing action - a wrench or terminal button that changes the shell from the seat - which needs a decision on whether a re-skinned cockpit should keep its integrity and description.
+- **Build wheel favourites and pinning (17.38.0-dev):** the ring lists what a player carries, alphabetically within each role. Pinning a block to a fixed wedge and reordering roles are both deferred until the wheel has been used in anger; both are presentation only and would add a player-preference field to the save.
+- **Working cockpit displays (17.37.0-dev):** the three displays across the top are part of the cabin model, not screens. Driving them from the construct's own data would mean mounting a `GridScreenBlock` surface into the shell and paying for three more text meshes per cockpit - the wall screens already read that data, and a pilot can scroll out to them.
 - **Threat tiers, waves, elites and the siege brute acceptance (17.18.0-dev):** confirm in Unity that a dirty district draws an announced organized wave (elite leader, flankers, logistics targets) once spawner heat and residual load qualify, that the siege brute walks past the player to dismantle machines with its double-damage bite, that elite/brute health bars and loot scale, that stopping industry bleeds the response back to ordinary scouts, and that guest replicas show the tier visuals and scaled health. The 17.30.0-dev district pressure card reports the same two readings this row has to be judged against (open an emitting machine while a wave is due), so the rung on the card and the answer that arrives can be compared directly. Tier thresholds and cooldowns await live-play tuning.
 - **Tree persistence, open-container crafting and ghoul-curve acceptance (17.17.2-dev):** confirm in Unity that felled or otherwise destroyed trees stay absent across save-load and chunk streaming, that recipes count and consume chest/drawer/bag/pen/pad contents only while their panel is open, and that a running furnace no longer accelerates spawns or recruits packs within minutes while a heavily polluted area still escalates toward the 2.15x ceiling.
 - **RecipeRegistry recovery and research audit (17.16.0-dev):** append-only Setup results and the follow-up Recipe Graph Validator report remain unverified; confirm skipped invalid/ambiguous assets and recipes gated without a ResearchNode reference, with recipe/research tuning unchanged.

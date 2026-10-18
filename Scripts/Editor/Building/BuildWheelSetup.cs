@@ -245,6 +245,7 @@ namespace VoxelEngine.EditorTools
             created += EnsureComponent<VoxelEngine.UI.EnergyPipeShapeWheel>(player, "Energy pipe shape wheel", ref present);
             created += EnsureComponent<VoxelEngine.Simulation.RoadSurfaceWheel>(player, "Road surface wheel", ref present);
             created += EnsureComponent<VoxelEngine.GridSystem.JumpDriveWheel>(player, "Jump drive destination wheel", ref present);
+            created += EnsureComponent<VoxelEngine.UI.GridBuildWheel>(player, "Grid build wheel", ref present);
 
             EditorUtility.SetDirty(player);
             UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(player.scene);
@@ -254,7 +255,8 @@ namespace VoxelEngine.EditorTools
                 $"Radial wheel family is wired on '{player.name}'.\n\n" +
                 $"Added: {created}\nAlready present: {present}\n\n" +
                 "Conveyor, grid armour, energy pipe and road surface wheels all open on the Build Wheel key " +
-                "while the matching item is held. The jump drive wheel opens on the Warp Drive key while piloting.",
+                "while the matching item is held. The grid build wheel opens on the same key while a grid block " +
+                "is held, and the jump drive wheel opens on the Warp Drive key while piloting.",
                 "OK");
         }
 

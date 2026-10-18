@@ -18,6 +18,15 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Idle power draw while the cockpit is powered on.")]
         public float idleWatts = 50f;
 
+        /// <summary>
+        /// 17.37.0-dev — which shell this cockpit wears. Authored on the prefab by Voxel
+        /// Engine Setup: 1 is the crawler nose, 2 the boxy cab, 0 a legacy cockpit with no
+        /// seat. The two cockpits in the build menu differ by this and by their model only;
+        /// the flight code is identical.
+        /// </summary>
+        [Tooltip("Shell: 0 = legacy, 1 = crawler nose, 2 = boxy cab")]
+        public int shellStyle;
+
         public override float PowerDraw => Enabled ? idleWatts : 0f;
 
         public Player.PlayerController Pilot { get; private set; }
@@ -27,6 +36,13 @@ namespace VoxelEngine.GridSystem
         private bool _hasDefaultCameraPose;
         private Vector3 _defaultPivotLocalPosition;
         private Quaternion _defaultPivotLocalRotation;
+
+        // 17.37.0-dev — the seated camera. The shell authors a SeatAnchor; the pilot's eye
+        // is moved there by offsetting the camera pivot, so the player rig itself is never
+        // touched and standing up is a single assignment back to the standing pose.
+        private bool _hasSeatPose;
+        private Vector3 _seatPivotOffset;
+        private Quaternion _seatPivotRotation = Quaternion.identity;
 
         // ── Scroll camera zoom ───────────────────────────────────────
         [Header("Camera")]
@@ -82,6 +98,9 @@ namespace VoxelEngine.GridSystem
 
         private void OnEnable()
         {
+            // Both shells ship inside the prefab; this picks the one the prefab (or a
+            // designer) asked for. Nothing is generated - it only flips which hull is on.
+            CockpitShellBuilder.ApplyShell(gameObject, shellStyle);
             VoxelEngine.Networking.GridSync.SeatDenied += OnSeatDenied;
         }
 
@@ -508,6 +527,29 @@ namespace VoxelEngine.GridSystem
             _hasDefaultCameraPose = true;
         }
 
+        /// <summary>
+        /// Work out where this cockpit wants the pilot's eyes. A shell that has been through
+        /// Setup carries a SeatAnchor; one that has not keeps the standing pose, so an old
+        /// cockpit degrades to what it always was instead of dropping the camera into a wall.
+        /// </summary>
+        private void CaptureSeatPose()
+        {
+            _hasSeatPose = false;
+            _seatPivotOffset = Vector3.zero;
+            _seatPivotRotation = _defaultPivotLocalRotation;
+
+            if (!_hasDefaultCameraPose) return;
+            if (!CockpitShellBuilder.TryGetSeatAnchor(gameObject, out Vector3 seatPosition, out Quaternion seatRotation))
+                return;
+
+            // The player rig is parented to the cockpit with identity rotation, so cockpit
+            // local and rig local are the same frame: the pivot only has to move by the
+            // difference between where the eye is and where the seat is.
+            _seatPivotOffset = seatPosition - _defaultPivotLocalPosition;
+            _seatPivotRotation = _defaultPivotLocalRotation * seatRotation;
+            _hasSeatPose = true;
+        }
+
         private void ApplyCameraMode()
         {
             var pivot = Pilot != null ? Pilot.cameraPivot : null;
@@ -560,9 +602,10 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                // Restore the first-person cockpit pose.
-                pivot.localPosition = _defaultPivotLocalPosition;
-                pivot.localRotation = _defaultPivotLocalRotation;
+                // First person: either the seated pose the shell authored, or - for a
+                // cockpit that predates the shells - the standing pose exactly as before.
+                pivot.localPosition = _defaultPivotLocalPosition + (_hasSeatPose ? _seatPivotOffset : Vector3.zero);
+                pivot.localRotation = _hasSeatPose ? _seatPivotRotation : _defaultPivotLocalRotation;
             }
         }
 
@@ -585,6 +628,7 @@ namespace VoxelEngine.GridSystem
 
             Pilot = player;
             CaptureDefaultCameraPose(player);
+            CaptureSeatPose();
             _cameraDistance = 0f;
             _targetCameraDistance = 0f;
             _orbitYaw = 0f;
@@ -725,7 +769,10 @@ namespace VoxelEngine.GridSystem
             // Release maritime controls (stop engines + rudder).
             ZeroMaritime();
 
-            // Restore first-person camera before unparenting/leaving the cockpit.
+            // Restore first-person camera before unparenting/leaving the cockpit. The seat
+            // pose is cleared first so the eye is back at standing height before the rig is
+            // moved out of the cockpit.
+            _hasSeatPose = false;
             _cameraDistance = 0f;
             _targetCameraDistance = 0f;
             _orbitYaw = 0f;

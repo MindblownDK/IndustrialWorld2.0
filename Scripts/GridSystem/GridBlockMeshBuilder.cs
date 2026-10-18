@@ -17,7 +17,9 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, WheelTire, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, FlareVent, RouteRecorder, RefuelConnector, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, FlareVent, RouteRecorder, RefuelConnector, Generic,
+            // 17.37.0-dev - the two seated cockpits. Appended so no existing style id moves.
+            CockpitCrawler, CockpitCab
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -45,6 +47,10 @@ namespace VoxelEngine.GridSystem
                 case Style.Armor:        BuildArmor(root, cs, body, metal); break;
                 case Style.Glass:        BuildGlass(root, cs, baseColor); break;
                 case Style.Cockpit:      BuildCockpit(root, cs, body, metal, glow); break;
+                case Style.CockpitCrawler:
+                    CockpitShellBuilder.Build(root, cs, baseColor, CockpitShellBuilder.StyleCrawler); break;
+                case Style.CockpitCab:
+                    CockpitShellBuilder.Build(root, cs, baseColor, CockpitShellBuilder.StyleCab); break;
                 case Style.Thruster:     BuildThruster(root, cs, dark, metal); break;
                 case Style.Battery:      BuildBattery(root, cs, body, metal, glow); break;
                 case Style.Cargo:        BuildCargo(root, cs, body, metal); break;
@@ -701,6 +707,15 @@ namespace VoxelEngine.GridSystem
                     break;
             }
         }
+
+        /// <summary>
+        /// A material built the same way every block material is, including the editor
+        /// persister hook. Public so a specialist builder (a cockpit shell, a wheel) can
+        /// author its own parts without inventing materials that a saved prefab cannot
+        /// keep a reference to.
+        /// </summary>
+        public static Material CreateMaterial(Color c, float metallic, float smooth, Color? emissive = null)
+            => Mat(c, metallic, smooth, emissive);
 
         private static Material Mat(Color c, float metallic, float smooth, Color? emissive = null)
         {
