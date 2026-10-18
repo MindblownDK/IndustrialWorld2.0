@@ -1,9 +1,53 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.32.0-dev`
+**Current Version:** `17.33.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.33.0-dev] The Ground Has A Vote
+
+**Type:** MINOR - the last place in the weather that ignored the world it was falling on. A band arriving at a ridge used to cross it exactly as it crossed a plain; now rising ground takes more of it and the lee side gets a rain shadow. No save field, schema or public API was removed, no prefab or asset is touched, and the weather state machine is not involved at all.
+
+**GitHub title:** `[17.33.0-dev] Mountains cast rain shadows, and the map shows which side you are on`
+
+#### Added
+- **`Scripts/Weather/WeatherTerrain.cs` (new) - the ground's answer to a band.** One pure function per place: sample the terrain height at the place and one step upwind and one step downwind along `WeatherFronts.DriftDirection` (the direction the bands actually travel), take the gradient, and turn it into a multiplier on that place's coverage.
+  - **Why slope along the drift, and not a generic steepness:** orographic lift is about air being FORCED UP as it crosses ground. Air moving along a contour is not lifted however steep the hillside is beside it, so the honest measurement is the rise in the direction the weather is going. A cliff face parallel to the drift gets no bonus; a gentle ramp across the drift gets all of it.
+  - **The curve.** `lift` is the slope normalised by `SlopeReference` (0.22 - a 22 cm climb per metre of run saturates it), `OrographicGain` is 0.90, and an elevation term (`ElevationGain` 0.20, measured above the field's own `LandPlateau` rather than above the deepest basin, so a coastal base on flat ground is neutral) adds a little to high ground. The total is clamped to 0.45 - 1.55: nothing is ever perfectly dry behind a ridge or perfectly soaked on a peak.
+  - **Calibrated before it was written.** The response was measured offline against a stand-in for `PlanetField`'s elevation stack at the real sampling step (400 m on an 8 km world): mean 1.00 to within a percent on mountainous, hilly and nearly flat bodies alike, 5th/95th percentiles at 0.77x / 1.28x on a mountainous world and 0.91x / 1.09x on a flat one. The first iteration centred the elevation term on the ocean floor and dragged every coastal base to 0.86x; that is why the reference is `LandPlateau`.
+  - **The terrain is the one the game already uses.** `PlanetField.SurfaceRadius` is the single analytic field the GPU mirror (`PlanetFieldGpu.compute`) is kept in lockstep with, so the multiplier a guest computes is the multiplier the host computes, with no message and no divergence.
+  - **Memoised, and the memo is derived state.** Answers are cached on a 150 m bucket keyed by (seed, direction) - deliberately smaller than the field's 260 m hill band, so a bucket cannot average across a feature - with an 8192-entry cap that clears wholesale rather than growing. Three height samples are paid once per 150 m of ground; a per-frame player query, a per-second pollution pass over hundreds of cells and a full map repaint are all dictionary hits after the first. Because the cache is a pure function of the terrain, discarding it at any moment changes nothing, which is what makes it safe in a replicated world.
+- **`WeatherManager.CoverageForDirection` multiplies coverage by that answer (17.33.0-dev).** The multiplier is applied to COVERAGE, never to intensity, and never to the state machine: a clear spell stays clear over a mountain top (there is no system to be under), and a rain phase over a range now falls on the windward flank and stops at the crest. Everything that already asked about a place inherits it with no change to itself - the solar panels, the orbiting sensor's ground truth, the pollution washout, the player's own rain.
+- **`WeatherManager.TerrainBiasAt(Vector3)` (new).** The multiplier at a world position, for readouts. Note it is a separate query rather than something already folded in: `CoverageForDirection` has applied it, so a caller that wants the total must not multiply twice.
+- **`TERRAIN` line in the map's `WEATHER` section (`Scripts/UI/LogisticsMapScreen.cs`).** Under the band word it now reads e.g. `TERRAIN WINDWARD SLOPE · +22% RAIN` or `TERRAIN RAIN SHADOW · -19% RAIN` or `TERRAIN LEVEL GROUND · +0% RAIN`. The band word still says where you stand relative to the band; this says what the ground under it does, which are two different questions with two different answers on the same square metre.
+- **The painted bands inherit the shadow for free.** The map's `WEATHER` layer already drew cells by asking `CoverageForDirection`, so the rain shadow now shows as a visible dry wedge behind a range with no drawing code changed. That was the test of whether the multiplier belonged on coverage rather than on a second parallel path.
+
+#### Balance, stated plainly
+- **Body averages are unchanged by construction and by measurement.** `lift` is symmetric around zero and the calibration returns a mean of 1.00 on every body tested. A world does not get wetter or drier; rain gets redistributed across its terrain, which is the entire feature.
+- **The precipitation a player experiences is unchanged on flat ground** - the majority of any map - because both terms are zero there. Bases get their old weather unless they are genuinely on a slope or high ground.
+- **`OrographicGain` (0.90) is the single lever** for how strongly terrain expresses itself, and `SlopeReference` (0.22) for what counts as steep. Both are private constants in `WeatherTerrain`, so a tuning pass is a one-line change with no prefab involved.
+- **The debug chords still give a full storm.** `PrecipitationAt` returns the system's own strength while `IsManuallyHeld`, so Ctrl+Alt+R still ignores both bands and terrain; the terrain multiplier rides the coverage path, which that branch skips.
+
+#### Deliberately not changed
+- **The weather state machine, the cloud shell, the satellite sensor and the state timer** are untouched. Terrain shapes how much of a system lands where; it does not decide what the system is.
+- **Biome response is still open.** A band over a rainforest and a band over a desert drop the same amount; making the surface's own climate answer the sky is a different question (it wants the biome's water budget, not its slope) and is named as open in `Roadmap.md` rather than half-built here.
+- **No new sampling of the voxel cache or the physics world.** The response reads the analytic field, not meshes and not raycasts, so it costs the same whether a chunk is streamed in or not - the answer for a place is the same at 5 km as at 5 m, at the cost of not seeing a player-built hill.
+- **No inspector field, no setup step.** The constants live in the file; no serialized prefab can be left holding a stale default.
+
+#### Compatibility and validation
+- Semantic Versioning 2.0.0 prerelease: MINOR `17.33.0-dev` over `17.32.0-dev`. A new system is a MINOR by the project's own rule, and it is save-compatible in both directions: `CurrentSchemaVersion` stays `2`, weather is still not persisted at all, no item, recipe, block or prefab asset is touched, and no existing public signature changed (`CoverageForDirection` keeps its name and arguments and returns a number in the same 0..1 range; `TerrainBiasAt` is the only new public member on the manager).
+- Multiplayer: the change is deterministic in (seed, direction) and needs no wire traffic. Guests already receive the host's `Clock` (17.31.0-dev) and compute their own bands; they now compute their own rain shadow from the same seed, so a guest's local puddles are drawn where the host's are.
+- Not compiled in Unity here: no Editor or build step exists in the working environment. All touched files (`WeatherTerrain.cs` new, `WeatherManager.cs`, `LogisticsMapScreen.cs`, `GameVersion.cs`) were checked with the string- and comment-aware brace, bracket and parenthesis scanner - every counter returns to zero, nothing negative. Every symbol the new code calls was confirmed to exist with the signature used: `PlanetField.SurfaceRadius(int, in float3, float, float, float, float, float)`, `PlanetField.MaxElevation(float)`, `PlanetField.LandPlateau`, `WeatherFronts.DriftDirection`, `SphereGenParams.seed/.radiusWorld/.baseHeight/.seaRadius/.continentScaleDir/.mountainScale`, `CelestialBody.genParams`, `GravityProvider.ActiveBody`, `Mathf.Clamp01`. New names in the codebase: `WeatherTerrain`, `Multiplier`, `ClearCache`, `Percent`, `Word`, `SlopeReference`, `OrographicGain`, `ElevationGain`, `MinMultiplier`, `MaxMultiplier`, `SampleFractionOfRadius`, `SampleMinMetres`, `SampleMaxMetres`, `MinReliefMetres`, `CacheCellMetres`, `CacheKey`, `s_cache`, `Evaluate`, `Height`, `MaxRelief`, `KeyFor`, `TerrainBiasAt`, `_frontGen`, `_frontHasBody` - all checked repo-wide for a collision. The new script ships with a `.meta` (guid `af54481e5d3d4fa389b5f0a7efdb3b4c`, checked unique) so the asset keeps one identity across machines.
+- The one risk worth naming: `PlanetField` is `[BurstCompile]` and mirrored in a compute shader. This round does not change a single constant in it - it only calls it - so the CPU and GPU fields stay in lockstep by not being edited.
+
+#### What to run
+1. Nothing to author. Code only: no prefab, item, recipe, research node or wizard step.
+2. Find a mountain range on foot or by ship. Stand on the side the bands come FROM (the drift direction) and open the map (`L`) with the `WEATHER` layer on in rain: the painted bands should be visibly stronger on that flank, and thinning to a dry wedge on the far side of the crest.
+3. Walk through the range in rain with the map open. `TERRAIN` should move from `WINDWARD SLOPE` and a positive percentage, through `LEVEL GROUND` near the crest, to `RAIN SHADOW` and a negative one in the lee - while `LOCAL` precipitation falls with it even though the state and `SYSTEM` strength have not changed.
+4. Stand on flat ground near your base: `TERRAIN LEVEL GROUND · +0% RAIN` (or within a percent or two), and the weather should feel exactly as it did before this round.
+5. Put a smoking machine on each side of a ridge and leave a rain band over the pair for an hour: the windward machine's `RAIN SCRUB` (17.32.0-dev) should read higher than the lee one's. That is the two rounds reading each other correctly.
+6. If the effect is too strong or too weak on your terrain, say so with the numbers - `OrographicGain` is the one constant to move.
 
 ### [17.32.0-dev] Rain Washes Where It Falls
 

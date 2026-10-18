@@ -718,6 +718,21 @@ namespace VoxelEngine.UI
                 weatherPlace.style.marginBottom = 2;
                 _list.Add(weatherPlace);
 
+                // 17.33.0-dev — THE GROUND'S VOTE. The band word above says where the viewer
+                // stands relative to the band; this line says what the ground under the band
+                // does to it, so a base against a windward slope and one in the lee of the same
+                // ridge read differently while the same band is over both.
+                float terrain = weather.TerrainBiasAt(ViewerPosition());
+                int terrainPercent = WeatherTerrain.Percent(terrain);
+                var weatherGround = new Label(
+                    $"TERRAIN {WeatherTerrain.Word(terrain)}"
+                    + $"   ·   {(terrainPercent >= 0 ? "+" : string.Empty)}{terrainPercent}% RAIN");
+                weatherGround.style.fontSize = 9;
+                weatherGround.style.whiteSpace = WhiteSpace.Normal;
+                weatherGround.style.color = new StyleColor(T.TextMuted);
+                weatherGround.style.marginBottom = 2;
+                _list.Add(weatherGround);
+
                 var weatherNote = new Label(
                     "Bands drift and are not body-wide: a second base can be in sunshine while this "
                     + "one is under the rain. Solar panels read the sky directly above themselves.");

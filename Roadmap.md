@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.32.0-dev`
-**Roadmap Version:** `17.32.0-dev`
+**Current Version:** `17.33.0-dev`
+**Roadmap Version:** `17.33.0-dev`
 **Date:** 2026-10-18
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.33.0-dev - The Ground Has A Vote
+- `WeatherTerrain` (new) multiplies a band's coverage by the terrain under it: three `PlanetField.SurfaceRadius` samples along the drift direction give the slope the air actually meets, so a rising windward flank lands up to 1.55x and the lee side behind a ridge drops to 0.45x; elevation adds the last 20 percent and flat ground is neutral by construction (calibrated mean 1.00 within a percent on every body)
+- `WeatherManager.CoverageForDirection` applies the multiplier to COVERAGE, never to intensity, so a clear spell stays clear over a peak and the state machine is untouched; the map's painted bands inherit the rain shadow for free, the `WEATHER` section gained a `TERRAIN` line through the new `TerrainBiasAt`
+- Memoised on a 150 m bucket keyed by (seed, direction) and dropped when the body changes, so a place pays for three height samples once. No setup step, no prefab, no save or schema change
+
 ### 17.32.0-dev - Rain Washes Where It Falls
 - The smog washout is sampled per CELL (`PollutionService.Simulate` asks `WeatherManager.PrecipitationAt` at each body-local cell centre): a cell under a band is scrubbed at the rate the whole body used to receive, a cell in a gap between bands keeps its smog, and the rain-driven half of runoff spreading follows the same sample
 - `PollutionService.AirWashPerSecondAt` computes the simulation's own number for readouts, and `IndustrialPressureReadout.WashLineAt` prints it once for both the machine card's `RAIN SCRUB` row and the map's `INDUSTRIAL PRESSURE` section; `WeatherFronts.CoverageWord` is the only band-word list now
@@ -48,11 +53,6 @@
 - `PlayerController.UpdateWallRun` starts on the same recorded side collision the wall jump uses (airborne, off a hull, gravity present, steering within ~78 degrees, at least 5.5 m/s along the wall) and ends only for wall-gone, input-stop, speed-drop or ground
 - The descending gravity branch eases a fall to `wallRunDescent` (1.6 m/s) and can never add height; the wall-jump probe keeps the touch fresh mid-run
 - Three prefab knobs arrive through migration step 2. No setup step, no save change; closes the 17.7.0-dev traversal deferral
-
-### 17.28.0-dev - Mantle Onto Ledges, Wall Jumps
-- `PlayerController.TryStartMantle` / `UpdateMantle` pulls a blocked body up a 0.45 - 1.35 m ledge in a 0.38 s arc that lands only where the walkable-ground probe and a capsule overlap accept
-- `TryWallJump` spends one of `maxWallJumps` (2) per airtime on a fresh press against a recorded wall contact, launching 1.15 m up and 4.5 m/s away while keeping momentum along the wall
-- Two prefab switches plus tuning are set once by `_traversalMigration`. No setup step, no save change
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -109,7 +109,7 @@
 - **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
 - **Gust knockback stays local** (accepted 14.55.0): the Roc's wing gust damages remote players victim-side, but the knockback impulse only applies to the host's own player - replicating impulses is a future polish round. Replayed enemy volleys (fireballs, spikes) roll their own cosmetic spread on each guest.
 - **Same-instant double mount** (accepted 14.54.0): two players taking the same horse in the same wire instant - the later mount announce wins the glue; the earlier rider dismounts into a horse that is no longer theirs. Same vanishingly small window as the drop/loot races.
-- **Weather is no longer one sky for the whole body** (17.31.0-dev closed the 14.46.0 edge; per-cell washout landed 17.32.0-dev): the state machine still rolls where the host stands - one weather SYSTEM per body, host-authoritative as 14.46.0 decided - and `WeatherFronts`' drifting field decides where that system is actually depositing, so the bands are places and every machine that shares the front clock computes the same ones. The smog washout now reads the same field per cell, so a district in a gap between bands keeps its smog while one under a band is scrubbed. Remaining: fronts that respond to terrain or biomes (a band crosses a mountain range exactly as it crosses a plain), and live-play tuning of `WashRatePerIntensity` - total scrub across a body is now proportional to the covered area rather than body-wide, so a long polluted stretch out of the rain clears slower than it used to by design.
+- **Weather is no longer one sky for the whole body** (17.31.0-dev closed the 14.46.0 edge; per-cell washout landed 17.32.0-dev): the state machine still rolls where the host stands - one weather SYSTEM per body, host-authoritative as 14.46.0 decided - and `WeatherFronts`' drifting field decides where that system is actually depositing, so the bands are places and every machine that shares the front clock computes the same ones. The smog washout now reads the same field per cell, so a district in a gap between bands keeps its smog while one under a band is scrubbed. Fronts now respond to TERRAIN (17.33.0-dev - `WeatherTerrain` gives every place a windward/lee multiplier from the analytic field, so a range casts a rain shadow and the map paints it). Remaining: biome response (a band over a rainforest and one over a desert still drop the same amount), and live-play tuning of both `WashRatePerIntensity` (total scrub is proportional to covered area, not body-wide) and `WeatherTerrain.OrographicGain`.
 - **Dedicated headless server** (milestone 12, part 1 shipped 14.45.0): boot path, config and save carry-forward are live; remaining are the security hardening pass and converting client requests to intents, plus hardening every system that still assumes a local player at runtime (surfaced by dedicated-session testing).
 - **Security hardening** (deferred 14.6.0): SHIPPED across 14.56.0 (code hashing + keypad intents), 14.57.0 (verified identity, door and storage enforcement) and 14.58.0 (host-only machine simulation).
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
@@ -1764,6 +1764,7 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Wind speed → turbine output and degradation.
      - Solar panel efficiency (per panel, from the sky above it — 17.31.0-dev).
      - Pollution washout: rain scrubs only the cells its band is over (17.32.0-dev).
+     - Terrain: rising ground wets its windward face and shadows its lee (17.33.0-dev).
      - Player exposure/hazard levels.
      - Visibility and flight handling.
 

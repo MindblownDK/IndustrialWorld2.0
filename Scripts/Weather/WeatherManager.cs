@@ -225,6 +225,11 @@ namespace VoxelEngine.Weather
         private float _frontSurfaceRadius;
         private float _frontBandMetres;
         private int _frontSeed;
+        // 17.33.0-dev: the terrain response needs the body's own generation parameters, not
+        // just its seed. Kept alongside the front parameters so a coverage query from the map
+        // never has to look a body up (or allocate) to ask about the ground.
+        private SphereGenParams _frontGen;
+        private bool _frontHasBody;
 
         // Sub-systems (created as children)
         private WeatherParticles _particles;
@@ -601,6 +606,7 @@ namespace VoxelEngine.Weather
                 _frontSurfaceRadius = 0f;
                 _frontBandMetres = 0f;
                 _frontSeed = 0;
+                _frontHasBody = false;
                 _frontCoverage = 1f;
                 return;
             }
@@ -609,7 +615,17 @@ namespace VoxelEngine.Weather
             // sky and every machine in THIS world computes the same bands from the same seed.
             _frontSurfaceRadius = Mathf.Max(50f, body.SurfaceRadius);
             _frontBandMetres = WeatherFronts.BandMetresFor(_frontSurfaceRadius);
-            _frontSeed = body.genParams.seed;
+            int seed = body.genParams.seed;
+            if (seed != _frontSeed || !_frontHasBody)
+            {
+                // 17.33.0-dev: a different world underneath means different ground, and the
+                // terrain memo is keyed by seed - dropping it here keeps a reused process from
+                // ever answering one planet's question with another planet's mountain.
+                WeatherTerrain.ClearCache();
+            }
+            _frontSeed = seed;
+            _frontGen = body.genParams;
+            _frontHasBody = true;
 
             if (!IsWeatherActive || playerCamera == null) { _frontCoverage = 1f; return; }
             _frontCoverage = CoverageForDirection(GravityProvider.GetUp(playerCamera.position));
@@ -620,13 +636,33 @@ namespace VoxelEngine.Weather
         /// surface direction at that piece. Public because the map draws the bands with it; every
         /// gameplay question about another place should go through <see cref="CoverageAt"/> or
         /// <see cref="PrecipitationAt"/> instead, which start from a world position.
+        ///
+        /// 17.33.0-dev — the GROUND has the last word: the field's coverage is multiplied by
+        /// <see cref="WeatherTerrain.Multiplier"/>, so a band arriving on a rising slope lands
+        /// harder and the lee flank behind the ridge is in its rain shadow. The multiplier is
+        /// applied to COVERAGE and not to intensity, so a clear spell stays clear over a peak and
+        /// the weather state machine is not involved at all.
         /// </summary>
         public float CoverageForDirection(Vector3 up)
         {
             if (!IsWeatherActive || _frontBandMetres <= 0f) return 1f;
             var profile = Profile ?? WeatherClimateProfile.Default();
-            return WeatherFronts.Coverage01(up, _frontSurfaceRadius, _frontBandMetres, _frontSeed,
+            float coverage = WeatherFronts.Coverage01(up, _frontSurfaceRadius, _frontBandMetres, _frontSeed,
                 _weatherClock, WeatherFronts.CoverageBiasFor(profile.overcastBias));
+            if (coverage <= 0f || !_frontHasBody) return coverage;
+            return Mathf.Clamp01(coverage * WeatherTerrain.Multiplier(_frontGen, up));
+        }
+
+        /// <summary>
+        /// 17.33.0-dev — how the ground under a WORLD position treats the band arriving on it:
+        /// 1 = as before, above 1 = a windward slope where it lands harder, below 1 = the rain
+        /// shadow behind a ridge. Public because the map names it in words; the gameplay path
+        /// never calls it separately - <see cref="CoverageForDirection"/> already applied it.
+        /// </summary>
+        public float TerrainBiasAt(Vector3 worldPosition)
+        {
+            if (!_frontHasBody) return 1f;
+            return WeatherTerrain.Multiplier(_frontGen, GravityProvider.GetUp(worldPosition));
         }
 
         /// <summary>17.31.0-dev — coverage of the weather system over a WORLD position.</summary>
