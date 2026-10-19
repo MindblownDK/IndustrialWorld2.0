@@ -1,9 +1,46 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.38.0-dev`
+**Current Version:** `17.39.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.39.0-dev] One Cockpit, Two Shells, and Screens You Can Read
+
+**Type:** MINOR - the cockpit is one item now. The shells are chosen on the build wheel while the block is in hand, the cabin's displays finally face the pilot instead of away from them, the glass is actually transparent, and the ghost's FRONT marker sits on the nose of the shell you are about to build. No core save schema change; one additive block field, and both retired cockpit item ids are aliased so a ship built before this round keeps its cockpit.
+
+**GitHub title:** `[17.39.0-dev] One cockpit, both shells on the wheel, and a cabin you can see out of`
+
+#### Fixed
+
+- **There were no readable screens in the cabin.** The three displays were tilted 58 degrees and turned away from the seat, so from the pilot's eye they presented three dark undersides - a cockpit that looked, from inside, like it had no instruments at all. They now face back at the pilot on a raised binnacle, tipped 20 degrees so the top of the glass sits at eye level and the horizon stays clear above them, with a hood over the top. Each panel keeps its bar, graph and tick readouts, now placed in the panel's own frame so they sit on the glass at any tilt.
+- **The glass was opaque.** The shell tinted its panes and set `_Surface` alone, which leaves a URP material half-switched: no transparent surface keyword, no blend factors, no render queue. Every pane now goes through `RuntimeMaterials.ApplyTranslucent`, the one place that writes the full canonical transparent state, so the windscreen, the wraparound panes and the side glass are all see-through from the seat and from outside.
+- **The ghost's FRONT marker pointed at the back.** Both shells are authored facing +Z and turned round as they are parented, which is what puts the block's front on -Z where the marker looks for it. The marker is measured after the armed shell is applied to the preview and only from the renderers that are actually showing, so it lands on the nose of the hull on the bench; before this the hidden second shell was measured too, and a cockpit could have its FRONT on a face nobody could see.
+- **The build wheel could only offer the shell you were already holding.** The cockpit page existed only while a cockpit was in the hand and there was no other hull to pick. It is now there whenever a cockpit is anywhere in the pack, it lists every shell, and choosing one arms the next cockpit you place - so a cockpit on the hotbar can be switched to the other hull without crafting or rebuilding anything.
+- **The icon in the middle of the wheel was a cancel cross.** On the cockpit page the hub now draws the armed shell side-on, so the choice can be checked by looking at the centre of the dial instead of reading the label.
+- **The setup step for the biofuel chain could not be found.** The window had a hundred numbered steps behind twelve collapsed foldouts and no way to search them. There is now a "Find a step" field above the list: typing filters every group to the steps whose names match and opens the groups that still have one. "biofuel" finds "Build biofuel chain, biomass press and automatic tree farm" immediately.
+
+#### Changed
+
+- **One cockpit item, called Cockpit.** The buildable cockpit is `GItem_Cockpit` - one block, one recipe, and every shell behind it. The item description names both hulls and says where the choice is made.
+- **The shell travels with the block.** A placed cockpit records which hull it wears (`shellStyle`), and the save writes it next to the block as an additive `hasCockpitState` record. A record written before this round has no flag: a block whose old item id was the cab cockpit restores as the cab, everything else restores as the crawler, so no ship changes shape on load.
+- **Placing a cockpit bakes the wheel's choice into the block.** `GridBuilder` calls `SetShell` on the block it just placed, and the preview rebuilds itself when the armed shell changes, so the ghost and the block are never wearing different hulls.
+- **Both shells fit their cell.** The crawler's nose, bumper, lamps, markers and wipers, and the cab's front panel, windscreen, grille, stripe, bumper, lamps, markers, wipers and pillars were pulled back inside the two-metre cell, so a cockpit no longer clips into the block in front of it.
+- **The cabin's seat height was set against the room, not against the model.** The seated eye sits at 0.14 above the cell centre with the dash deck below the sight line and the display tops level with it, so the horizon is visible over the console and the instruments are readable without looking down.
+
+#### Removed
+
+- **`GItem_CockpitLarge` and `GItem_CockpitCab` are retired.** Setup deletes both item assets, both recipes and the `Cockpit_Cab` prefab, and their ids are aliased to `gitem_cockpit` in `ItemIdAliases`, so a stack in a crate and a block on a hull both resolve to the surviving cockpit.
+- **`Recipe_GCockpitSmall` is deleted** if it is still in the registry, which retires the last route to a cockpit pod nobody can sit in.
+
+#### Setup
+
+- Run `Tools -> Voxel Engine -> Voxel Engine Setup -> Grids, Ships & Navigation -> "Build the grid ship and vehicle system"`. It rebuilds `Cockpit_Large` as the one cockpit prefab with both shells and the new cabin, creates `GItem_Cockpit` and its recipe, deletes the two retired cockpit items, the `Cockpit_Cab` prefab and the three cockpit recipes, and renames the pod item. Nothing else is touched.
+
+#### Notes
+
+- **A prefab that has not been rebuilt through Setup still loads.** No shell root means no seat anchor, so the pilot keeps the standing camera instead of being pushed into geometry, and no shell style is stored for it.
+- **The interior still has no colliders.** The cabin is a shell of primitives with every collider stripped, so the seated player is never pushed out of the seat by their own cockpit; the block keeps its single cell collider, which is what placement, damage and the ghost all measure against.
 
 ### [17.38.0-dev] The Cockpit You Sit In, and the Build Wheel
 

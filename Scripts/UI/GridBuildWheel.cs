@@ -37,17 +37,21 @@ namespace VoxelEngine.UI
 
         private enum Role
         {
-            Flight = 0,
-            Power = 1,
-            Structure = 2,
-            Industry = 3,
-            Utility = 4
+            /// <summary>Not a group of items: the cockpit's own page, which chooses the
+            /// shell the next cockpit wears.</summary>
+            Cockpit = 0,
+            Flight = 1,
+            Power = 2,
+            Structure = 3,
+            Industry = 4,
+            Utility = 5
         }
 
-        private static readonly string[] RoleNames = { "FLIGHT", "POWER", "STRUCTURE", "INDUSTRY", "UTILITY" };
+        private static readonly string[] RoleNames = { "COCKPIT", "FLIGHT", "POWER", "STRUCTURE", "INDUSTRY", "UTILITY" };
 
         private static readonly string[] RoleBlurbs =
         {
+            "Which shell the cockpit you are holding will wear.",
             "Cockpits, thrusters, gyros and gear - what makes the construct move.",
             "Batteries, reactors and panels - what keeps it alive.",
             "Armour, glass and hull plating.",
@@ -107,6 +111,20 @@ namespace VoxelEngine.UI
             {
                 EnsurePages();
                 _wheel.GroupLabel = LabelForCurrentPage();
+
+                // The hub is the one icon a player reads without aiming at a wedge. On the
+                // cockpit page it draws the shell currently armed, side on, so the choice
+                // can be checked at a glance instead of by reading the label.
+                bool cockpitPage = _pages.Count > 0 && _pages[_pageIndex].Role == Role.Cockpit;
+                _wheel.IdleIcon = cockpitPage
+                    ? CockpitShellIcons.For(CockpitShellBuilder.SelectedStyle)
+                    : MachineShapeIcons.Cancel;
+                _wheel.IdleTitle = cockpitPage
+                    ? CockpitShellBuilder.NameOf(CockpitShellBuilder.SelectedStyle).ToUpperInvariant()
+                    : "KEEP CURRENT";
+                _wheel.IdleDescription = cockpitPage
+                    ? "Armed. Release here to keep it."
+                    : "Release in the centre to keep the block in hand";
             }
 
             _wheel.Tick(InputAction.BuildWheel, context);
@@ -146,7 +164,16 @@ namespace VoxelEngine.UI
             _nextPageScan = Time.unscaledTime + 0.25f;
 
             _pages.Clear();
-            for (int r = 0; r < RoleNames.Length; r++)
+
+            // A cockpit has one choice to make and it belongs on its own page, first: which
+            // shell the block wears. The page shows whenever a cockpit is anywhere in the
+            // pack, not only while one is in the hand - a player who owns a cockpit can arm
+            // the shell before they ever raise it, and a cockpit held on the hotbar can be
+            // switched to the other hull without first crafting anything.
+            if (HasCockpitInPack())
+                _pages.Add(new PageRef { Role = Role.Cockpit, Page = 0, PageCount = 1 });
+
+            for (int r = (int)Role.Flight; r < RoleNames.Length; r++)
             {
                 var role = (Role)r;
                 int count = Collect(role).Count;
@@ -257,6 +284,26 @@ namespace VoxelEngine.UI
             return prefab.GetComponent<GridBlock>() != null && IsHullLike(block) ? Role.Structure : Role.Utility;
         }
 
+        /// <summary>True when a cockpit block is carried in the hotbar or the backpack.</summary>
+        private bool HasCockpitInPack()
+        {
+            if (TryGetHeldBlock(out var held) && IsCockpit(held)) return true;
+            if (_inventory == null || _inventory.container == null) return false;
+
+            var slots = _inventory.container.Slots;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var stack = slots[i];
+                if (stack == null || stack.IsEmpty) continue;
+                if (stack.item is GridBlockItem block && IsCockpit(block)) return true;
+            }
+            return false;
+        }
+
+        private static bool IsCockpit(GridBlockItem block)
+            => block != null && block.blockPrefab != null
+               && block.blockPrefab.GetComponent<GridCockpit>() != null;
+
         private static bool IsHullLike(GridBlockItem block)
         {
             string name = (block.displayName ?? string.Empty).ToLowerInvariant();
@@ -275,10 +322,12 @@ namespace VoxelEngine.UI
             if (_pages.Count == 0) return;
 
             var page = _pages[_pageIndex];
+            _wheel.GroupLabel = LabelForCurrentPage();
+
+            if (page.Role == Role.Cockpit) { FillShellOptions(options); return; }
+
             var items = Collect(page.Role);
             int start = page.Page * PageSize;
-
-            _wheel.GroupLabel = LabelForCurrentPage();
 
             string heldId = TryGetHeldBlock(out var held) ? held.itemId : null;
 
@@ -288,14 +337,41 @@ namespace VoxelEngine.UI
                 if (index >= items.Count) break;
 
                 var block = items[index];
+
+                // A cockpit wedge wears the hull it builds, not the generic flight wedge:
+                // the ring is where a player picks the block, so it is where the block
+                // should look like itself.
+                var cockpit = block.blockPrefab != null ? block.blockPrefab.GetComponent<GridCockpit>() : null;
+                var icon = cockpit != null ? CockpitShellIcons.For(cockpit.shellStyle) : IconFor(page.Role);
+
                 options.Add(new RadialOption
                 {
                     Title = block.displayName.ToUpperInvariant(),
                     Description = block.description,
-                    Icon = IconFor(page.Role),
+                    Icon = icon,
                     Available = true,
                     Affordable = true,
                     Selected = heldId != null && block.itemId == heldId
+                });
+            }
+        }
+
+        /// <summary>One wedge per shell, with the armed one lit. A cockpit has no other
+        /// choice to make, so this page is the whole of its configuration.</summary>
+        private static void FillShellOptions(List<RadialOption> options)
+        {
+            var styles = CockpitShellBuilder.Styles;
+            for (int i = 0; i < styles.Length; i++)
+            {
+                int style = styles[i];
+                options.Add(new RadialOption
+                {
+                    Title = CockpitShellBuilder.NameOf(style).ToUpperInvariant(),
+                    Description = CockpitShellBuilder.BlurbOf(style),
+                    Icon = CockpitShellIcons.For(style),
+                    Available = true,
+                    Affordable = true,
+                    Selected = style == CockpitShellBuilder.SelectedStyle
                 });
             }
         }
@@ -306,6 +382,18 @@ namespace VoxelEngine.UI
             if (_pages.Count == 0) return true;
 
             var page = _pages[_pageIndex];
+
+            if (page.Role == Role.Cockpit)
+            {
+                if (index < 0 || index >= CockpitShellBuilder.Styles.Length) return true;
+                int style = CockpitShellBuilder.Styles[index];
+                CockpitShellBuilder.SelectedStyle = style;
+                BuildFeedbackHud.Show(CockpitShellBuilder.NameOf(style),
+                    "Armed - the next cockpit you place wears this shell",
+                    null, UITheme.AccentCyan);
+                return true;
+            }
+
             var items = Collect(page.Role);
             int absolute = page.Page * PageSize + index;
             if (absolute < 0 || absolute >= items.Count) return true;
@@ -384,7 +472,15 @@ namespace VoxelEngine.UI
 
         /// <summary>One drawn mark per role: the same isometric convention as every other
         /// wheel, so the dial reads as one family.</summary>
-        private static Texture2D IconFor(Role role) => IconAtlas.Get("buildrole:" + (int)role, b =>
+        private static Texture2D IconFor(Role role)
+        {
+            // The cockpit page's icon is the shell itself, drawn side on.
+            if (role == Role.Cockpit) return CockpitShellIcons.For(CockpitShellBuilder.SelectedStyle);
+
+            return IconAtlas.Get("buildrole:" + (int)role, b => DrawRoleIcon(b, role));
+        }
+
+        private static void DrawRoleIcon(LineArtBuilder b, Role role)
         {
             switch (role)
             {
@@ -422,6 +518,6 @@ namespace VoxelEngine.UI
                     b.Line(LineArtBuilder.Iso(0.44f, 0f, 0.5f), LineArtBuilder.Iso(0.84f, 0f, 0.5f));
                     break;
             }
-        });
+        }
     }
 }

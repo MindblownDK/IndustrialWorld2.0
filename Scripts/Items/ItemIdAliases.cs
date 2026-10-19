@@ -34,6 +34,12 @@ namespace VoxelEngine.Items
                 // back as Steel Plate rather than vanishing.
                 { "item_emptybarrel",    "item_steelplate" },
                 { "item_crudeoilbarrel", "item_steelplate" },
+
+                // 17.39.0-dev: the two large cockpits are one item with two shells, chosen
+                // on the build wheel. A ship built before this keeps its cockpit, and comes
+                // back wearing the crawler shell unless its own save says otherwise.
+                { "gitem_cockpitlarge", "gitem_cockpit" },
+                { "gitem_cockpitcab",   "gitem_cockpit" },
             };
 
         /// <summary>The surviving id for <paramref name="itemId"/>, or the id itself when it was never retired.</summary>

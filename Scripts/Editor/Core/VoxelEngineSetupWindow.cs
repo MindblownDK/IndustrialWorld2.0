@@ -121,6 +121,17 @@ namespace VoxelEngine.EditorTools
                 "Start with Core & Project Bootstrap, then open only the groups you need.\n" +
                 "Most content actions are idempotent; review each completion dialog and the Console before continuing.");
 
+            _setupIndex.Clear();
+            var filter = new UnityEngine.UIElements.TextField("Find a step");
+            filter.style.marginBottom = 8;
+            // This file names UI Toolkit types in full and imports no UI Toolkit namespace,
+            // so the RegisterValueChangedCallback extension is not in scope here - it lives
+            // on INotifyValueChanged. RegisterCallback is a method of VisualElement itself,
+            // so it needs nothing imported beyond the event type named in full.
+            filter.RegisterCallback<UnityEngine.UIElements.ChangeEvent<string>>(
+                change => ApplySetupFilter(change.newValue));
+            scroll.Add(filter);
+
             BuildOrganizedSetupList(scroll);
             AddSpacer(scroll, 20);
         }
@@ -320,9 +331,20 @@ namespace VoxelEngine.EditorTools
                 Setup("Apply the unified UI scale law to every PanelSettings (non-destructive, 17.17.0-dev)", () => VoxelEngine.EditorTools.UiScaleLawSetup.Run()));
         }
 
-        private static void AddSetupGroup(UnityEngine.UIElements.VisualElement parent, ref int number,
+        /// <summary>One group as the filter sees it: the foldout, and every button with the
+        /// label the player is searching for.</summary>
+        private sealed class SetupGroupIndex
+        {
+            public UnityEngine.UIElements.Foldout Foldout;
+            public readonly System.Collections.Generic.List<(UnityEngine.UIElements.Button Button, string Label)> Items = new();
+        }
+
+        private readonly System.Collections.Generic.List<SetupGroupIndex> _setupIndex = new();
+
+        private void AddSetupGroup(UnityEngine.UIElements.VisualElement parent, ref int number,
             string title, string description, bool expanded, params SetupEntry[] entries)
         {
+            var index = new SetupGroupIndex();
             var foldout = new UnityEngine.UIElements.Foldout
             {
                 text = $"{title} ({entries.Length})",
@@ -343,9 +365,45 @@ namespace VoxelEngine.EditorTools
             for (int i = 0; i < entries.Length; i++)
             {
                 var entry = entries[i];
-                AddWizardButton(foldout, $"{number++}. {entry.Label}", entry.Action, 48);
+                string text = $"{number++}. {entry.Label}";
+                var button = AddWizardButton(foldout, text, entry.Action, 48);
+                index.Items.Add((button, entry.Label));
             }
+
+            index.Foldout = foldout;
+            _setupIndex.Add(index);
             parent.Add(foldout);
+        }
+
+        /// <summary>
+        /// Filters the wizard. The complaint this answers is exact: a step existed - "Build
+        /// biofuel chain, biomass press and automatic tree farm" - and could not be found,
+        /// because it sits inside the twelfth foldout of a hundred-step list.
+        /// </summary>
+        private void ApplySetupFilter(string query)
+        {
+            query = (query ?? string.Empty).Trim();
+
+            for (int g = 0; g < _setupIndex.Count; g++)
+            {
+                var group = _setupIndex[g];
+                int visible = 0;
+
+                for (int i = 0; i < group.Items.Count; i++)
+                {
+                    bool match = query.Length == 0
+                        || group.Items[i].Label.IndexOf(query, System.StringComparison.OrdinalIgnoreCase) >= 0;
+                    group.Items[i].Button.style.display = match
+                        ? UnityEngine.UIElements.DisplayStyle.Flex
+                        : UnityEngine.UIElements.DisplayStyle.None;
+                    if (match) visible++;
+                }
+
+                group.Foldout.value = query.Length > 0 ? visible > 0 : group.Foldout.value;
+                group.Foldout.style.display = visible > 0
+                    ? UnityEngine.UIElements.DisplayStyle.Flex
+                    : UnityEngine.UIElements.DisplayStyle.None;
+            }
         }
 
         private static void AddInfo(UnityEngine.UIElements.VisualElement parent, string text)
@@ -372,7 +430,7 @@ namespace VoxelEngine.EditorTools
             parent.Add(spacer);
         }
 
-        private static void AddWizardButton(UnityEngine.UIElements.VisualElement parent, string text, System.Action action, float height)
+        private static UnityEngine.UIElements.Button AddWizardButton(UnityEngine.UIElements.VisualElement parent, string text, System.Action action, float height)
         {
             var button = new UnityEngine.UIElements.Button(() => QueueWizardAction(action)) { text = text };
             button.style.height = height;
@@ -380,6 +438,7 @@ namespace VoxelEngine.EditorTools
             button.style.whiteSpace = UnityEngine.UIElements.WhiteSpace.Normal;
             button.style.unityFontStyleAndWeight = FontStyle.Bold;
             parent.Add(button);
+            return button;
         }
 
         private static void QueueWizardAction(System.Action action)
@@ -7057,53 +7116,61 @@ namespace VoxelEngine.EditorTools
 
             // -- 1) Cockpits --
             //
-            // 17.38.0-dev — the small cockpit is retired, not deleted. Its recipe is removed
-            // (nothing may craft one), its item is renamed so it can never be mistaken for a
-            // buildable cockpit, and its prefab and item assets are left on disk because a
-            // save written before this version names them: deleting the item would blank the
-            // cockpit out of every ship that already has one, which is worse than a retired
-            // hull in a crate. Delete the three assets by hand if no save of yours uses one.
-            void RetireCockpitPod()
+            // 17.39.0-dev — ONE cockpit block.
+            //
+            // The cockpit used to be three items (a pod, a crawler and a cab) and the player
+            // had to guess which one to craft before they could see any of them. It is now a
+            // single item wearing either shell, and the build wheel picks the shell while the
+            // block is in hand - so the choice is made where the block is, not in a crafting
+            // menu three rooms away.
+            //
+            // Retired: GItem_CockpitLarge, GItem_CockpitCab, Cockpit_Cab.prefab and their
+            // recipes. Their ids are aliased to the surviving item (ItemIdAliases), so a ship
+            // that already has one comes back as a cockpit rather than as a hole. The small
+            // pod keeps its assets and its retirement from 17.38.0 - deleting it would drop
+            // small-grid cockpits out of existing ships, and it is already unreachable.
+            void RetireCockpitVariants()
             {
-                string recipePath = $"{RECIPES}/Recipe_GCockpitSmall.asset";
-                if (AssetDatabase.LoadMainAssetAtPath(recipePath) != null)
-                    AssetDatabase.DeleteAsset(recipePath);
+                string[] deadAssets =
+                {
+                    $"{ITEMS}/GItem_CockpitLarge.asset",
+                    $"{ITEMS}/GItem_CockpitCab.asset",
+                    $"{PREFABS}/Cockpit_Cab.prefab",
+                    $"{RECIPES}/Recipe_GCockpitLarge.asset",
+                    $"{RECIPES}/Recipe_GCockpitCab.asset",
+                };
+                foreach (var path in deadAssets)
+                    if (AssetDatabase.LoadMainAssetAtPath(path) != null) AssetDatabase.DeleteAsset(path);
 
-                // Same idiom as the pipe retirement above: the asset goes, and the registry
-                // loses its entry, or crafting keeps offering a recipe with nothing behind it.
                 if (registry != null)
                 {
-                    registry.recipes.RemoveAll(r => r == null || r.name == "Recipe_GCockpitSmall");
+                    registry.recipes.RemoveAll(r => r == null
+                        || r.name == "Recipe_GCockpitLarge"
+                        || r.name == "Recipe_GCockpitCab"
+                        || r.name == "Recipe_GCockpitSmall");
                     EditorUtility.SetDirty(registry);
                 }
 
-                string itemPath = $"{ITEMS}/GItem_CockpitSmall.asset";
-                var retired = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(itemPath);
-                if (retired == null) return;
-
-                retired.displayName = "Cockpit Pod (retired)";
-                retired.description = "Retired in 17.38.0-dev. The seated cockpits replaced it: a Crusader cannot fit inside a pod this size. Kept so ships built with one still load.";
-                EditorUtility.SetDirty(retired);
+                // The pod is retired rather than deleted. It is the one cockpit an old
+                // ship can still be sitting in, and an item id a save names must keep
+                // resolving. It has no recipe, so nothing can build another one, and the
+                // name says out loud what it is.
+                string podPath = $"{ITEMS}/GItem_CockpitSmall.asset";
+                var pod = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(podPath);
+                if (pod == null) return;
+                pod.displayName = "Cockpit Pod (retired)";
+                pod.description = "Retired in 17.39.0-dev. The seated cockpit replaced it: a pilot cannot fit inside a pod this size. Kept so ships built with one still load.";
+                EditorUtility.SetDirty(pod);
             }
 
+            RetireCockpitVariants();
 
-            // Two shells, one flight model. The small pod is gone: a Crusader cannot fit
-            // inside one, and a cockpit nobody can sit in is a decoration pretending to be a
-            // control station.
-            RetireCockpitPod();
-
-            var cockLargePref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 3f),
+            var cockPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 2f),
                 c => { c.idleWatts = 50f; c.shellStyle = VoxelEngine.GridSystem.CockpitShellBuilder.StyleCrawler; });
-            var cockCabPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Cab", new Color(0.42f, 0.38f, 0.30f), new Vector3(2f, 2f, 2.4f),
-                c => { c.idleWatts = 50f; c.shellStyle = VoxelEngine.GridSystem.CockpitShellBuilder.StyleCab; });
-            var itemCockLarge = MakeGItem("GItem_CockpitLarge", "Crawler Cockpit", Color.white, cockLargePref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
-            itemCockLarge.description = "Seated cockpit with a wide, low crawler nose and wraparound glazing: three displays across the top, a console low enough to glance at, and glass down to the sill so the ground is visible from the seat. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
-            EditorUtility.SetDirty(itemCockLarge);
-            var itemCockCab = MakeGItem("GItem_CockpitCab", "Cab Cockpit", Color.white, cockCabPref, VoxelEngine.GridSystem.GridSize.Large, 1600, 2100);
-            itemCockCab.description = "Seated cockpit in a boxy survey cab: upright windscreen, yellow hazard accents, roof grille and a satellite dome for the instruments inside. Same seat and same three displays as the crawler cockpit, with a squarer view out. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
-            EditorUtility.SetDirty(itemCockCab);
-            AddGRecipe("Recipe_GCockpitLarge", "Crawler Cockpit", itemCockLarge, (steelPlate, 10), (circuit, 6), (glass, 6));
-            AddGRecipe("Recipe_GCockpitCab", "Cab Cockpit", itemCockCab, (steelPlate, 12), (circuit, 6), (glass, 8));
+            var itemCockpit = MakeGItem("GItem_Cockpit", "Cockpit", new Color(0.55f, 0.72f, 0.92f), cockPref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
+            itemCockpit.description = "A seated cockpit with two shells to choose from: arm the crawler nose or the survey cab on the build wheel and the block you place wears it. Three displays across the dash, a console low enough to glance at, and glass down to the sill. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+            EditorUtility.SetDirty(itemCockpit);
+            AddGRecipe("Recipe_GCockpit", "Cockpit", itemCockpit, (steelPlate, 10), (circuit, 6), (glass, 6));
 
             // -- 2) Thrusters (Atmospheric / Ion / Hydrogen × Small & Large) --
             void MakeThruster(string id, string display, VoxelEngine.GridSystem.GridSize sz, Color col,

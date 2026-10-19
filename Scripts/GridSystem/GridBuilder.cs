@@ -39,6 +39,9 @@ namespace VoxelEngine.GridSystem
         private GridBlockItem _ghostItem;
         private Material _ghostMat;
         private bool _ghostIsShapeVariant;
+        // Which cockpit shell the preview was built with. A cockpit is one item with two
+        // hulls, so the ghost has to rebuild when the wheel arms the other one.
+        private int _ghostShell = -1;
         private GridPrecisionLatticePreview _precisionLattice;
 
         // ── Ghost port ring (variable service port preview) ─────────
@@ -913,6 +916,7 @@ namespace VoxelEngine.GridSystem
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
             block.SourceItem = item;
+
             if (IsShapeVariantItem(item))
             {
                 var shapeVisual = block.GetComponent<GridShapeVariantBlock>();
@@ -1255,6 +1259,10 @@ namespace VoxelEngine.GridSystem
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
             block.SourceItem = item;
+
+            // The shell armed on the build wheel is what gets bolted down.
+            if (block is GridCockpit cockpitBlock)
+                CockpitShellBuilder.SetShell(cockpitBlock, CockpitShellBuilder.SelectedStyle);
 
             if (IsShapeVariantItem(item))
             {
@@ -1915,6 +1923,9 @@ namespace VoxelEngine.GridSystem
             }
             if (!needsRebuild && _ghost != null && _ghostIsShapeVariant != useShapeGhost)
                 needsRebuild = true;
+            if (!needsRebuild && _ghost != null && IsCockpitItem(item)
+                && _ghostShell != CockpitShellBuilder.SelectedStyle)
+                needsRebuild = true;
 
             if (needsRebuild)
             {
@@ -1942,6 +1953,15 @@ namespace VoxelEngine.GridSystem
                     _ghost.name = "GridGhost";
                     foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
                     foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
+
+                    // The preview wears the shell the wheel armed, and the FRONT marker is
+                    // measured after this so it lands on the nose of that shell.
+                    _ghostShell = -1;
+                    if (IsCockpitItem(item))
+                    {
+                        _ghostShell = CockpitShellBuilder.SelectedStyle;
+                        CockpitShellBuilder.ApplyShell(_ghost, _ghostShell);
+                    }
                 }
                 BuildGhostMaterial();
             }
@@ -1962,6 +1982,10 @@ namespace VoxelEngine.GridSystem
 
             TraceGhost("showing '" + item.displayName + "'");
         }
+
+        private static bool IsCockpitItem(GridBlockItem item)
+            => item != null && item.blockPrefab != null
+               && item.blockPrefab.GetComponent<VoxelEngine.GridSystem.GridCockpit>() != null;
 
         /// <summary>Does this item's block have a face that has to point somewhere? Screens
         /// do; their glass is on -Z and the whole panel is unreadable from behind.</summary>

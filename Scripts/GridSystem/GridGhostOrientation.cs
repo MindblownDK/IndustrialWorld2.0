@@ -216,7 +216,10 @@ namespace VoxelEngine.GridSystem
             bool any = false;
             Matrix4x4 toRoot = ghost.transform.worldToLocalMatrix;
 
-            var renderers = ghost.GetComponentsInChildren<Renderer>(true);
+            // Active renderers only. A cockpit ships both shells inside one prefab with
+            // one of them switched off; measuring the hidden hull would put the marker on
+            // a nose that the player is not looking at.
+            var renderers = ghost.GetComponentsInChildren<Renderer>(false);
             for (int i = 0; i < renderers.Length; i++)
             {
                 var r = renderers[i];

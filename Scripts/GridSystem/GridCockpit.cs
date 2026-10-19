@@ -19,10 +19,11 @@ namespace VoxelEngine.GridSystem
         public float idleWatts = 50f;
 
         /// <summary>
-        /// 17.37.0-dev — which shell this cockpit wears. Authored on the prefab by Voxel
-        /// Engine Setup: 1 is the crawler nose, 2 the boxy cab, 0 a legacy cockpit with no
-        /// seat. The two cockpits in the build menu differ by this and by their model only;
-        /// the flight code is identical.
+        /// 17.39.0-dev — which shell this cockpit wears. There is ONE cockpit item now:
+        /// the shell is chosen on the build wheel, stored here when the block is placed,
+        /// and written to the save with the block. 1 is the crawler nose, 2 the boxy cab,
+        /// 0 a legacy cockpit whose prefab carries no shell (it keeps the standing camera,
+        /// so an old hull still works). The flight code is identical for every shell.
         /// </summary>
         [Tooltip("Shell: 0 = legacy, 1 = crawler nose, 2 = boxy cab")]
         public int shellStyle;

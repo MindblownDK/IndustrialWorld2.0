@@ -2735,6 +2735,12 @@ namespace VoxelEngine.Persistence
                 savedBlock.steamEngineFiring = engineBlock.firing;
             }
 
+            if (block is VoxelEngine.GridSystem.GridCockpit cockpitBlock)
+            {
+                savedBlock.hasCockpitState = true;
+                savedBlock.cockpitShellStyle = cockpitBlock.shellStyle;
+            }
+
             if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
             {
                 // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
@@ -3424,6 +3430,20 @@ namespace VoxelEngine.Persistence
                 // the intended breaking change — the rig needs tires fitted before it drives.
                 if (block is VoxelEngine.GridSystem.GridBannerBlock restoredGridBanner && saved.hasBannerState)
                     restoredGridBanner.SetTeam(saved.bannerTeamId ?? "");
+
+                // 17.39.0 cockpit shell: the hull is part of the block, not of the item.
+                // A record written after this version says which shell it wore. An older
+                // record does not, but its item id does: a ship built with the cab cockpit
+                // comes back as a cockpit wearing the cab, not as the default crawler.
+                if (block is VoxelEngine.GridSystem.GridCockpit restoredCockpit)
+                {
+                    int shell = saved.hasCockpitState
+                        ? saved.cockpitShellStyle
+                        : string.Equals(saved.itemId, "gitem_cockpitcab", System.StringComparison.OrdinalIgnoreCase)
+                            ? VoxelEngine.GridSystem.CockpitShellBuilder.StyleCab
+                            : VoxelEngine.GridSystem.CockpitShellBuilder.StyleCrawler;
+                    VoxelEngine.GridSystem.CockpitShellBuilder.SetShell(restoredCockpit, shell);
+                }
 
                 if (block is VoxelEngine.GridSystem.GridWheel restoredHub && saved.hasWheelHubState)
                 {
@@ -5958,6 +5978,12 @@ namespace VoxelEngine.Persistence
             // Legacy saves omit every field and restore a bare hub with authored defaults.
             public bool hasWheelHubState;
             public string wheelTireItemId = "";
+            // Additive 17.39.0: one cockpit item now carries both hulls, so the shell a
+            // placed cockpit wears has to travel with the block. A save written before
+            // this has no flag and restores as the crawler, which is what those blocks
+            // were modelled as.
+            public bool hasCockpitState;
+            public int cockpitShellStyle;
             public int wheelMountSide;
             public int wheelSizeClass = 3;
             public bool wheelSteerable = true;
