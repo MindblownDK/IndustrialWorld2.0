@@ -120,11 +120,10 @@ namespace VoxelEngine.GridSystem
                 float width = request.Width * charWidth * 0.84f;
                 float height = request.Height * lineHeight * 0.74f;
 
-                // Cell centre, in the body's own frame: columns run left to right from the
-                // text's left edge, rows run top to bottom from the centre the anchor puts
-                // them at. Both come from measurements, so neither drifts.
+                // Cell centre in the body's own frame. The text anchor is UpperLeft, so
+                // columns advance right from the origin and rows descend from it.
                 float cx = origin.x + (request.Column + request.Width * 0.5f) * charWidth;
-                float cy = origin.y + (rows * 0.5f - (request.Row + request.Height * 0.5f)) * lineHeight;
+                float cy = origin.y - (request.Row + request.Height * 0.5f) * lineHeight;
 
                 quad.transform.localPosition = new Vector3(cx, cy, 0.004f);
                 quad.transform.localScale = new Vector3(width, height, 1f);

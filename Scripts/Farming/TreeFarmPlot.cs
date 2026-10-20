@@ -65,6 +65,7 @@ namespace VoxelEngine.Farming
         public float Growth01 => isPlanted ? Mathf.Clamp01(growthProgress) : 0f;
         public bool IsReady => IsMature;
         public bool NeedsWater => isPlanted && !isIrrigated;
+        public bool NeedsOxygen => false;
         public bool IsEmpty => !isPlanted;
         public bool IsIrrigated => isIrrigated;
         public string GrowthStageLabel => StageLabel;

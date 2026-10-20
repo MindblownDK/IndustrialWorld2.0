@@ -1405,6 +1405,9 @@ namespace VoxelEngine.Persistence
                 scfg.splitPageB = screenBlock.splitPageB.ToString();
                 scfg.splitPageC = screenBlock.splitPageC.ToString();
                 scfg.splitPageD = screenBlock.splitPageD.ToString();
+                scfg.manifestTitle = screenBlock.manifestTitle ?? "";
+                scfg.powerGraphPanels = Mathf.Clamp(screenBlock.powerGraphPanels, 1, 3);
+                scfg.showBatteryPowerRates = screenBlock.showBatteryPowerRates;
                 var xs = new System.Collections.Generic.List<string>();
                 var ys = new System.Collections.Generic.List<string>();
                 var zs = new System.Collections.Generic.List<string>();
@@ -2741,6 +2744,13 @@ namespace VoxelEngine.Persistence
                 savedBlock.cockpitShellStyle = cockpitBlock.shellStyle;
             }
 
+            if (block is VoxelEngine.GridSystem.GridWindowBlock windowBlock)
+            {
+                savedBlock.hasGridWindowState = true;
+                savedBlock.gridWindowPaneStyle = windowBlock.paneStyle;
+                savedBlock.gridWindowShape = (int)windowBlock.windowShape;
+            }
+
             if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
             {
                 // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
@@ -3445,6 +3455,18 @@ namespace VoxelEngine.Persistence
                     VoxelEngine.GridSystem.CockpitShellBuilder.SetShell(restoredCockpit, shell);
                 }
 
+                if (block is VoxelEngine.GridSystem.GridWindowBlock restoredWindow)
+                {
+                    int paneStyle = saved.hasGridWindowState
+                        ? saved.gridWindowPaneStyle
+                        : VoxelEngine.GridSystem.GridWindowBlock.PaneClear;
+                    int windowShape = saved.hasGridWindowState
+                        ? saved.gridWindowShape
+                        : (int)VoxelEngine.GridSystem.GridWindowShape.Square;
+                    restoredWindow.SetWindowShape(windowShape);
+                    restoredWindow.SetPaneStyle(paneStyle);
+                }
+
                 if (block is VoxelEngine.GridSystem.GridWheel restoredHub && saved.hasWheelHubState)
                 {
                     if (System.Enum.IsDefined(typeof(VoxelEngine.GridSystem.WheelSizeClass), saved.wheelSizeClass))
@@ -3516,7 +3538,11 @@ namespace VoxelEngine.Persistence
                         return null;
                     }
                     block.transform.rotation = grid.transform.rotation * saved.localRotation;
-                    grid.AddBlock(saved.gridPos, block);
+                    if (!grid.TryAddBlock(saved.gridPos, block))
+                    {
+                        Destroy(go);
+                        return null;
+                    }
                 }
 
                 ApplyGridBlockState(block, go, saved);
@@ -4851,6 +4877,11 @@ namespace VoxelEngine.Persistence
                 screenBlock.splitPageB = ParseScreenPage(sc.splitPageB, screenBlock.splitPageB);
                 screenBlock.splitPageC = ParseScreenPage(sc.splitPageC, screenBlock.splitPageC);
                 screenBlock.splitPageD = ParseScreenPage(sc.splitPageD, screenBlock.splitPageD);
+                screenBlock.manifestTitle = sc.manifestTitle ?? "";
+                screenBlock.powerGraphPanels = sc.powerGraphPanels > 0
+                    ? Mathf.Clamp(sc.powerGraphPanels, 1, 3)
+                    : 3;
+                screenBlock.showBatteryPowerRates = sc.showBatteryPowerRates;
                 if (!string.IsNullOrEmpty(sc.sourcePositionsX))
                 {
                     var xs = sc.sourcePositionsX.Split(',');
@@ -5984,6 +6015,12 @@ namespace VoxelEngine.Persistence
             // were modelled as.
             public bool hasCockpitState;
             public int cockpitShellStyle;
+            // Additive 17.40.0: one Grid Window item records its pane finish here.
+            // Older grid saves without a flag restore the transparent clear pane.
+            public bool hasGridWindowState;
+            public int gridWindowPaneStyle;
+            // Additive 17.41.0: shape. Older records default to the one-cell square window.
+            public int gridWindowShape;
             public int wheelMountSide;
             public int wheelSizeClass = 3;
             public bool wheelSteerable = true;
@@ -6399,6 +6436,10 @@ namespace VoxelEngine.Persistence
             public string splitPageB;
             public string splitPageC;
             public string splitPageD;
+            // Additive 17.40.0-dev page options; missing legacy fields use neutral defaults.
+            public string manifestTitle = "";
+            public int powerGraphPanels = 3;
+            public bool showBatteryPowerRates;
             // Source positions stored as comma-separated strings for JSON compatibility
             public string sourcePositionsX;
             public string sourcePositionsY;

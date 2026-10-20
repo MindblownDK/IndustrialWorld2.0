@@ -579,7 +579,7 @@ namespace VoxelEngine.UI
 
             // While the search field has keyboard focus, don't react to hotkey-style keys
             // — the player is typing into the search box.
-            bool typing = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
+            bool typing = UIState.TextInputActive || _searchHasFocus || RecipeBrowserUI.IsSearchFocused
                 || VoxelEngine.Research.ResearchUI.IsSearchFocused
                 || VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused
                 || SteampunkTheme.IsTextInputFocused

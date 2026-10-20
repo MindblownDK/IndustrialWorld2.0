@@ -20,6 +20,7 @@ namespace VoxelEngine.Farming
         public CropDefinition plantedCrop;
         public float growthProgress;       // 0..1 (1 = harvestable)
         public bool isIrrigated;
+        public bool isOxygenated;
         public float timeSinceLastWater;
 
         [Header("Settings")]
@@ -34,6 +35,7 @@ namespace VoxelEngine.Farming
         public float Growth01 => plantedCrop != null ? Mathf.Clamp01(growthProgress) : 0f;
         public bool IsReady => plantedCrop != null && growthProgress >= 0.999f;
         public bool NeedsWater => plantedCrop != null && plantedCrop.requiresWater && !isIrrigated;
+        public bool NeedsOxygen => plantedCrop != null && plantedCrop.requiresOxygen && !isOxygenated;
         public bool IsEmpty => plantedCrop == null;
 
         // Visual
@@ -46,6 +48,7 @@ namespace VoxelEngine.Farming
         private void Awake()
         {
             _soilRenderer = GetComponent<MeshRenderer>();
+            isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             UpdateSoilColor();
         }
 
@@ -57,6 +60,7 @@ namespace VoxelEngine.Farming
             {
                 _irrigCheckTimer = 0f;
                 CheckIrrigation();
+                isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             }
 
             if (plantedCrop == null) return;
@@ -79,8 +83,9 @@ namespace VoxelEngine.Farming
                 timeSinceLastWater = 0f;
             }
 
-            // Grow the crop.
-            if (growthProgress < 1f)
+            // Crop growth pauses until the bed has both its required water and a
+            // breathable enclosure; plants do not advance in a vacuum greenhouse.
+            if (growthProgress < 1f && !NeedsOxygen)
             {
                 float speed = 1f / plantedCrop.growthTime;
                 if (isIrrigated) speed *= plantedCrop.irrigatedSpeedMultiplier;
@@ -103,6 +108,7 @@ namespace VoxelEngine.Farming
             plantedCrop = crop;
             growthProgress = 0f;
             timeSinceLastWater = 0f;
+            isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             _lastStage = -1;
             CreateCropVisual();
             return true;

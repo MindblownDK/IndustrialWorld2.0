@@ -28,6 +28,7 @@ namespace VoxelEngine.Farming
         public CropDefinition plantedCrop;
         [Range(0f, 1f)] public float growthProgress;
         public bool isIrrigated;
+        public bool isOxygenated;
         public bool isFertilized;
         public float timeSinceLastWater;
 
@@ -45,6 +46,7 @@ namespace VoxelEngine.Farming
         public float Growth01 => plantedCrop != null ? Mathf.Clamp01(growthProgress) : 0f;
         public bool IsReady => plantedCrop != null && growthProgress >= 0.999f;
         public bool NeedsWater => plantedCrop != null && plantedCrop.requiresWater && !isIrrigated;
+        public bool NeedsOxygen => plantedCrop != null && plantedCrop.requiresOxygen && !isOxygenated;
         public bool IsEmpty => plantedCrop == null;
 
         /// <summary>True while the tray is being watered. Public because the interaction
@@ -61,6 +63,7 @@ namespace VoxelEngine.Farming
             {
                 if (plantedCrop == null) return "EMPTY";
                 if (IsReady) return "READY";
+                if (NeedsOxygen) return "NO O2";
                 if (NeedsWater) return "DRY";
                 return (Growth01 * 100f).ToString("0") + "%";
             }
@@ -76,6 +79,7 @@ namespace VoxelEngine.Farming
 
         private void Awake()
         {
+            isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             CacheVisuals();
             ApplyStageVisuals(force: true);
         }
@@ -87,6 +91,7 @@ namespace VoxelEngine.Farming
             {
                 _irrigationTimer = 0f;
                 isIrrigated = SampleIrrigation();
+                isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             }
 
             if (plantedCrop == null) return;
@@ -101,7 +106,7 @@ namespace VoxelEngine.Farming
                 return;
             }
 
-            if (growthProgress < 1f)
+            if (growthProgress < 1f && !NeedsOxygen)
             {
                 float speed = 1f / Mathf.Max(0.5f, plantedCrop.growthTime);
                 if (isIrrigated) speed *= Mathf.Max(1f, plantedCrop.irrigatedSpeedMultiplier);
@@ -125,6 +130,7 @@ namespace VoxelEngine.Farming
             isFertilized = false;
             _lastStage = -1;
             isIrrigated = SampleIrrigation();
+            isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             ApplyStageVisuals(force: true);
             return true;
         }

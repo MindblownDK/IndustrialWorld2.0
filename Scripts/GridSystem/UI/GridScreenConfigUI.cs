@@ -33,6 +33,8 @@ namespace VoxelEngine.GridSystem.UI
         private VisualElement _previewBox;
         private Label _previewTitle, _previewStatus;
         private Label _pageInfoTitle, _pageInfoBlurb, _pageInfoHint;
+        private VisualElement _pageOptionsSlot;
+        private TextField _focusedTextField;
         private string _lastPreviewText;
         private float _lastPreviewWidth = -1f, _lastPreviewHeight = -1f;
         private bool _open;
@@ -126,7 +128,17 @@ namespace VoxelEngine.GridSystem.UI
         private void Update()
         {
             if (!_open) return;
-            if (GameSettings.WasPressed(InputAction.Pause)) { Close(); return; }
+            if (GameSettings.WasPressed(InputAction.Pause))
+            {
+                UIState.PauseConsumedFrame = Time.frameCount;
+                if (_focusedTextField != null)
+                {
+                    ReleaseTextFieldFocus();
+                    return;
+                }
+                Close();
+                return;
+            }
             // The preview costs a FormattedDisplay call per frame; the call itself is cached
             // by the block, and this early-outs unless the characters actually changed.
             RefreshPreview();
@@ -136,6 +148,8 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (screen == null) return;
             if (_open) Close();
+            ReleaseTextFieldFocus();
+            _pageOptionsSlot = null;
             _target = screen;
             _open = true;
             BringDocumentToFront();
@@ -160,6 +174,8 @@ namespace VoxelEngine.GridSystem.UI
         public void Close()
         {
             if (!_open) return;
+            ReleaseTextFieldFocus();
+            _pageOptionsSlot = null;
             _root.style.display = DisplayStyle.None;
             _open = false; _target = null; UIState.PopBlock(); Hide();
         }
@@ -294,6 +310,7 @@ namespace VoxelEngine.GridSystem.UI
             search.style.marginBottom = 6;
             search.label = string.Empty;
             search.tooltip = "Filter the pages by name or by what they show.";
+            TrackTextField(search);
             left.Add(search);
 
             var pageList = new ScrollView(ScrollViewMode.Vertical) { name = "ScreenPageList" };
@@ -502,6 +519,9 @@ namespace VoxelEngine.GridSystem.UI
                 right.Add(clearBtn);
             }
 
+            _pageOptionsSlot = new VisualElement { name = "ScreenPageOptions" };
+            right.Add(_pageOptionsSlot);
+
             // Text colour
             right.Add(SectionHeader("TEXT COLOR", 12));
 
@@ -601,37 +621,6 @@ namespace VoxelEngine.GridSystem.UI
             right.Add(customSlot);
 
             // ── Behaviour ───────────────────────────────────────────────────────
-            void RefreshPageInfo()
-            {
-                var info = ScreenPageCatalog.For(_target.dataMode);
-                _pageInfoTitle.text = info.Label.ToUpperInvariant();
-                _pageInfoBlurb.text = info.Blurb;
-
-                string hint = string.Empty;
-                // A split halves the rows, and a Small panel has three of them: the pane
-                // would be a title and nothing else. Say it here rather than on the wall.
-                if (_target.splitMode > 0
-                    && (_target.screenSize == ScreenSize.Small || _target.screenSize == ScreenSize.Wide))
-                {
-                    hint = "This panel has too few rows to split - a pane would be one line. "
-                         + "Splits are worth reading on a Large or ExtraLarge screen.";
-                }
-                else if (!ScreenPageCatalog.FitsOn(_target.screenSize, info.MinSize))
-                {
-                    hint = "Built for a " + ScreenPageCatalog.SizeLabel(info.MinSize).ToLowerInvariant()
-                         + " panel; on this " + ScreenPageCatalog.SizeLabel(_target.screenSize).ToLowerInvariant()
-                         + " one it will show less.";
-                }
-                else if (ScreenPageCatalog.NeedsSource(_target.dataMode) && _target.SourceCount == 0)
-                {
-                    hint = "Needs a linked source - pick one under DATA SOURCES.";
-                }
-                _pageInfoHint.text = hint;
-                _pageInfoHint.style.display = string.IsNullOrEmpty(hint) ? DisplayStyle.None : DisplayStyle.Flex;
-
-                RefreshPreview(true);
-            }
-
             void Select(ScreenDataMode mode)
             {
                 _target.dataMode = mode;
@@ -933,6 +922,7 @@ namespace VoxelEngine.GridSystem.UI
                 _modeBtns[i].style.backgroundColor = new StyleColor(
                     active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
             }
+            RefreshPageOptions();
             RefreshPreview(true);
         }
 
@@ -965,6 +955,7 @@ namespace VoxelEngine.GridSystem.UI
                 _activePane = index;
                 RefreshPanePickers();
                 RefreshModeHighlights();
+                RefreshPageInfo();
             })
             {
                 text = "PANE " + (index + 1),
@@ -995,7 +986,8 @@ namespace VoxelEngine.GridSystem.UI
                 int picked = field.index;
                 if (picked < 0 || picked >= _drawablePages.Count) return;
                 _target.SetPanePage(index, _drawablePages[picked]);
-                RefreshPreview(true);
+                RefreshModeHighlights();
+                RefreshPageInfo();
             });
             row.Add(field);
 
@@ -1029,6 +1021,107 @@ namespace VoxelEngine.GridSystem.UI
                         : new Color(0.46f, 0.51f, 0.60f);
                 }
             }
+        }
+
+        private void RefreshPageOptions()
+        {
+            if (_pageOptionsSlot == null || _target == null) return;
+            _pageOptionsSlot.Clear();
+            ScreenDataMode activeMode = _target.splitMode > 0
+                ? _target.PanePage(Mathf.Clamp(_activePane, 0, 3))
+                : _target.dataMode;
+
+            bool hasOptions = activeMode == ScreenDataMode.Manifest
+                || activeMode == ScreenDataMode.PowerGraph
+                || activeMode == ScreenDataMode.BatteryBank;
+            _pageOptionsSlot.style.display = hasOptions ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!hasOptions) return;
+
+            _pageOptionsSlot.Add(SectionHeader("PAGE OPTIONS", 12));
+            if (activeMode == ScreenDataMode.Manifest)
+            {
+                var field = new TextField("Heading");
+                field.value = _target.manifestTitle ?? string.Empty;
+                field.tooltip = "Leave blank to use the selected container or construct name.";
+                field.style.marginBottom = 6;
+                field.RegisterValueChangedCallback(evt =>
+                {
+                    if (_target == null) return;
+                    _target.manifestTitle = evt.newValue;
+                    RefreshPreview(true);
+                });
+                field.RegisterCallback<GeometryChangedEvent>(_ => StyleTextInput(field));
+                TrackTextField(field);
+                _pageOptionsSlot.Add(field);
+                field.schedule.Execute(() => StyleTextInput(field));
+            }
+            else if (activeMode == ScreenDataMode.PowerGraph)
+            {
+                var panels = new DropdownField("Graph panels", new List<string>
+                {
+                    "1 · Grid power", "2 · Grid + solar", "3 · Grid + solar + batteries",
+                }, Mathf.Clamp(_target.powerGraphPanels, 1, 3) - 1);
+                panels.tooltip = "The Power Graph can show one, two or three compact history plots.";
+                panels.RegisterValueChangedCallback(_ =>
+                {
+                    if (_target == null) return;
+                    _target.powerGraphPanels = Mathf.Clamp(panels.index + 1, 1, 3);
+                    RefreshPreview(true);
+                });
+                _pageOptionsSlot.Add(panels);
+            }
+            else
+            {
+                var rates = new Toggle("Show battery power rates")
+                {
+                    value = _target.showBatteryPowerRates,
+                    tooltip = "List current charge/discharge watts and each battery's maximum rate.",
+                };
+                rates.RegisterValueChangedCallback(evt =>
+                {
+                    if (_target == null) return;
+                    _target.showBatteryPowerRates = evt.newValue;
+                    RefreshPreview(true);
+                });
+                _pageOptionsSlot.Add(rates);
+            }
+        }
+
+        private void RefreshPageInfo()
+        {
+            if (_target == null) return;
+            ScreenDataMode mode = _target.splitMode > 0
+                ? _target.PanePage(Mathf.Clamp(_activePane, 0, 3))
+                : _target.dataMode;
+            var info = ScreenPageCatalog.For(mode);
+            if (_pageInfoTitle != null) _pageInfoTitle.text = info.Label.ToUpperInvariant();
+            if (_pageInfoBlurb != null) _pageInfoBlurb.text = info.Blurb;
+
+            string hint = string.Empty;
+            if (_target.splitMode > 0
+                && (_target.screenSize == ScreenSize.Small || _target.screenSize == ScreenSize.Wide))
+            {
+                hint = "This panel has too few rows to split - a pane would be one line. "
+                     + "Splits are worth reading on a Large or ExtraLarge screen.";
+            }
+            else if (!ScreenPageCatalog.FitsOn(_target.screenSize, info.MinSize))
+            {
+                hint = "Built for a " + ScreenPageCatalog.SizeLabel(info.MinSize).ToLowerInvariant()
+                     + " panel; on this " + ScreenPageCatalog.SizeLabel(_target.screenSize).ToLowerInvariant()
+                     + " one it will show less.";
+            }
+            else if (ScreenPageCatalog.NeedsSource(mode) && _target.SourceCount == 0)
+            {
+                hint = "Needs a linked source - pick one under DATA SOURCES.";
+            }
+            if (_pageInfoHint != null)
+            {
+                _pageInfoHint.text = hint;
+                _pageInfoHint.style.display = string.IsNullOrEmpty(hint) ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            RefreshPageOptions();
+            RefreshPreview(true);
         }
 
         private void RefreshAppearanceHighlights()
@@ -1081,6 +1174,7 @@ namespace VoxelEngine.GridSystem.UI
             sec.Add(h);
 
             var f = new TextField();
+            TrackTextField(f);
             f.value = _target.customText; f.multiline = true;
             f.style.minHeight = 40;
             f.style.backgroundColor = new StyleColor(new Color(0.025f, 0.030f, 0.045f));
@@ -1096,6 +1190,33 @@ namespace VoxelEngine.GridSystem.UI
             f.schedule.Execute(() => StyleTextInput(f));
 
             slot.Add(sec);
+        }
+
+        private void TrackTextField(TextField field)
+        {
+            if (field == null) return;
+            field.RegisterCallback<FocusInEvent>(_ =>
+            {
+                _focusedTextField = field;
+                UIState.TextInputActive = true;
+            });
+            field.RegisterCallback<FocusOutEvent>(_ => ClearTrackedTextField(field));
+            field.RegisterCallback<DetachFromPanelEvent>(_ => ClearTrackedTextField(field));
+        }
+
+        private void ClearTrackedTextField(TextField field)
+        {
+            if (_focusedTextField != field) return;
+            _focusedTextField = null;
+            UIState.TextInputActive = false;
+        }
+
+        private void ReleaseTextFieldFocus()
+        {
+            var field = _focusedTextField;
+            _focusedTextField = null;
+            if (field != null) field.Blur();
+            UIState.TextInputActive = false;
         }
 
         private static void StyleTextInput(TextField field)

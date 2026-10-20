@@ -180,7 +180,7 @@ namespace VoxelEngine.Thermal
             if (block != null && block.Grid != null)
             {
                 var cell = block.GridPos + IntakeCellOf(block.transform);
-                bool blocked = block.Grid.Blocks.ContainsKey(cell);
+                bool blocked = block.Grid.GetBlock(cell) != null;
                 var pressure = block.Grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
                 bool inRoom = pressure != null && pressure.RoomAtCell(cell) != null;
                 if (!blocked && !inRoom)

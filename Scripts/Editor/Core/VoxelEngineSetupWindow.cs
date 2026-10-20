@@ -239,6 +239,8 @@ namespace VoxelEngine.EditorTools
                 "Ship blocks, maritime systems, displays, travel, refuelling and station infrastructure.", false,
                 Setup("Build the grid ship and vehicle system", BuildGridSystemContent),
                 Setup("Build maritime propulsion and mechanical networks", BuildMaritimeContent),
+                Setup("Build the single Grid Window with shape and pane selectors", () => VoxelEngine.EditorTools.GridWindowSetup.RunStep122()),
+                Setup("Refresh cockpit shells and preserve cockpit tuning", () => VoxelEngine.EditorTools.CockpitShellSetup.RunStep123()),
                 Setup("Setup grid screens, displays and camera block", () => VoxelEngine.EditorTools.GridScreenSetup.RunStep19()),
                 Setup("Build the warp drive", BuildWarpDriveContent),
                 Setup("Author route book and range calculator", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep65()),
@@ -11068,7 +11070,7 @@ namespace VoxelEngine.EditorTools
         /// resolving to null during login/save restore. Existing catalog references are
         /// retained; missing catalog entries are repaired by scanning every ItemDefinition.
         /// </summary>
-        private static void EnsureItemPersistenceCatalog()
+        internal static void EnsureItemPersistenceCatalog()
         {
             const string resourcesRoot = "Assets/Resources";
             const string catalogFolder = resourcesRoot + "/VoxelEngine";

@@ -32,8 +32,13 @@ namespace VoxelEngine.GridSystem
         public float gravityScale = 1.35f;
 
         // ── Block storage ──────────────────────────────────────────
+        // Canonical block storage remains one entry per structural block (and anchor cell).
         private readonly Dictionary<Vector3Int, GridBlock> _blocks = new();
+        // Cell occupancy is derived from each block's rotated footprint. It includes aliases
+        // for multi-cell blocks without duplicating enumeration, mass, persistence or block count.
+        private readonly Dictionary<Vector3Int, GridBlock> _occupiedCells = new();
         public IReadOnlyDictionary<Vector3Int, GridBlock> Blocks => _blocks;
+        public IReadOnlyDictionary<Vector3Int, GridBlock> OccupiedCells => _occupiedCells;
         public GridPrecisionAttachmentLayer PrecisionAttachments => GetComponent<GridPrecisionAttachmentLayer>();
         public int BlockCount => _blocks.Count + (PrecisionAttachments != null ? PrecisionAttachments.Count : 0);
 
@@ -64,7 +69,7 @@ namespace VoxelEngine.GridSystem
         // A short post-load clearance window keeps unanchored grids from settling a
         // few centimetres into terrain while physics contacts/colliders warm up.
         private int _restoreGroundClearanceTicks;
-        private static readonly RaycastHit[] s_restoreGroundHits = new RaycastHit[24];
+        private static readonly RaycastHit[] s_restoreGroundHits = new RaycastHit[64];
         private bool _touchingIce;
         private float _lastIceContactTime = -999f;
         private const float IceGridBrakeMultiplier = 0.18f;
@@ -214,7 +219,7 @@ namespace VoxelEngine.GridSystem
                 if (!(block is GridThruster t)) continue;
                 // Thruster pushes the ship along its local forward. Atmospheric engines
                 // report their actual pressure-limited authority instead of full vacuum thrust.
-                Vector3 d = transform.InverseTransformDirection(t.transform.forward);
+                Vector3 d = CurrentControlFrame.InverseTransformDirection(t.transform.forward);
                 float available = t.maxThrustN * (t.thrusterType == ThrusterType.Atmospheric
                     ? t.AtmosphericEfficiency
                     : 1f);
@@ -374,7 +379,7 @@ namespace VoxelEngine.GridSystem
 
         private Transform CurrentControlFrame => ActiveControlFrame != null
             ? ActiveControlFrame
-            : (ActiveCockpit != null ? ActiveCockpit.transform : transform);
+            : (ActiveCockpit != null ? ActiveCockpit.FlightControlFrame : transform);
 
         // ── Lifecycle ──────────────────────────────────────────────
         private void Awake()
@@ -769,25 +774,47 @@ namespace VoxelEngine.GridSystem
             _rb.AddForce(gravity, ForceMode.Acceleration);
         }
 
-        // ── Block Management ───────────────────────────────────────
-        public bool CanPlace(Vector3Int gridPos) => !_blocks.ContainsKey(gridPos);
+        // ── Block Management ────────────────────────────────────────
+        public bool CanPlace(Vector3Int gridPos) => !_occupiedCells.ContainsKey(gridPos);
 
-        /// <summary>True if any of the 6 face-neighbours of <paramref name="gridPos"/> is occupied
-        /// (so a new block there actually connects to the existing structure).</summary>
+        /// <summary>Whether every cell in a proposed block footprint is clear.</summary>
+        public bool CanPlaceFootprint(Vector3Int anchor, bool hasAdditionalCell, Vector3Int additionalOffset)
+            => CanPlace(anchor) && (!hasAdditionalCell || CanPlace(anchor + additionalOffset));
+
+        /// <summary>True if any face-neighbour of this cell is occupied.</summary>
         public bool HasNeighbor(Vector3Int gridPos)
         {
             if (_blocks.Count == 0) return true; // first block always "connects"
-            return _blocks.ContainsKey(gridPos + Vector3Int.right)
-                || _blocks.ContainsKey(gridPos + Vector3Int.left)
-                || _blocks.ContainsKey(gridPos + Vector3Int.up)
-                || _blocks.ContainsKey(gridPos + Vector3Int.down)
-                || _blocks.ContainsKey(gridPos + new Vector3Int(0, 0, 1))
-                || _blocks.ContainsKey(gridPos + new Vector3Int(0, 0, -1));
+            for (int i = 0; i < SixNeighbours.Length; i++)
+                if (_occupiedCells.ContainsKey(gridPos + SixNeighbours[i])) return true;
+            return false;
         }
 
-        public void AddBlock(Vector3Int gridPos, GridBlock block)
+        /// <summary>A multi-cell placement connects if any face of any footprint cell
+        /// touches the existing structure.</summary>
+        public bool HasNeighborForFootprint(Vector3Int anchor, bool hasAdditionalCell, Vector3Int additionalOffset)
         {
-            if (_blocks.ContainsKey(gridPos)) return;
+            if (_blocks.Count == 0) return true;
+            if (HasNeighbor(anchor)) return true;
+            return hasAdditionalCell && HasNeighbor(anchor + additionalOffset);
+        }
+
+        /// <summary>Tests the anchor and rotated extra cells for this block.</summary>
+        public bool CanPlaceBlock(Vector3Int anchor, GridBlock block, Quaternion localRotation)
+        {
+            if (block == null || !CanPlace(anchor)) return false;
+            if (block is GridWindowBlock window
+                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, localRotation, out Vector3Int extra))
+                return CanPlace(anchor + extra);
+            return true;
+        }
+
+        public bool TryAddBlock(Vector3Int gridPos, GridBlock block)
+        {
+            if (block == null) return false;
+            Quaternion localRotation = Quaternion.Inverse(transform.rotation) * block.transform.rotation;
+            if (!CanPlaceBlock(gridPos, block, localRotation)) return false;
+
             _blocks[gridPos] = block;
             block.GridPos = gridPos;
             block.Grid = this;
@@ -795,8 +822,8 @@ namespace VoxelEngine.GridSystem
             block.transform.SetParent(transform, true);
             float cs = gridSize.CellSize();
             block.transform.localPosition = new Vector3(gridPos.x, gridPos.y, gridPos.z) * cs;
-            // Removed rotation reset - handled by the caller (GridBuilder)
-            // block.transform.localRotation = Quaternion.identity;
+            RegisterBlockFootprint(block, gridPos, block.transform.localRotation);
+            // Rotation is handled by the caller; do not reset localRotation here.
 
             if (block.GetComponentInChildren<Collider>(true) == null)
             {
@@ -821,13 +848,47 @@ namespace VoxelEngine.GridSystem
             // 14.29.0: a block a CLIENT just placed must reach the host - silent
             // everywhere else, including while a remote record is being applied.
             VoxelEngine.Networking.GridBuildSync.NotifyLocalPlaced(this, block);
+            return true;
+        }
+
+        /// <summary>Compatibility wrapper for existing non-interactive callers.</summary>
+        public void AddBlock(Vector3Int gridPos, GridBlock block)
+        {
+            if (!TryAddBlock(gridPos, block))
+                Debug.LogWarning($"[Grid] Refused block '{(block != null ? block.name : "null")}' at occupied cell {gridPos}.");
+        }
+
+        private void RegisterBlockFootprint(GridBlock block, Vector3Int anchor, Quaternion localRotation)
+        {
+            if (block == null) return;
+            _occupiedCells[anchor] = block;
+            if (block is GridWindowBlock window
+                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, localRotation, out Vector3Int extra))
+                _occupiedCells[anchor + extra] = block;
+        }
+
+        private void UnregisterBlockFootprint(GridBlock block, Vector3Int anchor)
+        {
+            if (_occupiedCells.TryGetValue(anchor, out var anchorBlock) && anchorBlock == block)
+                _occupiedCells.Remove(anchor);
+            if (block is GridWindowBlock window
+                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, block.transform.localRotation, out Vector3Int extra))
+            {
+                Vector3Int occupied = anchor + extra;
+                if (_occupiedCells.TryGetValue(occupied, out var extraBlock) && extraBlock == block)
+                    _occupiedCells.Remove(occupied);
+            }
         }
 
         public void RemoveBlock(Vector3Int gridPos)
         {
-            if (!_blocks.TryGetValue(gridPos, out var block)) return;
-            Vector3 formerPosition = block != null ? block.transform.position : GridToWorld(gridPos);
-            _blocks.Remove(gridPos);
+            if (!_occupiedCells.TryGetValue(gridPos, out var block) || block == null) return;
+            Vector3Int anchor = block.GridPos;
+            if (!_blocks.ContainsKey(anchor)) return;
+
+            Vector3 formerPosition = block.transform.position;
+            _blocks.Remove(anchor);
+            UnregisterBlockFootprint(block, anchor);
             block.OnRemoved();
             Destroy(block.gameObject);
             RecalculateMass();
@@ -839,7 +900,7 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition);
             // 14.29.0: a removal a CLIENT performed must reach the host. Fired
             // before the empty-hull teardown below so the id is still resolvable.
-            VoxelEngine.Networking.GridBuildSync.NotifyLocalRemoved(this, gridPos, false, default);
+            VoxelEngine.Networking.GridBuildSync.NotifyLocalRemoved(this, anchor, false, default);
 
             // Removing a wall can breach a room — re-solve pressure.
             GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
@@ -892,11 +953,25 @@ namespace VoxelEngine.GridSystem
                 while (stack.Count > 0)
                 {
                     Vector3Int cell = stack.Pop();
+                    if (!_blocks.TryGetValue(cell, out var current) || current == null) continue;
                     comp.Add(cell);
-                    for (int i = 0; i < SixNeighbours.Length; i++)
+
+                    Vector3Int extraCell = Vector3Int.zero;
+                    bool hasExtraCell = current is GridWindowBlock window
+                        && GridWindowBlock.TryGetAdditionalFootprintOffset(
+                            (int)window.windowShape, current.transform.localRotation, out extraCell);
+                    for (int footprintIndex = 0; footprintIndex < (hasExtraCell ? 2 : 1); footprintIndex++)
                     {
-                        Vector3Int n = cell + SixNeighbours[i];
-                        if (remaining.Remove(n)) stack.Push(n);
+                        Vector3Int occupied = footprintIndex == 0 ? cell : cell + extraCell;
+                        for (int i = 0; i < SixNeighbours.Length; i++)
+                        {
+                            Vector3Int neighbourCell = occupied + SixNeighbours[i];
+                            if (!_occupiedCells.TryGetValue(neighbourCell, out var neighbour) || neighbour == null
+                                || neighbour == current)
+                                continue;
+                            Vector3Int neighbourAnchor = neighbour.GridPos;
+                            if (remaining.Remove(neighbourAnchor)) stack.Push(neighbourAnchor);
+                        }
                     }
                 }
                 components.Add(comp);
@@ -975,11 +1050,13 @@ namespace VoxelEngine.GridSystem
             {
                 if (!_blocks.TryGetValue(cells[i], out var block) || block == null) continue;
                 Vector3Int cell = cells[i] - baseCell;
+                UnregisterBlockFootprint(block, cells[i]);
                 _blocks.Remove(cells[i]);
                 island._blocks[cell] = block;
                 block.GridPos = cell;
                 block.Grid = island;
                 block.transform.SetParent(island.transform, true);
+                island.RegisterBlockFootprint(block, cell, block.transform.localRotation);
                 moved++;
             }
             if (moved == 0) { Destroy(island.gameObject); return null; }
@@ -1091,10 +1168,11 @@ namespace VoxelEngine.GridSystem
             }
         }
 
+        /// <summary>Resolves either an anchor or an occupied footprint alias to its canonical block.</summary>
         public GridBlock GetBlock(Vector3Int gridPos)
         {
-            _blocks.TryGetValue(gridPos, out var b);
-            return b;
+            _occupiedCells.TryGetValue(gridPos, out var block);
+            return block;
         }
 
         // ── Maritime propulsion (buoyancy + mechanical network) ───────
@@ -1166,10 +1244,10 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>
-        /// Runs once after a saved grid's blocks and colliders have been recreated.
-        /// It preserves the saved pose but lifts a small interpenetration out of the
-        /// supporting terrain/dock, preventing restored grids from settling visibly
-        /// into the ground on the first post-load physics frame.
+        /// Probes during the short post-load window after a saved grid's blocks and
+        /// colliders have been recreated. It preserves the saved pose while lifting
+        /// interpenetration out of the supporting terrain/dock before the grid settles
+        /// visibly into the ground.
         /// </summary>
         public void ResolvePersistentGroundClearance()
         {
@@ -1184,16 +1262,38 @@ namespace VoxelEngine.GridSystem
 
             Physics.SyncTransforms();
             float desiredClearance = Mathf.Max(0.025f, gridSize.CellSize() * 0.015f);
-            float maxLift = Mathf.Max(0.15f, gridSize.CellSize() * 0.42f);
+            // A restored large-grid hull can be more than half a cell below its saved
+            // support point. Allow that correction, but still reject a lift approaching
+            // a full cell so an unrelated raycast cannot teleport the grid.
+            float maxLift = Mathf.Max(0.15f, gridSize.CellSize() * 0.85f);
             float neededLift = 0f;
-            int samples = 0;
 
+            // The old 64-ray cap was applied in block insertion order. On a large grid,
+            // that often meant probing upper machinery before ever reaching the parked
+            // hull. Find the bottom block band first, then spend the same bounded ray
+            // budget there.
+            float lowestBlockBottom = float.PositiveInfinity;
             foreach (var block in AllBlocks)
             {
                 if (block == null) continue;
+                float cellSize = Mathf.Max(0.05f, block.EffectiveCellSize);
+                float blockBottom = Vector3.Dot(block.transform.position, up) - cellSize * 0.5f;
+                if (blockBottom < lowestBlockBottom) lowestBlockBottom = blockBottom;
+            }
+            if (float.IsInfinity(lowestBlockBottom)) return;
+
+            float probeBand = Mathf.Max(0.5f, gridSize.CellSize() * 1.5f);
+            int samples = 0;
+            foreach (var block in AllBlocks)
+            {
+                if (block == null) continue;
+                float cellSize = Mathf.Max(0.05f, block.EffectiveCellSize);
+                float blockBottom = Vector3.Dot(block.transform.position, up) - cellSize * 0.5f;
+                if (blockBottom > lowestBlockBottom + probeBand) continue;
+
                 // Large machinery frequently has multiple fitted colliders. Probe all
-                // of them so a high upper hull collider cannot hide a lower skid/block
-                // that is actually entering the ground.
+                // colliders in the lowest hull band, so an upper collider cannot hide a
+                // skid/block that is actually entering the ground.
                 foreach (var collider in block.GetComponentsInChildren<Collider>(true))
                 {
                     if (collider == null || !collider.enabled || collider.isTrigger) continue;
@@ -1202,9 +1302,9 @@ namespace VoxelEngine.GridSystem
                     float supportExtent = Mathf.Abs(up.x) * bounds.extents.x
                         + Mathf.Abs(up.y) * bounds.extents.y
                         + Mathf.Abs(up.z) * bounds.extents.z;
-                    Vector3 origin = bounds.center + up * (supportExtent + block.EffectiveCellSize * 0.90f);
+                    Vector3 origin = bounds.center + up * (supportExtent + cellSize * 0.90f);
                     int hitCount = Physics.RaycastNonAlloc(origin, -up, s_restoreGroundHits,
-                        supportExtent + block.EffectiveCellSize * 3.0f, ~0, QueryTriggerInteraction.Ignore);
+                        supportExtent + cellSize * 3.0f, ~0, QueryTriggerInteraction.Ignore);
 
                     float nearestDistance = float.PositiveInfinity;
                     RaycastHit nearest = default;

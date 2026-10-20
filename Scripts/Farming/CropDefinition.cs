@@ -21,8 +21,10 @@ namespace VoxelEngine.Farming
         [Tooltip("Number of visual growth stages (changes scale/color).")]
         public int growthStages = 4;
 
-        [Header("Water")]
-        [Tooltip("If true, crop grows faster when irrigated. If false, it dies without water.")]
+        [Header("Environment")]
+        [Tooltip("If true, the crop only grows inside a sealed, breathable greenhouse or station room.")]
+        public bool requiresOxygen = true;
+        [Tooltip("If true, crop grows faster when irrigated and wilts without water.")]
         public bool requiresWater = true;
         [Tooltip("Growth speed multiplier when irrigated (2 = twice as fast).")]
         public float irrigatedSpeedMultiplier = 2.0f;

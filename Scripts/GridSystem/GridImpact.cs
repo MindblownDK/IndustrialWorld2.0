@@ -26,6 +26,7 @@
 // GridBlock.Damage -> RemoveBlock path, so structural splits and drops behave
 // exactly like any other source of harm.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Core;
 
@@ -44,6 +45,7 @@ namespace VoxelEngine.GridSystem
         private GridEntity _grid;
         private Rigidbody _rb;
         private float _nextImpactAt;
+        private readonly Dictionary<GridBlock, int> _closestRingByBlock = new();
 
         // Pose-delta velocity tracking - valid on kinematic replicas too.
         private Vector3 _lastPos;
@@ -163,17 +165,26 @@ namespace VoxelEngine.GridSystem
             int reach = severity >= 0.6f ? 2 : 1;
             Vector3Int center = _grid.WorldToGrid(worldPoint);
 
+            _closestRingByBlock.Clear();
             for (int dx = -reach; dx <= reach; dx++)
             for (int dy = -reach; dy <= reach; dy++)
             for (int dz = -reach; dz <= reach; dz++)
             {
                 var cell = new Vector3Int(center.x + dx, center.y + dy, center.z + dz);
-                if (!_grid.Blocks.TryGetValue(cell, out var block) || block == null) continue;
-                // The contact cell takes it raw; neighbors take falloff.
+                var block = _grid.GetBlock(cell);
+                if (block == null) continue;
                 int ring = Mathf.Max(Mathf.Abs(dx), Mathf.Max(Mathf.Abs(dy), Mathf.Abs(dz)));
-                float share = ring == 0 ? 1f : (ring == 1 ? 0.45f : 0.2f);
-                block.Damage(damage * share);
+                if (!_closestRingByBlock.TryGetValue(block, out int currentRing) || ring < currentRing)
+                    _closestRingByBlock[block] = ring;
             }
+
+            // A multi-cell block must receive damage once, using its closest occupied cell.
+            foreach (var entry in _closestRingByBlock)
+            {
+                float share = entry.Value == 0 ? 1f : (entry.Value == 1 ? 0.45f : 0.2f);
+                if (entry.Key != null) entry.Key.Damage(damage * share);
+            }
+            _closestRingByBlock.Clear();
         }
 
         /// <summary>Carve the impact crater and replicate it - same path and

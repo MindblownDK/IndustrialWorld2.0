@@ -42,6 +42,8 @@ namespace VoxelEngine.GridSystem
         // Which cockpit shell the preview was built with. A cockpit is one item with two
         // hulls, so the ghost has to rebuild when the wheel arms the other one.
         private int _ghostShell = -1;
+        private int _ghostWindowPaneStyle = -1;
+        private int _ghostWindowShape = -1;
         private GridPrecisionLatticePreview _precisionLattice;
 
         // ── Ghost port ring (variable service port preview) ─────────
@@ -236,7 +238,10 @@ namespace VoxelEngine.GridSystem
 
                     if (!placingTurbo && targetedBlock != null)
                         portSnapped = TryApplyMaritimePortSnap(gbi, attachGrid, targetedBlock, hit, ref gridPos, ref worldPos, ref rotation);
-                    if (!portSnapped && !attachGrid.HasNeighbor(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
+                    // A Grid Window's final orientation is applied below. Defer its
+                    // connection test until the complete rotated footprint is known.
+                    if (!portSnapped && !IsGridWindowItem(gbi) && !attachGrid.HasNeighbor(gridPos))
+                    { HideGhost(); HideGhostPortRing(); return; }
                 }
                 else
                 {
@@ -289,7 +294,8 @@ namespace VoxelEngine.GridSystem
             // Structural blocks may not engulf a detail attachment that happens to
             // sit in the target large cell. This catches grid pipes even when the
             // player aims at a neighbouring hull block rather than directly at the pipe.
-            if (gbi.gridSize == GridSize.Large && targetGrid != null && !portSnapped && !placingTurbo)
+            if (gbi.gridSize == GridSize.Large && targetGrid != null && !portSnapped && !placingTurbo
+                && !IsGridWindowItem(gbi))
             {
                 var precision = targetGrid.PrecisionAttachments;
                 if (precision != null && precision.HasStructuralVolumeConflict(gridPos))
@@ -338,6 +344,35 @@ namespace VoxelEngine.GridSystem
             else if (!portSnapped)
             {
                 rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            }
+
+            bool windowFootprintInvalid = false;
+            if (targetGrid != null && IsGridWindowItem(gbi) && !portSnapped)
+            {
+                Quaternion localWindowRotation = Quaternion.Inverse(targetGrid.transform.rotation) * rotation;
+                int windowShape = (int)GridWindowBlock.SelectedWindowShape;
+                bool hasExtraCell = GridWindowBlock.TryGetAdditionalFootprintOffset(
+                    windowShape, localWindowRotation, out Vector3Int extraCell);
+                bool clear = targetGrid.CanPlaceFootprint(gridPos, hasExtraCell, extraCell);
+                bool connected = targetGrid.HasNeighborForFootprint(gridPos, hasExtraCell, extraCell);
+                var precision = targetGrid.PrecisionAttachments;
+                bool precisionClear = precision == null
+                    || (!precision.HasStructuralVolumeConflict(gridPos)
+                        && (!hasExtraCell || !precision.HasStructuralVolumeConflict(gridPos + extraCell)));
+                windowFootprintInvalid = !clear || !connected || !precisionClear;
+                if (windowFootprintInvalid && GameSettings.WasPressed(InputAction.Build))
+                {
+                    string reason = !clear
+                        ? "The selected window shape overlaps an occupied structural cell"
+                        : !precisionClear
+                            ? "A precision detail block overlaps part of the window footprint"
+                            : "The selected window footprint must touch the existing grid";
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        "Window Footprint Blocked",
+                        reason,
+                        gbi.icon,
+                        Color.red);
+                }
             }
 
             if (IsLedStripItem(gbi))
@@ -391,9 +426,10 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
-            ShowGhost(gbi, worldPos, rotation, valid: !placementObstructed);
+            bool placementValid = !placementObstructed && !windowFootprintInvalid;
+            ShowGhost(gbi, worldPos, rotation, valid: placementValid);
 
-            if (GameSettings.WasPressed(InputAction.Build) && !placementObstructed
+            if (GameSettings.WasPressed(InputAction.Build) && placementValid
                 && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation, keepExactAttachmentPose))
             {
                 inventory.container.Remove(gbi, 1);
@@ -619,9 +655,19 @@ namespace VoxelEngine.GridSystem
 
         private static Bounds GetPrefabLocalBounds(GridBlockItem item)
         {
+            if (item == null) return new Bounds(Vector3.zero, Vector3.one);
+            var prefab = item.blockPrefab;
+            if (prefab != null && prefab.GetComponent<GridWindowBlock>() != null)
+            {
+                // Window geometry is a set of inactive generated variants. A prefab-wide
+                // renderer cache would combine every shape and make the two-cell ghost
+                // block placements for the one-cell shapes (or vice versa).
+                return GridWindowBlock.LocalBoundsForShape(
+                    (int)GridWindowBlock.SelectedWindowShape, item.gridSize.CellSize());
+            }
+
             if (s_prefabLocalBounds.TryGetValue(item, out var cached)) return cached;
             Bounds b;
-            var prefab = item.blockPrefab;
             if (prefab != null)
             {
                 var renderers = prefab.GetComponentsInChildren<Renderer>(true);
@@ -1210,11 +1256,39 @@ namespace VoxelEngine.GridSystem
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos,
             Quaternion rotation, bool keepExactAttachmentPose)
         {
-            if (grid != null && item != null && item.gridSize == GridSize.Large && !keepExactAttachmentPose
-                && grid.PrecisionAttachments != null && grid.PrecisionAttachments.HasStructuralVolumeConflict(gridPos))
+            if (grid != null && item != null && item.gridSize == GridSize.Large && !keepExactAttachmentPose)
             {
-                VoxelEngine.UI.BuildFeedbackHud.Show("Detail Volume Occupied", "Clear the pipe/detail block before placing structure here", item.icon, Color.red);
-                return false;
+                bool detailConflict = grid.PrecisionAttachments != null
+                    && grid.PrecisionAttachments.HasStructuralVolumeConflict(gridPos);
+                if (IsGridWindowItem(item))
+                {
+                    Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
+                    if (GridWindowBlock.TryGetAdditionalFootprintOffset(
+                            (int)GridWindowBlock.SelectedWindowShape, localRotation, out Vector3Int extraCell)
+                        && grid.PrecisionAttachments != null
+                        && grid.PrecisionAttachments.HasStructuralVolumeConflict(gridPos + extraCell))
+                        detailConflict = true;
+                }
+                if (detailConflict)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Detail Volume Occupied", "Clear the pipe/detail block from the full structural footprint before placing here", item.icon, Color.red);
+                    return false;
+                }
+            }
+
+            if (grid != null && item != null && IsGridWindowItem(item))
+            {
+                Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
+                bool hasExtraCell = GridWindowBlock.TryGetAdditionalFootprintOffset(
+                    (int)GridWindowBlock.SelectedWindowShape, localRotation, out Vector3Int extraCell);
+                if (!grid.CanPlaceFootprint(gridPos, hasExtraCell, extraCell)
+                    || !grid.HasNeighborForFootprint(gridPos, hasExtraCell, extraCell))
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Window Footprint Blocked",
+                        "The selected window footprint is occupied or does not touch the grid",
+                        item.icon, Color.red);
+                    return false;
+                }
             }
 
             if (grid != null && IsCellReservedByLedStrip(grid, gridPos))
@@ -1263,6 +1337,11 @@ namespace VoxelEngine.GridSystem
             // The shell armed on the build wheel is what gets bolted down.
             if (block is GridCockpit cockpitBlock)
                 CockpitShellBuilder.SetShell(cockpitBlock, CockpitShellBuilder.SelectedStyle);
+            if (block is GridWindowBlock windowBlock)
+            {
+                windowBlock.SetWindowShape((int)GridWindowBlock.SelectedWindowShape);
+                windowBlock.SetPaneStyle(GridWindowBlock.SelectedPaneStyle);
+            }
 
             if (IsShapeVariantItem(item))
             {
@@ -1285,7 +1364,18 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                grid.AddBlock(gridPos, block);
+                if (!grid.TryAddBlock(gridPos, block))
+                {
+                    Destroy(block.gameObject);
+                    if (createdNewGrid) Destroy(grid.gameObject);
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        "Placement Blocked",
+                        "The selected block footprint is occupied",
+                        item != null ? item.icon : null,
+                        Color.red);
+                    return false;
+                }
+
                 // Normal structural placement is always cell-centred. Only explicitly
                 // port-snapped machinery/turbo attachments may retain a non-lattice root
                 // pose, because their authored port offsets are authoritative.
@@ -1584,7 +1674,12 @@ namespace VoxelEngine.GridSystem
                 strip.wattsDraw = Mathf.Max(strip.wattsDraw, Mathf.Lerp(5f, 20f, Mathf.Clamp01(length / 10f)));
             }
 
-            grid.AddBlock(startPos, block);
+            if (!grid.TryAddBlock(startPos, block))
+            {
+                Destroy(block.gameObject);
+                VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "The LED strip start cell is occupied", item.icon, Color.red);
+                return false;
+            }
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, Mathf.Max(1, _lastLedStripCost));
             return true;
         }
@@ -1885,7 +1980,7 @@ namespace VoxelEngine.GridSystem
             {
                 if (ge.gridSize != size) continue;
                 var gp = ge.WorldToGrid(worldPoint);
-                if (!ge.HasNeighbor(gp) && !ge.Blocks.ContainsKey(gp)) continue;
+                if (!ge.HasNeighbor(gp) && ge.GetBlock(gp) == null) continue;
                 float d = Vector3.Distance(worldPoint, ge.GridToWorld(gp));
                 if (d < bestDist) { bestDist = d; best = ge; }
             }
@@ -1926,6 +2021,10 @@ namespace VoxelEngine.GridSystem
             if (!needsRebuild && _ghost != null && IsCockpitItem(item)
                 && _ghostShell != CockpitShellBuilder.SelectedStyle)
                 needsRebuild = true;
+            if (!needsRebuild && _ghost != null && IsGridWindowItem(item)
+                && (_ghostWindowPaneStyle != GridWindowBlock.SelectedPaneStyle
+                    || _ghostWindowShape != (int)GridWindowBlock.SelectedWindowShape))
+                needsRebuild = true;
 
             if (needsRebuild)
             {
@@ -1951,6 +2050,16 @@ namespace VoxelEngine.GridSystem
                         _ghost.transform.localScale = Vector3.one * item.gridSize.CellSize();
                     }
                     _ghost.name = "GridGhost";
+                    _ghostWindowPaneStyle = -1;
+                    _ghostWindowShape = -1;
+                    var windowPreview = _ghost.GetComponent<GridWindowBlock>();
+                    if (windowPreview != null)
+                    {
+                        _ghostWindowShape = (int)GridWindowBlock.SelectedWindowShape;
+                        _ghostWindowPaneStyle = GridWindowBlock.SelectedPaneStyle;
+                        windowPreview.SetWindowShape(_ghostWindowShape);
+                        windowPreview.SetPaneStyle(_ghostWindowPaneStyle);
+                    }
                     foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
                     foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
 
@@ -1986,6 +2095,10 @@ namespace VoxelEngine.GridSystem
         private static bool IsCockpitItem(GridBlockItem item)
             => item != null && item.blockPrefab != null
                && item.blockPrefab.GetComponent<VoxelEngine.GridSystem.GridCockpit>() != null;
+
+        private static bool IsGridWindowItem(GridBlockItem item)
+            => item != null && item.blockPrefab != null
+               && item.blockPrefab.GetComponent<GridWindowBlock>() != null;
 
         /// <summary>Does this item's block have a face that has to point somewhere? Screens
         /// do; their glass is on -Z and the whole panel is unreadable from behind.</summary>

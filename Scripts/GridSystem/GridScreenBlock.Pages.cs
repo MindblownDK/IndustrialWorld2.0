@@ -74,12 +74,19 @@ namespace VoxelEngine.GridSystem
             public IFarmBed bed;
             public Vector3 position;
             public float distanceSq;
+            public bool vertical;
         }
 
         // Power history (per screen; a bank of screens each keeps its own trace, which is
         // cheap - 90 floats - and means a panel shows what IT has seen, like a real gauge).
         private readonly List<float> _powerGainHistory = new(PowerHistoryLength);
         private readonly List<float> _powerLossHistory = new(PowerHistoryLength);
+        private readonly List<float> _solarOutputHistory = new(PowerHistoryLength);
+        private readonly List<float> _solarCapacityHistory = new(PowerHistoryLength);
+        private readonly List<float> _batteryChargeHistory = new(PowerHistoryLength);
+        private readonly List<float> _batteryDischargeHistory = new(PowerHistoryLength);
+        private readonly List<GridBattery> _batteryFound = new(32);
+        private readonly List<string> _manifestCategories = new(8);
         private float _powerSampledAt = -999f;
 
         private static readonly ItemMassEntry[] s_massScratch = new ItemMassEntry[256];
@@ -135,6 +142,9 @@ namespace VoxelEngine.GridSystem
             signature = signature * 31 + (int)PanePage(1);
             signature = signature * 31 + (int)PanePage(2);
             signature = signature * 31 + (int)PanePage(3);
+            signature = signature * 31 + (manifestTitle ?? string.Empty).GetHashCode();
+            signature = signature * 31 + Mathf.Clamp(powerGraphPanels, 1, 3);
+            signature = signature * 31 + (showBatteryPowerRates ? 1 : 0);
             return signature == 0 ? 1 : signature;
         }
 
@@ -191,32 +201,29 @@ namespace VoxelEngine.GridSystem
             for (int i = 0; i < panes; i++)
                 DrawPane(main, SplitPaneRect(i, columns, rows), PanePage(i));
 
-            DrawSplitRules(main, columns, rows);
             return Finish(main);
         }
 
-        /// <summary>Draw one pane: its title on the first row, its page under it.</summary>
+        /// <summary>Draw one pane inside its own border, with a short page label and a
+        /// clipped content area below it.</summary>
         private void DrawPane(ScreenCanvas main, RectInt rect, ScreenDataMode mode)
         {
-            if (rect.width < 3 || rect.height < 1) return;
+            if (rect.width < 4 || rect.height < 3) return;
 
-            // A pane names itself. There is one title mesh on the whole screen, so with four
-            // panes the only place a page's name can live is inside its own corner.
-            main.Text(rect.x, rect.y, Trim(ScreenPageCatalog.For(mode).Label.ToUpperInvariant(), rect.width));
+            main.Box(rect.x, rect.y, rect.width, rect.height);
+            int innerWidth = rect.width - 2;
+            string label = Trim(ScreenPageCatalog.For(mode).Label.ToUpperInvariant(), innerWidth);
+            main.Text(rect.x + 1, rect.y + 1, label);
 
-            // A one-row pane is a label and nothing else; drawing into it would put the
-            // page's first line on the neighbour's title row.
-            if (rect.height <= 1) return;
-
-            // A provider page has no canvas layout to shrink into, so the pane says so
-            // instead of printing a column of source dumps clipped at the divider.
             if (!IsManagedPage(mode))
             {
-                main.TextClipped(rect.x, rect.y + 1, "NOT AVAILABLE IN A PANE", rect.width);
+                if (rect.height > 3)
+                    main.TextClipped(rect.x + 1, rect.y + 2, "NOT AVAILABLE IN A PANE", innerWidth);
                 return;
             }
 
-            var content = new RectInt(rect.x, rect.y + 1, rect.width, rect.height - 1);
+            var content = new RectInt(rect.x + 1, rect.y + 2, innerWidth, rect.height - 3);
+            if (content.height <= 0) return;
             _splitTarget = main;
             _splitRect = content;
             try { BuildPage(mode); }
@@ -270,11 +277,13 @@ namespace VoxelEngine.GridSystem
         /// <summary>True for the pages this half of the class renders.</summary>
         private static bool IsManagedPage(ScreenDataMode mode) => mode switch
         {
-            ScreenDataMode.Environment or ScreenDataMode.BatteryBank or ScreenDataMode.PowerGraph
-                or ScreenDataMode.Manifest or ScreenDataMode.FillBars or ScreenDataMode.Farm
-                or ScreenDataMode.Mining or ScreenDataMode.InventoryGrid
-                or ScreenDataMode.PlanetMap or ScreenDataMode.Inventory
-                or ScreenDataMode.MiningCargo or ScreenDataMode.Speed => true,
+            ScreenDataMode.Summary or ScreenDataMode.System or ScreenDataMode.Bars
+                or ScreenDataMode.Power or ScreenDataMode.Environment or ScreenDataMode.BatteryBank
+                or ScreenDataMode.PowerGraph or ScreenDataMode.Manifest or ScreenDataMode.FillBars
+                or ScreenDataMode.Farm or ScreenDataMode.Mining or ScreenDataMode.InventoryGrid
+                or ScreenDataMode.PlanetMap or ScreenDataMode.Inventory or ScreenDataMode.MiningCargo
+                or ScreenDataMode.Speed or ScreenDataMode.AutoRunPilotInfo
+                or ScreenDataMode.RouteRecorderInfo or ScreenDataMode.FarmPlots => true,
             _ => false,
         };
 
@@ -286,20 +295,192 @@ namespace VoxelEngine.GridSystem
 
             return mode switch
             {
+                ScreenDataMode.Summary => BuildMixedPage(),
+                ScreenDataMode.System => BuildSystemsPage(),
+                ScreenDataMode.Bars => BuildBarsPage(),
+                ScreenDataMode.Power => BuildPowerPage(),
                 ScreenDataMode.Environment => BuildEnvironmentPage(),
                 ScreenDataMode.BatteryBank => BuildBatteryBankPage(),
                 ScreenDataMode.PowerGraph => BuildPowerGraphPage(),
                 ScreenDataMode.Manifest => BuildManifestPage(),
                 ScreenDataMode.FillBars => BuildFillBarsPage(),
                 ScreenDataMode.Farm => BuildFarmPage(),
+                ScreenDataMode.FarmPlots => BuildFarmPlotsPage(),
                 ScreenDataMode.Mining => BuildMiningPage(),
                 ScreenDataMode.MiningCargo => BuildMiningCargoPage(),
                 ScreenDataMode.InventoryGrid => BuildInventoryGridPage(),
                 ScreenDataMode.Inventory => BuildStorageMonitorPage(),
                 ScreenDataMode.PlanetMap => BuildPlanetMapPage(),
                 ScreenDataMode.Speed => BuildSpeedPage(),
+                ScreenDataMode.AutoRunPilotInfo => BuildAutoRunPilotPage(),
+                ScreenDataMode.RouteRecorderInfo => BuildRouteRecorderPage(),
                 _ => "NO PAGE",
             };
+        }
+
+        // ── Mixed / Systems / Bars ─────────────────────────────────────────────
+
+        private string BuildMixedPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            var providers = ResolveAllProviders();
+            if (providers.Count == 0)
+            {
+                canvas.Text(0, 0, "NO SOURCES LINKED");
+                if (canvas.Rows > 1) canvas.Text(0, 1, "OPEN THE SCREEN EDITOR");
+                return Finish(canvas);
+            }
+
+            bool wide = canvas.Columns >= 24;
+            int providerSlots = wide ? canvas.Rows : canvas.Rows / 2;
+            int shown = Mathf.Min(providers.Count, providerSlots);
+            if (providers.Count > shown)
+                shown = wide ? Mathf.Max(0, canvas.Rows - 1) : providerSlots;
+
+            int row = 0;
+            int nameWidth = Mathf.Clamp(canvas.Columns / 3, 5, 16);
+            for (int i = 0; i < shown; i++)
+            {
+                var provider = providers[i];
+                string value = FirstUsefulLine(provider.GetDisplayData());
+                string name = (provider.SourceName ?? "SOURCE").ToUpperInvariant();
+
+                if (wide)
+                {
+                    canvas.TextClipped(0, row, name, nameWidth);
+                    canvas.TextClipped(nameWidth + 1, row, value,
+                        Mathf.Max(1, canvas.Columns - nameWidth - 1));
+                    row++;
+                }
+                else
+                {
+                    canvas.TextClipped(0, row++, name, canvas.Columns);
+                    canvas.TextClipped(0, row++, value, canvas.Columns);
+                }
+            }
+
+            if (shown < providers.Count && row < canvas.Rows)
+                canvas.TextClipped(0, row, "+" + (providers.Count - shown) + " MORE SOURCES", canvas.Columns);
+            return Finish(canvas);
+        }
+
+        private string BuildSystemsPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            var providers = ResolveAllProviders();
+            if (providers.Count == 0)
+            {
+                canvas.Text(0, 0, "NO SYSTEMS LINKED");
+                if (canvas.Rows > 1) canvas.Text(0, 1, "LINK A GRID DEVICE");
+                return Finish(canvas);
+            }
+
+            int row = 0;
+            for (int i = 0; i < providers.Count && row < canvas.Rows; i++)
+            {
+                var provider = providers[i];
+                string[] lines = (provider.GetDisplayData() ?? string.Empty).Split('\n');
+                string status = lines.Length > 1 ? lines[1].Trim() : FirstUsefulLine(provider.GetDisplayData());
+                string label = (provider.DataCategory ?? "SYSTEM").ToUpperInvariant()
+                    + "  " + (provider.SourceName ?? "DEVICE").ToUpperInvariant();
+                canvas.TextClipped(0, row, label, canvas.Columns);
+                row++;
+                if (row >= canvas.Rows) break;
+                int valueWidth = Mathf.Min(18, Mathf.Max(4, canvas.Columns - 2));
+                canvas.TextClipped(1, row, status, valueWidth);
+                row++;
+                if (row < canvas.Rows && i + 1 < providers.Count) canvas.HLine(0, row++, canvas.Columns, '\u2500');
+            }
+            return Finish(canvas);
+        }
+
+        private string BuildBarsPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            var providers = ResolveAllProviders();
+            if (providers.Count == 0)
+            {
+                canvas.Text(0, 0, "NO SOURCES LINKED");
+                if (canvas.Rows > 1) canvas.Text(0, 1, "LINK A DEVICE TO SHOW BARS");
+                return Finish(canvas);
+            }
+
+            int row = 0;
+            int barWidth = Mathf.Clamp(canvas.Columns / 3, 5, 14);
+            for (int i = 0; i < providers.Count && row < canvas.Rows; i++)
+            {
+                var provider = providers[i];
+                string[] lines = (provider.GetDisplayData() ?? string.Empty).Split('\n');
+                for (int j = 0; j < lines.Length && row < canvas.Rows; j++)
+                {
+                    string line = lines[j].Trim();
+                    float value = ExtractPercentage(line);
+                    if (value < 0f) continue;
+                    int percentAt = line.IndexOf('%');
+                    string label = percentAt > 0 ? line.Substring(0, percentAt).Trim() : provider.SourceName;
+                    int labelWidth = Mathf.Max(3, canvas.Columns - barWidth - 5);
+                    canvas.TextClipped(0, row, label.ToUpperInvariant(), labelWidth);
+                    int barX = Mathf.Min(labelWidth + 1, canvas.Columns - barWidth - 4);
+                    canvas.Bar(barX, row, barWidth, value);
+                    canvas.TextClipped(barX + barWidth + 1, row, (value * 100f).ToString("0") + "%",
+                        Mathf.Max(1, canvas.Columns - barX - barWidth - 1));
+                    row++;
+                }
+            }
+            if (row == 0) canvas.Text(0, 0, "NO PERCENTAGES REPORTED");
+            return Finish(canvas);
+        }
+
+        private string BuildPowerPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            if (Grid == null)
+            {
+                canvas.Text(0, 0, "NO CONSTRUCT");
+                return Finish(canvas);
+            }
+
+            float generated = Mathf.Max(0f, Grid.PowerGenerated);
+            float consumed = Mathf.Max(0f, Grid.PowerConsumed);
+            float net = generated - consumed;
+            string state = net >= -0.1f ? "STABLE" : "DEFICIT";
+            bool bars = canvas.Rows >= 4 && canvas.Columns >= 22;
+            int barWidth = bars ? Mathf.Clamp(canvas.Columns / 3, 8, 14) : 0;
+            int row = 0;
+
+            canvas.Text(0, row++, "POWER " + state);
+            if (row < canvas.Rows)
+            {
+                canvas.Text(0, row, "GEN " + FormatWatts(generated));
+                if (bars) canvas.Bar(Mathf.Min(canvas.Columns - barWidth, 13), row, barWidth,
+                    generated / Mathf.Max(1f, Mathf.Max(generated, consumed)));
+                row++;
+            }
+            if (row < canvas.Rows)
+            {
+                canvas.Text(0, row, "USE " + FormatWatts(consumed));
+                if (bars) canvas.Bar(Mathf.Min(canvas.Columns - barWidth, 13), row, barWidth,
+                    consumed / Mathf.Max(1f, Mathf.Max(generated, consumed)));
+                row++;
+            }
+            if (row < canvas.Rows) canvas.Text(0, row, "NET " + SignedWatts(net));
+            return Finish(canvas);
+        }
+
+        private static string FirstUsefulLine(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "NO DATA";
+            var lines = raw.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length > 0) return line;
+            }
+            return "NO DATA";
         }
 
         // ── Layout ──────────────────────────────────────────────────────────────
@@ -366,28 +547,29 @@ namespace VoxelEngine.GridSystem
             Vector3 velocity = Grid != null && Grid.Body != null
                 ? Grid.Body.linearVelocity
                 : Vector3.zero;
+            Vector3 upAxis = GravityProvider.GetUp(transform.position);
+            if (upAxis.sqrMagnitude < 0.0001f) upAxis = Vector3.up;
+            else upAxis.Normalize();
             float speed = velocity.magnitude;
-            float vertical = velocity.y;
+            float vertical = Vector3.Dot(velocity, upAxis);
+            float forward = Grid != null ? Vector3.Dot(velocity, transform.forward) : 0f;
 
-            string main = speed.ToString("0.0") + " m/s";
-            canvas.Text(canvas.Columns - 1, 0, main, rightAlign: true);
-            if (canvas.Columns >= main.Length + 8) canvas.Text(0, 0, "SPEED");
-
+            canvas.Text(0, 0, "SPD  " + speed.ToString("0.0") + " m/s");
             if (canvas.Rows > 1)
-                canvas.Text(0, 1, "VERT " + (vertical >= 0f ? "+" : "-") + Mathf.Abs(vertical).ToString("0.0") + " m/s");
+                canvas.Text(0, 1, "FWD  " + (forward >= 0f ? "+" : "-") + Mathf.Abs(forward).ToString("0.0") + " m/s");
+            if (canvas.Rows > 2)
+                canvas.Text(0, 2, "VERT " + (vertical >= 0f ? "+" : "-") + Mathf.Abs(vertical).ToString("0.0") + " m/s");
 
-            // Three bars - forward, up and the side total - all scaled against the strongest
-            // axis, so a loaded ship that climbs slowly shows it as a short UP bar rather
-            // than as a number the pilot has to compare in their head.
-            if (canvas.Rows > 2 && Grid != null)
+            // Short, capped thrust bars leave room for the direction labels and do not turn
+            // an otherwise compact flight page into three edge-to-edge stripes.
+            if (canvas.Rows > 3 && Grid != null)
             {
                 var (fwd, back, right, left, up, down) = Grid.GetThrustByDirection();
                 float thrustMax = Mathf.Max(1f, Mathf.Max(fwd + back, Mathf.Max(up + down, right + left)));
-
-                int row = 2;
-                DrawThrustBar(canvas, row, "FWD", fwd, thrustMax);
-                if (canvas.Rows > row + 1) DrawThrustBar(canvas, row + 1, "UP ", up, thrustMax);
-                if (canvas.Rows > row + 2) DrawThrustBar(canvas, row + 2, "SIDE", right + left, thrustMax);
+                int row = 3;
+                DrawThrustBar(canvas, row++, "FWD", fwd, thrustMax);
+                if (row < canvas.Rows) DrawThrustBar(canvas, row++, "UP", up, thrustMax);
+                if (row < canvas.Rows) DrawThrustBar(canvas, row, "SIDE", right + left, thrustMax);
             }
 
             return Finish(canvas);
@@ -395,9 +577,15 @@ namespace VoxelEngine.GridSystem
 
         private static void DrawThrustBar(ScreenCanvas canvas, int row, string label, float value, float max)
         {
-            canvas.Text(0, row, label);
-            int width = Mathf.Max(3, canvas.Columns - 5);
-            canvas.Bar(4, row, width, max > 0.001f ? value / max : 0f);
+            if (row < 0 || row >= canvas.Rows) return;
+            int barWidth = Mathf.Clamp(canvas.Columns / 3, 5, 14);
+            int barX = Mathf.Min(label.Length + 1, Mathf.Max(0, canvas.Columns - barWidth - 4));
+            canvas.TextClipped(0, row, label, barX);
+            canvas.Bar(barX, row, barWidth, max > 0.001f ? value / max : 0f);
+            int percentX = barX + barWidth + 1;
+            if (percentX < canvas.Columns)
+                canvas.TextClipped(percentX, row, (Mathf.Clamp01(value / Mathf.Max(1f, max)) * 100f).ToString("0") + "%",
+                    canvas.Columns - percentX);
         }
 
         // ── ENVIRONMENT ─────────────────────────────────────────────────────────
@@ -413,7 +601,6 @@ namespace VoxelEngine.GridSystem
             ClearPageIcons();
 
             Vector3 here = transform.position;
-
             GridRoom room = null;
             var pressureSystem = GridPressureSystem.For(Grid);
             if (pressureSystem != null) room = pressureSystem.RoomAtWorld(here);
@@ -421,45 +608,36 @@ namespace VoxelEngine.GridSystem
             float pressureAtm = room != null
                 ? room.PressureAtm
                 : PressureRules.SampleAmbient(here).PressureAtm;
-            bool sealedRoom = room != null;
             bool breathable = pressureAtm >= PressureRules.BreathablePressureAtm;
-
             float gravity = GravityProvider.GetGravity(here).magnitude;
             float temperature = room != null ? room.AirTemperatureC : ExteriorTemperatureC();
 
-            // One reading per row, label left and value against the right edge. Two columns
-            // looked tidier on paper and overlapped the moment a value grew a digit, which
-            // on a panel this size is most of the time.
             int row = 0;
-            TextRow(canvas, ref row, "ATM", pressureAtm.ToString("0.00") + " atm");
+            if (row < canvas.Rows)
+                canvas.Text(0, row++, "AIR  " + (breathable ? "BREATHABLE" : "NOT BREATHABLE")
+                    + (room != null ? " · SEALED" : " · AMBIENT"));
+
+            if (row < canvas.Rows)
+            {
+                TextRow(canvas, ref row, "PRESS", pressureAtm.ToString("0.00") + " atm");
+                int barWidth = Mathf.Min(12, Mathf.Max(0, canvas.Columns - 18));
+                if (barWidth >= 4 && row - 1 < canvas.Rows)
+                    canvas.Bar(Mathf.Min(18, canvas.Columns - barWidth), row - 1, barWidth,
+                        Mathf.Clamp01(pressureAtm / Mathf.Max(0.01f, PressureRules.NominalPressureAtm)));
+            }
             TextRow(canvas, ref row, "GRAV", gravity.ToString("0.00") + " m/s2");
             TextRow(canvas, ref row, "TEMP", temperature.ToString("0.0") + " C");
             TextRow(canvas, ref row, "ALT", AltitudeText());
-
-            // The two words that say whether a player can open the door, on any row spare.
-            if (row < canvas.Rows)
-            {
-                canvas.Text(0, row, sealedRoom ? "SEALED ROOM" : "AMBIENT AIR");
-                canvas.Text(canvas.Columns - 1, row, breathable ? "BREATHABLE" : "VACUUM", rightAlign: true);
-                row++;
-            }
-
-            if (row < canvas.Rows && canvas.Columns >= 12)
-            {
-                canvas.Text(0, row, "ATM ");
-                canvas.Bar(4, row, canvas.Columns - 4,
-                    Mathf.Clamp01(pressureAtm / Mathf.Max(0.01f, PressureRules.NominalPressureAtm)));
-            }
-
             return Finish(canvas);
         }
 
-        /// <summary>Label on the left, value against the right edge, next row down.</summary>
+        /// <summary>Label and value share a left-anchored row; names never drift to the far
+        /// edge when a number changes length.</summary>
         private static void TextRow(ScreenCanvas canvas, ref int row, string label, string value)
         {
             if (row >= canvas.Rows) return;
-            canvas.Text(0, row, label);
-            canvas.Text(canvas.Columns - 1, row, value, rightAlign: true);
+            string text = label + "  " + value;
+            canvas.TextClipped(0, row, text, canvas.Columns);
             row++;
         }
 
@@ -489,22 +667,19 @@ namespace VoxelEngine.GridSystem
         {
             var canvas = NewCanvas();
             ClearPageIcons();
+            _batteryFound.Clear();
 
-            int count = 0;
             float stored = 0f;
             float capacity = 0f;
-            var fills = new List<float>(32);
-
             foreach (var block in Grid.AllBlocks)
             {
                 if (block is not GridBattery battery) continue;
-                count++;
+                _batteryFound.Add(battery);
                 stored += Mathf.Max(0f, battery.storedWh);
                 capacity += Mathf.Max(0f, battery.capacityWh);
-                fills.Add(Mathf.Clamp01(battery.Fill01));
             }
 
-            if (count == 0)
+            if (_batteryFound.Count == 0)
             {
                 canvas.Text(0, 0, "BATTERY STATUS");
                 if (canvas.Rows > 1) canvas.Text(0, 1, "NO BATTERIES ON THIS CONSTRUCT");
@@ -512,25 +687,35 @@ namespace VoxelEngine.GridSystem
             }
 
             float percent = capacity > 0f ? stored / capacity : 0f;
-
-            // Header: a cell, the count, and the bank total - [cell] x N | 60 MWh - because
-            // that is the line a player already knows how to read. On a panel too narrow for
-            // the picture and the count together, the numbers alone still tell the truth.
-            string countWord = "x" + count;
-            string total = FormatWattHours(stored);
-            bool roomForGlyph = canvas.Columns >= 6 + countWord.Length + 3 + total.Length;
-
-            if (roomForGlyph)
+            if (showBatteryPowerRates)
             {
-                canvas.BatterySegment(0, 0, 4, percent);
-                canvas.Text(5, 0, countWord);
-                canvas.Text(canvas.Columns - total.Length - 2, 0, "|");
-                canvas.Text(canvas.Columns - 1, 0, total, rightAlign: true);
+                canvas.TextClipped(0, 0, "BATTERIES x" + _batteryFound.Count + "  "
+                    + FormatWattHours(stored) + " / " + FormatWattHours(capacity), canvas.Columns);
+                int availableRows = Mathf.Max(0, canvas.Rows - 1);
+                bool hasOverflow = _batteryFound.Count > availableRows;
+                int shown = hasOverflow ? Mathf.Max(0, availableRows - 1) : availableRows;
+                for (int i = 0; i < shown; i++)
+                {
+                    var battery = _batteryFound[i];
+                    float current = battery.IsCharging ? battery.CurrentChargeWatts
+                        : battery.IsDischarging ? battery.CurrentDischargeWatts : 0f;
+                    float maximum = battery.IsCharging ? battery.maxChargeRate
+                        : battery.IsDischarging ? battery.maxDischargeRate
+                        : Mathf.Max(battery.maxChargeRate, battery.maxDischargeRate);
+                    string state = battery.IsCharging ? "CHG" : battery.IsDischarging ? "DIS" : "IDLE";
+                    string line = "B" + (i + 1).ToString("00") + " " + state + " "
+                        + FormatWatts(current) + " / " + FormatWatts(maximum);
+                    canvas.TextClipped(0, i + 1, line, canvas.Columns);
+                }
+                if (_batteryFound.Count > shown && canvas.Rows > 1)
+                    canvas.TextClipped(0, canvas.Rows - 1,
+                        "+" + (_batteryFound.Count - shown) + " BATTERIES", canvas.Columns);
+                return Finish(canvas);
             }
-            else
-            {
-                canvas.Text(canvas.Columns - 1, 0, countWord + "  " + total, rightAlign: true);
-            }
+
+            canvas.TextClipped(0, 0, "x" + _batteryFound.Count + "  " + FormatWattHours(stored)
+                + " / " + FormatWattHours(capacity) + "  " + (percent * 100f).ToString("0") + "%",
+                canvas.Columns);
 
             const int cellWidth = 5;
             const int batteryWidth = 4;
@@ -538,33 +723,24 @@ namespace VoxelEngine.GridSystem
             int rowsOfCells = Mathf.Max(0, Mathf.Min(3, (canvas.Rows - 1) / 4));
             int capacityCells = perRow * rowsOfCells;
 
-            for (int i = 0; i < fills.Count && i < capacityCells; i++)
+            for (int i = 0; i < _batteryFound.Count && i < capacityCells; i++)
             {
                 int row = i / perRow;
                 int column = i % perRow;
-                canvas.Battery(column * cellWidth, 1 + row * 4, batteryWidth, fills[i]);
+                canvas.Battery(column * cellWidth, 1 + row * 4, batteryWidth, _batteryFound[i].Fill01);
             }
 
-            if (rowsOfCells == 0)
+            if (rowsOfCells == 0 && canvas.Rows > 1)
             {
-                // A panel too short for even one row of cells: the bank as one bar and a
-                // count. Better a truthful summary than a page with a header and nothing.
-                if (canvas.Rows > 1)
-                {
-                    canvas.Text(0, 1, "BANK");
-                    canvas.Bar(5, 1, Mathf.Max(2, canvas.Columns - 12), percent);
-                    canvas.Text(canvas.Columns - 1, 1, (percent * 100f).ToString("0") + "%", rightAlign: true);
-                }
+                int width = Mathf.Min(16, Mathf.Max(2, canvas.Columns - 8));
+                canvas.Text(0, 1, "BANK");
+                canvas.Bar(Mathf.Min(5, canvas.Columns - width), 1, width, percent);
                 return Finish(canvas);
             }
 
-            if (fills.Count > capacityCells)
-            {
-                // Say how many were left off rather than silently showing a sample.
-                int lastRow = 1 + (rowsOfCells - 1) * 4 + 3;
-                canvas.Text(canvas.Columns - 1, lastRow,
-                    "+" + (fills.Count - capacityCells), rightAlign: true);
-            }
+            if (_batteryFound.Count > capacityCells && canvas.Rows > 1)
+                canvas.TextClipped(0, canvas.Rows - 1,
+                    "+" + (_batteryFound.Count - capacityCells) + " NOT SHOWN", canvas.Columns);
 
             return Finish(canvas);
         }
@@ -582,39 +758,50 @@ namespace VoxelEngine.GridSystem
             ClearPageIcons();
             SamplePowerHistory();
 
-            float gainNow = Last(_powerGainHistory);
-            float lossNow = Last(_powerLossHistory);
-            float gainPeak = Peak(_powerGainHistory, gainNow);
-            float lossPeak = Peak(_powerLossHistory, lossNow);
-            float scale = Mathf.Max(1f, Mathf.Max(gainPeak, lossPeak));
+            int panels = Mathf.Clamp(powerGraphPanels, 1, Mathf.Clamp(canvas.Rows / 3, 1, 3));
+            int baseHeight = canvas.Rows / panels;
+            int extraRows = canvas.Rows % panels;
+            int top = 0;
 
-            // One line of legend, values only - the plot carries the history.
-            string head = "GEN " + FormatWatts(gainNow) + "   USE " + FormatWatts(lossNow);
-            if (canvas.Columns >= head.Length + 12) canvas.Text(0, 0, "POWER");
-            canvas.Text(canvas.Columns - 1, 0, head, rightAlign: true);
-
-            int plotTop = 1;
-            int plotHeight = canvas.Rows - 3;
-
-            if (plotHeight < 3)
+            for (int panel = 0; panel < panels; panel++)
             {
-                // Too short for a chart: the two numbers are the honest answer.
-                if (canvas.Rows > 1) canvas.Text(0, 1, "NET " + SignedWatts(gainNow - lossNow));
-                if (canvas.Rows > 2) canvas.Text(0, 2, PowerStateWord());
-                return Finish(canvas);
+                int height = baseHeight + (panel < extraRows ? 1 : 0);
+                IReadOnlyList<float> first;
+                IReadOnlyList<float> second;
+                float firstNow, secondNow, scale;
+                string label;
+
+                if (panel == 0)
+                {
+                    first = _powerGainHistory; second = _powerLossHistory;
+                    firstNow = Last(first); secondNow = Last(second);
+                    scale = Mathf.Max(1f, Mathf.Max(Peak(first, firstNow), Peak(second, secondNow)));
+                    label = "GRID  GEN " + FormatWatts(firstNow) + "  USE " + FormatWatts(secondNow);
+                }
+                else if (panel == 1)
+                {
+                    first = _solarOutputHistory; second = _solarCapacityHistory;
+                    firstNow = Last(first); secondNow = Last(second);
+                    scale = Mathf.Max(1f, Peak(second, secondNow));
+                    label = "SOLAR  " + FormatWatts(firstNow) + " / " + FormatWatts(secondNow);
+                }
+                else
+                {
+                    first = _batteryChargeHistory; second = _batteryDischargeHistory;
+                    firstNow = Last(first); secondNow = Last(second);
+                    scale = Mathf.Max(1f, Mathf.Max(Peak(first, firstNow), Peak(second, secondNow)));
+                    label = "BATTERY  CHG " + FormatWatts(firstNow) + "  DIS " + FormatWatts(secondNow);
+                }
+
+                canvas.TextClipped(0, top, label, canvas.Columns);
+                int plotHeight = height - 1;
+                if (plotHeight >= 2 && canvas.Columns >= 4)
+                {
+                    canvas.Plot(0, top + 1, canvas.Columns, plotHeight, first, scale, '\u2588');
+                    canvas.Plot(0, top + 1, canvas.Columns, plotHeight, second, scale, '\u2592');
+                }
+                top += height;
             }
-
-            int plotLeft = 1;
-            int plotWidth = Mathf.Max(2, canvas.Columns - 2);
-            canvas.Box(0, plotTop, canvas.Columns, plotHeight);
-
-            canvas.Plot(plotLeft, plotTop + 1, plotWidth, plotHeight - 2, _powerGainHistory, scale, '\u2588');
-            canvas.Plot(plotLeft, plotTop + 1, plotWidth, plotHeight - 2, _powerLossHistory, scale, '\u2592');
-
-            // Axis labels outside the frame: what the scale is, and where "now" is.
-            int axisRow = canvas.Rows - 1;
-            canvas.Text(0, axisRow, "PEAK " + FormatWatts(scale));
-            canvas.Text(canvas.Columns - 1, axisRow, "3m \u2500\u2500 now", rightAlign: true);
 
             return Finish(canvas);
         }
@@ -625,8 +812,27 @@ namespace VoxelEngine.GridSystem
                 && Time.unscaledTime - _powerSampledAt < PowerSampleSeconds) return;
             _powerSampledAt = Time.unscaledTime;
 
+            float solar = 0f, solarCapacity = 0f, batteryCharge = 0f, batteryDischarge = 0f;
+            foreach (var block in Grid.AllBlocks)
+            {
+                if (block is GridSolarPanel panel)
+                {
+                    solar += Mathf.Max(0f, panel.CurrentOutput);
+                    solarCapacity += Mathf.Max(0f, panel.maxOutput);
+                }
+                else if (block is GridBattery battery)
+                {
+                    batteryCharge += Mathf.Max(0f, battery.CurrentChargeWatts);
+                    batteryDischarge += Mathf.Max(0f, battery.CurrentDischargeWatts);
+                }
+            }
+
             Push(_powerGainHistory, Mathf.Max(0f, Grid.PowerGenerated));
             Push(_powerLossHistory, Mathf.Max(0f, Grid.PowerConsumed));
+            Push(_solarOutputHistory, solar);
+            Push(_solarCapacityHistory, solarCapacity);
+            Push(_batteryChargeHistory, batteryCharge);
+            Push(_batteryDischargeHistory, batteryDischarge);
 
             static void Push(List<float> list, float value)
             {
@@ -635,10 +841,10 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private static float Last(List<float> values)
-            => values.Count > 0 ? values[values.Count - 1] : 0f;
+        private static float Last(IReadOnlyList<float> values)
+            => values != null && values.Count > 0 ? values[values.Count - 1] : 0f;
 
-        private static float Peak(List<float> values, float atLeast)
+        private static float Peak(IReadOnlyList<float> values, float atLeast)
         {
             float peak = atLeast;
             for (int i = 0; i < values.Count; i++) if (values[i] > peak) peak = values[i];
@@ -657,42 +863,54 @@ namespace VoxelEngine.GridSystem
         private string BuildManifestPage()
         {
             var canvas = NewCanvas();
-            int entries = CollectGridCargo(_ => true, out int usedSlots, out int capacitySlots, out float totalKg);
+            var selectedContainer = SingleSelectedCargoContainer();
+            int entries = CollectGridCargo(_ => true, out int usedSlots, out int capacitySlots,
+                out float totalKg, selectedContainer);
             float fill = capacitySlots > 0 ? Mathf.Clamp01(usedSlots / (float)capacitySlots) : 0f;
+            string title = !string.IsNullOrWhiteSpace(manifestTitle) ? manifestTitle.Trim()
+                : selectedContainer != null ? selectedContainer.SourceName : GridEntityName() + " MANIFEST";
 
             if (entries == 0)
             {
                 ClearPageIcons();
-                canvas.Text(0, 0, "MANIFEST");
+                canvas.TextClipped(0, 0, title.ToUpperInvariant(), canvas.Columns);
                 if (canvas.Rows > 1) canvas.Text(0, 1, "HOLD EMPTY");
                 return Finish(canvas);
             }
 
-            // Header: how full, and with how much.
-            string total = FormatMass(totalKg);
-            if (canvas.Columns >= 8 + total.Length + 2) canvas.Text(0, 0, "MANIFEST");
-            canvas.Text(canvas.Columns - 1, 0, total, rightAlign: true);
-            if (canvas.Rows > 1)
-                canvas.Bar(0, 1, canvas.Columns, fill);
+            canvas.TextClipped(0, 0, title.ToUpperInvariant() + "  " + FormatMass(totalKg), canvas.Columns);
+            if (canvas.Rows > 1) canvas.Bar(0, 1, Mathf.Min(16, canvas.Columns), fill);
 
-            int startRow = 2;
-            int rowsLeft = Mathf.Max(0, canvas.Rows - startRow);
-            int shown = Mathf.Min(Mathf.Min(HeaviestItemCount, entries), rowsLeft);
-
-            for (int i = 0; i < shown; i++)
+            _manifestCategories.Clear();
+            for (int i = 0; i < entries; i++)
             {
-                var entry = s_massScratch[i];
-                if (entry.item == null) continue;
-
-                int row = startRow + i;
-                // Picture in the two cells on the left, name after it, mass on the edge.
-                canvas.Icon(0, row, 2, 1, entry.item);
-                canvas.Text(2, row, " ");
-                canvas.TextClipped(3, row, entry.item.displayName,
-                    Mathf.Max(4, canvas.Columns - 3 - 10));
-                canvas.Text(canvas.Columns - 1, row, FormatMass(entry.massKg), rightAlign: true);
+                string category = ManifestCategory(s_massScratch[i].item);
+                if (!_manifestCategories.Contains(category)) _manifestCategories.Add(category);
             }
 
+            int startRow = 2;
+            int rowCursor = startRow;
+            int shown = 0;
+            int maxEntries = Mathf.Min(HeaviestItemCount, entries);
+            for (int categoryIndex = 0; categoryIndex < _manifestCategories.Count
+                 && shown < maxEntries && rowCursor < canvas.Rows - 1; categoryIndex++)
+            {
+                string category = _manifestCategories[categoryIndex];
+                canvas.TextClipped(0, rowCursor++, category, canvas.Columns);
+                for (int i = 0; i < entries && shown < maxEntries && rowCursor < canvas.Rows - 1; i++)
+                {
+                    var entry = s_massScratch[i];
+                    if (entry.item == null || ManifestCategory(entry.item) != category) continue;
+                    string line = entry.item.displayName + "  x" + FormatCount(entry.count)
+                        + "  " + FormatMass(entry.massKg);
+                    canvas.TextClipped(1, rowCursor++, line, Mathf.Max(1, canvas.Columns - 1));
+                    shown++;
+                }
+            }
+
+            int notShown = Mathf.Max(0, entries - shown);
+            if (notShown > 0 && rowCursor < canvas.Rows)
+                canvas.TextClipped(0, rowCursor, "+" + notShown + " ITEMS", canvas.Columns);
             return Finish(canvas);
         }
 
@@ -710,9 +928,8 @@ namespace VoxelEngine.GridSystem
             float fill = capacitySlots > 0 ? Mathf.Clamp01(usedSlots / (float)capacitySlots) : 0f;
 
             string percentWord = (fill * 100f).ToString("0") + "%";
-            if (canvas.Columns >= 5 + percentWord.Length + 2) canvas.Text(0, 0, "CARGO");
-            canvas.Text(canvas.Columns - 1, 0, percentWord, rightAlign: true);
-            if (canvas.Rows > 1) canvas.Bar(0, 1, canvas.Columns, fill);
+            canvas.TextClipped(0, 0, "CARGO  " + percentWord + "  " + FormatMass(totalKg), canvas.Columns);
+            if (canvas.Rows > 1) canvas.Bar(0, 1, Mathf.Min(16, canvas.Columns), fill);
 
             if (entries == 0)
             {
@@ -732,11 +949,11 @@ namespace VoxelEngine.GridSystem
 
                 int row = startRow + i;
                 canvas.Icon(0, row, 2, 1, entry.item);
-                canvas.TextClipped(3, row, entry.item.displayName, Mathf.Max(4, canvas.Columns - 13));
-                canvas.Text(canvas.Columns - 1, row, FormatMass(entry.massKg), rightAlign: true);
+                string line = entry.item.displayName + "  " + FormatMass(entry.massKg);
+                canvas.TextClipped(3, row, line, Mathf.Max(1, canvas.Columns - 3));
             }
 
-            canvas.Text(0, canvas.Rows - 1, FormatMass(totalKg) + " on board");
+            canvas.TextClipped(0, canvas.Rows - 1, "ON BOARD  " + FormatMass(totalKg), canvas.Columns);
             return Finish(canvas);
         }
 
@@ -769,7 +986,10 @@ namespace VoxelEngine.GridSystem
 
                 canvas.TextClipped(0, row, name, nameWidth);
                 canvas.Bar(nameWidth, row, barWidth, fill);
-                canvas.Text(canvas.Columns - 1, row, (fill * 100f).ToString("0") + "%", rightAlign: true);
+                int percentX = nameWidth + barWidth + 1;
+                if (percentX < canvas.Columns)
+                    canvas.TextClipped(percentX, row, (fill * 100f).ToString("0") + "%",
+                        canvas.Columns - percentX);
                 written++;
             }
 
@@ -796,65 +1016,283 @@ namespace VoxelEngine.GridSystem
 
             if (_farmFound.Count == 0)
             {
-                canvas.Text(0, 0, "FARM");
-                if (canvas.Rows > 1)
-                    canvas.Text(0, 1, "NO BEDS WITHIN " + FarmScanRadiusMetres.ToString("0") + " m");
-                if (canvas.Rows > 2)
-                    canvas.Text(0, 2, "SOIL, PLANTERS AND TREE BEDS");
+                canvas.Text(0, 0, "FARMS");
+                if (canvas.Rows > 1) canvas.TextClipped(0, 1, "NO BEDS SELECTED", canvas.Columns);
+                if (canvas.Rows > 2) canvas.TextClipped(0, 2, "AVAILABLE: SOIL / PLANTER / TREE", canvas.Columns);
                 return Finish(canvas);
             }
 
-            int ready = 0, thirsty = 0, empty = 0;
+            int ready = 0, dry = 0, oxygenShort = 0, empty = 0;
             for (int i = 0; i < _farmFound.Count; i++)
             {
                 var bed = _farmFound[i].bed;
                 if (bed == null) continue;
                 if (bed.IsEmpty) empty++;
                 else if (bed.IsReady) ready++;
-                else if (bed.NeedsWater) thirsty++;
+                if (!bed.IsEmpty && bed.NeedsWater) dry++;
+                if (!bed.IsEmpty && bed.NeedsOxygen) oxygenShort++;
             }
 
-            // Two numbers, in the order a player acts on them: what can be picked now,
-            // and what needs carrying water to.
-            string tail = ready + " READY";
-            if (canvas.Columns > tail.Length + 10) tail = thirsty + " DRY   " + tail;
-            canvas.Text(canvas.Columns - 1, 0, tail, rightAlign: true);
+            string summary = "FARMS x" + _farmFound.Count + "  READY " + ready
+                + "  DRY " + dry + "  NO O2 " + oxygenShort + "  EMPTY " + empty;
+            canvas.TextClipped(0, 0, summary, canvas.Columns);
 
-            string head = "FARM x" + _farmFound.Count;
-            if (canvas.Columns >= head.Length + tail.Length + 2) canvas.Text(0, 0, head);
-
-            int rows = Mathf.Max(0, canvas.Rows - 1);
-            // The overflow count needs a row of its own, so one bed fewer is listed when
-            // there are more beds than rows.
-            bool more = _farmFound.Count > rows;
-            int shown = Mathf.Min(_farmFound.Count, more ? Mathf.Max(0, rows - 1) : rows);
+            int dataRows = Mathf.Max(0, canvas.Rows - 1);
+            bool more = _farmFound.Count > dataRows;
+            int shown = Mathf.Min(_farmFound.Count, more ? Mathf.Max(0, dataRows - 1) : dataRows);
             for (int i = 0; i < shown; i++)
             {
                 var entry = _farmFound[i];
                 var bed = entry.bed;
                 if (bed == null) continue;
 
-                int row = 1 + i;
-                string state = bed.IsEmpty ? "EMPTY" : bed.IsReady ? "READY"
-                    : bed.NeedsWater ? "DRY"
-                    : (bed.Growth01 * 100f).ToString("0") + "%";
-
-                // Names are clipped against the state, never the other way round: the
-                // state is four characters and the crop name is whatever the pack says.
-                int nameWidth = Mathf.Max(3, canvas.Columns - state.Length - 1);
-                string name = bed.IsEmpty ? bed.BedName : bed.CropName;
-                if (string.IsNullOrEmpty(name)) name = bed.BedName;
-
-                canvas.TextClipped(0, row, name, nameWidth);
-                canvas.Text(canvas.Columns - 1, row, state, rightAlign: true);
+                string crop = bed.IsEmpty ? "EMPTY" : bed.CropName;
+                if (string.IsNullOrEmpty(crop)) crop = bed.BedName;
+                string status = FarmBedState(bed, detailed: false);
+                string orientation = entry.vertical ? "VERT" : "FLAT";
+                string line = orientation + "  " + bed.BedName + "  " + crop + "  " + status;
+                canvas.TextClipped(0, i + 1, line, canvas.Columns);
             }
 
-            // Anything that did not fit is counted, not silently dropped.
             if (more && canvas.Rows > 1)
-                canvas.Text(canvas.Columns - 1, canvas.Rows - 1,
-                    "+" + (_farmFound.Count - shown), rightAlign: true);
-
+                canvas.TextClipped(0, canvas.Rows - 1,
+                    "+" + (_farmFound.Count - shown) + " MORE PLOTS", canvas.Columns);
             return Finish(canvas);
+        }
+
+        private string BuildFarmPlotsPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            RefreshFarmScan();
+
+            if (_farmFound.Count == 0)
+            {
+                canvas.Text(0, 0, "FARMS · PLOT STATUS");
+                if (canvas.Rows > 1) canvas.TextClipped(0, 1, "NO BEDS SELECTED", canvas.Columns);
+                if (canvas.Rows > 2) canvas.TextClipped(0, 2, "AVAILABLE: SOIL / PLANTER / TREE", canvas.Columns);
+                return Finish(canvas);
+            }
+
+            int ready = 0, dry = 0, oxygenShort = 0;
+            for (int i = 0; i < _farmFound.Count; i++)
+            {
+                var bed = _farmFound[i].bed;
+                if (bed == null || bed.IsEmpty) continue;
+                if (bed.IsReady) ready++;
+                if (bed.NeedsWater) dry++;
+                if (bed.NeedsOxygen) oxygenShort++;
+            }
+
+            canvas.TextClipped(0, 0, "FARMS · PLOT STATUS x" + _farmFound.Count, canvas.Columns);
+            if (canvas.Rows > 1)
+                canvas.TextClipped(0, 1, "READY " + ready + "  DRY " + dry + "  NO O2 " + oxygenShort, canvas.Columns);
+
+            int dataStart = 2;
+            int row = dataStart;
+            bool overflow = _farmFound.Count > Mathf.Max(0, canvas.Rows - dataStart);
+            int rowLimit = overflow ? canvas.Rows - 1 : canvas.Rows;
+            for (int i = 0; i < _farmFound.Count && row < rowLimit; i++)
+            {
+                var entry = _farmFound[i];
+                var bed = entry.bed;
+                if (bed == null) continue;
+
+                string state = FarmBedState(bed, detailed: true);
+
+                string product = FarmProductName(bed);
+                string line = (entry.vertical ? "VERT" : "FLAT") + "  " + bed.BedName + "  "
+                    + (bed.IsEmpty ? "EMPTY" : bed.CropName) + "  " + state;
+                if (!string.IsNullOrEmpty(product) && !bed.IsEmpty)
+                    line += "  -> " + product;
+
+                var iconItem = FarmProductItem(bed);
+                if (iconItem != null) canvas.Icon(0, row, 2, 1, iconItem);
+                canvas.TextClipped(iconItem != null ? 3 : 0, row, line,
+                    canvas.Columns - (iconItem != null ? 3 : 0));
+                row++;
+            }
+
+            if (row < canvas.Rows && rowLimit < canvas.Rows)
+                canvas.TextClipped(0, canvas.Rows - 1,
+                    "+" + (_farmFound.Count - (row - dataStart)) + " MORE PLOTS", canvas.Columns);
+            return Finish(canvas);
+        }
+
+        private static string FarmBedState(IFarmBed bed, bool detailed)
+        {
+            if (bed == null) return "OFFLINE";
+            if (bed.IsEmpty) return "EMPTY";
+            if (bed.IsReady) return detailed ? "READY TO PICK" : "READY";
+            if (bed.NeedsOxygen && bed.NeedsWater) return "NO O2 + DRY";
+            if (bed.NeedsOxygen) return "NO O2";
+            if (bed.NeedsWater) return "DRY";
+            string growth = (bed.Growth01 * 100f).ToString("0") + "%";
+            return detailed ? "GROW " + growth : growth;
+        }
+
+        private static ItemDefinition FarmProductItem(IFarmBed bed)
+        {
+            if (bed is FarmPlot soil && soil.plantedCrop != null) return soil.plantedCrop.harvestItem;
+            if (bed is CropPlanter planter && planter.plantedCrop != null) return planter.plantedCrop.harvestItem;
+            if (bed is TreeFarmPlot tree) return tree.woodLogItem;
+            return null;
+        }
+
+        private static string FarmProductName(IFarmBed bed)
+        {
+            var product = FarmProductItem(bed);
+            return product != null ? product.displayName : string.Empty;
+        }
+
+        private string BuildAutoRunPilotPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            var pilot = FindAutoRunPilot();
+            if (pilot == null)
+            {
+                canvas.TextClipped(0, 0, "AUTO-RUN PILOT", canvas.Columns);
+                if (canvas.Rows > 1) canvas.TextClipped(0, 1, "NO PILOT ON THIS CONSTRUCT", canvas.Columns);
+                return Finish(canvas);
+            }
+
+            var book = Grid.GetComponent<VoxelEngine.Navigation.RouteBook>();
+            int row = 0;
+            WritePageLine(canvas, ref row, "AUTO-RUN PILOT");
+            WritePageLine(canvas, ref row, "STATUS  " + AutoRunStatus());
+            WritePageLine(canvas, ref row, "CONTROL  " + FormatWatts(pilot.PowerDraw));
+            if (book == null)
+            {
+                WritePageLine(canvas, ref row, "NO ROUTE BOOK");
+                return Finish(canvas);
+            }
+
+            if (book.IsRecording)
+            {
+                WritePageLine(canvas, ref row, "RECORDING  "
+                    + (book.Draft != null ? book.Draft.routeName : "NEW ROUTE"));
+                WritePageLine(canvas, ref row, "POINTS  " + (book.Draft != null ? book.Draft.waypoints.Count : 0));
+                return Finish(canvas);
+            }
+
+            var route = book.Find(pilot.selectedRouteName);
+            if (route == null && book.Count > 0) route = book.Routes[0];
+            if (route == null)
+            {
+                WritePageLine(canvas, ref row, "NO SAVED ROUTES");
+                return Finish(canvas);
+            }
+
+            WritePageLine(canvas, ref row, "ROUTE  " + route.routeName);
+            WritePageLine(canvas, ref row, "MODE  " + RouteModeLabel(route.travelMode)
+                + "  ·  POINTS " + route.waypoints.Count);
+            var plan = pilot.Plan;
+            if (plan.IsValid)
+            {
+                WritePageLine(canvas, ref row, "DIST  " + plan.TotalDistanceKm.ToString("0") + " km"
+                    + "  ·  ETA " + VoxelEngine.Navigation.GridRouteRecorder.FormatDuration(plan.TotalSeconds));
+                WritePageLine(canvas, ref row, "ENERGY  " + FormatWattHours(plan.TotalWattHours)
+                    + "  ·  MARGIN " + (plan.ReserveMargin01 * 100f).ToString("0") + "%");
+                WritePageLine(canvas, ref row, plan.HasWarnings
+                    ? "WARNINGS  " + plan.Warnings.Count : "ROUTE CLEAR");
+            }
+            else WritePageLine(canvas, ref row, "ROUTE CANNOT BE COSTED");
+            return Finish(canvas);
+        }
+
+        private string BuildRouteRecorderPage()
+        {
+            var canvas = NewCanvas();
+            ClearPageIcons();
+            var recorder = FindRouteRecorder();
+            if (recorder == null)
+            {
+                canvas.TextClipped(0, 0, "ROUTE RECORDER", canvas.Columns);
+                if (canvas.Rows > 1) canvas.TextClipped(0, 1, "NO RECORDER ON THIS CONSTRUCT", canvas.Columns);
+                return Finish(canvas);
+            }
+
+            var book = Grid.GetComponent<VoxelEngine.Navigation.RouteBook>();
+            int row = 0;
+            WritePageLine(canvas, ref row, "ROUTE RECORDER");
+            if (book == null)
+            {
+                WritePageLine(canvas, ref row, "NO ROUTE BOOK");
+                return Finish(canvas);
+            }
+
+            WritePageLine(canvas, ref row, book.IsRecording ? "STATE  RECORDING" : "STATE  READY");
+            WritePageLine(canvas, ref row, "SAVED ROUTES  " + book.Count);
+            if (book.IsRecording && book.Draft != null)
+            {
+                WritePageLine(canvas, ref row, "DRAFT  " + book.Draft.routeName);
+                WritePageLine(canvas, ref row, "MODE  " + RouteModeLabel(book.Draft.travelMode)
+                    + "  ·  POINTS " + book.Draft.waypoints.Count);
+                return Finish(canvas);
+            }
+
+            var route = book.Find(recorder.selectedRouteName);
+            if (route == null && book.Count > 0) route = book.Routes[0];
+            if (route == null)
+            {
+                WritePageLine(canvas, ref row, "NO SAVED ROUTES");
+                return Finish(canvas);
+            }
+
+            WritePageLine(canvas, ref row, "SELECTED  " + route.routeName);
+            WritePageLine(canvas, ref row, "MODE  " + RouteModeLabel(route.travelMode)
+                + "  ·  POINTS " + route.waypoints.Count);
+            var plan = recorder.Plan;
+            if (plan.IsValid)
+            {
+                WritePageLine(canvas, ref row, "DIST  " + plan.TotalDistanceKm.ToString("0") + " km"
+                    + "  ·  ETA " + VoxelEngine.Navigation.GridRouteRecorder.FormatDuration(plan.TotalSeconds));
+                WritePageLine(canvas, ref row, "ENERGY  " + FormatWattHours(plan.TotalWattHours)
+                    + "  ·  MARGIN " + (plan.ReserveMargin01 * 100f).ToString("0") + "%");
+            }
+            else WritePageLine(canvas, ref row, "PLAN  CANNOT BE COSTED");
+            return Finish(canvas);
+        }
+
+        private IndustrialWorld.Navigation.AutoRunPilot FindAutoRunPilot()
+        {
+            if (Grid == null) return null;
+            foreach (var block in Grid.AllBlocks)
+                if (block is IndustrialWorld.Navigation.AutoRunPilot pilot) return pilot;
+            return null;
+        }
+
+        private VoxelEngine.Navigation.GridRouteRecorder FindRouteRecorder()
+        {
+            if (Grid == null) return null;
+            foreach (var block in Grid.AllBlocks)
+                if (block is VoxelEngine.Navigation.GridRouteRecorder recorder) return recorder;
+            return null;
+        }
+
+        private string AutoRunStatus()
+        {
+            if (Grid.WheelAutopilot != null && Grid.WheelAutopilot.IsDriving)
+                return Grid.WheelAutopilot.Status;
+
+            var local = Grid.GetComponent<IndustrialWorld.Navigation.LocalRoutePilot>();
+            if (local != null && local.IsActive) return local.Status;
+
+            var legacy = Grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+            if (legacy != null && legacy.IsArmed) return legacy.StatusLine;
+
+            var session = Grid.GetComponent<IndustrialWorld.Navigation.RouteRunSession>();
+            return session != null ? session.Status : "STANDBY";
+        }
+
+        private static string RouteModeLabel(VoxelEngine.Navigation.RouteTravelMode mode)
+            => mode.ToString().ToUpperInvariant().Replace("NETWORK", " NETWORK");
+
+        private static void WritePageLine(ScreenCanvas canvas, ref int row, string text)
+        {
+            if (row >= canvas.Rows) return;
+            canvas.TextClipped(0, row++, text, canvas.Columns);
         }
 
         private void RefreshFarmScan()
@@ -891,7 +1329,14 @@ namespace VoxelEngine.GridSystem
             float distanceSq = (position - here).sqrMagnitude;
             if (distanceSq > radiusSq) return;
 
-            _farmFound.Add(new FarmBedEntry { bed = bed, position = position, distanceSq = distanceSq });
+            Vector3 gravityUp = GravityProvider.GetUp(position);
+            if (gravityUp.sqrMagnitude < 0.0001f) gravityUp = Vector3.up;
+            else gravityUp.Normalize();
+            bool vertical = Mathf.Abs(Vector3.Dot(behaviour.transform.up, gravityUp)) < 0.5f;
+            _farmFound.Add(new FarmBedEntry
+            {
+                bed = bed, position = position, distanceSq = distanceSq, vertical = vertical,
+            });
         }
 
         // ── MINING ──────────────────────────────────────────────────────────────
@@ -949,11 +1394,13 @@ namespace VoxelEngine.GridSystem
         {
             if (width < 6 || height < 2) return;
 
-            canvas.Text(left + width / 2, top, caption, rightAlign: true);
+            int captionX = left + Mathf.Max(0, (width - caption.Length) / 2);
+            canvas.Text(captionX, top, caption);
 
             string number = (Mathf.Clamp01(value01) * 100f).ToString("0.00") + "%";
             int numberRow = height >= 3 ? top + 1 + (height - 3) / 2 : top + 1;
-            canvas.Text(left + width / 2, numberRow, number, rightAlign: true);
+            int numberX = left + Mathf.Max(0, (width - number.Length) / 2);
+            canvas.Text(numberX, numberRow, number);
 
             if (height >= 3)
                 canvas.Bar(left, top + height - 1, width, value01);
@@ -983,9 +1430,7 @@ namespace VoxelEngine.GridSystem
             // Header is one compact line: how full, how heavy.
             string fillWord = "HOLD " + (fill * 100f).ToString("0") + "%";
             string massWord = FormatMass(totalKg);
-            if (canvas.Columns >= fillWord.Length + massWord.Length + 2)
-                canvas.Text(0, 0, fillWord);
-            canvas.Text(canvas.Columns - 1, 0, massWord, rightAlign: true);
+            canvas.TextClipped(0, 0, fillWord + "  " + massWord, canvas.Columns);
 
             // Each cell: picture on the left of two rows, count on the second row.
             const int cellWidth = 8;
@@ -1019,29 +1464,20 @@ namespace VoxelEngine.GridSystem
         private string BuildStorageMonitorPage()
         {
             var canvas = NewCanvas();
+            var selectedContainer = SingleSelectedCargoContainer();
             int entries = CollectGridCargo(_ => true,
-                out int usedSlots, out int capacitySlots, out float totalKg);
+                out int usedSlots, out int capacitySlots, out float totalKg, selectedContainer);
             float fill = capacitySlots > 0 ? Mathf.Clamp01(usedSlots / (float)capacitySlots) : 0f;
 
-            // Name of the monitor: the first linked container if one is linked, otherwise
-            // the construct. It sits bottom-right, where a real monitor puts its label.
-            string owner = GridEntityName();
-            var providers = ResolveAllProviders();
-            for (int i = 0; i < providers.Count; i++)
-            {
-                if (providers[i] is GridCargoContainer cargo && !string.IsNullOrEmpty(cargo.SourceName))
-                {
-                    owner = cargo.SourceName;
-                    break;
-                }
-            }
+            string owner = selectedContainer != null && !string.IsNullOrEmpty(selectedContainer.SourceName)
+                ? selectedContainer.SourceName : GridEntityName();
 
             if (entries == 0)
             {
                 ClearPageIcons();
-                canvas.Text(0, 0, "STORAGE MONITOR");
+                canvas.TextClipped(0, 0, "STORAGE MONITOR", canvas.Columns);
                 if (canvas.Rows > 1) canvas.Text(0, 1, "EMPTY");
-                canvas.Text(canvas.Columns - 1, canvas.Rows - 1, Trim(owner, canvas.Columns), rightAlign: true);
+                canvas.TextClipped(0, canvas.Rows - 1, Trim(owner, canvas.Columns), canvas.Columns);
                 return Finish(canvas);
             }
 
@@ -1064,12 +1500,10 @@ namespace VoxelEngine.GridSystem
                 canvas.Text(column + (cellWidth - 2) / 2, row + 2, FormatCount(entry.count));
             }
 
-            // Footer: how full on the left, whose monitor this is on the right.
             int footer = canvas.Rows - 1;
-            string left = (fill * 100f).ToString("0") + "%";
-            string label = Trim(owner, Mathf.Max(4, canvas.Columns - left.Length - 2));
-            canvas.Text(0, footer, left);
-            canvas.Text(canvas.Columns - 1, footer, label, rightAlign: true);
+            string footerLine = Trim(owner, Mathf.Max(4, canvas.Columns / 2)) + "  "
+                + (fill * 100f).ToString("0") + "%  " + FormatMass(totalKg);
+            canvas.TextClipped(0, footer, footerLine, canvas.Columns);
 
             return Finish(canvas);
         }
@@ -1132,13 +1566,12 @@ namespace VoxelEngine.GridSystem
 
             canvas.Box(0, 0, canvas.Columns, canvas.Rows);
 
-            // Header inside the frame: body on the left, altitude on the right.
-            canvas.TextClipped(1, 0, body.DisplayName.ToUpperInvariant(), canvas.Columns - 14);
-            canvas.Text(canvas.Columns - 2, 0, FormatDistance(altitude), rightAlign: true);
+            // Keep the frame intact; the heading and footer sit on its inside rows.
+            canvas.TextClipped(1, 1, body.DisplayName.ToUpperInvariant() + "  ALT "
+                + FormatDistance(altitude), canvas.Columns - 2);
 
-            // The disc occupies the frame between the header and footer rows.
-            int discTop = 1;
-            int discHeight = canvas.Rows - 2;
+            int discTop = 2;
+            int discHeight = canvas.Rows - 4;
             int discWidth = canvas.Columns - 2;
             int rows = Mathf.Max(2, discHeight);
             int columns = Mathf.Max(4, Mathf.Min(discWidth, rows * 2));
@@ -1173,15 +1606,18 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            // The body's name sits on the disc, low and centred, like a chart label.
+            // The body's name sits on the disc, centred by its left edge rather than
+            // right-aligned, so it remains readable when the label length changes.
             string name = Trim(body.DisplayName.ToUpperInvariant(), Mathf.Max(4, columns - 4));
-            if (rows >= 4)
-                canvas.Text(offsetX + columns / 2, discTop + rows / 2 + 1, name, rightAlign: true);
+            if (rows >= 3)
+            {
+                int nameX = offsetX + Mathf.Max(0, (columns - name.Length) / 2);
+                canvas.Text(nameX, discTop + rows / 2, name);
+            }
 
-            // Footer: where we are, in the two numbers that actually describe it.
-            string footer = "LAT " + latitude.ToString("0") + "\u00b0  LON " + longitude.ToString("0") + "\u00b0";
-            canvas.Text(1, canvas.Rows - 1, footer);
-            canvas.Text(canvas.Columns - 2, canvas.Rows - 1, "R " + FormatDistance(radius), rightAlign: true);
+            string footer = "LAT " + latitude.ToString("0") + "\u00b0  LON "
+                + longitude.ToString("0") + "\u00b0  R " + FormatDistance(radius);
+            canvas.TextClipped(1, canvas.Rows - 2, footer, canvas.Columns - 2);
 
             return Finish(canvas);
         }
@@ -1195,13 +1631,46 @@ namespace VoxelEngine.GridSystem
 
         // ── Shared snapshot helpers ─────────────────────────────────────────────
 
+        private GridCargoContainer SingleSelectedCargoContainer()
+        {
+            GridCargoContainer selected = null;
+            var providers = ResolveAllProviders();
+            for (int i = 0; i < providers.Count; i++)
+            {
+                if (providers[i] is not GridCargoContainer cargo) continue;
+                if (selected != null) return null;
+                selected = cargo;
+            }
+            return selected;
+        }
+
+        private static string ManifestCategory(ItemDefinition item)
+        {
+            if (item is ResourceItem resource)
+            {
+                switch (resource.subcategory.ToString().ToUpperInvariant())
+                {
+                    case "RAW": return "RAW MATERIALS";
+                    case "INGOT": return "INGOTS";
+                    case "COMPONENT": return "COMPONENTS";
+                    case "FUEL": return "FUEL";
+                    case "MISC": return "MISC";
+                }
+            }
+
+            string category = item != null ? item.category : null;
+            return string.IsNullOrWhiteSpace(category) ? "OTHER" : category.Trim().ToUpperInvariant();
+        }
+
         /// <summary>
-        /// Aggregates every item held by every container on the construct into
-        /// <see cref="s_massScratch"/>, sorted heaviest first, and returns how many distinct
-        /// types there are (capped at the scratch length).
+        /// Aggregates every item held by each chosen container into <see cref="s_massScratch"/>,
+        /// sorted heaviest first, and returns the number of distinct types (capped at scratch
+        /// capacity). A single linked container scopes the monitor to that container; otherwise
+        /// the page shows the whole construct.
         /// </summary>
         private int CollectGridCargo(System.Func<ItemDefinition, bool> filter,
-            out int usedSlots, out int capacitySlots, out float totalKg)
+            out int usedSlots, out int capacitySlots, out float totalKg,
+            GridCargoContainer onlyContainer = null)
         {
             int found = 0;
             usedSlots = 0;
@@ -1210,7 +1679,8 @@ namespace VoxelEngine.GridSystem
 
             foreach (var block in Grid.AllBlocks)
             {
-                if (block is not GridCargoContainer cargo || cargo.container == null) continue;
+                if (block is not GridCargoContainer cargo || cargo.container == null
+                    || (onlyContainer != null && cargo != onlyContainer)) continue;
                 capacitySlots += cargo.container.Size;
                 for (int i = 0; i < cargo.container.Size; i++)
                 {

@@ -215,7 +215,7 @@ namespace VoxelEngine.Pressure
                 for (int d = 0; d < Neighbours.Length; d++)
                 {
                     if (room.Contains(cell + Neighbours[d])) continue;
-                    if (!_grid.Blocks.TryGetValue(cell + Neighbours[d], out var wall)) continue;
+                    if (!_grid.OccupiedCells.TryGetValue(cell + Neighbours[d], out var wall)) continue;
                     sum += thermal.TemperatureOf(wall);
                     count++;
                 }
@@ -490,7 +490,7 @@ namespace VoxelEngine.Pressure
             max = Vector3Int.zero;
             bool first = true;
 
-            foreach (var kv in _grid.Blocks)
+            foreach (var kv in _grid.OccupiedCells)
             {
                 var block = kv.Value;
                 if (block == null) continue;

@@ -30,6 +30,42 @@ namespace VoxelEngine.GridSystem
 
         public override float PowerDraw => Enabled ? idleWatts : 0f;
 
+        /// <summary>The authored cabin basis. Its local forward matches the windscreen,
+        /// unlike the grid prefab root which intentionally remains an item-placement frame.</summary>
+        public Transform FlightControlFrame
+        {
+            get
+            {
+                Transform cabin = transform.Find(CockpitShellBuilder.ShellRootName + "/" + CockpitShellBuilder.InteriorName);
+                return cabin != null ? cabin : transform;
+            }
+        }
+
+        private const float ArmoredCabHealthMultiplier = 1.5f;
+
+        /// <summary>The broad-glazed armored cab has more integrity than the low crawler.
+        /// Its durability is derived from the same authored item health, so Setup never
+        /// rewrites the existing block-health tuning.</summary>
+        public void ApplyShellDurability()
+        {
+            float itemHealth = SourceItem is GridBlockItem gridItem && gridItem.blockHP > 0f
+                ? gridItem.blockHP
+                : maxHP;
+            if (itemHealth <= 0f) return;
+
+            float targetHealth = shellStyle == CockpitShellBuilder.StyleCab
+                ? itemHealth * ArmoredCabHealthMultiplier
+                : itemHealth;
+            maxHP = targetHealth;
+            currentHP = Mathf.Clamp(currentHP, 0f, maxHP);
+        }
+
+        public override void OnPlaced()
+        {
+            ApplyShellDurability();
+            base.OnPlaced();
+        }
+
         public Player.PlayerController Pilot { get; private set; }
 
         public bool IsFlightOnline => Enabled && Grid != null && Grid.HasPower;
@@ -102,6 +138,8 @@ namespace VoxelEngine.GridSystem
             // Both shells ship inside the prefab; this picks the one the prefab (or a
             // designer) asked for. Nothing is generated - it only flips which hull is on.
             CockpitShellBuilder.ApplyShell(gameObject, shellStyle);
+            if (Application.isPlaying && GetComponent<GridCockpitMfd>() == null)
+                gameObject.AddComponent<GridCockpitMfd>();
             VoxelEngine.Networking.GridSync.SeatDenied += OnSeatDenied;
         }
 
@@ -120,6 +158,7 @@ namespace VoxelEngine.GridSystem
         {
             if (Pilot != null) Exit();
             else VoxelEngine.Networking.GridSync.ReleaseSeatIfHeld(this);
+
         }
 
         public override void OnRemoved()
@@ -146,7 +185,11 @@ namespace VoxelEngine.GridSystem
         {
             if (Pilot == null) return;
 
-            if (GameSettings.WasPressed(InputAction.ExitCockpit)) { Exit(); return; }
+            if (GameSettings.WasPressed(InputAction.ExitCockpit)
+                && !VoxelEngine.UI.UIState.IsBlocking
+                && !VoxelEngine.UI.UIState.TextInputActive
+                && !VoxelEngine.UI.UIState.PauseConsumedThisFrame)
+            { Exit(); return; }
 
             // Confirm wheel owns the cursor (Ctrl frees it for the drive slider).
             if (VoxelEngine.UI.ConfirmDialogHud.IsOpen)
@@ -156,7 +199,7 @@ namespace VoxelEngine.GridSystem
             }
 
             // While a full UI panel (terminal/inventory) is open, release control + cursor.
-            if (VoxelEngine.UI.UIState.IsBlocking || Grid == null)
+            if (VoxelEngine.UI.UIState.IsBlocking || VoxelEngine.UI.UIState.TextInputActive || Grid == null)
             {
                 Grid?.SetFlightInput(Vector3.zero, 0, 0, 0);
                 return;
@@ -488,8 +531,12 @@ namespace VoxelEngine.GridSystem
             float sens = 2.0f;
             _lookYaw   = Mathf.Clamp(_lookYaw   + mouseX * sens, -120f, 120f);
             _lookPitch = Mathf.Clamp(_lookPitch - mouseY * sens, -80f, 80f);
-            // Offset the camera relative to the cockpit's facing (player is parented to it).
-            pivot.localRotation = Quaternion.Euler(_lookPitch, _lookYaw, 0f);
+            // Apply look input in the seated camera's basis. Replacing the local rotation
+            // with a bare Euler angle discarded the SeatAnchor's 180-degree facing, so Alt
+            // pointed the pilot through the back of the cabin. Legacy cockpits keep their
+            // captured standing basis; generated shells keep their authored forward view.
+            Quaternion baseRotation = _hasSeatPose ? _seatPivotRotation : _defaultPivotLocalRotation;
+            pivot.localRotation = baseRotation * Quaternion.Euler(_lookPitch, _lookYaw, 0f);
             _freeLooking = true;
         }
 

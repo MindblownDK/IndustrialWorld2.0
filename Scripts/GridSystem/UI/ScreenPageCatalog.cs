@@ -148,10 +148,14 @@ namespace VoxelEngine.GridSystem
                 "The whole hold as a dense wall of item pictures and counts - what is aboard, at a glance.",
                 ScreenSize.Medium, "inventory grid items counts list hold contents stock"),
 
-            new(ScreenDataMode.Farm, "Farm",
+            new(ScreenDataMode.Farm, "Farms",
                 ScreenPageCategory.Production,
-                "Every bed near this screen - tilled soil, seed planters and sapling beds: what is planted, how far along, and whether it has water.",
-                ScreenSize.Medium, "farm crops plots planters saplings growth water harvest agriculture seeds"),
+                "A nearby farm summary for soil, seed planters and tree beds, including growth, water and greenhouse oxygen status.",
+                ScreenSize.Medium, "farm farms crops plots planters saplings growth water oxygen greenhouse harvest agriculture seeds"),
+            new(ScreenDataMode.FarmPlots, "Farm Plots",
+                ScreenPageCategory.Production,
+                "Per-plot growth and harvest status, water and oxygen needs, flat or vertical orientation, and the final crop-product icon.",
+                ScreenSize.Medium, "farm plot details vertical horizontal orientation crop product icon greenhouse water oxygen"),
 
             // ── Flight / work ─────────────────────────────────────────────────────
             new(ScreenDataMode.Mining, "Mining",
@@ -168,6 +172,14 @@ namespace VoxelEngine.GridSystem
                 ScreenPageCategory.Navigation,
                 "The body below as a disc, with a line grid and the construct's own position on it.",
                 ScreenSize.Medium, "planet map orbit latitude longitude position navigation globe"),
+            new(ScreenDataMode.AutoRunPilotInfo, "Auto-Run Pilot",
+                ScreenPageCategory.Navigation,
+                "A read-only status page for the active run, selected route, ETA, energy budget and reserve margin.",
+                ScreenSize.Medium, "auto run autopilot route pilot unattended status eta energy margin navigation"),
+            new(ScreenDataMode.RouteRecorderInfo, "Route Recorder",
+                ScreenPageCategory.Navigation,
+                "Recording state, saved-route count, selected route, waypoints and its current plan.",
+                ScreenSize.Medium, "route recorder recording saved routes waypoints plan distance eta navigation"),
 
             new(ScreenDataMode.Camera, "Camera",
                 ScreenPageCategory.Media,
@@ -269,7 +281,8 @@ namespace VoxelEngine.GridSystem
             // These read the construct or the world directly.
             ScreenDataMode.Power or ScreenDataMode.BatteryBank or ScreenDataMode.PowerGraph
                 or ScreenDataMode.Manifest or ScreenDataMode.Mining or ScreenDataMode.Environment
-                or ScreenDataMode.Farm or ScreenDataMode.Custom or ScreenDataMode.Camera
+                or ScreenDataMode.Farm or ScreenDataMode.FarmPlots or ScreenDataMode.AutoRunPilotInfo
+                or ScreenDataMode.RouteRecorderInfo or ScreenDataMode.Custom or ScreenDataMode.Camera
                 or ScreenDataMode.TeamBanner or ScreenDataMode.Speed => false,
             // These are a view ON a linked container.
             ScreenDataMode.FillBars => true,

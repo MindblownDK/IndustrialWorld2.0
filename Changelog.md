@@ -1,9 +1,102 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.39.0-dev`
+**Current Version:** `17.41.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.41.0-dev] Fix Cockpit Thrust Direction and Add Footprint-Aware Grid Windows
+
+**Type:** MINOR - adds save-compatible Grid Window shape variants with rotated multi-cell occupancy and refreshes both cockpit shells; the additive window-shape save field defaults old saves to Square.
+
+**GitHub title:** `[17.41.0-dev] Fix cockpit thrust direction and add footprint-aware Grid Windows`
+
+#### Fixed
+
+- **W activated the thrusters in the wrong direction.** Flight input and thrust-direction classification now use the active cockpit's pilot-facing `FlightControlFrame`, so the visual nose, seated view and forward thrust share one basis.
+- **The low-profile cockpit obscured the outward view.** The crawler shell now wraps its glazing around the cockpit, lowers the armored nose, and suspends three working MFD screens on a floating rail. Existing `MFD_*` anchors and live-screen behavior are retained.
+
+#### Added
+
+- **The Armored Cab is a distinct panoramic shell.** It has broad glazing, a solid non-glass lower body and 1.5× the cockpit item's authored health at runtime; item health, power tuning and recipes are not rewritten.
+- **One Grid Window item now offers eight shapes.** Square, slope, shallow long slope, two-cell long slope, half, half-slope, inverted slope and corner-wrap geometry share the existing item and recipe. The selector independently arms the shape and Clear, Reinforced or Tinted glass, without multiplying item variants.
+- **The two-cell long slope occupies its full rotated footprint.** Placement, connectivity, removal, disconnected-island traversal, pressure/thermal cell queries, save restore and network placement use the occupied-cell alias while canonical block enumeration, mass and block count remain one-per-block. The older pane-only save record defaults to the Square shape.
+- **Editor-only Setup refresh actions.** The Grid Window action creates/reconnects its assets and generated shapes; the cockpit action refreshes only generated shell subtrees and preserves unrelated prefab children and authored tuning.
+
+#### Setup
+
+- In `Tools -> Voxel Engine -> Voxel Engine Setup -> Grids, Ships & Navigation`, run **"Build the single Grid Window with shape and pane selectors"** to create or reconnect the one-item window assets.
+- After `Cockpit_Large.prefab` exists (and after any later full grid-system rebuild), run **"Refresh cockpit shells and preserve cockpit tuning"**. It rebuilds only the generated interior/shell/seat subtrees; unrelated prefab children, item health, cockpit power, recipes and component tuning remain intact.
+- If the contextual build wheel is not already on the player prefab, run **Construction & Building Tools -> "Wire conveyor, armour, pipe, road and jump-drive wheels"**.
+
+#### Validation
+
+- `git diff --check` and the static C# delimiter scan pass. Unity and a C# compiler are unavailable in this environment; Setup execution, compilation, save/network round-trip, placement rotations, detached-grid behavior, cockpit visibility and W-direction still need in-game verification.
+
+### [17.40.2-dev] Depth-Tested Cockpit Text, Richer Planet Globe, and Clearer Farms
+
+**Type:** PATCH - fixes cockpit text occlusion, improves the globe's visual detail, and clarifies farm oxygen/water status; no save-schema or authored-content change.
+
+**GitHub title:** `[17.40.2-dev] Depth-test cockpit text, enrich the planet globe, and clarify farm status`
+
+#### Fixed
+
+- **Cockpit text rendered through nearby blocks.** MFD TextMeshes now use the shared depth-tested `WorldTextMaterial`, so cockpit and world geometry occlude the labels correctly.
+- **The planet display looked like an untextured ball.** The globe now draws a higher-resolution, seam-matched surface atlas from the body's surface mode, water, terrain, climate, atmosphere, weather and radiation settings, including coastlines, relief, polar ice, clouds and a subtle latitude/longitude grid.
+- **Farm rows hid one need when a bed lacked both water and oxygen.** Farm and Farm Plots pages now report both `NO O2` and `DRY`; crop growth requires a sealed breathable grid room or a breathable station room, not open ambient air.
+
+#### Validation
+
+- `git diff --check` and the static C# delimiter scan pass. Unity compilation, greenhouse behavior, MFD occlusion and globe appearance still need in-game verification.
+
+### [17.40.1-dev] Cockpit MFD Text Fits the Screens
+
+**Type:** PATCH - corrects the cockpit display's runtime text scale and orientation; no save or authored-content change.
+
+**GitHub title:** `[17.40.1-dev] Fix cockpit MFD text scale and orientation`
+
+#### Fixed
+
+- **Telemetry text was oversized, mirrored and floating outside the MFDs.** Text now waits for Unity to rebuild its mesh before fitting, stays at a safe interim scale, and mirrors only the glyph X axis to match the seated view. The air readout is anchored at the display's left edge.
+
+#### Validation
+
+- Thomas's follow-up test confirmed the text-size correction but exposed x-ray rendering and a too-simple globe; both are addressed in 17.40.2-dev. Save/load and post-fix visual acceptance remain unverified.
+
+### [17.40.0-dev] Contextual Grid Windows, Readable Screens, and Live Cockpit Displays
+
+**Type:** MINOR - adds a distinct grid-window item and save-compatible screen, farm, and cockpit instrument features. New save fields are additive; older saves use safe defaults.
+
+**GitHub title:** `[17.40.0-dev] Add contextual grid windows, balanced screens, and live cockpit MFDs`
+
+#### Added
+
+- **One new Grid Window block, three pane finishes.** The `grid_window` item offers Clear, Reinforced, and Tinted panes on a contextual placement wheel. The selected style updates the ghost and placed block and is stored per block; pre-feature saves restore as Clear. The existing Glass Block and hammer-built window content are untouched.
+- **Dedicated Auto-Run Pilot and Route Recorder pages.** Screens can show run state, selected route, waypoints, ETA, energy plan and reserve margin, or the recorder's recording state and saved routes.
+- **Farm Plots page and greenhouse status.** Farm readouts include flat/vertical orientation, crop growth, watering and oxygen needs, plus the final harvest item and icon. Crops configured to require oxygen pause growth outside a breathable enclosure.
+- **Configurable screen details.** Cargo Manifest headings, one-to-three Power Graph panels, and optional battery charge/discharge rate listings are now editable and saved with the screen.
+
+#### Fixed
+
+- **Navigation-page namespace references blocked compilation.** `GridScreenBlock.Pages.cs` now resolves the route model types (`GridRouteRecorder`, `RouteBook`, `RouteTravelMode`, and the legacy autopilot) from `VoxelEngine.Navigation`, while Auto-Run Pilot, local pilot and run-session types remain under `IndustrialWorld.Navigation`.
+
+#### Changed
+
+- **Grid screens are rebalanced for reading.** Mixed, Systems and Bars layouts use the screen canvas; page icons align to the text grid; text begins at the upper-left within the panel; split panes keep their borders and the editor reports page fit and source needs.
+- **Cockpit MFDs are live.** The centre display reads grid speed, the left display reports breathable-air percentage, and the right shows the current body's name and a procedural globe. Values refresh while piloting.
+- **Build selection is contextual.** Ordinary grid blocks place directly. The placement wheel is limited to cockpit shells and Grid Window pane finishes; armor shape selection remains on its dedicated wheel.
+- **Screen editing protects flight and menu input.** Typing in a screen text field suppresses gameplay hotkeys; the first Pause/Escape press releases text focus, and a later press closes the editor.
+- **Alt free-look preserves the seat's facing.** Look input is composed with the authored seat-camera basis rather than replacing it, so the pilot continues to look around from the intended cockpit orientation.
+- **Restored parked-grid clearance probes the low hull first.** Ground sampling prioritizes blocks in the lowest band, uses a bounded 64-ray budget, and permits corrections up to 0.85 cell while rejecting near-full-cell jumps.
+
+#### Setup
+
+- In `Tools -> Voxel Engine -> Voxel Engine Setup`, run **Construction & Building Tools -> "Wire conveyor, armour, pipe, road and jump-drive wheels"** (Step 101) to add the missing contextual wheel to the player.
+- Run **Grids, Ships & Navigation -> "Build the single Grid Window with shape and pane selectors"** to create or reconnect the Grid Window prefab, item, recipe and item-persistence catalog entry. It preserves existing authored values and custom prefab children.
+
+#### Validation
+
+- Thomas's first Unity compile exposed incorrect navigation namespaces in `GridScreenBlock.Pages.cs`; those references were corrected, and his later in-game screenshot confirms the build reached runtime. The MFD visual defect is fixed in 17.40.1-dev; save/load and broader visual acceptance remain open.
 
 ### [17.39.0-dev] One Cockpit, Two Shells, and Screens You Can Read
 

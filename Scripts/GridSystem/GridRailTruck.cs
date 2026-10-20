@@ -91,7 +91,8 @@ namespace VoxelEngine.GridSystem
             if (Grid == null) return false;
 
             var below = GridPos + Vector3Int.down;
-            if (!Grid.Blocks.TryGetValue(below, out var block) || block == null) return false;
+            var block = Grid.GetBlock(below);
+            if (block == null) return false;
 
             return block is GridRailTruck;
         }

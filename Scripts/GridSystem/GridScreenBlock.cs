@@ -21,7 +21,9 @@ namespace VoxelEngine.GridSystem
         Environment, BatteryBank, PowerGraph, Manifest, FillBars, Farm, Mining,
         InventoryGrid, PlanetMap,
         // 17.36.0-dev — the second mining page, for pairing across a split panel.
-        MiningCargo
+        MiningCargo,
+        // 17.40.0-dev — farm and navigation detail pages, appended to preserve saved enum values.
+        AutoRunPilotInfo, RouteRecorderInfo, FarmPlots
     }
 
     public enum ScreenSize
@@ -54,6 +56,12 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Page in pane 4 (bottom right, quadrants only)")]
         public ScreenDataMode splitPageD = ScreenDataMode.Environment;
         public string customText = "CUSTOM DISPLAY";
+        [Tooltip("Optional heading for the cargo manifest. Blank uses the selected container name or the grid name.")]
+        public string manifestTitle = "";
+        [Range(1, 3), Tooltip("Number of compact history plots on the Power Graph page: grid power, solar output and battery transfer.")]
+        public int powerGraphPanels = 3;
+        [Tooltip("Show each battery's current charge/discharge and its rated maximum instead of the compact battery-cell grid.")]
+        public bool showBatteryPowerRates;
         /// <summary>TeamBanner mode (14.37.0): whose banner the screen shows.
         /// Set when the mode is chosen in the config panel - the banner itself
         /// is edited in PAUSE > TEAMS, never here. "" = default emblem.</summary>
@@ -489,7 +497,7 @@ namespace VoxelEngine.GridSystem
 
             if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.455f, 0);
             if (_statusText != null) _statusText.transform.localPosition = new Vector3(dw * 0.455f, -dh * 0.455f, 0);
-            if (_screenText != null) _screenText.transform.localPosition = new Vector3(-dw * 0.47f, 0f, 0f);
+            if (_screenText != null) _screenText.transform.localPosition = new Vector3(-dw * 0.47f, dh * 0.34f, 0f);
 
             // 17.35.1-dev: the type is measured against the glass after the text is set,
             // so it fits the panel it is actually on rather than a fixed guess.
@@ -570,11 +578,11 @@ namespace VoxelEngine.GridSystem
             // EACH LINE separately, so two rows of different lengths no longer share a
             // column grid and the pictures have nothing to line up with. The body is now
             // anchored at the left edge of the glass, which is also how a monitor reads.
-            dObj.transform.localPosition = new Vector3(-_glassWidth * 0.47f, 0f, 0f);
+            dObj.transform.localPosition = new Vector3(-_glassWidth * 0.47f, _glassHeight * 0.34f, 0f);
             _screenText = dObj.AddComponent<TextMesh>();
             _screenText.text = "STARTING"; _screenText.fontSize = 24;
             _screenText.characterSize = charSize; _screenText.color = textColor;
-            _screenText.anchor = TextAnchor.MiddleLeft; _screenText.alignment = TextAlignment.Left;
+            _screenText.anchor = TextAnchor.UpperLeft; _screenText.alignment = TextAlignment.Left;
             MakeTextOpaque(_screenText);
 
             var sObj = new GameObject("ScreenStatusText");
@@ -740,8 +748,8 @@ namespace VoxelEngine.GridSystem
             // The cap exists to stop a two-word page filling the panel with giant letters,
             // so it has to count the page's own lines.
             int bodyLines = _screenText != null ? Mathf.Max(1, CountLines(_screenText.text)) : 1;
-            bool fitted = FitTextMesh(_screenText, gw * 0.94f, gh * 0.64f,
-                gh * 0.62f / bodyLines, stretch);
+            bool fitted = FitTextMesh(_screenText, gw * 0.94f, gh * 0.72f,
+                gh * 0.68f / bodyLines, stretch);
             FitTextMesh(_titleText, gw * 0.94f, gh * 0.11f);
             FitTextMesh(_statusText, gw * 0.36f, gh * 0.10f);
             return fitted;

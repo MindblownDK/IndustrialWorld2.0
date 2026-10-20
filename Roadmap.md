@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.39.0-dev`
-**Roadmap Version:** `17.39.0-dev`
-**Date:** 2026-10-18
+**Current Version:** `17.41.0-dev`
+**Roadmap Version:** `17.41.0-dev`
+**Date:** 2026-10-20
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,35 +29,30 @@
 
 ## 0. Recently Done
 
+### 17.41.0-dev - Cockpit Direction Fix and Footprint-Aware Grid Windows
+- Cockpit thrust and HUD direction use the pilot-facing cabin; refreshed shells preserve MFD anchors and authored tuning
+- One Grid Window offers eight shapes and three pane finishes; the two-cell long slope reserves its rotated extra cell
+- Footprint-aware placement, split, save and network paths are implemented; editor Setup execution and Unity/runtime acceptance remain outstanding
+
+### 17.40.2-dev - Depth-Tested MFDs, Detailed Globe, and Farm Status
+- MFD TextMeshes use the depth-tested world-text material so cockpit geometry can occlude live labels; the planet atlas now reflects surface, water, terrain and atmospheric settings with relief, coastlines, ice and clouds
+- Farm enclosure checks require breathable sealed grid/station rooms, and farm pages expose simultaneous oxygen and water needs
+- Runtime/code-only patch; Unity compile, in-game occlusion, globe appearance and greenhouse verification remain outstanding
+
+### 17.40.1-dev - Cockpit MFD Text Fit
+- `GridCockpitMfd` defers text sizing until Unity rebuilds each TextMesh, avoiding stale placeholder bounds that made telemetry enormous
+- MFD glyphs are mirrored to read correctly from the seat; the air readout now anchors at the display's left edge
+- Runtime-only visual correction; no save schema or authored prefab content changes
+
+### 17.40.0-dev - Grid Window, Live Cockpit MFDs, and Readable Pages
+- `GridWindowBlock` provides one `grid_window` item with Clear, Reinforced and Tinted panes; ordinary grid blocks place directly, while cockpit and window variants use the contextual wheel, and pane style is saved per block
+- `GridScreenBlock` gains mixed/system/bars, farm and navigation pages, customizable manifest/graph/battery views, balanced pane rendering and text-input focus protection; older screen saves use safe defaults
+- `GridCockpitMfd` reads live speed, breathable-air percentage and a procedural planet globe; crops can require a breathable enclosure, and restored grids prioritize the lowest hull band for clearance probes
+
 ### 17.39.0-dev - One Cockpit, Two Shells
 - One cockpit item (`GItem_Cockpit`, "Cockpit"); the shell is chosen on the build wheel's cockpit page, written to the block's `shellStyle` on placement, and saved with it as an additive `hasCockpitState` record. `GItem_CockpitLarge`, `GItem_CockpitCab`, `Cockpit_Cab.prefab` and all three cockpit recipes are deleted by Setup, with both old item ids aliased to `gitem_cockpit`
 - Cabin displays rebuilt to face the seat (binnacle, 20-degree tilt, hood, readouts in the panel's own frame); shell glass routed through `RuntimeMaterials.ApplyTranslucent` so the panes are actually transparent; both shells trimmed inside the two-metre cell; the ghost FRONT marker measured after the armed shell is applied
 - `GridBuildWheel` cockpit page is presence-based (any cockpit in the pack, both shells listed) and its hub draws the armed shell; `VoxelEngineSetupWindow` gained a "Find a step" filter over every group and button
-
-### 17.38.0-dev - The Cockpit You Sit In
-- `CockpitShellBuilder` now builds the cabin as a room - seat and harness, angled console with a lit leading edge and a throttle quadrant, side stick, rudder pedals, three tilted displays, overhead panel, bulkhead hatch, and a cabin point light - authored at the 2 m cell and scaled with the block
-- Both shells live in one prefab and `ApplyShell` decides which is on, so a cockpit carries its whole identity in one asset; both exteriors gained the details that read at walking distance (tow hook, wipers, roll-bar posts, roof lamps, grille, mirrors, ladder)
-- The small cockpit is retired - no longer generated, recipe deleted, item renamed, prefab and item kept so saves that already contain one still load
-- `GridBuildWheel` (new) turns the build menu into a dial: every grid block the player carries, grouped Flight / Power / Structure / Industry / Utility, twelve wedges a page with group paging; blocks with shape variants keep the shape wheel
-- Cleared CS0234 (`UnityEngine.Rendering.RenderQueue`), CS0103 (thrust tuple), CS0618 (`FindObjectsByType`) and CS1061 (`CropPlanter.IsIrrigated` / `IsFertilized`)
-
-### 17.37.0-dev - Two Cockpits You Can Sit In
-- `CockpitShellBuilder` (new) authors two shells and one shared cabin into the prefab: a crawler nose with wraparound glazing, fenders and a roll bar, and a boxy cab with yellow accents, a grille, a roof louver bank and a satellite dome. Both get a seat, side consoles, a console deck at glance height and three displays across the top. Nothing is built at play time
-- A seated camera reads the shell's own `SeatAnchor` on entry and moves the camera pivot there - never the player rig - so the pilot sits behind the console with the displays in the upper view; leaving restores the standing eye, and a cockpit without a shell keeps the old pose
-- `Cab Cockpit` is a second large cockpit block with its own item and recipe; `Large Cockpit` is renamed `Crawler Cockpit` with its id and recipe asset unchanged. Setup rebuilds cockpit prefabs on every run, and all cockpit materials are persisted so a saved prefab never holds a transient one
-- Fixed the duplicate `_appliedFontStyle` field in `GridScreenBlock.cs` that stopped 17.36.0 compiling (CS0102)
-
-### 17.36.0-dev - Pages Drawn, Panes Split, Beds Planted
-- `ScreenCanvas` (new) is the character grid every page draws on - boxes, bars, batteries, line plots and icon cells with clipping, so alignment is layout instead of string luck; `GridScreenBlock.Icons.cs` (new partial) turns icon requests into sprite quads placed from the body's measured line height, so a picture always sits over its own count
-- Power Graph is a real two-trace chart over three minutes; Batteries draws a case per cell; Storage Monitor (`Inventory`) and Inventory Grid show item pictures with counts; Mining Cargo (new page) pairs under the Mining gauge; Manifest, Environment and Speed are single-column readings with no furniture
-- A screen splits into two across, two tall or four equal quarters with a page per pane; each pane draws into a canvas sized to its pane and is blitted at that pane's corner, so no page had to learn what a pane is. The editor gains a LAYOUT row, pane pickers and a focused pane
-- `CropPlanter` (new) is a one-metre seed tray with its own growth, water, fertilizer and harvest, written into the world by the existing farming setup step; `IFarmBed` (new) lets the Farm page list tilled soil, seed planters and sapling beds together, sorted by distance, with biofarms deliberately not counted
-- Font styles are case + weight + proportion and the fit compensates for the stretch; borders draw four quads on the glass; the fit pass caps by the page's own line count; source selection keys on instance id, so one chest no longer ticks every chest
-
-### 17.35.1-dev - Text That Stays On The Glass
-- `GridScreenBlock.EnsureGlassProudOfFrame` moves the glass, glow strip and corner dots out of the solid `Generated_Frame` cube they were buried inside (glass 4 mm, glow 8 mm, dots 11 mm proud), and the display root no longer hangs off the scaled surface - together these are why a screen used to be a closed dark box with text spilling out beside it; text meshes are now sized from their own measured bounds against a measured glass, split into title, body and status bands
-- `GridScreenConfigUI` is a full-window three-column editor: page list on the left, a live preview at the panel's own aspect ratio in the middle showing the real text, colour, title and border, sources and appearance on the right
-- `GridGhostOrientation` (new) puts a `FRONT` box and three up chevrons on the front face of a screen or cockpit preview, sized from the ghost's own renderer bounds and skipped by the ghost material pass. No setup step, no prefab, no save change
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -87,11 +82,12 @@
 12. **Dedicated server:** IN PROGRESS - part 1 shipped 14.45.0 (headless boot path, server config, server-only FishNet start, no-local-player save carry-forward, heartbeat). **Security hardening (committed 14.6.0): SHIPPED 14.56.0 + 14.57.0** - codes rest as salted hashes and never reach guests in verifiable form; keypad/code-set/toggle/removal are host-validated intents cross-checked against the connection's admitted identity; locked doors and Security-Block-guarded storage networks are enforced host-side with true-state corrections. 14.58.0 closed the machine-sim half: importer/exporter/auto-crafter/disk-manipulator tick host-only and guests converge from replicated state. Remaining for this milestone: hardening systems that still assume a local player at runtime (surfaced by dedicated-session testing).
 
 ### Open Scope (named with the version that deferred it)
+- **Restored-grid clearance acceptance (17.40.0-dev):** the low-hull probe and bounded correction are implemented, but flat-ground, slope, small-grid and large-grid save/load checks have not run in Unity.
 - **Per-pane sources (17.36.0-dev):** a split screen links one source list, and its panes share it. A pane that could be pointed at its own container is a genuinely different feature - it changes the saved shape from a list to a list per pane - and no page currently needs it: the canvas pages read the construct themselves.
 - **Planter automation (17.36.0-dev):** `CropPlanter` is manual on purpose - plant, harvest, fertilize by hand. A harvester that empties a row of trays, and a conveyor port on the tray itself, are the next step for a farm that runs while the player is away.
 - **Cockpit shell switching in place (17.37.0-dev, authoring done in 17.39.0-dev):** one cockpit item, both shells inside one prefab, the shell chosen on the build wheel, written to `shellStyle` on placement and saved with the block, so a cockpit's hull is now a property of the block rather than of the item. What is still open is changing it on a cockpit that already exists - a wrench or terminal action from the seat or from outside - which needs a decision on whether a re-skinned cockpit keeps its integrity, name and description.
-- **Build wheel favourites and pinning (17.38.0-dev):** the ring lists what a player carries, alphabetically within each role. Pinning a block to a fixed wedge and reordering roles are both deferred until the wheel has been used in anger; both are presentation only and would add a player-preference field to the save.
-- **Working cockpit displays (17.37.0-dev, geometry settled in 17.39.0-dev):** the three displays on the binnacle now face the seat and carry drawn readouts, but they are still part of the cabin model rather than live screens. Driving them from the construct's own data means mounting a `GridScreenBlock` surface into the shell and paying for three more text meshes per cockpit - the wall screens already read that data, and a pilot can turn to them.
+- **Placement-wheel favorites and ordering (17.40.0-dev, expanded 17.41.0-dev):** cockpit shells and Grid Window shape/pane selectors are contextual; pinning or reordering their options remains deferred as a presentation-only player preference.
+- **Cockpit and Grid Window runtime acceptance (17.41.0-dev):** Unity setup execution, cockpit sightlines/MFDs/thrust direction/cab durability, window shape and pane appearance, rotated two-cell placement/removal, detached-grid splits, and save/network round-trips remain unverified.
 - **Threat tiers, waves, elites and the siege brute acceptance (17.18.0-dev):** confirm in Unity that a dirty district draws an announced organized wave (elite leader, flankers, logistics targets) once spawner heat and residual load qualify, that the siege brute walks past the player to dismantle machines with its double-damage bite, that elite/brute health bars and loot scale, that stopping industry bleeds the response back to ordinary scouts, and that guest replicas show the tier visuals and scaled health. The 17.30.0-dev district pressure card reports the same two readings this row has to be judged against (open an emitting machine while a wave is due), so the rung on the card and the answer that arrives can be compared directly. Tier thresholds and cooldowns await live-play tuning.
 - **Tree persistence, open-container crafting and ghoul-curve acceptance (17.17.2-dev):** confirm in Unity that felled or otherwise destroyed trees stay absent across save-load and chunk streaming, that recipes count and consume chest/drawer/bag/pen/pad contents only while their panel is open, and that a running furnace no longer accelerates spawns or recruits packs within minutes while a heavily polluted area still escalates toward the 2.15x ceiling.
 - **RecipeRegistry recovery and research audit (17.16.0-dev):** append-only Setup results and the follow-up Recipe Graph Validator report remain unverified; confirm skipped invalid/ambiguous assets and recipes gated without a ResearchNode reference, with recipe/research tuning unchanged.

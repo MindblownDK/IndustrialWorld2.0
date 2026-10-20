@@ -178,7 +178,7 @@ namespace VoxelEngine.Thermal
 
         /// <summary>Temperature of whatever occupies a grid cell (ambient when untracked).</summary>
         public float TemperatureAt(Vector3Int cell)
-            => _grid != null && _grid.Blocks.TryGetValue(cell, out var block) ? TemperatureOf(block) : AmbientC;
+            => _grid != null && _grid.OccupiedCells.TryGetValue(cell, out var block) ? TemperatureOf(block) : AmbientC;
 
         /// <summary>
         /// Hottest tracked block temperature within <paramref name="radius"/> of a point.
@@ -364,7 +364,7 @@ namespace VoxelEngine.Thermal
                         float penalty = Mathf.Clamp01(rise / ThermalRules.RoomDamageHeatC);
                         _roomAir[cell] = new RoomAir(rise * ThermalRules.RoomAirTransmission, penalty);
                     }
-                    if (_grid.Blocks.TryGetValue(cell, out var member) && member != null)
+                    if (_grid.OccupiedCells.TryGetValue(cell, out var member) && member != null)
                         _blockRooms[member] = room;
                 }
             }
@@ -539,7 +539,7 @@ namespace VoxelEngine.Thermal
                 Mathf.RoundToInt(Mathf.Clamp(local.z, -1f, 1f)));
             if (step == Vector3Int.zero) return false;
 
-            return _grid.Blocks.TryGetValue(block.GridPos + step, out var ahead)
+            return _grid.OccupiedCells.TryGetValue(block.GridPos + step, out var ahead)
                    && ahead is IHeatshieldBlock shield && shield.ShieldIntact;
         }
 
@@ -551,7 +551,7 @@ namespace VoxelEngine.Thermal
             float hottest = 0f;
             for (int i = 0; i < Neighbours.Length; i++)
             {
-                if (!_grid.Blocks.TryGetValue(block.GridPos + Neighbours[i], out var other)) continue;
+                if (!_grid.OccupiedCells.TryGetValue(block.GridPos + Neighbours[i], out var other)) continue;
                 if (ReferenceEquals(other, block)) continue;
 
                 if (other is GridThruster thruster)

@@ -12,8 +12,27 @@
 // that eats biomass; it is not a bed with a crop in it, and a farm page that
 // counted it would be lying about what the player owns.
 
+using UnityEngine;
+using VoxelEngine.Pressure;
+
 namespace VoxelEngine.Farming
 {
+    /// <summary>Shared greenhouse check for crops that require an oxygenated enclosure.
+    /// Open ambient air does not count; the bed must sit in a breathable sealed grid room
+    /// or pressure-rated station compartment.</summary>
+    public static class FarmEnvironment
+    {
+        public static bool HasBreathableEnclosure(Vector3 worldPosition)
+        {
+            // Ambient planetary air is not a greenhouse. Grid farms need a sealed,
+            // breathable pressure volume; hammer-built station rooms are accepted too.
+            var gridRoom = RoomAtmosphereService.RoomAt(worldPosition);
+            if (gridRoom != null && gridRoom.IsSealed)
+                return gridRoom.IsBreathable;
+            return StationRoomSolver.IsBreathableAt(worldPosition);
+        }
+    }
+
     /// <summary>
     /// A bed a player can plant in: tilled soil, a seed planter, a sapling bed.
     /// Read-only by design - the page reports, the player plants through the
@@ -36,6 +55,10 @@ namespace VoxelEngine.Farming
 
         /// <summary>True when a planted crop wants water it is not getting.</summary>
         bool NeedsWater { get; }
+
+        /// <summary>True when a planted crop requires a sealed breathable enclosure and
+        /// this bed is not currently in one.</summary>
+        bool NeedsOxygen { get; }
 
         /// <summary>True when the bed has no crop in it.</summary>
         bool IsEmpty { get; }
