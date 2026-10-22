@@ -848,7 +848,22 @@ namespace VoxelEngine.GridSystem
             // that page high in the panel - or, worse, pushed off the top of it.
             var pageGrid = PageGrid();
             float canvasWidth = pageGrid.columns * cellW * stretch * scale;
-            float centreX = canvasWidth * 0.5f;
+
+            // Which of the two is the page's centre depends on how the page was written.
+            // A page that centres its lines is centred in the CANVAS, and its ink box is
+            // only off the canvas centre by the whole character its padding rounds by - so
+            // that page wants the canvas centre, and gets it when the two agree to within a
+            // couple of cells. A page that prints left-aligned uses only the columns its
+            // text needs, and its ink box sits well left of the canvas centre; centring such
+            // a page on the canvas hangs it off the left edge of its panel, which is what
+            // the farm and custom pages did. So: snap to the canvas when the page is
+            // centred in it, otherwise centre the ink that is actually there.
+            float inkCentreX = (minX * scale * stretch) + (inkW * scale * stretch) * 0.5f;
+            float canvasCentreX = canvasWidth * 0.5f;
+            float snap = cellW * stretch * scale * 2f;
+            float centreX = Mathf.Abs(inkCentreX - canvasCentreX) <= snap
+                ? canvasCentreX
+                : inkCentreX;
             float centreY = (maxY * scale) - (inkH * scale) * 0.5f;
 
             // A short page rests a little below the middle rather than dead on it: three

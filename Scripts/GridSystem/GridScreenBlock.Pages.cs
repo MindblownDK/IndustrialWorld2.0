@@ -921,14 +921,27 @@ namespace VoxelEngine.GridSystem
         /// <summary>The line a construct board prints when nothing is picked: the page is
         /// not empty, it is waiting to be told what to watch.</summary>
         private static void NoSources(ScreenCanvas canvas, string title)
+            => EmptyState(canvas, title, "NO DATA SOURCES");
+
+        /// <summary>
+        /// The ONE way a page says it has nothing to show: its name, what is missing, and
+        /// what to do about it, on three centred rows in the middle of the panel.
+        ///
+        /// Every page that could arrive empty used to invent its own wording on its own
+        /// row, so a farm with no beds printed three left-aligned lines in the corner while
+        /// a storage monitor printed a centred block - the same state, drawn two ways. A page
+        /// that has nothing to show now looks like every other page that has nothing to
+        /// show, and the fit has one shape to place instead of several.
+        /// </summary>
+        private static void EmptyState(ScreenCanvas canvas, string title, string headline,
+            string hint = "PICK THEM IN THE SCREEN EDITOR")
         {
             int middle = Mathf.Max(1, canvas.Rows / 2);
             canvas.TextCentered(0, Mathf.Max(0, middle - 1), canvas.Columns,
                 title.ToUpperInvariant(), ScreenInk.Dim);
-            canvas.TextCentered(0, middle, canvas.Columns, "NO DATA SOURCES", ScreenInk.Primary);
+            canvas.TextCentered(0, middle, canvas.Columns, headline, ScreenInk.Primary);
             if (middle + 1 < canvas.Rows)
-                canvas.TextCentered(0, middle + 1, canvas.Columns,
-                    "PICK THEM IN THE SCREEN EDITOR", ScreenInk.Dim);
+                canvas.TextCentered(0, middle + 1, canvas.Columns, hint, ScreenInk.Dim);
         }
 
         private void CollectGeneratorGroups()
@@ -1747,9 +1760,9 @@ namespace VoxelEngine.GridSystem
 
             if (_farmFound.Count == 0)
             {
-                canvas.Text(0, 0, "FARMS", false, ScreenInk.Accent);
-                if (canvas.Rows > 1) canvas.TextClipped(0, 1, "NO BEDS SELECTED", canvas.Columns, ScreenInk.Dim);
-                if (canvas.Rows > 2) canvas.TextClipped(0, 2, "AVAILABLE: SOIL / PLANTER / TREE BED", canvas.Columns, ScreenInk.Dim);
+                // The same empty state every other page uses. The hint names the beds this
+                // screen is waiting for, because on this page that IS the instruction.
+                EmptyState(canvas, "FARMS", "NO BEDS SELECTED", "SOIL / PLANTER / TREE BED");
                 return Finish(canvas);
             }
 
@@ -1852,9 +1865,8 @@ namespace VoxelEngine.GridSystem
 
             if (_farmFound.Count == 0)
             {
-                canvas.Text(0, 0, "FARMS \u00b7 PLOT STATUS", false, ScreenInk.Accent);
-                if (canvas.Rows > 1) canvas.TextClipped(0, 1, "NO BEDS SELECTED", canvas.Columns, ScreenInk.Dim);
-                if (canvas.Rows > 2) canvas.TextClipped(0, 2, "AVAILABLE: SOIL / PLANTER / TREE BED", canvas.Columns, ScreenInk.Dim);
+                EmptyState(canvas, "FARMS \u00b7 PLOT STATUS", "NO BEDS SELECTED",
+                    "SOIL / PLANTER / TREE BED");
                 return Finish(canvas);
             }
 

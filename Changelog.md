@@ -1,9 +1,24 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.9-dev`
+**Current Version:** `17.42.10-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.42.10-dev] One Empty State, And A Centre That Fits The Page
+
+**Type:** PATCH - corrects horizontal placement for left-aligned pages and unifies what an empty page looks like; no save schema change.
+
+**GitHub title:** `[17.42.10-dev] Left-aligned pages centred on their ink, empty pages drawn one way`
+
+#### Fixed
+
+- **Left-aligned pages hung off the left edge of their panel.** The previous pass centred every page on its canvas, which is right for a page that centres its lines and wrong for one that prints from column zero: the farm and custom pages use only the columns their text needs, so their ink sits far left of the canvas centre and the page was placed off the panel. A page is now measured first: when its ink is centred in the canvas to within a couple of cells, it is centred exactly on the canvas (which removes the one-character bias a page's own padding rounds by); otherwise the ink that is actually there is centred instead. Both kinds of page now sit in the middle of the glass.
+- **Every page that arrives empty now looks the same.** A farm with no beds printed three left-aligned lines starting at the top corner while a storage monitor printed a centred block - the same state, drawn two ways, in two places. There is one empty-state treatment now: the page's name, what is missing, and what to do about it, on three centred rows in the middle of the panel. The farm pages pass their own hint line, since on a farm the useful instruction is which beds it is waiting for rather than where to pick a source.
+
+#### Validation
+
+- `git diff --check`, the delimiter scan, the duplicate-field scan and the local-shadowing scan pass over the touched files. Unity and a C# compiler remain unavailable here. Still to verify in game: that the farm, plot-status and custom pages sit centred, and that the empty state reads the same on every page that can show it.
 
 ### [17.42.9-dev] Centre On The Canvas Across, On The Ink Down
 

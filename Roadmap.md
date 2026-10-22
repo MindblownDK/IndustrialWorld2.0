@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.9-dev`
-**Roadmap Version:** `17.42.9-dev`
+**Current Version:** `17.42.10-dev`
+**Roadmap Version:** `17.42.10-dev`
 **Date:** 2026-10-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.42.10-dev - One Empty State
+- A page is centred on the canvas when its ink is centred in it, and on its ink when it is left-aligned, so farm and custom pages no longer hang off the left edge
+- One shared empty-state treatment (name, what is missing, what to do) used by every page that can arrive empty, with a per-page hint line
+
 ### 17.42.9-dev - Centre Across The Canvas, Down The Ink
 - Horizontal centring comes from the canvas (pages centre their lines by padding to the canvas width, so the ink box sits left of centre and pushed the page right); vertical stays on the ink
 - A page of four printed rows or fewer rests slightly below the middle instead of dead on it
@@ -46,11 +50,6 @@
 - The fit measures the union of the five ink layers' mesh bounds - what was actually drawn - instead of counting characters the canvas padded, and maps it onto 98x94 percent of the glass in one division; sparse pages are capped at a third of the height
 - The canvas grid is published separately for the picture pass, so icons keep their rows while the fit works from the ink
 - The editor preview uses the same box and the same cap, with the page's own margins removed
-
-### 17.42.5-dev - Exact Fit, Versioned Atlas, Clean Ghost
-- The fit solves instead of iterating: one cell measured from the baked mesh (bounds over line count and longest line), the printed block scaled into the panel in a single step, re-run every frame and idempotent - so the same layout fills a Small, an Extra Large or a cockpit panel
-- Glyph recovery is version-tracked (a rebuild bumps a counter, each mesh remembers its bake version and re-bakes on mismatch), because comparing material textures missed the case the engine's own rebuild hook had already fixed the material but not the mesh
-- Ghosts disable their block behaviours and drop their text meshes before display, the tint skips text, and the FRONT/chevron marker re-lays itself out until bounds and both captions are really measured
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
