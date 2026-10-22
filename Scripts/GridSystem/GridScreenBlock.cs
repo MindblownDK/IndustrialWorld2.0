@@ -835,15 +835,27 @@ namespace VoxelEngine.GridSystem
             _fittedLineHeight = Mathf.Max(0.0001f, cellH * scale);
             _fittedCharWidth = Mathf.Max(0.0001f, cellW * stretch * scale);
 
-            // ── Centre the DRAWN page on the glass.
+            // ── Centre the page on the glass. The two axes are not the same question.
             //
-            // This uses the ink box, and it must: the block published for the picture pass
-            // describes the whole canvas, blank rows included, so centring on it pushed a
-            // page that starts partway down its canvas up off the top of the panel - which
-            // is exactly how a page ends up printed in the air above its own screen.
-            float centreX = (minX * scale * stretch) + (inkW * scale * stretch) * 0.5f;
+            // HORIZONTALLY the canvas is the answer, not the ink: a page that centres its
+            // lines does it by padding them out to the canvas width (see NoSources), so the
+            // ink box is narrower than the canvas and sits left of its centre. Centring on
+            // that ink box pushes the whole page to the right - which is exactly what a
+            // "no data sources" page did.
+            //
+            // VERTICALLY the ink is the answer, not the canvas: a page that begins partway
+            // down its grid has blank rows above it, and centring on the canvas would leave
+            // that page high in the panel - or, worse, pushed off the top of it.
+            var pageGrid = PageGrid();
+            float canvasWidth = pageGrid.columns * cellW * stretch * scale;
+            float centreX = canvasWidth * 0.5f;
             float centreY = (maxY * scale) - (inkH * scale) * 0.5f;
-            var anchorPosition = new Vector3(-centreX, -centreY, 0f);
+
+            // A short page rests a little below the middle rather than dead on it: three
+            // lines centred exactly read as floating, because the eye takes the empty space
+            // below them as part of the page.
+            float restingBias = printedRows <= 4 ? -boxH * 0.06f : 0f;
+            var anchorPosition = new Vector3(-centreX, -centreY + restingBias, 0f);
 
             // ── The block the PICTURES are placed against. Two extents matter and they are
             // not the same: the fit maps the INK onto the glass, while a picture belongs to
@@ -851,7 +863,6 @@ namespace VoxelEngine.GridSystem
             // pictures as fractions of the ink box would slide them inwards on every page
             // whose longest line is not its last column, so the canvas grid is published
             // here and the ink box stays a local of this method.
-            var pageGrid = PageGrid();
             _blockLeft = 0f;
             // The canvas's row zero sits above the first printed row, by however many blank
             // rows the page left at the top.

@@ -1,9 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.8-dev`
+**Current Version:** `17.42.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.42.9-dev] Centre On The Canvas Across, On The Ink Down
+
+**Type:** PATCH - corrects where a page is placed on its glass; no save schema change.
+
+**GitHub title:** `[17.42.9-dev] Pages centred across the canvas, and a resting place for short pages`
+
+#### Fixed
+
+- **A page sat too far to the right.** The horizontal centre was taken from the ink box, but a page centres its lines by padding them out to the canvas width, so the ink box is narrower than the canvas and left of its centre - subtracting that centre moved the whole page right. Across is now measured from the canvas, which is the frame the page was laid out against, and the "no data sources" page sits in the middle of its panel for the first time.
+- Down is still measured from the ink, because that is where the earlier "printed in the air above the panel" fault came from: a page whose text begins partway down its grid has blank rows above it, and the canvas would place it high or off the panel entirely.
+- **A short page rests slightly below the middle** rather than dead on it. Three centred lines read as floating, because the eye counts the empty space under them as part of the page; pages of four printed rows or fewer now settle a little lower.
+
+#### Validation
+
+- `git diff --check`, the delimiter scan, the duplicate-field scan and the local-shadowing scan pass over the touched files. Unity and a C# compiler remain unavailable here. Still to verify in game: that the no-source page and the short pages sit where they should, and that full pages are unaffected by the resting bias.
 
 ### [17.42.8-dev] Keep Pages On Their Panel, and Size Cockpit Captions Properly
 

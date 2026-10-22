@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.8-dev`
-**Roadmap Version:** `17.42.8-dev`
+**Current Version:** `17.42.9-dev`
+**Roadmap Version:** `17.42.9-dev`
 **Date:** 2026-10-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.42.9-dev - Centre Across The Canvas, Down The Ink
+- Horizontal centring comes from the canvas (pages centre their lines by padding to the canvas width, so the ink box sits left of centre and pushed the page right); vertical stays on the ink
+- A page of four printed rows or fewer rests slightly below the middle instead of dead on it
+
 ### 17.42.8-dev - Pages On Their Panel
 - Centring reads the ink box again; the canvas block is only the frame pictures are placed in, so a page that starts low on its canvas no longer prints above the panel
 - Cockpit captions are fitted by comparing world extents (panel size times parent scale against text bounds times its own), absolutely rather than off a placeholder, and clamped inside the panel
@@ -47,11 +51,6 @@
 - The fit solves instead of iterating: one cell measured from the baked mesh (bounds over line count and longest line), the printed block scaled into the panel in a single step, re-run every frame and idempotent - so the same layout fills a Small, an Extra Large or a cockpit panel
 - Glyph recovery is version-tracked (a rebuild bumps a counter, each mesh remembers its bake version and re-bakes on mismatch), because comparing material textures missed the case the engine's own rebuild hook had already fixed the material but not the mesh
 - Ghosts disable their block behaviours and drop their text meshes before display, the tint skips text, and the FRONT/chevron marker re-lays itself out until bounds and both captions are really measured
-
-### 17.42.4-dev - Converging Fit, Open Source List, Reference Boards
-- The text fit is a per-frame servo (measure the drawn ink union, step the scale toward the box, re-centre the block, repeat with a two percent deadband) and degrades to carried-forward metrics instead of abandoning a pass, so a page can no longer be left small in a corner
-- Every block with a power reading is a pickable data source through a generic block readout, the source list filters as the player types, and pictures are placed as a fraction of the measured printed block; the ghost's FRONT plate and chevrons retry until measurable
-- The storage board is the reference's heading-rule-tile grid, the chart trace is a half-height line with vertical joins, the battery bank packs to the panel, the dial ring is one cell thick, and the preview sizes type by the printed block
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
