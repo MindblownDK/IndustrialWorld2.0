@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.6-dev`
+**Current Version:** `17.42.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.42.7-dev] Measure Text From the Renderer, and Let the Page Fill the Panel
+
+**Type:** PATCH - fixes the bounds lookup every text fit in the project depended on; no save schema change.
+
+**GitHub title:** `[17.42.7-dev] Text bounds from the renderer, so pages and MFDs fill their panels`
+
+#### Fixed
+
+- **The fit was measuring nothing, on every screen, since it was written.** Every pass looked for a `MeshFilter` and read `sharedMesh.bounds`. A `TextMesh` does not use a MeshFilter - a text object carries a MeshRenderer and nothing else - so the lookup returned null on every ink layer, the pass gave up on its first line, and the page stayed at the scale it was created with, anchored where it was created: a fraction of its real size, in the corner of the glass. That is the whole of "the content is a small part of the screen". Bounds now come from the renderer, which knows the bounds of what it draws; there is one shared helper for it, and the MeshFilter path is kept only for text authored by a tool.
+- **The cockpit MFD captions had the same bug**, which is why they stayed unreadable: the caption was stamped with a placeholder scale, the fit reported failure for ever, and nothing ever corrected it. The captions are now measured and fitted, and they are re-fitted when the font atlas is rebuilt, because a rebuild replaces the very quads the measurement came from.
+- **The placement marker's captions had it too** - the FRONT plate and the up-chevrons were drawn at whatever size they were born with instead of the size their boxes asked for.
+- **A page is laid out even before its mesh exists.** When the font has not built its quads yet, the pass can no longer leave the page at the corner: it centres the page from the canvas's own line height, so the first frame is already in the right place and the measured pass takes over as soon as there is something to measure.
+- The fit fills the glass from the ink box at 98 by 94 percent, so a page takes the whole panel on any size class rather than a fixed fraction of it.
+
+#### Validation
+
+- `git diff --check`, the delimiter scan, the duplicate-field scan and the local-shadowing scan pass over the touched files. Unity and a C# compiler remain unavailable here. Still to verify in game: that pages fill their panels at every size, that cockpit captions are legible and no longer scrambled, and that the editor preview and the glass now agree, because both scale from a real measurement.
 
 ### [17.42.6-dev] Fit the Drawn Ink to the Panel, Edge to Edge
 

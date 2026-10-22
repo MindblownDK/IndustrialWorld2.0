@@ -32,6 +32,7 @@ namespace VoxelEngine.GridSystem
         private float _nextCockpitDisplayUpdate;
         private bool _mfdTextFitPending;
         private int _fitTextAfterFrame;
+        private int _mfdFitAtlasVersion = -1;
 
         private void Awake()
         {
@@ -51,6 +52,14 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(_speedDisplayText);
             VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(_airDisplayText);
             VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(_planetNameText);
+
+            // A rebuilt atlas replaces the quads, so the measurement the scale came from is
+            // no longer valid; re-fit on the change rather than only on new text.
+            if (_mfdFitAtlasVersion != VoxelEngine.Rendering.WorldTextMaterial.AtlasVersion)
+            {
+                _mfdFitAtlasVersion = VoxelEngine.Rendering.WorldTextMaterial.AtlasVersion;
+                ScheduleMfdTextFit();
+            }
 
             if (_mfdTextFitPending && Time.frameCount >= _fitTextAfterFrame)
                 RefreshMfdTextFits();
@@ -180,11 +189,15 @@ namespace VoxelEngine.GridSystem
         private static bool FitMfdText(TextMesh text, Transform panel, float widthFraction, float heightFraction)
         {
             if (text == null || panel == null) return false;
-            MeshFilter filter = text.GetComponent<MeshFilter>();
-            Mesh mesh = filter != null ? filter.sharedMesh : null;
-            if (mesh == null) return false;
 
-            Vector3 bounds = mesh.bounds.size;
+            // From the renderer: a TextMesh has no MeshFilter, so the old lookup returned
+            // null on every caption, the fit reported failure for ever, and each caption
+            // stayed at the tiny placeholder scale SetMfdText had just stamped on it. That
+            // is the whole reason the cockpit screens were unreadable.
+            if (!VoxelEngine.Rendering.WorldTextMaterial.TryGetTextBounds(text, out Bounds measured))
+                return false;
+
+            Vector3 bounds = measured.size;
             if (bounds.x <= 0.0001f || bounds.y <= 0.0001f) return false;
             float fitX = panel.localScale.x * widthFraction / bounds.x;
             float fitY = panel.localScale.y * heightFraction / bounds.y;

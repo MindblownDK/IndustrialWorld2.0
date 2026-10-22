@@ -753,11 +753,12 @@ namespace VoxelEngine.GridSystem
                 var layer = _inkLayers[i];
                 if (layer == null || string.IsNullOrEmpty(layer.text)) continue;
 
-                var filter = layer.GetComponent<MeshFilter>();
-                Mesh mesh = filter != null ? filter.sharedMesh : null;
-                if (mesh == null) continue;
-                Bounds b = mesh.bounds;
-                if (b.size.x <= 0.0001f || b.size.y <= 0.0001f) continue;
+                // Bounds from the RENDERER, not from a MeshFilter: a TextMesh carries an
+                // internal mesh and no filter, which is why this pass used to measure
+                // nothing on every layer and give up - leaving the page at its creation
+                // scale in the corner of the glass.
+                if (!VoxelEngine.Rendering.WorldTextMaterial.TryGetTextBounds(layer, out Bounds b))
+                    continue;
 
                 // The layer sits at the anchor's origin, so its mesh box is already in the
                 // anchor's space; only the layer's own offset needs adding.
@@ -777,7 +778,28 @@ namespace VoxelEngine.GridSystem
                 if (longest > longestLine) longestLine = longest;
             }
 
-            if (!measured) return false;
+            if (!measured)
+            {
+                // Nothing measurable: the font has not built its mesh yet. Lay the page out
+                // from the canvas's own line height so it is centred and sized from the
+                // first frame instead of sitting at the corner until a mesh appears.
+                var fallback = PageGrid();
+                float lineH = Mathf.Max(0.0001f, CharHeight());
+                float cellW2 = lineH * 0.52f * stretch;
+                _fittedLineHeight = lineH;
+                _fittedCharWidth = cellW2;
+                _blockLeft = 0f;
+                _blockTop = 0f;
+                _blockWidth = fallback.columns * cellW2;
+                _blockHeight = fallback.rows * lineH;
+                var fallbackAnchor = new Vector3(-_blockWidth * 0.5f, _blockHeight * 0.5f, 0f);
+                if (_bodyAnchor.localPosition != fallbackAnchor)
+                {
+                    _bodyAnchor.localPosition = fallbackAnchor;
+                    _iconsDirty = true;
+                }
+                return false;
+            }
 
             float inkW = Mathf.Max(0.00001f, maxX - minX);
             float inkH = Mathf.Max(0.00001f, maxY - minY);

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.6-dev`
-**Roadmap Version:** `17.42.6-dev`
+**Current Version:** `17.42.7-dev`
+**Roadmap Version:** `17.42.7-dev`
 **Date:** 2026-10-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.42.7-dev - Text Bounds From the Renderer
+- Root cause of every "the page is a corner of the glass": a TextMesh has no MeshFilter, so every fit in the project (screen pages, cockpit MFD captions, placement marker captions) measured null and gave up on its first line
+- One shared helper reads the renderer's own bounds; the MFD captions re-fit when the font atlas rebuilds, and a page is centred even before its mesh exists
+
 ### 17.42.6-dev - Ink Box Fit, Edge to Edge
 - The fit measures the union of the five ink layers' mesh bounds - what was actually drawn - instead of counting characters the canvas padded, and maps it onto 98x94 percent of the glass in one division; sparse pages are capped at a third of the height
 - The canvas grid is published separately for the picture pass, so icons keep their rows while the fit works from the ink
@@ -48,11 +52,6 @@
 - The fit owns the body anchor (the per-frame update no longer resets it), so the printed block is centred on the glass on every size class and every split layout instead of hugging the top-left corner
 - Every construct board - Power, Battery Status, Power Graph, Manifest, Storage Monitor, Inventory Grid, Mining Cargo - reads only the data sources ticked in the editor and prints `NO DATA SOURCES` when none are; the banner, camera and planet map remain the only pages that read the world unasked
 - The mining dial is a lamp-thick tick ring, the battery cell a plain case with one continuous quantised fill, tiles wrap their names, graph panels are framed plots with chip legends and a time axis (side by side on a wide glass), the cockpit MFDs re-sync their font atlas every frame, and page options that change the option list rebuild it; verified statically only
-
-### 17.42.2-dev - Centred Pages, Scoped Cargo Boards, and the Tick Dial
-- The page is centred on the glass by its own measured block (not a fixed corner offset) and may fill 96 x 90 percent of the panel; the character grid's column count comes from the measured cell shape, so a full page fills both dimensions instead of coming out short
-- All four cargo boards - manifest, storage monitor, inventory grid and mining cargo - read only the holds picked as that screen's sources (explicit container, then picked holds, then the whole construct); storage tiles print the name across its own cell with the picture and counts beneath, and the battery bank spends the leftover rows on the cells with width-aware captions
-- The mining dial is a ring of radial tick marks in two halves around the middle rule; the editor's live preview draws in the wall's monospace face with no wrapping or tracking; verified statically only, in-game acceptance stays open in the stage rows
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

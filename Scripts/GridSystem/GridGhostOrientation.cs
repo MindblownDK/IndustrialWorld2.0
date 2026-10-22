@@ -223,11 +223,10 @@ namespace VoxelEngine.GridSystem
             // The caption is a runtime dynamic font: its mesh may not exist yet on the frame
             // the ghost appears, and a text mesh scaled from a missing bounds is unreadable.
             if (mesh.font != null) WorldTextMaterial.SyncAtlas(mesh);
-            var filter = mesh.GetComponent<MeshFilter>();
-            Mesh built = filter != null ? filter.sharedMesh : null;
-            if (built == null) return false;
-
-            Bounds bounds = built.bounds;
+            // The renderer holds the bounds of what a TextMesh draws; there is no
+            // MeshFilter on a text object, which is why this used to report failure and
+            // leave the caption at its creation size.
+            if (!WorldTextMaterial.TryGetTextBounds(mesh, out Bounds bounds)) return false;
             if (bounds.size.x <= 0.0001f || bounds.size.y <= 0.0001f) return false;
 
             float scale = Mathf.Min(maxWidth / bounds.size.x, maxHeight / bounds.size.y);

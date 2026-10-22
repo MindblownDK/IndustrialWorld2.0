@@ -111,6 +111,48 @@ namespace VoxelEngine.Rendering
             tm.text = text;
         }
 
+        /// <summary>The version of the font atlas currently in use. Anything that sizes
+        /// text by measuring its mesh has to re-measure when this changes, because a
+        /// rebuild replaces the quads.</summary>
+        public static int AtlasVersion => _atlasVersion;
+
+        /// <summary>
+        /// The bounds of the text this TextMesh is drawing, in its own local space.
+        ///
+        /// NOT from a MeshFilter: a TextMesh owns an internal mesh and a GameObject made
+        /// with one carries a MeshRenderer and no MeshFilter at all, so
+        /// `GetComponent&lt;MeshFilter&gt;().sharedMesh` is null on every text object in the
+        /// project. Every fit that measured text that way - the screen pages and the
+        /// cockpit captions both - was silently measuring nothing, giving up, and leaving
+        /// its text at whatever scale it had been created with. The renderer knows the
+        /// bounds of what it draws; ask it.
+        ///
+        /// The bounds are independent of the transform's scale, which is what makes them
+        /// usable for a fit: measure once, solve the scale, apply it.
+        /// </summary>
+        public static bool TryGetTextBounds(TextMesh tm, out Bounds bounds)
+        {
+            bounds = default;
+            if (tm == null) return false;
+
+            var renderer = tm.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                Bounds b = renderer.localBounds;
+                if (b.size.x > 0.0001f && b.size.y > 0.0001f) { bounds = b; return true; }
+            }
+
+            // A text object authored by a tool could still carry a filter; accept it.
+            var filter = tm.GetComponent<MeshFilter>();
+            Mesh mesh = filter != null ? filter.sharedMesh : null;
+            if (mesh != null && mesh.bounds.size.x > 0.0001f && mesh.bounds.size.y > 0.0001f)
+            {
+                bounds = mesh.bounds;
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Depth-test every TextMesh in a hierarchy.
         ///
         /// Prefabs authored by the editor tools cannot carry the swapped-in material:
