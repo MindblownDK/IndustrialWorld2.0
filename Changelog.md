@@ -1,9 +1,38 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.5-dev`
+**Current Version:** `17.44.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.0-dev] Placement Feel: Build Patterns, Cross-Block Alignment, Freeze and Nudge, and a Placement Assist Card
+
+**Type:** MINOR - a new placement layer on top of the existing one. New modes, a new input action and a new HUD, all save-compatible: no chunk format, save schema, item or recipe change, and every existing snap path (roads, pipes, cables, decks, portal pieces, pivot-anchored prefabs) keeps the pose it had.
+
+**GitHub title:** `[17.44.0-dev] Placement feel: build patterns, cross-block alignment, freeze and nudge, and a placement assist card`
+
+#### Added
+
+- **Build patterns: SINGLE, SPAN, PILLAR and DECK (`Scripts/Building/PlacementOptions.cs`, `Scripts/Building/PlacementPatternPlanner.cs`).** A new shared placement contract: hold the build key on a block, then Ctrl + scroll turns the wheel over to `BUILD PATTERN`. SPAN drags a straight run across the aimed face, PILLAR stacks up or down it, DECK fills a rectangle from the anchor corner. SPAN and PILLAR cap at ten cells, DECK at four by four, and any single commit caps at sixteen. Press anchors, drag grows the plan, release builds it - the preview and the commit walk the same cell list, so a run can never draw ten cells and place nine. The pattern is a property of the player (saved in PlayerPrefs), not of the item, so it carries from block to block.
+- **The placement ring, reachable from any wheel (`Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs`, `Scripts/UI/RadialWheelController.cs`).** `RadialWheelController` gained a second face: `CtrlSwapGroup` fires on Ctrl + scroll (and Ctrl + Tab) while a dial is open, and a wheel without one ignores the gesture rather than stealing it, because Ctrl is also the rotation modifier. A second flick on the same dial reaches `LATTICE STEP` (1 m, 0.5 m, FREE). Static blocks had no build wheel at all - a crate, a foundation or a furnace simply ignored the key - so `PlacementWheel` now answers for them, and it yields to the conveyor, energy-pipe and data-pipe wheels, which own their own items. The conveyor wheel carries the same ring, so belt runs are laid in one gesture.
+- **Cross-block alignment and a real placement frame (`Scripts/Building/PlacementAlign.cs`, `BuildSystem.RefineStaticPose`).** Static placement used to round X, Y and Z against the world, which is not a grid on a round planet: blocks laid apart each rounded against a different tangent plane and met centimetres and degrees out of agreement. Every static placement now resolves the frame of what it is aimed at - a placed block's own axes, a deck's, a construct's, or local gravity on open ground - and quantises inside it. Holding Ctrl lines the heading up on that structure's cardinals, and a block aimed at an identical block inherits its exact heading unless the player has turned the ghost by hand, so a second wall faces the same way as the first without being re-aimed. Rotation reset moved to Ctrl + R; Shift + R turns the ghost back one step.
+- **Freeze and nudge, `BuildLock` on V (`Scripts/Building/PlacementLock.cs`, `Scripts/Settings/GameSettings.cs`).** V freezes the hologram where it stands, so the mouse is free to walk around the machine and look at it from the far side. Arrow keys nudge one lattice step, Shift + arrow moves five, Ctrl + arrow lifts or drops along the surface normal. The next build click confirms exactly what is on screen, the lock survives the click so copies can be stamped down, and a locked commit no longer needs anything under the crosshair at all. The action is rebindable with every other key in Settings - Keybinds; the keybind set migrates to version 27.
+- **A placement assist card instead of a rotation legend (`Scripts/GridSystem/UI/BlockRotationHud.cs`, rewritten).** The top-right card was a static cube and four lines of text: it explained which keys rotated which axis and could not say which way the block was pointing. It is now a live instrument - the player's own block drawn as a projected wireframe in the hologram's real pose with its front face filled and a pip on the face centre, three orbital rings for yaw, pitch and roll that light up on the axis actually stepped, a compass line naming the heading relative to the structure it is lined up against, chips for the build pattern, the lattice step and the lock, a run read-out while a run is being dragged, and key rows that change with what is happening (nudging while locked, releasing while dragging). It repaints only when the pose it draws changes.
+- **Snap clink, planting thud and dust (`Scripts/Building/PlacementFeedback.cs`, `Scripts/FX/SfxLibrary.cs`).** Three synthesised one-shots (`BuildSnap`, `BuildThud`, `BuildRefuse`) - no imported audio - with the clink fired when the hologram changes CELL rather than when it moves a millimetre, the thud weighted by how many blocks landed, and a short low outward breath of dust at the base of a commit. A run is one thud, not ten. The emitter is one pooled ParticleSystem and every path degrades to silence rather than to an error.
+- **The lattice you are actually building on (`Scripts/Building/PlacementLattice.cs`).** While a block is in hand the aimed surface grows a faint lattice at exactly the step placement quantises to, with a slow band of light sweeping across it so the surface reads as live. The grid itself never slides, because a lattice that moves would lie about where the cells are.
+
+#### Changed
+
+- **Static block placement feels steadier.** Positions now quantise inside the aimed structure's frame rather than the world's, the ghost report says which structure it lined up against, and the ghost only clinks on a real cell change instead of rattling as it slides.
+- **Soft clearance (`Scripts/Items/BlockItem.cs`, `BuildSystem.IsPlacementValid`).** `BlockItem` gained `softClearance` (default off, so nothing existing changes). A soft block may brush past another soft block, which is what lets railing, trim, signage and lamps share an edge with what they decorate. Soft versus hard is still refused, and hard versus hard is exactly as strict as it was.
+- **The build wheel now says what Ctrl + scroll does** on every dial that has a second face, and the placement prompt pill carries the current pattern and step.
+- **`BuildSystem.TryPlace` split cleanly.** The commit half is now `CommitPlacement`, and both a single click and a run of cells go through it - same scatter clearing, same belt and pipe reconfiguration, same collider fallback, same network announce. `PlayerInteractionTool` stands aside while a pattern owns the click so one press can never place a block and start a run.
+
+#### Validation
+
+- Parsed every new and modified C# file with a C# grammar; all files parse clean with balanced delimiters, and every symbol added by this release was checked against its declaration in the repository.
+- No item, prefab, recipe, research node or Setup step was added or changed: the release reuses existing prefabs, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run for it. `softClearance` is an opt-in field on `BlockItem` and defaults off.
+- Deliberately excluded from runs, so their own snap contracts are untouched: rails (laid by the rail tool), road cells (graded by the paver), item, gas and water pipes (each copy is a graph edge), energy and data cables, portal pieces, mounted surface attachments, interior-lattice stations and pivot-anchored prefabs.
 
 ### [17.43.5-dev] Restore Canonical Item, Recipe, and Material Helpers in GridWindowSetup
 

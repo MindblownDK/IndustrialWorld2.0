@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.5-dev`
-**Roadmap Version:** `17.43.5-dev`
+**Current Version:** `17.44.0-dev`
+**Roadmap Version:** `17.44.0-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.0-dev - Placement Feel: Build Patterns, Alignment, Freeze and Nudge
+- Build patterns SPAN / PILLAR / DECK (with a lattice step of 1 m, 0.5 m or FREE) live on the second face of the build wheel behind Ctrl + scroll, and static blocks now have a build wheel at all
+- Static placement resolves the aimed structure's frame, inherits an identical neighbour's heading, and Ctrl lines the heading up on that structure's cardinals; `BuildLock` (V) freezes the hologram for arrow-key nudging
+- The top-right card is a live placement instrument (projected body, three lit rotation rings, compass, pattern/lattice/lock chips, adaptive key rows) with synthesised snap clink, planting thud and dust
+
 ### 17.43.5-dev - GridWindowSetup Asset Helper Fix
 - Restored canonical `GridBlockItem`, `RecipeDefinition`, `RecipeRegistry`, and `Shader.Find` helper methods in `GridWindowSetup.cs` so the editor setup script compiles cleanly
 
@@ -45,15 +50,15 @@
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
 
-### 17.43.1-dev - GridBuilder Collections Import Fix
-- Added `using System.Collections.Generic;` to `GridBuilder.cs` so multi-cell footprint helpers compile cleanly
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
+- **Patterns for grid blocks and the building hammer (17.44.0-dev):** the pattern ring, the frame alignment and the frozen hologram shipped for static blocks only. Grid-block cells (`GridBuilder`) and hammer pieces (`BuildSystemV2` / `PlacedTieredBlock`) still place one at a time; their runs need a cell-space planner (grid coordinates rather than world poses) and a hammer cost preview per piece before the release gesture can be shared.
+- **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
+- **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
 - **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, the Automatic Tree Farm and the Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm; the Farm pages already show `FarmPlot`/`CropPlanter`/`TreeFarmPlot` beds and gain the new blocks' beds when they land. `IFarmBed` needs `Water01`/`IsDead` for the true water and dead-crop states the references show - today water is derived from `NeedsWater` and a planted bed reads as dead only while it reports `NeedsOxygen`/`NeedsWater`.
 - ~~**Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.~~ *(17.43.0-dev)*
 - **Screen engine runtime acceptance (17.42.0-dev):** the page remaster is code-complete and statically checked but untested in Unity - fit resolution on every screen size, per-page palettes, the 12 graph series against live grids, icon placement on glass, split-pane outlines, and the typing/Escape input fixes all need in-game verification.
@@ -117,6 +122,21 @@
 **Rule:** auto-size uniformly shrinks an assigned prefab only when its visible rendered bounds exceed the item’s target size; auto-size defaults on, and larger or specially framed assets can opt out or raise the target.
 
 **Status:** implemented in `Scripts/Items/ItemDefinition.cs` and `Scripts/Player/HeldToolView.cs`; no Voxel Engine Setup content action is needed.
+
+### Placement Feel - Patterns, Alignment, Freeze & Nudge (17.44.0-dev)
+
+~~Run placement (SPAN / PILLAR / DECK) on the second face of the build wheel, frame-based static alignment, a freezable and nudgable hologram, and a live placement assist card.~~ *(17.44.0-dev)*
+
+**Rules that bind:**
+- A run is always axis-aligned inside the aimed frame: the dominant axis wins, so a diagonal drag builds a straight run rather than a staircase. SPAN and PILLAR cap at 10 cells, DECK at 4 x 4, and any single commit caps at 16.
+- The preview and the commit share one cell list (`PlacementPatternPlanner.Build`), so a run can never draw more cells than it builds.
+- Patterns never touch items whose placement IS their snap: rails, road cells, item/gas/water pipes, energy and data cables, portal pieces, mounted surface attachments, interior-lattice stations and pivot-anchored prefabs keep their own pose paths untouched.
+- Ctrl means LINE UP, never "snap harder": it snaps the heading to the aimed structure's cardinals and quantises inside that structure's frame. A pose that has been pitched or rolled by hand is left alone.
+- A manually turned ghost keeps its heading (`_rotationManual`); an untouched one inherits an identical neighbour's rotation. Ctrl + R is the way back to the surface default.
+- Clearing clearance is two-tier: `BlockItem.softClearance` is off by default and only permits soft-versus-soft overlap - soft versus hard and hard versus hard stay exactly as strict as they were.
+- A frozen hologram (`BuildLock`, V by default) owns its pose: it commits where it stands and needs nothing under the crosshair. Nudging is one lattice step, Shift + arrow is five, Ctrl + arrow is 0.05 m along the surface normal.
+
+**Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
 
 ### Real Crusaders - Player Model & Readable Loadout (milestone 6 design)
 

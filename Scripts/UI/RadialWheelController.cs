@@ -46,6 +46,16 @@ namespace VoxelEngine.UI
         public Action ConfirmCentreRight;
         /// <summary>Tab or the scroll wheel was used while open. Optional.</summary>
         public Action SwapGroup;
+        /// <summary>
+        /// Ctrl + scroll (or Ctrl + Tab) while open. This is the SECOND FACE of the dial:
+        /// a shape wheel turns over to the placement ring, and the placement ring turns
+        /// over to the lattice step (17.44.0-dev). Ctrl is also the placement-rotation
+        /// modifier, so a wheel that has nothing on its second face deliberately ignores
+        /// the gesture instead of stealing it.
+        /// </summary>
+        public Action CtrlSwapGroup;
+        /// <summary>Caption for the second face. Empty hides the hint.</summary>
+        public string CtrlSwapHint = string.Empty;
         /// <summary>Resolves the root the dial is parented to. Called lazily until it returns non-null.</summary>
         public Func<VisualElement> ResolveHost;
 
@@ -59,6 +69,14 @@ namespace VoxelEngine.UI
         public bool IsOpen { get; private set; }
         public bool IsPinned { get; private set; }
         public int Hovered { get; private set; } = -1;
+
+        /// <summary>
+        /// True while ANY radial dial is up. Placement rotation checks this so Ctrl + scroll
+        /// on an open wheel turns the wheel instead of spinning the hologram underneath it.
+        /// </summary>
+        public static bool AnyOpen => _openCount > 0;
+
+        private static int _openCount;
 
         private readonly RadialWheelInput _input = new();
         private readonly List<RadialOption> _options = new(16);
@@ -144,6 +162,19 @@ namespace VoxelEngine.UI
 
         private void HandleSwap()
         {
+            // 17.44.0-dev: Ctrl + scroll is the dial's second face. It is checked FIRST so
+            // a wheel that has one never sees the plain swap on the same gesture.
+            if (VoxelEngine.GridSystem.GridInput.Ctrl)
+            {
+                if (CtrlSwapGroup == null) return;
+                if (Time.unscaledTime < _nextSwap) return;
+                if (!TabPressed() && Mathf.Abs(ReadScroll()) <= 0.01f) return;
+                _nextSwap = Time.unscaledTime + 0.18f;
+                CtrlSwapGroup.Invoke();
+                PlayTick(0.80f);
+                return;
+            }
+
             if (SwapGroup == null) return;
             if (Time.unscaledTime < _nextSwap) return;
             if (!TabPressed() && Mathf.Abs(ReadScroll()) <= 0.01f) return;
@@ -182,6 +213,7 @@ namespace VoxelEngine.UI
             if (host == null) return;
 
             IsOpen = true;
+            _openCount++;
             IsPinned = false;
             Hovered = -1;
             _input.Begin();
@@ -210,6 +242,7 @@ namespace VoxelEngine.UI
             }
 
             IsOpen = false;
+            _openCount = Mathf.Max(0, _openCount - 1);
             IsPinned = false;
             Hovered = -1;
             UIState.PopBlock();
@@ -284,11 +317,14 @@ namespace VoxelEngine.UI
             _view.IdleDescription = IdleDescription;
             _view.IdleTitleColor = IdleTitleColor;
             _view.IdleIcon = IdleIcon;
-            _view.HintLine = IsPinned
+            string ctrlHint = string.IsNullOrEmpty(CtrlSwapHint)
+                ? string.Empty
+                : "  ·  CTRL+SCROLL " + CtrlSwapHint;
+            _view.HintLine = (IsPinned
                 ? (ConfirmCentreRight != null
                     ? "PINNED  ·  LEFT CLICK TO CONFIRM  ·  RIGHT CLICK CENTRE FOR ALTERNATE  ·  ESC TO CLOSE"
                     : "PINNED  ·  LEFT CLICK TO CONFIRM  ·  ESC TO CLOSE")
-                : $"HOLD {GameSettings.GetKey(_openAction)}  ·  FLICK  ·  RELEASE";
+                : $"HOLD {GameSettings.GetKey(_openAction)}  ·  FLICK  ·  RELEASE") + ctrlHint;
             _view.SwapHint = SwapHint;
         }
 

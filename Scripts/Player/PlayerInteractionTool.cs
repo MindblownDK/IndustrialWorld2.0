@@ -1792,6 +1792,11 @@ namespace VoxelEngine.Player
 
             if (buildHeld)
             {
+                // 17.44.0-dev: while a placement pattern is armed, the run owns the build
+                // click - BuildSystem anchors on press and commits on release. Placing a
+                // single block here as well would double-charge and double-build.
+                if (VoxelEngine.Building.BuildSystem.PatternOwnsClick) return;
+
                 // Hold RMB to continuously place blocks.
                 var stack = inventory.ActiveStack;
                 if (stack.IsEmpty || !(stack.item is BlockItem block)) return;
@@ -1825,6 +1830,9 @@ namespace VoxelEngine.Player
             // consume the input or prevent GridBuilder.Update from committing the block.
             if (stack.item is VoxelEngine.GridSystem.GridBlockItem) return true;
             if (stack.item is not BlockItem block) return false;
+
+            // 17.44.0-dev: a run in progress owns the click (see BuildSystem.HandlePlacementPattern).
+            if (VoxelEngine.Building.BuildSystem.PatternOwnsClick) return true;
 
             // Storage drawer and controller FRONTS take RMB even when a placeable
             // block is held (14.42.0): the face is an insertion slot, so blocks

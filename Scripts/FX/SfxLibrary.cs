@@ -54,6 +54,11 @@ namespace VoxelEngine.FX
         UiClick,
         UiHover,
 
+        // ── Build ONE-SHOTS (17.44.0-dev) ──────────────────────────
+        BuildSnap,         // the crisp magnetic clink when the ghost finds a snap point
+        BuildThud,         // the bass-weighted planting thud when a block commits
+        BuildRefuse,       // a short dull knock when a placement is refused
+
         // ── World ONE-SHOTS ────────────────────────────────────────
         BridgeHorn,        // drawbridge warning horn — low two-tone, the register ships and rail crossings speak in
         SplitFlapFlip,     // split-flap display card turning over — the clack-slap of a departure board updating
@@ -166,6 +171,13 @@ namespace VoxelEngine.FX
                 case Sfx.Pickup:           return OneShot("Pickup",      0.18f, Pickup);
                 case Sfx.UiClick:          return OneShot("UiClick",     0.09f, UiClick);
                 case Sfx.UiHover:          return OneShot("UiHover",     0.06f, UiHover);
+
+                // Build feel (17.44.0-dev). A snap is two tiny metallic bursts a few
+                // milliseconds apart plus a short high sine - the second burst is what
+                // makes it read as metal seating rather than a UI blip.
+                case Sfx.BuildSnap:        return OneShot("BuildSnap",    0.11f, d => MineImpact(d, 2100f, 0.30f, 0.55f));
+                case Sfx.BuildThud:        return OneShot("BuildThud",    0.34f, d => MineImpact(d, 74f,  0.85f, 0.22f));
+                case Sfx.BuildRefuse:      return OneShot("BuildRefuse",  0.16f, d => MineImpact(d, 120f, 0.30f, 0.75f));
 
                 // World
                 case Sfx.BridgeHorn:       return OneShot("BridgeHorn",  1.15f, BridgeHorn);

@@ -35,7 +35,8 @@ namespace VoxelEngine.Settings
         Autopilot,      // fly-to-nav-target cruise control (12.22.0-dev)
         PushToTalk,     // hold to speak on proximity voice (14.20.0-dev)
         Dampeners,      // personal inertia dampeners; Ctrl+key locks a relative target (14.62.0-dev)
-        WindLines       // surface wind-line visuals; read WITH the Ctrl modifier - Ctrl+B by default (17.20.0-dev)
+        WindLines,      // surface wind-line visuals; read WITH the Ctrl modifier - Ctrl+B by default (17.20.0-dev)
+        BuildLock       // freeze the placement hologram in the world, then nudge it (17.44.0-dev)
     }
 
     /// <summary>How the microphone decides it is your turn to speak.
@@ -85,7 +86,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 26;   // v26: modifier-combo binds ("Ctrl+X"); wind lines default becomes literally Ctrl+B
+        private const int    CURRENT_VERSION = 27;   // v27: BuildLock (V) - freeze the placement hologram and nudge it
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -439,6 +440,9 @@ namespace VoxelEngine.Settings
             // a different key keeps the Ctrl contract. Plain B stays the build
             // wheel; the wheel ignores its open edge while Ctrl is held.
             InputAction.WindLines       => "Ctrl+B",
+            // 17.44.0-dev: V is the last free letter beside the build cluster. B, G,
+            // R, T and H are all spoken for, so freeze-the-hologram takes V.
+            InputAction.BuildLock       => "V",
             _ => "None"
         };
 
@@ -524,6 +528,9 @@ namespace VoxelEngine.Settings
             string windLines = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.WindLines, "");
             if (string.IsNullOrEmpty(windLines) || windLines == "B")
                 PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.WindLines, DefaultKey(InputAction.WindLines));
+
+            // v27: BuildLock is new; the generic pass above already gave an unset
+            // profile its default V, so only a deliberately rebound key is preserved.
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);

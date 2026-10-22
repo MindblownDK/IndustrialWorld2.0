@@ -81,6 +81,22 @@ namespace VoxelEngine.Building
         private readonly System.Collections.Generic.List<TieredWallProjection> _wallSnapCandidates = new(16);
         private readonly System.Collections.Generic.Dictionary<BlockItem, StaticPlacementPrefabProfile> _staticPlacementProfiles = new();
 
+        // ── Placement patterns, lock and juice (17.44.0-dev) ──────────
+        private readonly System.Collections.Generic.List<PlacementCell> _plannedCells = new(PlacementOptions.MaxCells);
+        private readonly System.Collections.Generic.List<GameObject> _patternGhosts = new(12);
+        private bool _patternActive;
+        private Vector3 _patternAnchorPosition;
+        private Quaternion _patternAnchorRotation = Quaternion.identity;
+        private int _patternSignature = -1;
+        private Vector3 _lastSnapCell = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        private bool _buildWasHeld;
+        /// <summary>Set the moment the player turns the ghost by hand. A manually turned
+        /// block keeps its heading; an untouched one inherits its neighbour's.</summary>
+        private bool _rotationManual;
+        /// <summary>True when this frame's aim resolved a real placement frame.</summary>
+        private bool _frameResolvedThisFrame;
+        private const int MaxPatternPreviews = 12;
+
         private sealed class StaticPlacementPrefabProfile
         {
             public Collider[] colliders;
@@ -143,6 +159,29 @@ namespace VoxelEngine.Building
         public static string HeldBlockName { get; private set; } = string.Empty;
         public static Vector3Int RotationSteps { get; private set; }
 
+        // ── Placement assist state (17.44.0-dev) ─────────────────────────
+        // Read by the top-right card. These mirror what the hologram is doing RIGHT
+        // NOW; they are written once per frame by SyncGhostStatics, never by the UI.
+        public static VoxelEngine.Items.BlockItem HeldBlockItem { get; private set; }
+        public static Quaternion GhostRotation { get; private set; } = Quaternion.identity;
+        public static Vector3 GhostPosition { get; private set; }
+        public static Vector3 GhostUp { get; private set; } = Vector3.up;
+        public static bool GhostValid { get; private set; }
+        /// <summary>True when the heading came from the aimed structure or from Ctrl.</summary>
+        public static bool GhostAligned { get; private set; }
+        public static string GhostFrameLabel { get; private set; } = string.Empty;
+        public static PlacementFrame GhostFrame { get; private set; }
+        /// <summary>Cells the current run will lay, anchor included. 0 when no run is armed.</summary>
+        public static int PatternPreviewCount { get; private set; }
+
+        /// <summary>
+        /// True while a pattern owns the build click. The interaction tool reads this and
+        /// stands aside, so one press never places a block AND starts a run.
+        /// </summary>
+        public static bool PatternOwnsClick =>
+            HoldingBlock && PlacementOptions.IsMultiPlace
+            && PlacementOptions.IsPatternEligible(HeldBlockItem);
+
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
@@ -156,6 +195,10 @@ namespace VoxelEngine.Building
                 gameObject.AddComponent<VoxelEngine.UI.EnergyPipeShapeWheel>();
             if (GetComponent<VoxelEngine.UI.DataPipeShapeWheel>() == null)
                 gameObject.AddComponent<VoxelEngine.UI.DataPipeShapeWheel>();
+            // 17.44.0-dev: blocks with no shape variants of their own finally have a
+            // build wheel - the placement ring (pattern + lattice step).
+            if (GetComponent<VoxelEngine.UI.PlacementWheel>() == null)
+                gameObject.AddComponent<VoxelEngine.UI.PlacementWheel>();
 
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));
@@ -192,6 +235,13 @@ namespace VoxelEngine.Building
             HandleRotationInput();
 
             UpdateGhost();
+
+            // 17.44.0-dev placement pass. Order matters: the lock overrides the aim,
+            // the statics describe the final pose, and the pattern drags from it.
+            HandlePlacementLock();
+            SyncGhostStatics();
+            HandlePlacementPattern();
+            _buildWasHeld = GameSettings.IsHeld(InputAction.Build);
 
             // Quarry placement preview
             UpdateQuarryPreview();
@@ -336,6 +386,11 @@ namespace VoxelEngine.Building
 
         private void UpdateGhost()
         {
+            // Per-frame placement-assist flags: this frame has not resolved a frame yet,
+            // and no heading has been inherited yet.
+            _frameResolvedThisFrame = false;
+            GhostAligned = false;
+
             if (inventory == null)
             {
                 HoldingBlock = false; HeldBlockName = string.Empty; HideGhost();
@@ -379,6 +434,7 @@ namespace VoxelEngine.Building
                 }
                 _ghost.name = "BuildGhost";
                 _ghostItem = block;
+                _rotationManual = false;
                 _pipeGhostVisual = null;
                 _pipeGhostTargetId = EntityId.None;
                 _pipeGhostLastPosition = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
@@ -598,19 +654,58 @@ namespace VoxelEngine.Building
             HideStaticSurfaceLattice();
             HideGhostPortRing();
             Quarry.HidePlacementPreview();
+
+            // Placement assist state belongs to the ghost; it must die with it.
+            CancelPattern();
+            PlacementLattice.Hide();
+            HeldBlockItem = null;
+            GhostValid = false;
+            GhostAligned = false;
+            GhostFrame = default;
+            GhostFrameLabel = string.Empty;
+            PatternPreviewCount = 0;
         }
 
         private void OnDestroy()
         {
+            for (int i = 0; i < _patternGhosts.Count; i++)
+                if (_patternGhosts[i] != null) Destroy(_patternGhosts[i]);
+            _patternGhosts.Clear();
+            PlacementLock.Unlock();
             if (_ghostPortRing != null) Destroy(_ghostPortRing.gameObject);
             if (_staticSurfaceLattice != null) Destroy(_staticSurfaceLattice.gameObject);
         }
 
         private void HandleRotationInput()
         {
+            // 17.44.0-dev: an open dial owns Ctrl + scroll (it turns the wheel over to the
+            // placement ring). Spinning the ghost underneath it would fight the gesture.
+            if (VoxelEngine.UI.RadialWheelController.AnyOpen) return;
+
             if (GameSettings.WasPressed(InputAction.BuildRotate))
             {
-                _rotSteps.y = (_rotSteps.y + 1) % 4;
+                bool resetHeld = GridInput.Ctrl;
+                bool back = GridInput.Shift;
+                if (resetHeld)
+                {
+                    // Ctrl + R is the way home: every axis back to the surface default.
+                    _rotSteps = Vector3Int.zero;
+                    _rotationManual = false;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Rotation reset",
+                        "The block faces the way the surface does again. Turn it with " +
+                        GameSettings.GetKey(InputAction.BuildRotate) + " to override that.",
+                        null, VoxelEngine.UI.UITheme.AccentTeal);
+                }
+                else
+                {
+                    int step = back ? -1 : 1;
+                    _rotSteps.y = (_rotSteps.y + step + 4) % 4;
+                    _rotationManual = true;
+                    // A frozen hologram turns in place: the lock owns the pose now.
+                    if (PlacementLock.IsLocked)
+                        PlacementLock.Rotate(Quaternion.Euler(0f, step * 90f, 0f));
+                    PlacementFeedback.Snap(PlacementLock.IsLocked ? PlacementLock.Position : GhostPosition, 1);
+                }
                 RotationSteps = _rotSteps;
             }
 
@@ -625,6 +720,15 @@ namespace VoxelEngine.Building
             else if (ctrl) _rotSteps.y = (_rotSteps.y + dir + 4) % 4;
             else if (shift) _rotSteps.x = (_rotSteps.x + dir + 4) % 4;
             RotationSteps = _rotSteps;
+            _rotationManual = true;
+
+            if (PlacementLock.IsLocked)
+            {
+                Quaternion delta = ctrl && shift ? Quaternion.Euler(0f, 0f, dir * 90f)
+                    : ctrl ? Quaternion.Euler(0f, dir * 90f, 0f)
+                    : Quaternion.Euler(dir * 90f, 0f, 0f);
+                PlacementLock.Rotate(delta);
+            }
         }
 
         private static bool IsUnifiedPipe(BlockItem block)
@@ -1216,6 +1320,24 @@ namespace VoxelEngine.Building
             if (block == null || block.placedPrefab == null)
                 return false;
 
+            // 17.44.0-dev: a frozen hologram commits where it is, not where the crosshair
+            // moved to - and it does not need anything under the crosshair at all, which
+            // is the whole point of freezing it and walking around the machine. This sits
+            // above the aim raycast so looking at the sky cannot cancel a locked build.
+            if (PlacementLock.Matches(block))
+            {
+                if (!IsPlacementValid(PlacementLock.Position, block, PlacementLock.Rotation, out var lockRefusal))
+                {
+                    ShowPlacementRefusal(block, lockRefusal, force: true);
+                    PlacementFeedback.Refused(PlacementLock.Position);
+                    return false;
+                }
+                if (!CommitPlacement(block, PlacementLock.Position, PlacementLock.Rotation, hit))
+                    return false;
+                PlacementFeedback.Placed(PlacementLock.Position, 1);
+                return true;
+            }
+
             // Preview and commit must use the same filtered camera ray. PlayerInteractionTool
             // also raycasts for UI dispatch, but its trigger/liquid filters are deliberately
             // different; trusting that hit made the placed pose diverge from the visible ghost.
@@ -1266,6 +1388,21 @@ namespace VoxelEngine.Building
                 return false;
             }
 
+            return CommitPlacement(block, pos, rot, hit);
+        }
+
+        /// <summary>
+        /// 17.44.0-dev: the commit half of <see cref="TryPlace"/>, split out so a run of
+        /// cells uses the exact same path as a single click - same scatter clearing, same
+        /// belt/pipe reconfiguration, same collision fallback, same network announce. If
+        /// the two paths could differ, a run would eventually place blocks that a single
+        /// click refuses.
+        /// </summary>
+        private bool CommitPlacement(BlockItem block, Vector3 pos, Quaternion rot, RaycastHit hit,
+            bool hasHitContext = true, bool playFeedback = true)
+        {
+            if (block == null || block.placedPrefab == null) return false;
+
             var go = Instantiate(block.placedPrefab, pos, rot);
             go.name = block.displayName;
 
@@ -1278,7 +1415,11 @@ namespace VoxelEngine.Building
 
             var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (placedBelt != null)
-                placedBelt.SetBuildShape(ResolveConveyorBuildShape(placedBelt, hit));
+            {
+                placedBelt.SetBuildShape(hasHitContext
+                    ? ResolveConveyorBuildShape(placedBelt, hit)
+                    : ResolveRunBeltShape(placedBelt));
+            }
 
             var placedCable = go.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true);
             if (placedCable != null)
@@ -1362,7 +1503,340 @@ namespace VoxelEngine.Building
             placedBelt?.RefreshTopologyImmediate();
             // Multiplayer: the authority point for item-block placement (14.9.0).
             VoxelEngine.Networking.BlockSync.AnnouncePlaced(pb);
+
+            // One block, one thud and one breath of dust. A run passes playFeedback: false
+            // and announces itself once, so ten cells sound like one gesture.
+            if (playFeedback) PlacementFeedback.Placed(pos, 1);
             return true;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  17.44.0-dev — PLACEMENT FEEL
+        //  Alignment, the frozen hologram, runs, and the juice that tells
+        //  the player all three are working.
+        // ══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Refines a static block's pose inside the frame of what it is aimed at. Only
+        /// plain structural blocks take part: anything with a dedicated snap of its own
+        /// (conduits, cabled pipes, roads, portal pieces, mounted decals and pivot-anchored
+        /// prefabs) owns its pose and is deliberately left untouched.
+        /// </summary>
+        private void RefineStaticPose(RaycastHit hit, BlockItem block, ref Vector3 pos, ref Quaternion rot)
+        {
+            if (block == null || hit.collider == null) return;
+            var profile = GetStaticPlacementPrefabProfile(block);
+            if (profile == null) return;
+            if (profile.usesDedicatedSnap || profile.isThinConduit || profile.isSurfaceAttachment
+                || profile.isPortalPiece || profile.usesInteriorLattice || profile.anchorAtPivot)
+                return;
+            if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block)) return;
+
+            Vector3 surfaceUp = hit.normal.sqrMagnitude > 0.0001f
+                ? hit.normal.normalized
+                : GravityProvider.GetUp(pos);
+            var frame = PlacementAlign.Resolve(hit.collider, surfaceUp, pos);
+            GhostFrame = frame;
+            GhostFrameLabel = frame.label;
+            _frameResolvedThisFrame = true;
+
+            // The lattice only quantises where a lattice exists. Natural ground keeps the
+            // surface-flush seat it earned in 17.26.0.
+            if (gridSnap && HasStaticPlacementLatticeHost(hit.collider))
+            {
+                float step = PlacementOptions.StepMetres;
+                if (step > 0f) pos = PlacementAlign.Quantise(pos, frame, step);
+            }
+
+            // Predictability: a second wall beside the first should face the same way
+            // without the player turning it again. Only while the heading is untouched.
+            if (!_rotationManual)
+            {
+                Quaternion inherited = PlacementAlign.InheritRotation(hit.collider, block, rot);
+                if (inherited != rot) { rot = inherited; GhostAligned = true; }
+            }
+
+            // Ctrl is the alignment modifier, exactly as the brief asks: hold it and the
+            // heading snaps onto the aimed structure's cardinals. This still applies after
+            // a manual turn - a deliberately pitched or rolled block is left alone by
+            // AlignRotation itself, so only the heading is ever touched.
+            if (GridInput.Ctrl)
+            {
+                Quaternion aligned = PlacementAlign.AlignRotation(rot, frame);
+                if (aligned != rot) { rot = aligned; GhostAligned = true; }
+            }
+        }
+
+        /// <summary>
+        /// Freeze / release the hologram (BuildLock, V by default) and apply nudges.
+        /// Runs after the aim so a locked pose always wins.
+        /// </summary>
+        private void HandlePlacementLock()
+        {
+            if (!HoldingBlock || _ghost == null || _ghostItem == null)
+            {
+                if (PlacementLock.IsLocked) PlacementLock.Unlock();
+                return;
+            }
+
+            if (GameSettings.WasPressed(InputAction.BuildLock))
+            {
+                if (PlacementLock.Matches(_ghostItem)) PlacementLock.Unlock();
+                else if (GhostValid) PlacementLock.Lock(_ghostItem, GhostPosition, GhostRotation);
+                else
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Nothing to freeze",
+                        "The hologram has to be on a valid cell before it can be locked.",
+                        _ghostItem.icon, VoxelEngine.UI.UITheme.AccentAmber);
+            }
+
+            if (!PlacementLock.IsLocked || !PlacementLock.Matches(_ghostItem)) return;
+
+            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres));
+
+            // The frozen pose IS the preview from here on.
+            _ghost.SetActive(true);
+            _ghost.transform.SetPositionAndRotation(PlacementLock.Position, PlacementLock.Rotation);
+            if (PlacementLock.Position != GhostPosition)
+                PlacementFeedback.Snap(PlacementLock.Position, 1);
+
+            bool valid = IsPlacementValid(PlacementLock.Position, _ghostItem, PlacementLock.Rotation,
+                out var refusal);
+            ApplyGhostMaterialIfChanged(valid ? _ghostMaterialValid : _ghostMaterialInvalid);
+            if (!valid) ShowPlacementRefusal(_ghostItem, refusal, force: false);
+        }
+
+        /// <summary>
+        /// Publishes the pose the hologram actually ended up in, for the assist card and
+        /// the lattice. Also fires the snap clink when the cell changes.
+        /// </summary>
+        private void SyncGhostStatics()
+        {
+            if (_ghost == null || _ghostItem == null)
+            {
+                GhostValid = false;
+                GhostAligned = false;
+                GhostFrame = default;
+                GhostFrameLabel = string.Empty;
+                PatternPreviewCount = 0;
+                PlacementLattice.Hide();
+                return;
+            }
+
+            HeldBlockItem = _ghostItem;
+            GhostPosition = _ghost.transform.position;
+            GhostRotation = _ghost.transform.rotation;
+            GhostValid = _appliedGhostMaterial == _ghostMaterialValid;
+            if (!_frameResolvedThisFrame)
+            {
+                GhostFrame = PlacementFrame.FromUp(GhostPosition, GravityProvider.GetUp(GhostPosition),
+                    "GROUND", false);
+                GhostFrameLabel = GhostFrame.label;
+            }
+            GhostUp = GhostFrame.valid ? GhostFrame.up : GravityProvider.GetUp(GhostPosition);
+
+            // A clink when the hologram changes CELL, not when it moves a millimetre: the
+            // sound marks a snap point, and marking every frame would be a rattle.
+            if (GhostValid && gridSnap && !PlacementLock.IsLocked)
+            {
+                float step = Mathf.Max(0.25f, PlacementOptions.StepMetres);
+                Vector3 cell = new(Mathf.Round(GhostPosition.x / step), Mathf.Round(GhostPosition.y / step),
+                    Mathf.Round(GhostPosition.z / step));
+                if (cell != _lastSnapCell)
+                {
+                    if (_lastSnapCell.x < float.PositiveInfinity) PlacementFeedback.Snap(GhostPosition);
+                    _lastSnapCell = cell;
+                }
+            }
+
+            bool showLattice = gridSnap && PlacementOptions.StepMetres > 0f
+                && PlacementOptions.IsPatternEligible(_ghostItem);
+            if (showLattice)
+            {
+                Color tint = GhostValid
+                    ? new Color(0.30f, 0.80f, 0.96f, 0.16f)
+                    : new Color(0.92f, 0.34f, 0.24f, 0.13f);
+                PlacementLattice.Show(GhostPosition, GhostFrame, PlacementOptions.StepMetres, tint);
+            }
+            else PlacementLattice.Hide();
+        }
+
+        /// <summary>
+        /// Press, drag, release: SPAN / PILLAR / DECK. The press drops the anchor, the drag
+        /// grows the plan, the release builds it. SINGLE never enters this method's body, so
+        /// the classic click-to-place path is untouched.
+        /// </summary>
+        private void HandlePlacementPattern()
+        {
+            var block = _ghostItem;
+            bool wantsRun = block != null
+                            && _ghost != null
+                            && PlacementOptions.IsMultiPlace
+                            && PlacementOptions.IsPatternEligible(block)
+                            && !PlacementLock.IsLocked
+                            && !VoxelEngine.UI.RadialWheelController.AnyOpen;
+
+            if (!wantsRun)
+            {
+                if (_patternActive) CancelPattern();
+                return;
+            }
+
+            bool held = GameSettings.IsHeld(InputAction.Build);
+
+            if (!_patternActive)
+            {
+                if (!(held && !_buildWasHeld && GhostValid)) return;
+
+                _patternActive = true;
+                _patternAnchorPosition = GhostPosition;
+                _patternAnchorRotation = GhostRotation;
+                _patternSignature = -1;
+                PlacementFeedback.Snap(GhostPosition, 1);
+                return;
+            }
+
+            float step = Mathf.Max(0.25f, PlacementOptions.StepMetres);
+            int budget = Mathf.Min(PlacementOptions.MaxCells, Mathf.Max(1, AvailableCount(block)));
+            int planned = PlacementPatternPlanner.Build(
+                PlacementOptions.Pattern, GhostFrame,
+                _patternAnchorPosition, _patternAnchorRotation,
+                GhostPosition, step, budget, _plannedCells);
+            PatternPreviewCount = planned;
+            ShowPatternPreview(_plannedCells, block);
+
+            if (held) return;
+
+            // Released: build the plan, anchor first.
+            int built = CommitRun(block);
+            CancelPattern();
+            if (built > 0) PlacementFeedback.Placed(_patternAnchorPosition, built);
+        }
+
+        /// <summary>Positions the run's preview bodies. Rebuilt only when the plan changes.</summary>
+        private void ShowPatternPreview(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
+        {
+            if (cells == null || block == null || block.placedPrefab == null) return;
+
+            int wanted = Mathf.Clamp(cells.Count - 1, 0, MaxPatternPreviews);
+            int signature = wanted * 92821;
+            for (int i = 1; i <= wanted; i++)
+                signature = signature * 31 + Mathf.RoundToInt(
+                    cells[i].position.x * 10f + cells[i].position.y * 97f + cells[i].position.z * 769f);
+            if (signature == _patternSignature) return;
+            _patternSignature = signature;
+
+            while (_patternGhosts.Count < wanted)
+            {
+                GameObject preview;
+                try
+                {
+                    IsCreatingGhost = true;
+                    preview = Instantiate(block.placedPrefab);
+                }
+                finally
+                {
+                    IsCreatingGhost = false;
+                }
+                if (preview == null) break;
+                preview.name = "BuildRunGhost";
+                EnsureGhostVisual(preview, block);
+                StripGhost(preview, _ghostMaterialValid);
+                _patternGhosts.Add(preview);
+            }
+
+            for (int i = 0; i < _patternGhosts.Count; i++)
+            {
+                var ghost = _patternGhosts[i];
+                if (ghost == null) continue;
+                bool used = i < wanted;
+                if (ghost.activeSelf != used) ghost.SetActive(used);
+                if (!used) continue;
+                ghost.transform.SetPositionAndRotation(cells[i + 1].position, cells[i + 1].rotation);
+            }
+        }
+
+        /// <summary>Ends an armed run and puts its preview bodies away.</summary>
+        private void CancelPattern()
+        {
+            _patternActive = false;
+            _patternSignature = -1;
+            PatternPreviewCount = 0;
+            for (int i = 0; i < _patternGhosts.Count; i++)
+            {
+                var ghost = _patternGhosts[i];
+                if (ghost != null && ghost.activeSelf) ghost.SetActive(false);
+            }
+        }
+
+        /// <summary>Validates and builds every cell of the plan that the player can pay for.</summary>
+        private int CommitRun(BlockItem block)
+        {
+            if (block == null || _plannedCells.Count == 0) return 0;
+
+            // Nothing in the pack and no network to draw from: a run must not mint blocks.
+            int budget = AvailableCount(block);
+            if (budget <= 0)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Out of " + block.displayName,
+                    "The run needs more blocks than you are carrying.",
+                    block.icon, VoxelEngine.UI.UITheme.AccentAmber);
+                return 0;
+            }
+
+            int placed = 0;
+            for (int i = 0; i < _plannedCells.Count && placed < budget; i++)
+            {
+                // Per-cell snap context belongs to THAT cell, never to the anchor's.
+                _surfaceAttachmentHost = null;
+                _deckSnapHost = null;
+                if (!IsPlacementValid(_plannedCells[i].position, block, _plannedCells[i].rotation, out _))
+                    continue;
+                if (CommitPlacement(block, _plannedCells[i].position, _plannedCells[i].rotation,
+                        default, hasHitContext: false, playFeedback: false))
+                    placed++;
+            }
+
+            if (placed == 0)
+            {
+                ShowPlacementRefusal(block, PlacementRefusal.NoRoom, force: true);
+                PlacementFeedback.Refused(_patternAnchorPosition);
+                return 0;
+            }
+
+            ConsumePlaced(block, placed);
+            VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, placed);
+            return placed;
+        }
+
+        /// <summary>How many copies of this block the player can actually lay right now.</summary>
+        private int AvailableCount(BlockItem block)
+        {
+            if (block == null) return 0;
+            int have = inventory != null ? inventory.container.CountOf(block) : 0;
+            if (have > 0) return have;
+
+            // Build-from-network keeps working exactly as it does for a single click.
+            var research = VoxelEngine.Research.ResearchManager.Instance;
+            if (research == null || !research.IsUnlocked("res_build_from_network")) return 0;
+            var ui = VoxelEngine.UI.GameUIController.Instance;
+            var rack = ui != null ? ui.GetActiveWirelessRack() : null;
+            return rack != null && rack.IsOnline ? PlacementOptions.MaxCells : 0;
+        }
+
+        /// <summary>Takes the blocks a run used, from the pack first and the network second.</summary>
+        private void ConsumePlaced(BlockItem block, int count)
+        {
+            if (block == null || count <= 0) return;
+            int taken = inventory != null ? inventory.container.Remove(block, count) : 0;
+            int remaining = count - taken;
+            if (remaining <= 0) return;
+
+            var research = VoxelEngine.Research.ResearchManager.Instance;
+            if (research == null || !research.IsUnlocked("res_build_from_network")) return;
+            var ui = VoxelEngine.UI.GameUIController.Instance;
+            var rack = ui != null ? ui.GetActiveWirelessRack() : null;
+            if (rack == null || !rack.IsOnline) return;
+            rack.NetworkExtract(block.itemId, remaining);
         }
 
         /// <summary>
@@ -1605,7 +2079,18 @@ namespace VoxelEngine.Building
         /// correct 120° slot orientation and can never be placed wrong. Everything
         /// else falls back to the classic position + player-controlled yaw.
         /// </summary>
+        /// <summary>
+        /// The pose a static block will land in. The core chain below owns the snap
+        /// hierarchy; the refinement pass then places the result inside the aimed
+        /// structure's frame (17.44.0-dev) so follow-up blocks line up.
+        /// </summary>
         private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
+        {
+            ComputePlacementPoseCore(hit, block, out pos, out rot);
+            RefineStaticPose(hit, block, ref pos, ref rot);
+        }
+
+        private void ComputePlacementPoseCore(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
         {
             _surfaceAttachmentHost = null;
             _deckSnapHost = null;
@@ -2954,6 +3439,26 @@ namespace VoxelEngine.Building
             return false;
         }
 
+        /// <summary>
+        /// 17.44.0-dev: the shape a belt takes inside a run. A run is laid along one axis
+        /// of the lattice, so there is no aimed face to read: a flat run is straight and a
+        /// PILLAR run climbs. A diagonal belt inside a straight run would leave a gap in
+        /// the line, so the wheel's Ramp/Vertical choice is honoured only for climbing.
+        /// </summary>
+        private static VoxelEngine.Simulation.ConveyorShape ResolveRunBeltShape(
+            VoxelEngine.Simulation.ConveyorBelt belt)
+        {
+            if (belt == null) return VoxelEngine.Simulation.ConveyorShape.Straight;
+            var mode = VoxelEngine.Simulation.ConveyorShapeWheel.GetMode(belt.speed);
+            if (mode == VoxelEngine.Simulation.ConveyorBuildMode.Straight)
+                return VoxelEngine.Simulation.ConveyorShape.Straight;
+            if (PlacementOptions.Pattern != PlacementPattern.Pillar)
+                return VoxelEngine.Simulation.ConveyorShape.Straight;
+            return mode == VoxelEngine.Simulation.ConveyorBuildMode.Ramp
+                ? VoxelEngine.Simulation.ConveyorShape.RampUp
+                : VoxelEngine.Simulation.ConveyorShape.VerticalUp;
+        }
+
         private static VoxelEngine.Simulation.ConveyorShape ResolveConveyorBuildShape(
             VoxelEngine.Simulation.ConveyorBelt belt,
             RaycastHit hit)
@@ -3415,7 +3920,12 @@ namespace VoxelEngine.Building
             // (allowStacking is false), and grading — not overlap — is what decides whether the
             // ground may take it.
             bool isSurfaceOverlay = VoxelEngine.Building.RoadPaver.IsRoadBlock(block);
-            float checkSize = isSurfaceOverlay ? 0.12f : (isThin ? 0.18f : 0.42f);
+            // 17.44.0-dev: SOFT CLEARANCE. A decorative item may brush past another
+            // decorative item, so railing meets trim meets lamp without a refusal. Hard
+            // clearance is the default and is untouched: machines still cannot share a
+            // cell with anything.
+            bool isSoft = block != null && block.softClearance;
+            float checkSize = isSurfaceOverlay ? 0.12f : (isThin ? 0.18f : (isSoft ? 0.34f : 0.42f));
 
             // A road is judged by its GRADE, not by its overlap: it drapes on terrain by design, so
             // the overlap test below is relaxed for it and the ground gets the deciding word. Both
@@ -3502,7 +4012,7 @@ namespace VoxelEngine.Building
                 // placement red. A 1 cm inset treats support contact as contact while
                 // retaining the real solid-volume rejection.
                 if (IsPlacementProbeClear(probeCenter, probeHalfExtents, rot,
-                        isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
+                        isThin, isSurfaceOverlay, isSoft, block, surfaceAttachmentHost, _deckSnapHost,
                         allowAdjacentCoplanarDecks: true))
                     return true;
                 refusal = PlacementRefusal.NoRoom;
@@ -3510,7 +4020,7 @@ namespace VoxelEngine.Building
             }
 
             if (IsPlacementProbeClear(pos, Vector3.one * checkSize, Quaternion.identity,
-                    isThin, isSurfaceOverlay, block, surfaceAttachmentHost, _deckSnapHost,
+                    isThin, isSurfaceOverlay, isSoft, block, surfaceAttachmentHost, _deckSnapHost,
                     allowAdjacentCoplanarDecks: false))
                 return true;
             refusal = PlacementRefusal.NoRoom;
@@ -3576,20 +4086,20 @@ namespace VoxelEngine.Building
         /// <summary>Preserves the old structural placement verdict while avoiding an
         /// allocating OverlapBox every ghost frame under normal collider density.</summary>
         private bool IsPlacementProbeClear(Vector3 center, Vector3 halfExtents, Quaternion orientation,
-            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
+            bool isThin, bool isSurfaceOverlay, bool isSoft, BlockItem block, PlacedBlock surfaceAttachmentHost,
             VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost, bool allowAdjacentCoplanarDecks)
         {
             int count = Physics.OverlapBoxNonAlloc(center, halfExtents, s_placementOverlapProbe,
                 orientation, ~0, QueryTriggerInteraction.UseGlobal);
             for (int i = 0; i < count; i++)
-                if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay,
+                if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay, isSoft,
                         block, surfaceAttachmentHost, deckSnapHost, allowAdjacentCoplanarDecks))
                     return false;
             if (count < s_placementOverlapProbe.Length) return true;
 
             foreach (var collider in Physics.OverlapBox(center, halfExtents, orientation,
                          ~0, QueryTriggerInteraction.UseGlobal))
-                if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay,
+                if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay, isSoft,
                         block, surfaceAttachmentHost, deckSnapHost, allowAdjacentCoplanarDecks))
                     return false;
             return true;
@@ -3620,7 +4130,7 @@ namespace VoxelEngine.Building
         }
 
         private bool IsPlacementProbeColliderAllowed(Collider collider,
-            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost,
+            bool isThin, bool isSurfaceOverlay, bool isSoft, BlockItem block, PlacedBlock surfaceAttachmentHost,
             VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost, bool allowAdjacentCoplanarDecks)
         {
             if (collider == null || collider.isTrigger) return true;
@@ -3635,9 +4145,14 @@ namespace VoxelEngine.Building
             // snapped to. The support-plane pose guarantees it sits outside that
             // host; all other structures and conduits remain collision blockers.
             if (placed != null && placed == surfaceAttachmentHost) return true;
-            // Placed blocks retain their established stacking contract
+            // Placed blocks retain their established stacking contract.
+            // 17.44.0-dev: soft-versus-soft is allowed on top of it, so decoration can
+            // share an edge with the thing it decorates. Soft versus hard never is.
             if (placed != null)
+            {
+                if (isSoft && placed.Item != null && placed.Item.softClearance) return true;
                 return block != null && block.allowStacking;
+            }
             // 17.19.0-dev: biome scatter (trees, rocks, props under a chunk's
             // __scatter holder) is decoration, never structure - it must not
             // refuse a placement. This is what blocked the quarry in any lightly

@@ -17,6 +17,13 @@ namespace VoxelEngine.Items
         public bool   allowStacking = true;
         [Tooltip("Hit-points before this placed block breaks when mined.")]
         public int    blockHealth   = 100;
+
+        [Tooltip("SOFT CLEARANCE (17.44.0-dev). Off = hard clearance: nothing may overlap " +
+                 "this block and this block may not overlap another structure. On = " +
+                 "decorative clearance: it may brush past other soft blocks so railings, " +
+                 "trim, signage and lamps can share an edge with the thing they decorate. " +
+                 "Machines, foundations and anything with a function stay off.")]
+        public bool   softClearance = false;
         [Tooltip("Required pickaxe tier to break this block once placed.")]
         [Range(0,4)] public int miningTier = 0;
 
