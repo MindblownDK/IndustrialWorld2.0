@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.1-dev`
-**Roadmap Version:** `17.43.1-dev`
+**Current Version:** `17.43.2-dev`
+**Roadmap Version:** `17.43.2-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
+- `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
+
 ### 17.43.1-dev - GridBuilder Collections Import Fix
 - Added `using System.Collections.Generic;` to `GridBuilder.cs` so multi-cell footprint helpers compile cleanly
 
@@ -44,11 +47,6 @@
 ### 17.42.9-dev - Centre Across The Canvas, Down The Ink
 - Horizontal centring comes from the canvas (pages centre their lines by padding to the canvas width, so the ink box sits left of centre and pushed the page right); vertical stays on the ink
 - A page of four printed rows or fewer rests slightly below the middle instead of dead on it
-
-### 17.42.8-dev - Pages On Their Panel
-- Centring reads the ink box again; the canvas block is only the frame pictures are placed in, so a page that starts low on its canvas no longer prints above the panel
-- Cockpit captions are fitted by comparing world extents (panel size times parent scale against text bounds times its own), absolutely rather than off a placeholder, and clamped inside the panel
-- Cockpit captions use the screen face, whose atlas is the one the tracker re-bakes
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

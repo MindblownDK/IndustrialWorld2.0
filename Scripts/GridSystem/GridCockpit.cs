@@ -51,10 +51,7 @@ namespace VoxelEngine.GridSystem
         {
             if (shellStyle != CockpitShellBuilder.StyleLegacy)
             {
-                float cellSize = Grid != null
-                    ? Grid.CellSize
-                    : VoxelEngine.Items.GridSizeSpec.CellMetres(gridSize);
-                CockpitShellBuilder.SyncColliderBounds(gameObject, cellSize, shellStyle);
+                CockpitShellBuilder.SyncColliderBounds(gameObject, EffectiveCellSize, shellStyle);
 
                 if (string.IsNullOrEmpty(blockName)
                     || blockName == "Cockpit"

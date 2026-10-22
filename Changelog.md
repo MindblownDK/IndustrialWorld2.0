@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.1-dev`
+**Current Version:** `17.43.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.43.2-dev] Use GridBlock.EffectiveCellSize in GridCockpit
+
+**Type:** PATCH - fixes cell-size property lookup in `GridCockpit.ApplyShellDurability()`; no save schema or gameplay balance change.
+
+**GitHub title:** `[17.43.2-dev] Fix cell-size lookup in GridCockpit.ApplyShellDurability`
+
+#### Fixed
+
+- **Cell-size resolution in `GridCockpit.ApplyShellDurability()`.** Replaced the non-existent `Grid.CellSize` / `GridSizeSpec.CellMetres(gridSize)` expression with `EffectiveCellSize` inherited directly from `GridBlock`, resolving the compile error when syncing 2x2x2 cockpit collider bounds.
+
+#### Validation
+
+- Passed `git diff --check`, full symbol audit across all 19 modified runtime and editor `.cs` files against repository declarations, delimiter balance check, forbidden external naming scan, and workspace size verification.
 
 ### [17.43.1-dev] Add Generic Collections Import to GridBuilder
 
