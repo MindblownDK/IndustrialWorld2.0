@@ -397,127 +397,103 @@ namespace VoxelEngine.EditorTools
             if (created)
             {
                 item = ScriptableObject.CreateInstance<GridBlockItem>();
-                item.itemName = "Grid Window";
-                item.description = "Flush modular structural window with 8 clean architectural shapes (including a 2-cell raked canopy slope and a gap-free 3-pane Corner Wrap) and 3 glass finishes.";
-                item.category = ItemCategory.Component;
-                item.maxStack = 50;
-                item.weight = 4f;
-                item.value = 32;
-                item.gridSize = GridSize.Large;
-                item.blockPrefab = prefab;
-                item.bodyColor = new Color(0.55f, 0.72f, 0.78f, 1f);
-                item.icon = VoxelEngineSetupWindow.MakeIcon("WIN", new Color(0.24f, 0.42f, 0.50f));
                 AssetDatabase.CreateAsset(item, ItemPath);
-                Debug.Log("[GridWindowSetup] Created GItem_GridWindow.asset.");
-                return item;
+                item.itemId = "grid_window";
+                item.displayName = "Grid Window";
+                item.description = "One Grid Window item with selectable square, sloped, half, corner and two-cell long-slope shapes, plus Clear, Reinforced and Tinted glass.";
+                item.iconTint = new Color(0.30f, 0.72f, 0.88f);
+                item.maxStack = 20;
+                item.gridSize = GridSize.Large;
+                item.blockMass = 400f;
+                item.blockHP = 320f;
+                item.category = "Grid Blocks";
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(item.itemId)) item.itemId = "grid_window";
+                if (string.IsNullOrWhiteSpace(item.displayName)) item.displayName = "Grid Window";
+                if (string.IsNullOrWhiteSpace(item.description)
+                    || item.description == "A structural grid window. Hold the placement-variant wheel to choose a clear, reinforced, or tinted pane."
+                    || item.description == "A structural grid window with selectable clear, reinforced, and tinted panes.")
+                    item.description = "One Grid Window item with independently selectable shape and Clear, Reinforced or Tinted glass.";
+                if (item.maxStack <= 0) item.maxStack = 20;
+                if (item.blockMass <= 0f) item.blockMass = 400f;
+                if (item.blockHP <= 0f) item.blockHP = 320f;
+                if (string.IsNullOrWhiteSpace(item.category)) item.category = "Grid Blocks";
+                item.gridSize = GridSize.Large;
             }
 
-            bool changed = false;
-            if (item.blockPrefab != prefab)
-            {
-                item.blockPrefab = prefab;
-                changed = true;
-            }
-            if (string.IsNullOrWhiteSpace(item.itemName))
-            {
-                item.itemName = "Grid Window";
-                changed = true;
-            }
-            if (item.icon == null)
-            {
-                item.icon = VoxelEngineSetupWindow.MakeIcon("WIN", new Color(0.24f, 0.42f, 0.50f));
-                changed = true;
-            }
-            if (changed)
-            {
-                EditorUtility.SetDirty(item);
-                Debug.Log("[GridWindowSetup] Repaired missing links on GItem_GridWindow.asset; custom tuning was preserved.");
-            }
+            // Reconnect identity only; authored mass, health, recipe costs and display text survive.
+            item.blockPrefab = prefab;
+            EditorUtility.SetDirty(item);
             return item;
         }
 
         private static RecipeDefinition EnsureRecipe(GridBlockItem item)
         {
-            RecipeDefinition existing = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(RecipePath);
-            if (existing != null)
+            RecipeDefinition recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(RecipePath);
+            bool created = recipe == null;
+            if (created)
             {
-                if (existing.outputItem == null && item != null)
-                {
-                    existing.outputItem = item;
-                    if (existing.outputCount <= 0) existing.outputCount = 1;
-                    EditorUtility.SetDirty(existing);
-                    Debug.Log("[GridWindowSetup] Reconnected missing output link on Recipe_GGridWindow.asset; custom ingredients and tuning were preserved.");
-                }
-                return existing;
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                AssetDatabase.CreateAsset(recipe, RecipePath);
+                recipe.displayName = "Grid Window";
+                recipe.requiredStation = StationTier.Assembler;
+                recipe.craftSeconds = 6f;
+                recipe.unlockedByDefault = true;
             }
 
-            var ingredients = new List<Ingredient>();
-            ItemDefinition ironPlate = LoadFirstItem(
-                AssetRoot + "/Items/Item_IronPlate.asset",
-                AssetRoot + "/Items/Item_IronIngot.asset");
-            if (ironPlate != null)
-                ingredients.Add(new Ingredient { item = ironPlate, count = 2 });
-
-            ItemDefinition silica = LoadFirstItem(
-                AssetRoot + "/Items/Item_Sand.asset",
-                AssetRoot + "/Items/Item_Quartz.asset",
-                AssetRoot + "/Items/Item_Stone.asset");
-            if (silica != null)
-                ingredients.Add(new Ingredient { item = silica, count = 4 });
-
-            if (ingredients.Count == 0)
-                Debug.LogWarning("[GridWindowSetup] Standard plate/sand items were not found; created Recipe_GGridWindow.asset without ingredients for manual review.");
-
-            RecipeDefinition recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
-            recipe.recipeName = "Grid Window";
-            recipe.station = CraftingStation.Workbench;
-            recipe.craftTime = 1.5f;
-            recipe.ingredients = ingredients.ToArray();
+            if (string.IsNullOrWhiteSpace(recipe.displayName)) recipe.displayName = "Grid Window";
             recipe.outputItem = item;
-            recipe.outputCount = 1;
-            AssetDatabase.CreateAsset(recipe, RecipePath);
-            Debug.Log("[GridWindowSetup] Created Recipe_GGridWindow.asset.");
+            if (recipe.outputCount <= 0) recipe.outputCount = 1;
+            if (recipe.inputs == null || recipe.inputs.Length == 0)
+            {
+                var inputs = new List<RecipeIngredient>();
+                AddInput(inputs, AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetRoot + "/Industrial/Items/Item_SteelPlate.asset"), 4);
+                AddInput(inputs, AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetRoot + "/Industrial/Items/Item_Glass.asset"), 6);
+                AddInput(inputs, AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetRoot + "/Industrial/Items/Item_CopperWire.asset"), 2);
+                recipe.inputs = inputs.ToArray();
+            }
+            EditorUtility.SetDirty(recipe);
             return recipe;
+        }
+
+        private static void AddInput(List<RecipeIngredient> inputs, ItemDefinition item, int count)
+        {
+            if (item != null) inputs.Add(new RecipeIngredient { item = item, count = count });
         }
 
         private static void RegisterRecipe(RecipeDefinition recipe)
         {
             if (recipe == null) return;
             RecipeRegistry registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(AssetRoot + "/RecipeRegistry.asset");
-            if (registry == null) return;
-
-            var list = new List<RecipeDefinition>(registry.recipes ?? System.Array.Empty<RecipeDefinition>());
-            if (list.Contains(recipe)) return;
-
-            list.Add(recipe);
-            registry.recipes = list.ToArray();
-            EditorUtility.SetDirty(registry);
-            Debug.Log("[GridWindowSetup] Registered Recipe_GGridWindow.asset in RecipeRegistry.asset.");
-        }
-
-        private static ItemDefinition LoadFirstItem(params string[] paths)
-        {
-            for (int i = 0; i < paths.Length; i++)
+            if (registry == null)
             {
-                ItemDefinition found = AssetDatabase.LoadAssetAtPath<ItemDefinition>(paths[i]);
-                if (found != null) return found;
+                Debug.LogWarning("[GridWindowSetup] RecipeRegistry.asset was not found. The recipe asset was created but must be registered after the core crafting setup.");
+                return;
             }
-            return null;
+            if (!registry.recipes.Contains(recipe))
+            {
+                registry.recipes.Add(recipe);
+                EditorUtility.SetDirty(registry);
+            }
         }
 
         private static Material GetOrUpdateMaterial(string assetName, Color color, bool translucent, float metallic, float smoothness)
         {
             string path = MaterialFolder + "/" + assetName + ".mat";
             Material mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            Shader shader = VoxelEngine.Rendering.RuntimeMaterials.LitShader;
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             if (shader == null) return null;
 
             if (mat == null)
             {
-                mat = new Material(shader) { name = assetName };
+                mat = new Material(shader) { name = assetName, color = color };
                 AssetDatabase.CreateAsset(mat, path);
+                mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat == null) return null;
             }
-            else if (mat.shader == null || mat.shader != shader)
+            else if (mat.shader == null)
             {
                 mat.shader = shader;
             }
@@ -527,18 +503,14 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Rendering.RuntimeMaterials.ApplyTranslucent(mat, color);
                 if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
                 if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
-                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
             }
             else
             {
                 mat.color = color;
                 if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
                 if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
-                if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 0f);
                 if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
                 if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
-                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
-                mat.renderQueue = -1;
             }
 
             EditorUtility.SetDirty(mat);

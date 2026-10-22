@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.4-dev`
+**Current Version:** `17.43.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.43.5-dev] Restore Canonical Item, Recipe, and Material Helpers in GridWindowSetup
+
+**Type:** PATCH - restores the canonical `GridBlockItem`, `RecipeDefinition`, `RecipeRegistry`, and `Shader.Find` helper definitions in `GridWindowSetup.cs` so editor setup compiles cleanly in Unity; no save schema change.
+
+**GitHub title:** `[17.43.5-dev] Restore canonical item, recipe, and material helpers in GridWindowSetup`
+
+#### Fixed
+
+- **Editor compilation errors in `GridWindowSetup.cs`.** Restored the exact `EnsureItem`, `EnsureRecipe`, `RegisterRecipe`, and `GetOrUpdateMaterial` implementations using `GridBlockItem` (`itemId`, `displayName`, `iconTint`, `blockMass`, `blockHP`), `RecipeDefinition` (`displayName`, `requiredStation`, `craftSeconds`, `inputs`, `RecipeIngredient`), `RecipeRegistry.recipes`, and `Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard")`.
+
+#### Validation
+
+- Inspected every line of `Scripts/Editor/GridSystem/GridWindowSetup.cs` against `HEAD` and verified `git diff --check`, delimiter balance across all modified C# files, zero emojis in changelog notes, and 5-entry `Recently Done` cap in `Roadmap.md`.
 
 ### [17.43.4-dev] Clean Single-Pane Sloped Grid Windows and Mitered Octagon Cockpit Shells
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.4-dev`
-**Roadmap Version:** `17.43.4-dev`
+**Current Version:** `17.43.5-dev`
+**Roadmap Version:** `17.43.5-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 17.43.5-dev - GridWindowSetup Asset Helper Fix
+- Restored canonical `GridBlockItem`, `RecipeDefinition`, `RecipeRegistry`, and `Shader.Find` helper methods in `GridWindowSetup.cs` so the editor setup script compiles cleanly
+
 ### 17.43.4-dev - Clean Single-Pane Sloped Windows & Watertight Octagon Cockpits
 - Sloped Grid Window variants (`Slope`, `InvertedSlope`, `HalfSlope`, `LongSlope`, `LongSlopeTwoCell`) now generate clean single-pane window sheets without extra side cheek walls or box rails
 - Reinforced Cockpit front, quarter, and side windows seal flush into the mitered 45-degree glacis, FOPS pillars, and roof with zero gaps
@@ -44,11 +47,6 @@
 
 ### 17.43.1-dev - GridBuilder Collections Import Fix
 - Added `using System.Collections.Generic;` to `GridBuilder.cs` so multi-cell footprint helpers compile cleanly
-
-### 17.43.0-dev - 2x2x2 Cockpits, Sealed Corner Windows, Steady Cameras & Clean Dismounts
-- Modern cockpits span a save-compatible 2x2x2 Large-grid volume with unobstructed low-arc MFDs, harvester front/side/floor glazing (`0.80x` HP) and a reinforced armored cab (`1.85x` HP)
-- All 8 Grid Window variants use flush industrial frames, cell-aligned slopes, and a sealed 3-pane chamfered Corner Wrap with zero gaps
-- Seated piloting keeps `RigidbodyInterpolation.Interpolate` with zero local camera shake, and `F` exits seats/mounts without toggling `FlyMode`
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
