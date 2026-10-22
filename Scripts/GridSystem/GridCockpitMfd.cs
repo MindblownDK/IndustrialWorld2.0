@@ -258,9 +258,9 @@ namespace VoxelEngine.GridSystem
         private void PlacePlanetGlobe()
         {
             if (_planetGlobe == null || _planetPanel == null) return;
-            const float radius = 0.09f;
+            float radius = Mathf.Max(0.05f, _planetGlobe.localScale.x * 0.5f);
             _planetGlobe.localPosition = _planetPanel.localPosition + _planetPanel.localRotation *
-                new Vector3(0f, -0.045f, _planetPanel.localScale.z * 0.5f + radius);
+                new Vector3(0f, -_planetPanel.localScale.y * 0.14f, _planetPanel.localScale.z * 0.5f + radius * 0.55f);
             _planetGlobe.localRotation = _planetPanel.localRotation;
         }
 

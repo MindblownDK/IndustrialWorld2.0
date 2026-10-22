@@ -627,6 +627,7 @@ namespace VoxelEngine.Building
                 {
                     for (int i = 0; i < _rowTexts.Count; i++)
                     {
+                        if (_rowTexts[i] == null) continue;
                         string line = lines[i] ?? "";
                         if (_shown[i] == line) continue;
                         _shown[i] = line;
@@ -649,6 +650,7 @@ namespace VoxelEngine.Building
                     bool changed = false;
                     for (int i = 0; i < _nixieDigits.Count; i++)
                     {
+                        if (_nixieDigits[i] == null) continue;
                         string ch = i < all.Length ? all.Substring(i, 1) : "";
                         if (_nixieDigits[i].text == ch) continue;
                         _nixieDigits[i].text = ch;
@@ -677,19 +679,23 @@ namespace VoxelEngine.Building
             if (row >= _rowCards.Count || row >= _rowTexts.Count) yield break;
             var card = _rowCards[row];
             var label = _rowTexts[row];
+            if (card == null || label == null) yield break;
             var labelRenderer = label.GetComponent<MeshRenderer>();
 
             yield return new WaitForSeconds(0.04f * row);
 
+            if (card == null || label == null) yield break;
             if (labelRenderer != null) labelRenderer.enabled = false;
             float t = 0f;
             while (t < 0.05f)
             {
+                if (card == null) yield break;
                 t += Time.deltaTime;
                 card.localRotation = Quaternion.Euler(Mathf.Lerp(0f, 88f, t / 0.05f), 0f, 0f);
                 yield return null;
             }
 
+            if (card == null || label == null) yield break;
             label.text = text;
             if (labelRenderer != null) labelRenderer.enabled = true;
             VoxelEngine.FX.AudioManager.PlayAt(
@@ -700,11 +706,12 @@ namespace VoxelEngine.Building
             t = 0f;
             while (t < 0.07f)
             {
+                if (card == null) yield break;
                 t += Time.deltaTime;
                 card.localRotation = Quaternion.Euler(Mathf.Lerp(88f, 0f, t / 0.07f), 0f, 0f);
                 yield return null;
             }
-            card.localRotation = Quaternion.identity;
+            if (card != null) card.localRotation = Quaternion.identity;
         }
 
         private System.Collections.IEnumerator NixieFlicker()

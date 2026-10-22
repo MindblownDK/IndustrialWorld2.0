@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.2-dev`
-**Roadmap Version:** `17.43.2-dev`
+**Current Version:** `17.43.4-dev`
+**Roadmap Version:** `17.43.4-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 17.43.4-dev - Clean Single-Pane Sloped Windows & Watertight Octagon Cockpits
+- Sloped Grid Window variants (`Slope`, `InvertedSlope`, `HalfSlope`, `LongSlope`, `LongSlopeTwoCell`) now generate clean single-pane window sheets without extra side cheek walls or box rails
+- Reinforced Cockpit front, quarter, and side windows seal flush into the mitered 45-degree glacis, FOPS pillars, and roof with zero gaps
+- Wraparound Cockpit bottom floor frame, observation glass, waist rail, and canopy visor follow the exact 45-degree chamfered octagon with zero square corners sticking out
+
+### 17.43.3-dev - Pilot-Facing Cockpit MFDs & Streaming / Screen Fixes
+- All three cockpit MFDs use `Quaternion.LookRotation(SeatEye - centre, Vector3.up)` to tilt upward and angle inward directly at the pilot's eyes, with the 3D planet globe centered cleanly below the planet title
+- `SphereWorld` settles any stale-epoch `SurfaceNetsJob` / `SphereChunkGenJob` on recycled `Chunk` instances and places springs/lakes before `QueueMesh`
+- `GridBuilder.ShowGhost` strips `RailDisplayScreen` on ghosts and `RailDisplayScreen` guards destroyed `TextMesh` rows
+
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
 
@@ -37,16 +47,8 @@
 
 ### 17.43.0-dev - 2x2x2 Cockpits, Sealed Corner Windows, Steady Cameras & Clean Dismounts
 - Modern cockpits span a save-compatible 2x2x2 Large-grid volume with unobstructed low-arc MFDs, harvester front/side/floor glazing (`0.80x` HP) and a reinforced armored cab (`1.85x` HP)
-- All 8 Grid Window variants use flush industrial frames, cell-aligned slopes with side cheek glazing, and a sealed 3-pane chamfered Corner Wrap with zero gaps
+- All 8 Grid Window variants use flush industrial frames, cell-aligned slopes, and a sealed 3-pane chamfered Corner Wrap with zero gaps
 - Seated piloting keeps `RigidbodyInterpolation.Interpolate` with zero local camera shake, and `F` exits seats/mounts without toggling `FlyMode`
-
-### 17.42.10-dev - One Empty State
-- A page is centred on the canvas when its ink is centred in it, and on its ink when it is left-aligned, so farm and custom pages no longer hang off the left edge
-- One shared empty-state treatment (name, what is missing, what to do) used by every page that can arrive empty, with a per-page hint line
-
-### 17.42.9-dev - Centre Across The Canvas, Down The Ink
-- Horizontal centring comes from the canvas (pages centre their lines by padding to the canvas width, so the ink box sits left of centre and pushed the page right); vertical stays on the ink
-- A page of four printed rows or fewer rests slightly below the middle instead of dead on it
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

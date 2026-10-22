@@ -1,9 +1,41 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.2-dev`
+**Current Version:** `17.43.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.43.4-dev] Clean Single-Pane Sloped Grid Windows and Mitered Octagon Cockpit Shells
+
+**Type:** PATCH - removes extra side cheek panes and box rails from sloped Grid Window variants, eliminates the Reinforced Cockpit front/quarter window seam gap, and trims protruding square floor/canopy corners on both cockpits to a clean mitered 45-degree octagon; no save schema change.
+
+**GitHub title:** `[17.43.4-dev] Fix extra sloped window side panes, Reinforced cockpit window gap, and Wraparound corner overhangs`
+
+#### Fixed
+
+- **Extra side panes and frame faces on sloped Grid Window variants.** `GridWindowSetup.BuildWindowShapes()` generated left/right triangular/trapezoidal side cheek panes, bottom rails, rear posts, and a lower riser pane on `Slope`, `InvertedSlope`, `HalfSlope`, `LongSlope`, and `LongSlopeTwoCell`. Removed all extra side cheeks and box faces so every sloped variant builds a single clean modular window pane just like `Square`, `Half`, and `Corner`.
+- **Front / quarter window sky gap and overhanging brow/glacis corners on the Reinforced Cockpit.** `CockpitShellBuilder.BuildReinforcedHeavyCab()` left a vertical gap between the window top (`+1.63`) and armored roof (`+1.68`) and extended square glacis/brow corners past the angled quarter glass. Extended all window panes cleanly into both sill and roof (`y = -0.36 .. +1.74`) and aligned the floor, glacis, quarter windows, FOPS pillars, brow armor, and roof along one closed 45-degree chamfered octagon with zero gaps.
+- **Square bottom floor and canopy corners sticking out on the Wraparound Cockpit.** `CockpitShellBuilder.BuildWraparoundHarvester()` extended full-width rectangular floor glass, side floor frames, front brush bar, waist bar, and canopy visor past the 45-degree front corner wraps. Mitered every bottom frame member, observation floor glass pane, waist transom, ROPS post, and canopy visor along the exact `(1.92, 1.28) <-> (1.30, 1.90)` 45-degree octagon perimeter so zero square corners overhang.
+
+#### Validation
+
+- Passed `git diff --check`, delimiter balance check across all modified C# files, forbidden external naming scan, zero-emoji check on added changelog notes, and workspace snapshot budget verification. Re-run both `Refresh cockpit shells and preserve cockpit tuning` and `Create or repair Grid Window prefab, item & recipe` in `Tools -> Voxel Engine -> Voxel Engine Setup`.
+
+### [17.43.3-dev] Aim Cockpit MFDs Directly at Pilot Eyes and Fix Streaming / Display Exceptions
+
+**Type:** PATCH - orients cockpit MFD screens inward and upward toward the pilot's eyes, centers the 3D planet globe, and resolves the `SphereWorld` `SurfaceNetsJob` voxel write race and `RailDisplayScreen` destroyed-`TextMesh` exception; no save schema change.
+
+**GitHub title:** `[17.43.3-dev] Aim cockpit MFD screens at pilot eyes, fix SphereWorld job race and RailDisplayScreen exception`
+
+#### Fixed
+
+- **Cockpit MFD screens angled away from the pilot in both shells.** `CockpitShellBuilder.BuildInterior()` rotated the three MFD panels using inverted yaw/pitch Euler angles, leaving the outer panels turned outward toward the side glass and pitched downward while offsetting the 3D planet globe. Each panel now uses `Quaternion.LookRotation(SeatEye - centre, Vector3.up)` so all three displays tilt up and angle inward squarely at the pilot's eyes, and `GridCockpitMfd.PlacePlanetGlobe()` centers the globe cleanly below the planet name.
+- **`InvalidOperationException` on `SurfaceNetsJob.voxels` in `SphereWorld`.** When a pooled `Chunk` streamed out while a prior `SurfaceNetsJob` or `SphereChunkGenJob` was still in flight and was re-rented for a new chunk coordinate, `CompleteMeshJobFor` and `CompleteGenJobFor` skipped stale epochs even though they still held an active `AtomicSafetyHandle` on `chunk.voxels`, and `TryPlaceSprings` / `TryPlaceLake` also wrote voxels after `QueueMesh` had queued the chunk. `CompleteGenJobFor` and `CompleteMeshJobFor` now settle any job referencing the `Chunk` instance regardless of epoch before reuse, and spring/lake placement runs strictly before `QueueMesh`.
+- **`MissingReferenceException` on destroyed `TextMesh` in `RailDisplayScreen`.** Placement ghosts destroyed child `TextMesh` objects while leaving `RailDisplayScreen` active on the preview object. `GridBuilder.ShowGhost()` now disables and destroys `RailDisplayScreen` components on ghosts, and `RailDisplayScreen.Apply()` / `FlipRow()` guard null `TextMesh` references safely.
+
+#### Validation
+
+- Passed `git diff --check`, delimiter balance check across all modified C# files, forbidden external naming scan, zero-emoji changelog check, and workspace size verification. Re-run `Refresh cockpit shells and preserve cockpit tuning` in Unity to update the MFD orientations in `Cockpit_Large.prefab`.
 
 ### [17.43.2-dev] Use GridBlock.EffectiveCellSize in GridCockpit
 

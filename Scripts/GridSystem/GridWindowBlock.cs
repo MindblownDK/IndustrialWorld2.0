@@ -124,12 +124,12 @@ namespace VoxelEngine.GridSystem
 
         public static string ShapeBlurbOf(int shape) => (GridWindowShape)NormalizeShape(shape) switch
         {
-            GridWindowShape.Slope => "Full 45-degree sloped glazing with sealed triangular side cheeks.",
-            GridWindowShape.LongSlope => "Upper 1:2 shallow slope that pairs seamlessly behind Half Slope.",
-            GridWindowShape.LongSlopeTwoCell => "Continuous 2-cell raked canopy slope with full flank glazing; owns both rotated cells.",
+            GridWindowShape.Slope => "Clean 45-degree sloped window pane for continuous angled roofs and windscreens.",
+            GridWindowShape.LongSlope => "Upper 1:2 shallow sloped window pane that aligns smoothly behind Half Slope.",
+            GridWindowShape.LongSlopeTwoCell => "Continuous 2-cell raked canopy window pane; reserves both rotated grid cells.",
             GridWindowShape.Half => "Flush half-height industrial window with reinforced top sill.",
-            GridWindowShape.HalfSlope => "Lower 1:2 raked glazing that transitions cleanly into Long Slope or Half windows.",
-            GridWindowShape.InvertedSlope => "Full 45-degree inverted overhang glazing for harvester chins and observation noses.",
+            GridWindowShape.HalfSlope => "Lower 1:2 sloped window pane that pairs smoothly ahead of Long Slope.",
+            GridWindowShape.InvertedSlope => "Clean 45-degree inverted overhang window pane for observation noses.",
             GridWindowShape.Corner => "Connected 3-pane panoramic chamfer wrap sealing a 90-degree corner with zero gaps.",
             _ => "Flush full-cell architectural window frame.",
         };

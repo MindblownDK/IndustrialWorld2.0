@@ -2133,6 +2133,11 @@ namespace VoxelEngine.GridSystem
                     // text mesh the prefab carries is removed outright: tinted with the
                     // ghost material, a page of glyphs reads as noise crawling over the
                     // block - and on a screen ghost it was the page itself.
+                    foreach (var screen in _ghost.GetComponentsInChildren<VoxelEngine.Building.RailDisplayScreen>(true))
+                    {
+                        screen.enabled = false;
+                        Destroy(screen);
+                    }
                     foreach (var b in _ghost.GetComponentsInChildren<GridBlock>(true))
                     {
                         b.enabled = false;

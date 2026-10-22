@@ -975,6 +975,11 @@ namespace VoxelEngine.Cosmos
                 _queuedForGeneration.Remove(chunk);
                 if (chunk.isGenerated || IsGenJobPending(chunk)) continue;
 
+                // Ensure any stale in-flight gen or SurfaceNets job from a prior pool rental of this
+                // Chunk instance has released its NativeArray safety handle before writing chunk.voxels.
+                CompleteGenJobFor(chunk, finalizeContent: false);
+                CompleteMeshJobFor(chunk);
+
                 // Fast path: load from disk if previously saved.
                 if (_storage != null && _storage.TryLoadChunk(chunk.coord, chunk))
                 {
@@ -984,13 +989,15 @@ namespace VoxelEngine.Cosmos
                     // Re-evaluate deterministic oil-rich-body seeps after loading old chunks too.
                     bool loadedSurfaceChunk = ShouldBuildInitialTerrainMesh(chunk);
                     if (loadedSurfaceChunk)
+                    {
                         VoxelEngine.Generation.OilReservoirDecorator.Decorate(chunk, this);
+                        TryPlaceSprings(chunk);
+                    }
                     if (ChunkHasGeneratedLiquid(chunk))
                         VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
                     // Saved chunks can contain intentional player mines/building edits below the
                     // exterior band, so preserve their full mesh restore path.
                     QueueMesh(chunk);
-                    if (loadedSurfaceChunk) TryPlaceSprings(chunk);
                     if (!loadedSurfaceChunk) chunk.isScattered = true;
                     continue;
                 }
@@ -1214,9 +1221,9 @@ namespace VoxelEngine.Cosmos
 
             if (initialSurfaceChunk)
             {
-                QueueMesh(p.chunk);
                 TryPlaceSprings(p.chunk);
                 TryPlaceLake(p.chunk);
+                QueueMesh(p.chunk);
             }
             else
             {
@@ -1664,7 +1671,7 @@ namespace VoxelEngine.Cosmos
             if (chunk == null) return;
             for (int i = _pendingGen.Count - 1; i >= 0; i--)
             {
-                if (_pendingGen[i].chunk != chunk || _pendingGen[i].epoch != chunk.streamEpoch) continue;
+                if (_pendingGen[i].chunk != chunk) continue;
                 var p = _pendingGen[i];
                 _pendingGen.RemoveAt(i);
                 // Non-recursive: just complete + mark. Do NOT call FinalizeGen (which would
@@ -1672,7 +1679,7 @@ namespace VoxelEngine.Cosmos
                 // safe to mesh and this queue path preserves the normal finalisation order.
                 p.handle.Complete();
                 DisposeGenLattice(p);
-                if (!IsCurrentChunk(p.chunk, p.epoch)) return;
+                if (!IsCurrentChunk(p.chunk, p.epoch)) continue;
                 p.chunk.isGenerated = true;
                 p.chunk.genCompletedTime = Time.time;
                 p.chunk.isScattered = false;
@@ -1684,16 +1691,16 @@ namespace VoxelEngine.Cosmos
                         VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
                 }
                 QueueMesh(p.chunk);
-                return;
             }
         }
 
         private void CompleteMeshJobFor(Chunk chunk)
         {
+            if (chunk == null) return;
             for (int i = _pendingMesh.Count - 1; i >= 0; i--)
             {
                 var p = _pendingMesh[i];
-                if (p.chunk != chunk || p.epoch != chunk.streamEpoch) continue;
+                if (p.chunk != chunk) continue;
                 p.handle.Complete();
                 if (IsCurrentChunk(p.chunk, p.epoch))
                 {

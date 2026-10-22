@@ -1,5 +1,5 @@
 // Assets/Scripts/VoxelEngine/UI/GridWindowShapeIcons.cs
-// Clean architectural symbols for all 8 Grid Window shapes on the placement wheel.
+// Clean architectural symbols for all 8 single-sheet Grid Window shapes on the placement wheel.
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
@@ -14,13 +14,23 @@ namespace VoxelEngine.UI
             switch (selected)
             {
                 case GridWindowShape.Slope:
-                    b.Closed(new Vector2(0.16f, 0.14f), new Vector2(0.84f, 0.14f), new Vector2(0.84f, 0.84f));
-                    b.Line(new Vector2(0.34f, 0.24f), new Vector2(0.76f, 0.66f));
+                    // Clean single 45-degree sloped window pane (isometric sheet)
+                    b.Closed(
+                        new Vector2(0.14f, 0.20f),
+                        new Vector2(0.56f, 0.20f),
+                        new Vector2(0.86f, 0.80f),
+                        new Vector2(0.44f, 0.80f));
+                    b.Line(new Vector2(0.32f, 0.36f), new Vector2(0.66f, 0.66f));
                     break;
 
                 case GridWindowShape.InvertedSlope:
-                    b.Closed(new Vector2(0.16f, 0.84f), new Vector2(0.84f, 0.84f), new Vector2(0.84f, 0.14f));
-                    b.Line(new Vector2(0.34f, 0.74f), new Vector2(0.76f, 0.32f));
+                    // Clean single 45-degree inverted overhang window pane
+                    b.Closed(
+                        new Vector2(0.14f, 0.80f),
+                        new Vector2(0.56f, 0.80f),
+                        new Vector2(0.86f, 0.20f),
+                        new Vector2(0.44f, 0.20f));
+                    b.Line(new Vector2(0.32f, 0.64f), new Vector2(0.66f, 0.34f));
                     break;
 
                 case GridWindowShape.Half:
@@ -30,27 +40,38 @@ namespace VoxelEngine.UI
                     break;
 
                 case GridWindowShape.HalfSlope:
-                    b.Closed(new Vector2(0.16f, 0.14f), new Vector2(0.84f, 0.14f), new Vector2(0.84f, 0.50f));
-                    b.Line(new Vector2(0.36f, 0.20f), new Vector2(0.78f, 0.42f));
+                    // Lower 1:2 single sloped pane
+                    b.Closed(
+                        new Vector2(0.14f, 0.18f),
+                        new Vector2(0.56f, 0.18f),
+                        new Vector2(0.86f, 0.52f),
+                        new Vector2(0.44f, 0.52f));
+                    b.Line(new Vector2(0.34f, 0.28f), new Vector2(0.66f, 0.44f));
                     break;
 
                 case GridWindowShape.LongSlope:
+                    // Upper 1:2 single sloped pane
                     b.Closed(
-                        new Vector2(0.16f, 0.14f),
-                        new Vector2(0.84f, 0.14f),
-                        new Vector2(0.84f, 0.84f),
-                        new Vector2(0.16f, 0.50f));
-                    b.Line(new Vector2(0.24f, 0.48f), new Vector2(0.78f, 0.75f));
+                        new Vector2(0.14f, 0.48f),
+                        new Vector2(0.56f, 0.48f),
+                        new Vector2(0.86f, 0.82f),
+                        new Vector2(0.44f, 0.82f));
+                    b.Line(new Vector2(0.34f, 0.58f), new Vector2(0.66f, 0.74f));
                     break;
 
                 case GridWindowShape.LongSlopeTwoCell:
-                    b.Closed(new Vector2(0.06f, 0.18f), new Vector2(0.94f, 0.18f), new Vector2(0.94f, 0.80f));
-                    b.Line(new Vector2(0.50f, 0.18f), new Vector2(0.50f, 0.49f));
-                    b.Line(new Vector2(0.24f, 0.26f), new Vector2(0.86f, 0.69f));
+                    // Continuous 2-cell sloped canopy window sheet
+                    b.Closed(
+                        new Vector2(0.06f, 0.24f),
+                        new Vector2(0.34f, 0.24f),
+                        new Vector2(0.94f, 0.76f),
+                        new Vector2(0.66f, 0.76f));
+                    b.Line(new Vector2(0.36f, 0.50f), new Vector2(0.64f, 0.50f));
+                    b.Line(new Vector2(0.24f, 0.34f), new Vector2(0.76f, 0.68f));
                     break;
 
                 case GridWindowShape.Corner:
-                    // Connected 3-pane panoramic chamfer wrap icon (top-down + perspective read)
+                    // Connected 3-pane panoramic chamfer wrap icon
                     b.Polyline(
                         new Vector2(0.16f, 0.22f),
                         new Vector2(0.54f, 0.22f),
