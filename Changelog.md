@@ -1,9 +1,36 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.10-dev`
+**Current Version:** `17.43.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.43.0-dev] Spacious 2x2x2 Cockpits, Sealed Corner Windows, Steady Cameras, and Clean Dismounts
+
+**Type:** MINOR - expands modern cockpits to a save-compatible 2x2x2 Large-grid footprint with overhauled harvester and armored cab shells, rebuilds all eight Grid Window shapes including a solid three-pane Corner Wrap, eliminates seated camera shake and high-speed hull stutter, and isolates jetpack toggling from seat/mount dismount.
+
+**GitHub title:** `[17.43.0-dev] Overhaul 2x2x2 cockpits and grid windows, fix seated camera shake and F-key jetpack toggle`
+
+#### Added
+
+- **Spacious 2x2x2 Large-grid cockpit footprint (`4 m x 4 m x 4 m`).** Modern shelled cockpits now span eight Large-grid cells (`{0, 1} x {0, 1} x {-1, 0}`) across placement preview, obstruction probing, precision-attachment conflict checks, structural occupancy, island pruning, and safe player exit positioning. Smart anchor pocket resolution automatically shifts placement within the 2x2x2 volume when aiming against adjacent chassis blocks, while `WorldStatePersistence` restores pre-17.43 constructs non-destructively even if older ships placed hull blocks directly adjacent to a legacy 1x1x1 cockpit.
+- **Wraparound Cockpit harvester shell (`StyleCrawler = 1`).** Rebuilt with full front raked windscreen, raked lower chin glazing, full bottom floor observation panes flanking and ahead of a slim central catwalk spine, floor-to-ceiling side and 45-degree corner glazing, slim tubular ROPS posts, top-parked wipers, folding mirrors, and a six-lamp floodlight roof visor. Configured at `0.80x` base durability (`1,600 HP` at default `2,000`).
+- **Reinforced Cockpit heavy-machinery shell (`StyleCab = 2`).** Rebuilt as a heavy industrial cab with a solid ribbed steel floor, multi-plate bolted lower glacis armor, push bumper with recovery clevises, rock-guarded headlights, crew doors with steps and grab rails, thick FOPS cage, roof HVAC packs, armored radome, and tall unobstructed upper panoramic windows (`1.98 m` clear height). Configured at `1.85x` base durability (`3,700 HP` at default `2,000`).
+
+#### Improved
+
+- **Unobstructed cockpit sightlines and curved low-profile MFD pod.** Elevated `SeatAnchor` to `(0, 0.36, 0.16)` with chair-mounted side stick/throttle pods and relocated all three live MFD panels (`AIR %`, `SPEED m/s`, `PLANET GLOBE`) onto a cantilevered waist-level arc tilted toward the pilot below `-35` degrees so forward, side, and downward glass stays clear. Centered the `AIR` caption cleanly on `MFD_Screen_0`.
+- **All eight Grid Window variants and sealed 3-pane Corner Wrap.** Rebuilt `GridWindowSetup` with flush architectural steel channels, brushed gasket bezels, corner gussets, true 45-degree and 1:2 cell-aligned slopes, persistent double-sided side cheek glazing meshes, and a connected three-pane panoramic `Corner Wrap` (`Front -> 45-degree Chamfer -> Side`) sealed with full-height mullions and top/bottom tie plates with zero holes or gaps.
+- **Non-destructive material and prefab refresh in Setup.** `CockpitShellSetup`, `GridWindowSetup`, and `VoxelEngineSetupWindow` now update material properties in place without breaking GUIDs and create or refresh prefabs, items, and recipes without overwriting custom power, mass, health, recipe inputs, or custom prefab children.
+
+#### Fixed
+
+- **Eliminated camera and grid shaking while seated in a cockpit.** Fixed three compounding causes: `GridEntity.FixedUpdate()` subtracted planet gravity even while stationary or holding dampeners (feeding a continuous `1.35 G` impulse into `CameraFeedback`), `CameraFeedback` jittered local camera position/rotation inside the cockpit child hierarchy regardless of `GameSettings.ScreenShake`, and `GridEntity` disabled `RigidbodyInterpolation.Interpolate` above `30 m/s` even while piloted. Seated piloting now keeps `RigidbodyInterpolation.Interpolate` active, feeds zero impulse at rest, and never applies local camera shake inside a cockpit.
+- **Pressing `F` to exit a cockpit or mount no longer toggles jetpack flight.** `PlayerController` now suppresses `ToggleFly` while mounted/seated (`IsInAnySeatOrMount`) and on the exact frame any cockpit, helm, ship console, artillery seat, or rideable animal exits (`SuppressFlyToggleThisFrame()` + `OnEnable()` guard), and `GridCockpit.Exit()` no longer auto-enables `FlyMode`.
+
+#### Validation
+
+- Passed `git diff --check`, brace/parenthesis/bracket delimiter verification, forbidden external naming scan, non-destructive setup check, and workspace size verification. Full visual and flight verification requires running the two non-destructive setup actions in Unity.
 
 ### [17.42.10-dev] One Empty State, And A Centre That Fits The Page
 

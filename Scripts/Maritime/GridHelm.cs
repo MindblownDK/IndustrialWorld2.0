@@ -146,11 +146,12 @@ namespace VoxelEngine.Maritime
                 _pilotCamPivot.localRotation = _origPivotRot;
             }
 
-            // Re-enable player.
+            // Re-enable player without letting the shared 'F' press toggle jetpack flight.
             if (Pilot != null)
             {
                 Pilot.transform.SetParent(_origParent, true);
                 Pilot.transform.position = transform.position + transform.up * 1.2f + transform.right * 1.5f;
+                Pilot.SuppressFlyToggleThisFrame();
                 Pilot.enabled = true;
                 var cc = Pilot.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = true;

@@ -6890,8 +6890,11 @@ namespace VoxelEngine.EditorTools
 
                         if (needsVisualRebuild)
                         {
-                            while (root.transform.childCount > 0)
-                                UnityEngine.Object.DestroyImmediate(root.transform.GetChild(0).gameObject);
+                            if (!lowerPrefabName.Contains("cockpit"))
+                            {
+                                while (root.transform.childCount > 0)
+                                    UnityEngine.Object.DestroyImmediate(root.transform.GetChild(0).gameObject);
+                            }
 
                             var mf = root.GetComponent<MeshFilter>();
                             if (mf != null) UnityEngine.Object.DestroyImmediate(mf);
@@ -6911,6 +6914,9 @@ namespace VoxelEngine.EditorTools
                         if (b == null) b = root.AddComponent<T>();
 
                         config?.Invoke(b);
+
+                        if (b is VoxelEngine.GridSystem.GridCockpit builtCockpit)
+                            VoxelEngine.GridSystem.CockpitShellBuilder.SyncColliderBounds(root, cs, builtCockpit.shellStyle);
                     }
                     finally
                     {
@@ -7167,10 +7173,15 @@ namespace VoxelEngine.EditorTools
 
             RetireCockpitVariants();
 
-            var cockPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 2f),
-                c => { c.idleWatts = 50f; c.shellStyle = VoxelEngine.GridSystem.CockpitShellBuilder.StyleCrawler; });
+            var cockPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(4f, 4f, 4f),
+                c =>
+                {
+                    if (c.idleWatts <= 0f) c.idleWatts = 50f;
+                    if (c.shellStyle == VoxelEngine.GridSystem.CockpitShellBuilder.StyleLegacy)
+                        c.shellStyle = VoxelEngine.GridSystem.CockpitShellBuilder.StyleCrawler;
+                });
             var itemCockpit = MakeGItem("GItem_Cockpit", "Cockpit", new Color(0.55f, 0.72f, 0.92f), cockPref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
-            itemCockpit.description = "A seated cockpit with two shells to choose from: arm the crawler nose or the survey cab on the build wheel and the block you place wears it. Three displays across the dash, a console low enough to glance at, and glass down to the sill. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+            itemCockpit.description = "Spacious 2x2x2 seated industrial cockpit with two selectable shells on the build wheel: the Wraparound Cockpit (harvester-style front, side & bottom floor observation glass, lighter hull) or the Reinforced Cockpit (rugged heavy-duty machinery cab with bolted glacis armor, FOPS cage & high integrity). Three angled displays sit low below eye level so outward sightlines stay unobstructed.";
             EditorUtility.SetDirty(itemCockpit);
             AddGRecipe("Recipe_GCockpit", "Cockpit", itemCockpit, (steelPlate, 10), (circuit, 6), (glass, 6));
 

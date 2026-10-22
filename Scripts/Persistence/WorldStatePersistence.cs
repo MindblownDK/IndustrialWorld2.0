@@ -2883,8 +2883,11 @@ namespace VoxelEngine.Persistence
             if (saved.hasLocalPose)
                 block.transform.localPosition = saved.localPosition;
 
-            // OnPlaced initializes defaults, so reapply persisted state afterwards.
-            block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
+            // OnPlaced initializes defaults, so reapply persisted state afterwards,
+            // clamped against maxHP in case a shell durability multiplier adjusted maxHP.
+            block.currentHP = saved.currentHP > 0f
+                ? Mathf.Min(saved.currentHP, block.maxHP)
+                : block.maxHP;
             block.Enabled = saved.enabled;
             // A battered hull reloads battered: cracks are derived from saved HP.
             block.RefreshDamageVisual();
@@ -3532,13 +3535,13 @@ namespace VoxelEngine.Persistence
                 }
                 else
                 {
-                    if (grid.GetBlock(saved.gridPos) != null)
+                    if (grid.Blocks.ContainsKey(saved.gridPos))
                     {
                         Destroy(go);
                         return null;
                     }
                     block.transform.rotation = grid.transform.rotation * saved.localRotation;
-                    if (!grid.TryAddBlock(saved.gridPos, block))
+                    if (!grid.TryAddSavedBlock(saved.gridPos, block))
                     {
                         Destroy(go);
                         return null;

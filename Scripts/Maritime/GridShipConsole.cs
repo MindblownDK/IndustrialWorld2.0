@@ -140,6 +140,7 @@ namespace VoxelEngine.Maritime
             {
                 Pilot.transform.SetParent(_origParent, true);
                 Pilot.transform.position = transform.position + transform.up * 1.2f + transform.right * 1.5f;
+                Pilot.SuppressFlyToggleThisFrame();
                 Pilot.enabled = true;
                 var cc = Pilot.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = true;

@@ -41,23 +41,48 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private const float ArmoredCabHealthMultiplier = 1.5f;
+        public const float WraparoundHealthMultiplier = 0.80f;
+        public const float ArmoredCabHealthMultiplier = 1.85f;
 
-        /// <summary>The broad-glazed armored cab has more integrity than the low crawler.
-        /// Its durability is derived from the same authored item health, so Setup never
-        /// rewrites the existing block-health tuning.</summary>
+        /// <summary>The reinforced heavy-machinery cab carries heavy armored integrity while
+        /// the wraparound harvester cockpit trades durability for full-glass visibility.
+        /// Derived from the authored item health so Setup never overwrites custom item values.</summary>
         public void ApplyShellDurability()
         {
+            if (shellStyle != CockpitShellBuilder.StyleLegacy)
+            {
+                float cellSize = Grid != null
+                    ? Grid.CellSize
+                    : VoxelEngine.Items.GridSizeSpec.CellMetres(gridSize);
+                CockpitShellBuilder.SyncColliderBounds(gameObject, cellSize, shellStyle);
+
+                if (string.IsNullOrEmpty(blockName)
+                    || blockName == "Cockpit"
+                    || blockName == "Wraparound Cockpit"
+                    || blockName == "Reinforced Cockpit")
+                {
+                    blockName = CockpitShellBuilder.NameOf(shellStyle);
+                }
+            }
+
             float itemHealth = SourceItem is GridBlockItem gridItem && gridItem.blockHP > 0f
                 ? gridItem.blockHP
                 : maxHP;
             if (itemHealth <= 0f) return;
 
-            float targetHealth = shellStyle == CockpitShellBuilder.StyleCab
-                ? itemHealth * ArmoredCabHealthMultiplier
-                : itemHealth;
-            maxHP = targetHealth;
-            currentHP = Mathf.Clamp(currentHP, 0f, maxHP);
+            float previousMax = maxHP > 0f ? maxHP : itemHealth;
+            float ratio = previousMax > 0f ? Mathf.Clamp01(currentHP / previousMax) : 1f;
+
+            float multiplier = shellStyle == CockpitShellBuilder.StyleCab
+                ? ArmoredCabHealthMultiplier
+                : shellStyle == CockpitShellBuilder.StyleCrawler
+                    ? WraparoundHealthMultiplier
+                    : 1f;
+
+            maxHP = Mathf.Round(itemHealth * multiplier);
+            currentHP = currentHP > 0f
+                ? Mathf.Clamp(Mathf.Round(maxHP * ratio), 1f, maxHP)
+                : 0f;
         }
 
         public override void OnPlaced()
@@ -256,6 +281,12 @@ namespace VoxelEngine.GridSystem
                 HandleWarpDriveInput();
 
             ReadFlightInput();
+        }
+
+        private void LateUpdate()
+        {
+            if (Pilot == null || _freeLooking) return;
+            ApplyCameraMode();
         }
 
         /// <summary>
@@ -718,7 +749,8 @@ namespace VoxelEngine.GridSystem
             // (BuildHotbar skips while ActivePilotSeat != null) — the ship toolbar replaces it.
             VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
 
-            // Enable camera screenshake/FOV feedback only while actually piloting this grid.
+            // Enable camera FOV feedback only while actually piloting this grid, starting clean at rest.
+            VoxelEngine.Player.CameraFeedback.ResetTransient();
             VoxelEngine.Player.CameraFeedback.IsPiloting = true;
         }
 
@@ -766,32 +798,40 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(Grid);
         }
 
-        /// <summary>14.64.2 — pick a drop spot whose player capsule does NOT start
-        /// inside the hull. Spawning overlapped used to hand PhysX a depenetration
-        /// impulse that torqued the whole ship on exit. Candidates: right, left,
-        /// behind, ahead, straight up — first clear one wins; the classic right-hand
-        /// spot stays the fallback.</summary>
+        /// <summary>14.64.2 / 17.43.0 — pick a drop spot outside the full cockpit collider
+        /// (including 2x2x2 cockpits) so the player capsule never starts inside the hull.</summary>
         private Vector3 FindClearExitPosition()
         {
-            Vector3 fallback = transform.position + transform.up * 1.2f + transform.right * 1.5f;
-            if (Pilot == null) return fallback;
+            var box = GetComponent<BoxCollider>();
+            Vector3 localCenter = box != null ? box.center : Vector3.zero;
+            Vector3 halfExtents = box != null ? box.size * 0.5f : Vector3.one;
+            Vector3 worldCenter = transform.TransformPoint(localCenter);
 
-            var cc = Pilot.GetComponent<CharacterController>();
+            var cc = Pilot != null ? Pilot.GetComponent<CharacterController>() : null;
             float radius = cc != null ? Mathf.Max(0.25f, cc.radius * 0.95f) : 0.38f;
             float height = cc != null ? Mathf.Max(radius * 2f + 0.1f, cc.height * 0.95f) : 1.7f;
 
+            float clearance = radius + 0.45f;
+            float sideDist = halfExtents.x + clearance;
+            float foreAftDist = halfExtents.z + clearance;
+            float floorY = -halfExtents.y + 0.15f;
+            float roofY = halfExtents.y + 0.25f;
+
+            Vector3 fallback = worldCenter + transform.up * floorY + transform.right * sideDist;
+            if (Pilot == null) return fallback;
+
             Vector3[] offsets =
             {
-                transform.up * 1.2f + transform.right * 1.5f,
-                transform.up * 1.2f - transform.right * 1.5f,
-                transform.up * 1.2f - transform.forward * 1.5f,
-                transform.up * 1.2f + transform.forward * 1.5f,
-                transform.up * 2.2f,
+                transform.up * floorY + transform.right * sideDist,
+                transform.up * floorY - transform.right * sideDist,
+                transform.up * floorY + transform.forward * foreAftDist,
+                transform.up * roofY,
+                transform.up * floorY - transform.forward * foreAftDist,
             };
             var scratch = new Collider[8];
             for (int o = 0; o < offsets.Length; o++)
             {
-                Vector3 pos = transform.position + offsets[o];
+                Vector3 pos = worldCenter + offsets[o];
                 Vector3 foot = pos + transform.up * radius;
                 Vector3 head = pos + transform.up * (height - radius);
                 int n = Physics.OverlapCapsuleNonAlloc(foot, head, radius, scratch,
@@ -834,6 +874,8 @@ namespace VoxelEngine.GridSystem
             Pilot.transform.SetParent(_originalParent, worldPositionStays: true);
             Pilot.transform.position = FindClearExitPosition();
 
+            // Prevent the shared 'F' key press from also toggling jetpack flight on this frame.
+            Pilot.SuppressFlyToggleThisFrame();
             Pilot.enabled = true;
             var cc = Pilot.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = true;
@@ -873,11 +915,7 @@ namespace VoxelEngine.GridSystem
             var exitBoots = Pilot.GetComponent<VoxelEngine.Player.MagneticBoots>();
             if (exitBoots != null && Grid != null)
                 exitBoots.LockReference(Grid);
-            // 14.65.2 - no deck below the exit point means the walk update would hand
-            // the crewman to gravity while the hull burns on (the "ship recedes after
-            // exiting at speed" report). Flip the jetpack on so the relative dampeners
-            // locked above hold formation from the very first frame.
-            Pilot.AutoEnableFlightForSeatExit();
+
             VoxelEngine.Networking.GridSync.ReleaseControl();
             Pilot = null;
             if (Grid != null && Grid.ActiveCockpit == this) Grid.ActiveCockpit = null;
@@ -889,8 +927,9 @@ namespace VoxelEngine.GridSystem
             }
             VoxelEngine.UI.GameUIController.Instance?.CloseAll();
 
-            // Camera shake/FOV warp is for piloting only — turn it off when leaving the seat.
+            // Clear camera transient offsets cleanly on seat exit.
             VoxelEngine.Player.CameraFeedback.IsPiloting = false;
+            VoxelEngine.Player.CameraFeedback.ResetTransient();
         }
 
         public void SwitchToSmallGrid()

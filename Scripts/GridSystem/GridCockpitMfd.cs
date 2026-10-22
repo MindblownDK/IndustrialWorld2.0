@@ -90,7 +90,7 @@ namespace VoxelEngine.GridSystem
             _speedDisplayText = EnsureMfdText("MFD_Runtime_Speed", _speedPanel,
                 TextAnchor.MiddleCenter, TextAlignment.Center);
             _airDisplayText = EnsureMfdText("MFD_Runtime_Air", _airPanel,
-                TextAnchor.MiddleLeft, TextAlignment.Left);
+                TextAnchor.MiddleCenter, TextAlignment.Center);
             _planetNameText = EnsureMfdText("MFD_Runtime_Planet_Name", _planetPanel,
                 TextAnchor.MiddleCenter, TextAlignment.Center);
 
@@ -104,13 +104,14 @@ namespace VoxelEngine.GridSystem
 
                 _planetGlobe = globe.transform;
                 _planetGlobeRenderer = globe.GetComponent<Renderer>();
-                _planetGlobe.localScale = Vector3.one * 0.18f;
+                float globeDiameter = Mathf.Clamp(_planetPanel.localScale.y * 0.56f, 0.12f, 0.22f);
+                _planetGlobe.localScale = Vector3.one * globeDiameter;
             }
 
             PlaceMfdText(_speedDisplayText, _speedPanel,
                 new Vector3(0f, 0f, _speedPanel.localScale.z * 0.5f + 0.010f));
             PlaceMfdText(_airDisplayText, _airPanel,
-                new Vector3(_airPanel.localScale.x * 0.40f, 0f, _airPanel.localScale.z * 0.5f + 0.010f));
+                new Vector3(0f, 0f, _airPanel.localScale.z * 0.5f + 0.010f));
             PlaceMfdText(_planetNameText, _planetPanel,
                 new Vector3(0f, _planetPanel.localScale.y * 0.39f, _planetPanel.localScale.z * 0.5f + 0.012f));
             PlacePlanetGlobe();

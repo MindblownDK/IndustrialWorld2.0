@@ -347,28 +347,37 @@ namespace VoxelEngine.GridSystem
             }
 
             bool windowFootprintInvalid = false;
-            if (targetGrid != null && IsGridWindowItem(gbi) && !portSnapped)
+            if (targetGrid != null && (IsGridWindowItem(gbi) || IsCockpitItem(gbi)) && !portSnapped)
             {
-                Quaternion localWindowRotation = Quaternion.Inverse(targetGrid.transform.rotation) * rotation;
-                int windowShape = (int)GridWindowBlock.SelectedWindowShape;
-                bool hasExtraCell = GridWindowBlock.TryGetAdditionalFootprintOffset(
-                    windowShape, localWindowRotation, out Vector3Int extraCell);
-                bool clear = targetGrid.CanPlaceFootprint(gridPos, hasExtraCell, extraCell);
-                bool connected = targetGrid.HasNeighborForFootprint(gridPos, hasExtraCell, extraCell);
+                Quaternion localItemRotation = Quaternion.Inverse(targetGrid.transform.rotation) * rotation;
+                CollectSelectedMultiCellOffsets(gbi, localItemRotation, _multiCellOffsets);
+
+                // When placing a 2x2x2 cockpit against a narrow chassis or deck, automatically shift
+                // the anchor within the 2x2x2 pocket if the raw corner cell overlaps adjacent hull blocks.
+                if (IsCockpitItem(gbi) && _multiCellOffsets.Count > 0 && !targetGrid.CanPlaceOffsets(gridPos, _multiCellOffsets))
+                {
+                    if (TryResolveMultiCellAnchor(targetGrid, gridPos, _multiCellOffsets, out Vector3Int resolvedAnchor))
+                    {
+                        gridPos = resolvedAnchor;
+                        worldPos = targetGrid.GridToWorld(gridPos);
+                    }
+                }
+
+                bool clear = targetGrid.CanPlaceOffsets(gridPos, _multiCellOffsets);
+                bool connected = targetGrid.HasNeighborForOffsets(gridPos, _multiCellOffsets);
                 var precision = targetGrid.PrecisionAttachments;
-                bool precisionClear = precision == null
-                    || (!precision.HasStructuralVolumeConflict(gridPos)
-                        && (!hasExtraCell || !precision.HasStructuralVolumeConflict(gridPos + extraCell)));
+                bool precisionClear = precision == null || !HasPrecisionFootprintConflict(precision, gridPos, _multiCellOffsets);
                 windowFootprintInvalid = !clear || !connected || !precisionClear;
                 if (windowFootprintInvalid && GameSettings.WasPressed(InputAction.Build))
                 {
+                    string label = IsCockpitItem(gbi) ? "Cockpit Footprint Blocked" : "Window Footprint Blocked";
                     string reason = !clear
-                        ? "The selected window shape overlaps an occupied structural cell"
+                        ? "The block footprint overlaps an occupied structural cell"
                         : !precisionClear
-                            ? "A precision detail block overlaps part of the window footprint"
-                            : "The selected window footprint must touch the existing grid";
+                            ? "A precision detail block overlaps part of the footprint"
+                            : "The block footprint must touch the existing grid";
                     VoxelEngine.UI.BuildFeedbackHud.Show(
-                        "Window Footprint Blocked",
+                        label,
                         reason,
                         gbi.icon,
                         Color.red);
@@ -653,17 +662,78 @@ namespace VoxelEngine.GridSystem
             if (lowest < 0.02f) worldPos += up * (0.02f - lowest);
         }
 
+        private readonly List<Vector3Int> _multiCellOffsets = new(8);
+
+        private static void CollectSelectedMultiCellOffsets(GridBlockItem item, Quaternion localRotation, List<Vector3Int> offsets)
+        {
+            if (offsets == null) return;
+            offsets.Clear();
+            if (item == null) return;
+
+            if (IsGridWindowItem(item))
+            {
+                if (GridWindowBlock.TryGetAdditionalFootprintOffset(
+                        (int)GridWindowBlock.SelectedWindowShape, localRotation, out Vector3Int extra))
+                    offsets.Add(extra);
+            }
+            else if (IsCockpitItem(item))
+            {
+                CockpitShellBuilder.AppendAdditionalFootprintOffsets(
+                    CockpitShellBuilder.SelectedStyle, localRotation, offsets);
+            }
+        }
+
+        private static bool HasPrecisionFootprintConflict(
+            GridPrecisionAttachmentLayer precision,
+            Vector3Int anchor,
+            IReadOnlyList<Vector3Int> extraOffsets)
+        {
+            if (precision == null) return false;
+            if (precision.HasStructuralVolumeConflict(anchor)) return true;
+            if (extraOffsets == null) return false;
+            for (int i = 0; i < extraOffsets.Count; i++)
+                if (precision.HasStructuralVolumeConflict(anchor + extraOffsets[i]))
+                    return true;
+            return false;
+        }
+
+        private static bool TryResolveMultiCellAnchor(
+            GridEntity grid,
+            Vector3Int aimedCell,
+            IReadOnlyList<Vector3Int> extraOffsets,
+            out Vector3Int resolvedAnchor)
+        {
+            resolvedAnchor = aimedCell;
+            if (grid == null || extraOffsets == null) return false;
+
+            // Every candidate anchor shift -extraOffsets[i] keeps aimedCell inside the placed 2x2x2 block!
+            for (int i = 0; i < extraOffsets.Count; i++)
+            {
+                Vector3Int candidate = aimedCell - extraOffsets[i];
+                if (!grid.CanPlaceOffsets(candidate, extraOffsets)) continue;
+                if (!grid.HasNeighborForOffsets(candidate, extraOffsets)) continue;
+                var precision = grid.PrecisionAttachments;
+                if (precision != null && HasPrecisionFootprintConflict(precision, candidate, extraOffsets))
+                    continue;
+                resolvedAnchor = candidate;
+                return true;
+            }
+            return false;
+        }
+
         private static Bounds GetPrefabLocalBounds(GridBlockItem item)
         {
             if (item == null) return new Bounds(Vector3.zero, Vector3.one);
             var prefab = item.blockPrefab;
             if (prefab != null && prefab.GetComponent<GridWindowBlock>() != null)
             {
-                // Window geometry is a set of inactive generated variants. A prefab-wide
-                // renderer cache would combine every shape and make the two-cell ghost
-                // block placements for the one-cell shapes (or vice versa).
                 return GridWindowBlock.LocalBoundsForShape(
                     (int)GridWindowBlock.SelectedWindowShape, item.gridSize.CellSize());
+            }
+            if (prefab != null && prefab.GetComponent<GridCockpit>() != null)
+            {
+                return CockpitShellBuilder.LocalBoundsForStyle(
+                    CockpitShellBuilder.SelectedStyle, item.gridSize.CellSize());
             }
 
             if (s_prefabLocalBounds.TryGetValue(item, out var cached)) return cached;
@@ -1258,17 +1328,10 @@ namespace VoxelEngine.GridSystem
         {
             if (grid != null && item != null && item.gridSize == GridSize.Large && !keepExactAttachmentPose)
             {
+                Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
+                CollectSelectedMultiCellOffsets(item, localRotation, _multiCellOffsets);
                 bool detailConflict = grid.PrecisionAttachments != null
-                    && grid.PrecisionAttachments.HasStructuralVolumeConflict(gridPos);
-                if (IsGridWindowItem(item))
-                {
-                    Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
-                    if (GridWindowBlock.TryGetAdditionalFootprintOffset(
-                            (int)GridWindowBlock.SelectedWindowShape, localRotation, out Vector3Int extraCell)
-                        && grid.PrecisionAttachments != null
-                        && grid.PrecisionAttachments.HasStructuralVolumeConflict(gridPos + extraCell))
-                        detailConflict = true;
-                }
+                    && HasPrecisionFootprintConflict(grid.PrecisionAttachments, gridPos, _multiCellOffsets);
                 if (detailConflict)
                 {
                     VoxelEngine.UI.BuildFeedbackHud.Show("Detail Volume Occupied", "Clear the pipe/detail block from the full structural footprint before placing here", item.icon, Color.red);
@@ -1276,16 +1339,16 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            if (grid != null && item != null && IsGridWindowItem(item))
+            if (grid != null && item != null && (IsGridWindowItem(item) || IsCockpitItem(item)))
             {
                 Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
-                bool hasExtraCell = GridWindowBlock.TryGetAdditionalFootprintOffset(
-                    (int)GridWindowBlock.SelectedWindowShape, localRotation, out Vector3Int extraCell);
-                if (!grid.CanPlaceFootprint(gridPos, hasExtraCell, extraCell)
-                    || !grid.HasNeighborForFootprint(gridPos, hasExtraCell, extraCell))
+                CollectSelectedMultiCellOffsets(item, localRotation, _multiCellOffsets);
+                if (!grid.CanPlaceOffsets(gridPos, _multiCellOffsets)
+                    || !grid.HasNeighborForOffsets(gridPos, _multiCellOffsets))
                 {
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Window Footprint Blocked",
-                        "The selected window footprint is occupied or does not touch the grid",
+                    string title = IsCockpitItem(item) ? "Cockpit Footprint Blocked" : "Window Footprint Blocked";
+                    VoxelEngine.UI.BuildFeedbackHud.Show(title,
+                        "The block footprint is occupied or does not touch the grid",
                         item.icon, Color.red);
                     return false;
                 }

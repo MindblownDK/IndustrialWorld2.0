@@ -1,9 +1,8 @@
 // Assets/Scripts/VoxelEngine/UI/CockpitShellIcons.cs
 //
-// The two cockpit shells, drawn side-on for the build wheel. A cockpit is a shape rather
-// than a cube, so a generic block wedge says nothing about which one you are about to
-// build - a low nose with a raked screen and a tall square cab read at a glance even at
-// fifty-eight pixels.
+// Side-profile icons for the two 2x2x2 industrial cockpit shells on the build wheel:
+//   - Style 1 (Wraparound Cockpit): harvester canopy with raked front + chin + floor glazing and roof work-lights.
+//   - Style 2 (Reinforced Cockpit): heavy-duty armored cab with bolted glacis, dozer bumper, FOPS cage and radome.
 
 using UnityEngine;
 
@@ -11,76 +10,65 @@ namespace VoxelEngine.UI
 {
     public static class CockpitShellIcons
     {
-        /// <summary>Side view of a shell, facing right. Keyed per style so both are cached
-        /// once and shared by every wedge that shows them.</summary>
         public static Texture2D For(int style) => IconAtlas.Get("cockpitshell:" + style, b =>
         {
-            if (style == 2) DrawCab(b);
-            else DrawCrawler(b);
+            if (style == 2) DrawReinforcedCab(b);
+            else DrawWraparoundHarvester(b);
         });
 
-        /// <summary>A wheel, as two concentric circles: the tyre and the rim.</summary>
-        private static void Wheel(LineArtBuilder b, float x, float y, float r)
+        private static void DrawWraparoundHarvester(LineArtBuilder b)
         {
-            b.Circle(new Vector2(x, y), r, 18);
-            b.Circle(new Vector2(x, y), r * 0.42f, 14);
+            // Panoramic harvester profile facing right: overhanging floodlight roof, raked upper screen,
+            // raked lower chin glass, full belly floor glass and slim rear bulkhead.
+            b.Closed(
+                new Vector2(0.14f, 0.12f),
+                new Vector2(1.06f, 0.12f),
+                new Vector2(1.36f, 0.42f),
+                new Vector2(1.26f, 0.96f),
+                new Vector2(0.14f, 0.96f));
+
+            // Overhanging flood-lamp visor at top front
+            b.Polyline(new Vector2(1.16f, 0.96f), new Vector2(1.40f, 0.96f), new Vector2(1.36f, 0.88f));
+
+            // Slim mullions & floor glass read lines
+            b.Line(new Vector2(0.32f, 0.12f), new Vector2(0.32f, 0.96f));
+            b.Line(new Vector2(0.84f, 0.12f), new Vector2(0.84f, 0.96f));
+            b.Line(new Vector2(0.96f, 0.42f), new Vector2(1.36f, 0.42f));
+            b.Line(new Vector2(0.42f, 0.18f), new Vector2(1.00f, 0.18f));
+
+            // Elevated operator seat silhouette visible through side glass
+            b.Polyline(new Vector2(0.50f, 0.34f), new Vector2(0.54f, 0.68f));
+            b.Line(new Vector2(0.52f, 0.38f), new Vector2(0.70f, 0.38f));
         }
 
-        /// <summary>
-        /// The crawler: a long low body, one raked windscreen carried down to the sill, a
-        /// roll hoop behind the cab and a bumper out front.
-        /// </summary>
-        private static void DrawCrawler(LineArtBuilder b)
+        private static void DrawReinforcedCab(LineArtBuilder b)
         {
-            // Hull, from the rear step to the bumper.
-            b.Closed(new Vector2(0.06f, 0.10f), new Vector2(1.34f, 0.10f),
-                     new Vector2(1.34f, 0.44f), new Vector2(0.06f, 0.44f));
-            // Bumper lip and the step behind the rear wheel.
-            b.Line(new Vector2(1.34f, 0.14f), new Vector2(1.46f, 0.14f));
-            b.Line(new Vector2(1.46f, 0.14f), new Vector2(1.46f, 0.30f));
-            b.Line(new Vector2(1.34f, 0.30f), new Vector2(1.46f, 0.30f));
+            // Rugged heavy-duty machinery cab: solid thick lower armor, sloped glacis,
+            // heavy front push bumper, wide upper window band, FOPS roof ribs & sensor dome.
+            b.Closed(
+                new Vector2(0.12f, 0.12f),
+                new Vector2(1.30f, 0.12f),
+                new Vector2(1.30f, 0.50f),
+                new Vector2(1.18f, 0.58f),
+                new Vector2(1.16f, 0.96f),
+                new Vector2(0.12f, 0.96f));
 
-            // Cab: rear pillar, roof, raked screen down to the bonnet line.
-            b.Polyline(new Vector2(0.18f, 0.44f), new Vector2(0.18f, 0.90f),
-                       new Vector2(0.98f, 0.90f), new Vector2(1.20f, 0.44f));
+            // Heavy push bumper + clevis
+            b.Rect(1.30f, 0.12f, 1.42f, 0.32f);
 
-            // Windscreen and the door line, so the glass reads as glass.
-            b.Line(new Vector2(0.98f, 0.86f), new Vector2(1.14f, 0.50f));
-            b.Line(new Vector2(0.62f, 0.44f), new Vector2(0.62f, 0.86f));
+            // Solid armored sill line & upper panoramic window band
+            b.Line(new Vector2(0.12f, 0.56f), new Vector2(1.18f, 0.56f));
+            b.Rect(0.26f, 0.60f, 1.10f, 0.90f);
+            b.Line(new Vector2(0.76f, 0.60f), new Vector2(0.76f, 0.90f));
 
-            // Headlight and the roll hoop.
-            b.Line(new Vector2(1.24f, 0.36f), new Vector2(1.32f, 0.36f));
-            b.Polyline(new Vector2(0.10f, 0.44f), new Vector2(0.10f, 0.78f));
+            // Lower armor door seam & louver bars
+            b.Rect(0.42f, 0.18f, 0.80f, 0.50f);
+            b.Line(new Vector2(0.96f, 0.24f), new Vector2(1.22f, 0.24f));
+            b.Line(new Vector2(0.96f, 0.34f), new Vector2(1.22f, 0.34f));
 
-            Wheel(b, 0.38f, 0.10f, 0.14f);
-            Wheel(b, 1.06f, 0.10f, 0.14f);
-        }
-
-        /// <summary>
-        /// The cab: a tall square box with an upright screen, a grille at the front and the
-        /// survey dome on the roof.
-        /// </summary>
-        private static void DrawCab(LineArtBuilder b)
-        {
-            // Body: one tall rectangle with a slightly proud bumper.
-            b.Rect(0.12f, 0.12f, 1.28f, 1.10f);
-            b.Line(new Vector2(1.28f, 0.16f), new Vector2(1.40f, 0.16f));
-            b.Line(new Vector2(1.40f, 0.16f), new Vector2(1.40f, 0.34f));
-            b.Line(new Vector2(1.28f, 0.34f), new Vector2(1.40f, 0.34f));
-
-            // Windscreen, door line and the grille bars.
-            b.Rect(0.30f, 0.62f, 1.16f, 0.98f);
-            b.Line(new Vector2(0.72f, 0.12f), new Vector2(0.72f, 0.62f));
-            b.Line(new Vector2(1.02f, 0.20f), new Vector2(1.24f, 0.20f));
-            b.Line(new Vector2(1.02f, 0.28f), new Vector2(1.24f, 0.28f));
-            b.Line(new Vector2(1.02f, 0.36f), new Vector2(1.24f, 0.36f));
-
-            // Roof dome and its mast.
-            b.Circle(new Vector2(0.56f, 1.10f), 0.10f, 16);
-            b.Line(new Vector2(0.56f, 1.20f), new Vector2(0.56f, 1.32f));
-
-            Wheel(b, 0.38f, 0.12f, 0.13f);
-            Wheel(b, 1.04f, 0.12f, 0.13f);
+            // FOPS roof guard & radome
+            b.Line(new Vector2(0.18f, 1.02f), new Vector2(1.14f, 1.02f));
+            b.Circle(new Vector2(0.46f, 1.02f), 0.08f, 14);
         }
     }
 }

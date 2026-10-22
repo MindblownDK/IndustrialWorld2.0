@@ -124,14 +124,14 @@ namespace VoxelEngine.GridSystem
 
         public static string ShapeBlurbOf(int shape) => (GridWindowShape)NormalizeShape(shape) switch
         {
-            GridWindowShape.Slope => "One-cell glazing angled for a raked cockpit or wall.",
-            GridWindowShape.LongSlope => "One-cell shallow slope with a broad, low-profile pane.",
-            GridWindowShape.LongSlopeTwoCell => "A continuous shallow slope spanning two Large cells; rotates with the block.",
-            GridWindowShape.Half => "Half-height framed window for a sill or low wall.",
-            GridWindowShape.HalfSlope => "Half-height angled glazing.",
-            GridWindowShape.InvertedSlope => "One-cell slope tipped in the opposite direction.",
-            GridWindowShape.Corner => "Two short panes joined around a right-angle corner.",
-            _ => "A full-cell square window frame.",
+            GridWindowShape.Slope => "Full 45-degree sloped glazing with sealed triangular side cheeks.",
+            GridWindowShape.LongSlope => "Upper 1:2 shallow slope that pairs seamlessly behind Half Slope.",
+            GridWindowShape.LongSlopeTwoCell => "Continuous 2-cell raked canopy slope with full flank glazing; owns both rotated cells.",
+            GridWindowShape.Half => "Flush half-height industrial window with reinforced top sill.",
+            GridWindowShape.HalfSlope => "Lower 1:2 raked glazing that transitions cleanly into Long Slope or Half windows.",
+            GridWindowShape.InvertedSlope => "Full 45-degree inverted overhang glazing for harvester chins and observation noses.",
+            GridWindowShape.Corner => "Connected 3-pane panoramic chamfer wrap sealing a 90-degree corner with zero gaps.",
+            _ => "Flush full-cell architectural window frame.",
         };
 
         /// <summary>

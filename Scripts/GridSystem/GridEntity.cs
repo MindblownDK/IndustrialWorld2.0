@@ -449,14 +449,25 @@ namespace VoxelEngine.GridSystem
             // physics truth; below 20 m/s the planetside smoothness returns.
             if (_rb != null && !_rb.isKinematic)
             {
-                float speedSq = _rb.linearVelocity.sqrMagnitude;
-                if (_rb.interpolation == RigidbodyInterpolation.Interpolate)
+                // While a pilot is seated inside this grid, the player camera rides the hull transform
+                // directly: turning off interpolation above 30 m/s made the entire world & ship stutter
+                // on every non-fixed render frame. Keep smooth interpolation active whenever piloted.
+                if (IsControlled)
                 {
-                    if (speedSq > 900f) _rb.interpolation = RigidbodyInterpolation.None;
+                    if (_rb.interpolation != RigidbodyInterpolation.Interpolate)
+                        _rb.interpolation = RigidbodyInterpolation.Interpolate;
                 }
-                else if (speedSq < 400f)
+                else
                 {
-                    _rb.interpolation = RigidbodyInterpolation.Interpolate;
+                    float speedSq = _rb.linearVelocity.sqrMagnitude;
+                    if (_rb.interpolation == RigidbodyInterpolation.Interpolate)
+                    {
+                        if (speedSq > 900f) _rb.interpolation = RigidbodyInterpolation.None;
+                    }
+                    else if (speedSq < 400f)
+                    {
+                        _rb.interpolation = RigidbodyInterpolation.Interpolate;
+                    }
                 }
             }
 
@@ -534,15 +545,13 @@ namespace VoxelEngine.GridSystem
                 _restoreGroundClearanceTicks--;
             }
 
-            // Camera screenshake/FOV warp from the previous physics step's net acceleration.
-            // Only fire when a player is actually controlling this grid so walking around or
-            // watching another ship doesn't shake the camera. Subtract gravity so free-fall
-            // doesn't constantly shake the camera — only thrust impulses and impacts create the
-            // "power" feel.
+            // Only feed real controlled thrust acceleration (never subtract planet gravity while
+            // parked or station-keeping, which previously injected a fake 1.35 G shake continuously).
             if (_rb != null && IsControlled)
             {
-                Vector3 acceleration = (_rb.linearVelocity - _prevVelocity) / Time.fixedDeltaTime
-                                     - CurrentGravityAcceleration();
+                Vector3 acceleration = HasManualThrustInput()
+                    ? (_rb.linearVelocity - _prevVelocity) / Time.fixedDeltaTime
+                    : Vector3.zero;
                 VoxelEngine.Player.CameraFeedback.Impulse(acceleration);
                 _prevVelocity = _rb.linearVelocity;
             }
@@ -795,12 +804,42 @@ namespace VoxelEngine.GridSystem
             _rb.AddForce(gravity, ForceMode.Acceleration);
         }
 
+        private readonly List<Vector3Int> _footprintScratch = new(8);
+
         // ── Block Management ────────────────────────────────────────
         public bool CanPlace(Vector3Int gridPos) => !_occupiedCells.ContainsKey(gridPos);
+
+        /// <summary>Collects all rotated non-anchor cell offsets occupied by a multi-cell block.</summary>
+        public static void CollectAdditionalFootprintOffsets(GridBlock block, Quaternion localRotation, List<Vector3Int> offsets)
+        {
+            if (offsets == null) return;
+            offsets.Clear();
+            if (block == null) return;
+
+            if (block is GridWindowBlock window
+                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, localRotation, out Vector3Int extra))
+            {
+                offsets.Add(extra);
+            }
+            else if (block is GridCockpit cockpit)
+            {
+                CockpitShellBuilder.AppendAdditionalFootprintOffsets(cockpit.shellStyle, localRotation, offsets);
+            }
+        }
 
         /// <summary>Whether every cell in a proposed block footprint is clear.</summary>
         public bool CanPlaceFootprint(Vector3Int anchor, bool hasAdditionalCell, Vector3Int additionalOffset)
             => CanPlace(anchor) && (!hasAdditionalCell || CanPlace(anchor + additionalOffset));
+
+        /// <summary>Whether anchor plus all extra footprint offsets are clear.</summary>
+        public bool CanPlaceOffsets(Vector3Int anchor, IReadOnlyList<Vector3Int> extraOffsets)
+        {
+            if (!CanPlace(anchor)) return false;
+            if (extraOffsets == null) return true;
+            for (int i = 0; i < extraOffsets.Count; i++)
+                if (!CanPlace(anchor + extraOffsets[i])) return false;
+            return true;
+        }
 
         /// <summary>True if any face-neighbour of this cell is occupied.</summary>
         public bool HasNeighbor(Vector3Int gridPos)
@@ -820,21 +859,45 @@ namespace VoxelEngine.GridSystem
             return hasAdditionalCell && HasNeighbor(anchor + additionalOffset);
         }
 
+        /// <summary>True if anchor or any extra footprint cell touches an existing block.</summary>
+        public bool HasNeighborForOffsets(Vector3Int anchor, IReadOnlyList<Vector3Int> extraOffsets)
+        {
+            if (_blocks.Count == 0) return true;
+            if (HasNeighbor(anchor)) return true;
+            if (extraOffsets == null) return false;
+            for (int i = 0; i < extraOffsets.Count; i++)
+                if (HasNeighbor(anchor + extraOffsets[i])) return true;
+            return false;
+        }
+
         /// <summary>Tests the anchor and rotated extra cells for this block.</summary>
         public bool CanPlaceBlock(Vector3Int anchor, GridBlock block, Quaternion localRotation)
         {
             if (block == null || !CanPlace(anchor)) return false;
-            if (block is GridWindowBlock window
-                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, localRotation, out Vector3Int extra))
-                return CanPlace(anchor + extra);
-            return true;
+            CollectAdditionalFootprintOffsets(block, localRotation, _footprintScratch);
+            return CanPlaceOffsets(anchor, _footprintScratch);
         }
 
         public bool TryAddBlock(Vector3Int gridPos, GridBlock block)
+            => TryAddBlockInternal(gridPos, block, allowLegacyFootprintOverlap: false);
+
+        /// <summary>Restores a saved block on load without destroying existing pre-17.43 ships
+        /// whose blocks may sit adjacent to an upgraded 2x2x2 cockpit's expanded cells.</summary>
+        public bool TryAddSavedBlock(Vector3Int gridPos, GridBlock block)
+            => TryAddBlockInternal(gridPos, block, allowLegacyFootprintOverlap: true);
+
+        private bool TryAddBlockInternal(Vector3Int gridPos, GridBlock block, bool allowLegacyFootprintOverlap)
         {
             if (block == null) return false;
             Quaternion localRotation = Quaternion.Inverse(transform.rotation) * block.transform.rotation;
-            if (!CanPlaceBlock(gridPos, block, localRotation)) return false;
+            if (allowLegacyFootprintOverlap)
+            {
+                if (_blocks.ContainsKey(gridPos)) return false;
+            }
+            else if (!CanPlaceBlock(gridPos, block, localRotation))
+            {
+                return false;
+            }
 
             _blocks[gridPos] = block;
             block.GridPos = gridPos;
@@ -843,7 +906,7 @@ namespace VoxelEngine.GridSystem
             block.transform.SetParent(transform, true);
             float cs = gridSize.CellSize();
             block.transform.localPosition = new Vector3(gridPos.x, gridPos.y, gridPos.z) * cs;
-            RegisterBlockFootprint(block, gridPos, block.transform.localRotation);
+            RegisterBlockFootprint(block, gridPos, block.transform.localRotation, allowLegacyFootprintOverlap);
             // Rotation is handled by the caller; do not reset localRotation here.
 
             if (block.GetComponentInChildren<Collider>(true) == null)
@@ -868,7 +931,8 @@ namespace VoxelEngine.GridSystem
             GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
             // 14.29.0: a block a CLIENT just placed must reach the host - silent
             // everywhere else, including while a remote record is being applied.
-            VoxelEngine.Networking.GridBuildSync.NotifyLocalPlaced(this, block);
+            if (!allowLegacyFootprintOverlap)
+                VoxelEngine.Networking.GridBuildSync.NotifyLocalPlaced(this, block);
             return true;
         }
 
@@ -879,23 +943,29 @@ namespace VoxelEngine.GridSystem
                 Debug.LogWarning($"[Grid] Refused block '{(block != null ? block.name : "null")}' at occupied cell {gridPos}.");
         }
 
-        private void RegisterBlockFootprint(GridBlock block, Vector3Int anchor, Quaternion localRotation)
+        private void RegisterBlockFootprint(GridBlock block, Vector3Int anchor, Quaternion localRotation,
+            bool preserveExistingCanonicalBlocks = false)
         {
             if (block == null) return;
             _occupiedCells[anchor] = block;
-            if (block is GridWindowBlock window
-                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, localRotation, out Vector3Int extra))
-                _occupiedCells[anchor + extra] = block;
+            CollectAdditionalFootprintOffsets(block, localRotation, _footprintScratch);
+            for (int i = 0; i < _footprintScratch.Count; i++)
+            {
+                Vector3Int cell = anchor + _footprintScratch[i];
+                if (preserveExistingCanonicalBlocks && _blocks.ContainsKey(cell))
+                    continue;
+                _occupiedCells[cell] = block;
+            }
         }
 
         private void UnregisterBlockFootprint(GridBlock block, Vector3Int anchor)
         {
             if (_occupiedCells.TryGetValue(anchor, out var anchorBlock) && anchorBlock == block)
                 _occupiedCells.Remove(anchor);
-            if (block is GridWindowBlock window
-                && GridWindowBlock.TryGetAdditionalFootprintOffset((int)window.windowShape, block.transform.localRotation, out Vector3Int extra))
+            CollectAdditionalFootprintOffsets(block, block.transform.localRotation, _footprintScratch);
+            for (int i = 0; i < _footprintScratch.Count; i++)
             {
-                Vector3Int occupied = anchor + extra;
+                Vector3Int occupied = anchor + _footprintScratch[i];
                 if (_occupiedCells.TryGetValue(occupied, out var extraBlock) && extraBlock == block)
                     _occupiedCells.Remove(occupied);
             }
@@ -977,13 +1047,10 @@ namespace VoxelEngine.GridSystem
                     if (!_blocks.TryGetValue(cell, out var current) || current == null) continue;
                     comp.Add(cell);
 
-                    Vector3Int extraCell = Vector3Int.zero;
-                    bool hasExtraCell = current is GridWindowBlock window
-                        && GridWindowBlock.TryGetAdditionalFootprintOffset(
-                            (int)window.windowShape, current.transform.localRotation, out extraCell);
-                    for (int footprintIndex = 0; footprintIndex < (hasExtraCell ? 2 : 1); footprintIndex++)
+                    CollectAdditionalFootprintOffsets(current, current.transform.localRotation, _footprintScratch);
+                    for (int footprintIndex = 0; footprintIndex <= _footprintScratch.Count; footprintIndex++)
                     {
-                        Vector3Int occupied = footprintIndex == 0 ? cell : cell + extraCell;
+                        Vector3Int occupied = footprintIndex == 0 ? cell : cell + _footprintScratch[footprintIndex - 1];
                         for (int i = 0; i < SixNeighbours.Length; i++)
                         {
                             Vector3Int neighbourCell = occupied + SixNeighbours[i];

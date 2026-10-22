@@ -341,6 +341,7 @@ namespace VoxelEngine.Combat
             var rb = player.GetComponent<Rigidbody>();
             if (rb != null) rb.isKinematic = false;
             player.ResetVelocity();
+            player.SuppressFlyToggleThisFrame();
             player.IsMounted = false;
             _pilot = null;
             ActiveArtilleryCockpit = null;

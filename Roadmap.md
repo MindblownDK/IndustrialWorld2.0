@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.10-dev`
-**Roadmap Version:** `17.42.10-dev`
-**Date:** 2026-10-21
+**Current Version:** `17.43.0-dev`
+**Roadmap Version:** `17.43.0-dev`
+**Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.43.0-dev - 2x2x2 Cockpits, Sealed Corner Windows, Steady Cameras & Clean Dismounts
+- Modern cockpits span a save-compatible 2x2x2 Large-grid volume with unobstructed low-arc MFDs, harvester front/side/floor glazing (`0.80x` HP) and a reinforced armored cab (`1.85x` HP)
+- All 8 Grid Window variants use flush industrial frames, cell-aligned slopes with side cheek glazing, and a sealed 3-pane chamfered Corner Wrap with zero gaps
+- Seated piloting keeps `RigidbodyInterpolation.Interpolate` with zero local camera shake, and `F` exits seats/mounts without toggling `FlyMode`
+
 ### 17.42.10-dev - One Empty State
 - A page is centred on the canvas when its ink is centred in it, and on its ink when it is left-aligned, so farm and custom pages no longer hang off the left edge
 - One shared empty-state treatment (name, what is missing, what to do) used by every page that can arrive empty, with a per-page hint line
@@ -46,11 +51,6 @@
 - Root cause of every "the page is a corner of the glass": a TextMesh has no MeshFilter, so every fit in the project (screen pages, cockpit MFD captions, placement marker captions) measured null and gave up on its first line
 - One shared helper reads the renderer's own bounds; the MFD captions re-fit when the font atlas rebuilds, and a page is centred even before its mesh exists
 
-### 17.42.6-dev - Ink Box Fit, Edge to Edge
-- The fit measures the union of the five ink layers' mesh bounds - what was actually drawn - instead of counting characters the canvas padded, and maps it onto 98x94 percent of the glass in one division; sparse pages are capped at a third of the height
-- The canvas grid is published separately for the picture pass, so icons keep their rows while the fit works from the ink
-- The editor preview uses the same box and the same cap, with the page's own margins removed
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
@@ -58,7 +58,7 @@
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
 - **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, the Automatic Tree Farm and the Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm; the Farm pages already show `FarmPlot`/`CropPlanter`/`TreeFarmPlot` beds and gain the new blocks' beds when they land. `IFarmBed` needs `Water01`/`IsDead` for the true water and dead-crop states the references show - today water is derived from `NeedsWater` and a planted bed reads as dead only while it reports `NeedsOxygen`/`NeedsWater`.
-- **Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.
+- ~~**Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.~~ *(17.43.0-dev)*
 - **Screen engine runtime acceptance (17.42.0-dev):** the page remaster is code-complete and statically checked but untested in Unity - fit resolution on every screen size, per-page palettes, the 12 graph series against live grids, icon placement on glass, split-pane outlines, and the typing/Escape input fixes all need in-game verification.
 - **Restored-grid clearance acceptance (17.40.0-dev):** the low-hull probe and bounded correction are implemented, but flat-ground, slope, small-grid and large-grid save/load checks have not run in Unity.
 - **Per-pane sources (17.36.0-dev):** a split screen links one source list, and its panes share it. A pane that could be pointed at its own container is a genuinely different feature - it changes the saved shape from a list to a list per pane - and no page currently needs it: the canvas pages read the construct themselves.

@@ -313,8 +313,39 @@ namespace VoxelEngine.Player
         /// `wallRunDescent` instead of falling at gravity.</summary>
         public bool IsWallRunning => _wallRunning;
         public bool IsFlying => inspectorFlyToggle;
+        private bool _isMounted;
+        private int _suppressFlyToggleFrame = -1;
+
         /// <summary>True while riding a mount: locomotion is suspended, but mouse-look + camera stay live.</summary>
-        public bool IsMounted;
+        public bool IsMounted
+        {
+            get => _isMounted;
+            set
+            {
+                if (_isMounted && !value)
+                    SuppressFlyToggleThisFrame();
+                _isMounted = value;
+            }
+        }
+
+        /// <summary>True whenever the player occupies any cockpit, helm, ship console, turret or mount.</summary>
+        public bool IsInAnySeatOrMount =>
+            _isMounted
+            || VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive
+            || VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit != null;
+
+        /// <summary>Prevents the shared 'F' key from toggling jetpack flight on the frame a seat or mount exits.</summary>
+        public void SuppressFlyToggleThisFrame()
+        {
+            _suppressFlyToggleFrame = Time.frameCount;
+        }
+
+        private void OnEnable()
+        {
+            // Exiting a cockpit/helm/console re-enables PlayerController mid-frame while 'F' is pressed:
+            // suppress ToggleFly on that exact frame so dismounting never flips jetpack flight.
+            _suppressFlyToggleFrame = Time.frameCount;
+        }
         public Vector3 Velocity => _velocity;
         public float LastAirDownSpeed => _lastAirDownSpeed;
 
@@ -669,6 +700,9 @@ namespace VoxelEngine.Player
 
         private void UpdateFlyToggle()
         {
+            if (IsInAnySeatOrMount || Time.frameCount == _suppressFlyToggleFrame)
+                return;
+
             if (GameSettings.WasPressed(InputAction.ToggleFly))
             {
                 // Only allow toggling fly mode if research has unlocked it (OR if the user

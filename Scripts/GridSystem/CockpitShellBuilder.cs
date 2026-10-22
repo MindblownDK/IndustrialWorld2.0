@@ -1,22 +1,20 @@
 // Assets/Scripts/VoxelEngine/GridSystem/CockpitShellBuilder.cs
 //
-// 17.39.0-dev - one cockpit, two shells, and a cabin you can actually see out of.
+// 17.43.0-dev - spacious 2x2x2 industrial cockpits with high-visibility glazing:
+//   - Wraparound Cockpit (StyleCrawler = 1): panoramic harvester cab with full front,
+//     corner, side, lower-chin and bottom floor observation glass, overhead work lamps,
+//     and slim tubular ROPS posts. Lighter hull integrity.
+//   - Reinforced Cockpit (StyleCab = 2): rugged heavy-duty machinery cab with bolted
+//     armored glacis plates, heavy FOPS cage, clevised dozer bumper, solid steel deck,
+//     and tall unobstructed upper panoramic windows. High hull integrity.
 //
 // A block is authored facing -Z in this project: the ghost draws its FRONT marker on the
-// minimum Z face. Everything below is drawn facing +Z because that is how a cockpit reads
-// while it is being modelled, and the cabin and both shells are then turned 180 degrees
-// about Y as they are parented. That single rotation is the difference between a pilot
-// looking out of the windscreen and a pilot looking at the back of their own seat.
-//
-//   CABIN     seat and harness, a dash that stays Below the sight line so the horizon is
-//             clear, three angled multi-function displays with drawn readouts, a holo ring,
-//             side keypads, an overhead switch strip and a cabin light.
-//   CRAWLER   a low nose, glass down to the sill, thin pillars, a roll bar behind.
-//   CAB       an upright survey cab: square windscreen, mirrors, roof dome.
-//
-// Both shells ship inside the one cockpit prefab and only one is enabled at a time, so a
-// cockpit changes character without changing item.
+// minimum Z face. Everything inside Cabin, Shell_Crawler and Shell_Cab is authored in a
+// symmetric [-2, +2]^3 room (for CellUnit = 2 m, total size 4 m x 4 m x 4 m) facing +Z
+// and then rotated 180 degrees around Y under ShellRoot at (+0.5, +0.5, -0.5) * cellSize,
+// so the finished 2x2x2 block spans cells {0, 1} x {0, 1} x {-1, 0} cleanly.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VoxelEngine.GridSystem
@@ -37,13 +35,23 @@ namespace VoxelEngine.GridSystem
         /// <summary>Every shell a cockpit can wear, in the order the build wheel offers them.</summary>
         public static readonly int[] Styles = { StyleCrawler, StyleCab };
 
-        /// <summary>Every measurement below is authored against a 2 m grid cell and then
-        /// scaled with the block, so a cockpit reads the same whatever cell it is built on.</summary>
+        /// <summary>Base Large-grid single-cell unit (2 m). The 2x2x2 cockpit spans 2 * CellUnit (4 m) per axis.</summary>
         private const float CellUnit = 2f;
 
-        /// <summary>Where a pilot's seated eye lands, in cell units, before the cabin is
-        /// turned to face -Z.</summary>
-        private static readonly Vector3 SeatEye = new(0f, 0.14f, -0.40f);
+        /// <summary>Pilot eye in the authored (+Z forward) cabin frame: elevated high above
+        /// the low-mounted curved MFD pod so the entire horizon, flanks and harvester floor stay open.</summary>
+        private static readonly Vector3 SeatEye = new(0f, 0.36f, -0.16f);
+
+        private static readonly Vector3Int[] s_localExtraCells =
+        {
+            new(1, 0, 0),
+            new(0, 1, 0),
+            new(0, 0, -1),
+            new(1, 1, 0),
+            new(1, 0, -1),
+            new(0, 1, -1),
+            new(1, 1, -1),
+        };
 
         private const string ShellPreferenceKey = "cockpit.shell";
         private static int _selectedStyle = -1;
@@ -54,7 +62,7 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>
         /// The shell the next cockpit placed in the world will wear. Chosen on the build
-        /// wheel, remembered between sessions: a player who builds cabs wants cabs.
+        /// wheel and persisted across sessions.
         /// </summary>
         public static int SelectedStyle
         {
@@ -72,24 +80,70 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>Any stored or requested value folded into a shell that exists.</summary>
-        private static int Normalise(int style) => style == StyleCab ? StyleCab : StyleCrawler;
+        public static int Normalise(int style) => style == StyleCab ? StyleCab : StyleCrawler;
 
-        /// <summary>The name the wheel and the item description use for a shell.</summary>
-        public static string NameOf(int style) => Normalise(style) == StyleCab ? "Armored Cab" : "Wraparound Cockpit";
+        /// <summary>The name the wheel, HUD and item description use for a shell.</summary>
+        public static string NameOf(int style) => Normalise(style) == StyleCab
+            ? "Reinforced Cockpit"
+            : "Wraparound Cockpit";
 
         /// <summary>One line about what a shell is for, printed in the wheel's hub.</summary>
         public static string BlurbOf(int style) => Normalise(style) == StyleCab
-            ? "Broad panoramic glazing above a solid armored lower cab; the hull has increased integrity."
-            : "Low-profile wraparound glass with three floating MFDs and an open forward sightline.";
+            ? "Heavy-duty armored machinery cab with bolted glacis plating, FOPS cage and high hull integrity."
+            : "Harvester-style panoramic glass across the front, sides and floor for maximum downward and wide visibility; lighter hull.";
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  2x2x2 FOOTPRINT & COLLIDER BOUNDS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        public static bool UsesMultiCellFootprint(int style) => style != StyleLegacy;
+
+        public static Bounds LocalBoundsForStyle(int style, float cellSize)
+        {
+            float cs = Mathf.Max(0.01f, cellSize);
+            if (!UsesMultiCellFootprint(style))
+                return new Bounds(Vector3.zero, Vector3.one * cs);
+
+            return new Bounds(
+                new Vector3(cs * 0.5f, cs * 0.5f, -cs * 0.5f),
+                new Vector3(cs * 2f, cs * 2f, cs * 2f));
+        }
+
+        /// <summary>Appends the 7 non-anchor grid cells occupied by the rotated 2x2x2 cockpit.</summary>
+        public static void AppendAdditionalFootprintOffsets(int style, Quaternion localRotation, List<Vector3Int> results)
+        {
+            if (results == null || !UsesMultiCellFootprint(style)) return;
+            for (int i = 0; i < s_localExtraCells.Length; i++)
+                results.Add(RotateGridOffset(s_localExtraCells[i], localRotation));
+        }
+
+        public static Vector3Int RotateGridOffset(Vector3Int localOffset, Quaternion localRotation)
+        {
+            Vector3 rotated = localRotation * (Vector3)localOffset;
+            return new Vector3Int(
+                Mathf.RoundToInt(rotated.x),
+                Mathf.RoundToInt(rotated.y),
+                Mathf.RoundToInt(rotated.z));
+        }
+
+        public static void SyncColliderBounds(GameObject root, float cellSize, int style)
+        {
+            if (root == null) return;
+            var box = root.GetComponent<BoxCollider>();
+            if (box == null) return;
+            bool hasShell = root.transform.Find(ShellRootName) != null;
+            Bounds bounds = LocalBoundsForStyle(hasShell ? Normalise(style) : StyleLegacy, cellSize);
+            box.center = bounds.center;
+            box.size = bounds.size;
+        }
 
         // ═══════════════════════════════════════════════════════════════════════
         //  BUILD
         // ═══════════════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Build the whole cockpit: one cabin and both shells, with
-        /// <paramref name="style"/> enabled. Editor only - a prefab without a shell gets one
-        /// from Setup, and nothing is generated at play time.
+        /// Build the whole 2x2x2 cockpit: shared open-sightline cabin plus both shells,
+        /// with <paramref name="style"/> active. Editor only.
         /// </summary>
         public static void Build(GameObject root, float cellSize, Color bodyColor, int style)
         {
@@ -97,13 +151,16 @@ namespace VoxelEngine.GridSystem
             if (Application.isPlaying) return;
             if (style == StyleLegacy) return;
 
+            Bounds bounds = LocalBoundsForStyle(style, cellSize);
             var existing = root.transform.Find(ShellRootName);
             Transform shellRoot = existing != null
                 ? existing
-                : Group(root.transform, ShellRootName, Vector3.zero).transform;
+                : Group(root.transform, ShellRootName, bounds.center).transform;
+            shellRoot.localPosition = bounds.center;
+            shellRoot.localRotation = Quaternion.identity;
+            shellRoot.localScale = Vector3.one;
 
-            // Replace only the four subtrees owned by this builder. Custom prefab children
-            // beside them stay attached to Generated_CockpitShell across this refresh.
+            // Replace only the four subtrees owned by this builder so unrelated custom children stay intact.
             RemoveGeneratedChild(shellRoot, InteriorName);
             RemoveGeneratedChild(shellRoot, CrawlerName);
             RemoveGeneratedChild(shellRoot, CabName);
@@ -112,27 +169,26 @@ namespace VoxelEngine.GridSystem
             var palette = new Palette(bodyColor);
             float scale = cellSize / CellUnit;
 
-            // Authored facing +Z, parented facing -Z. See the header.
-            var cabin = Group(shellRoot.transform, InteriorName, Vector3.zero);
+            // Authored in [-2, +2]^3 facing +Z, rotated 180 degrees around Y to face -Z.
+            var cabin = Group(shellRoot, InteriorName, Vector3.zero);
             FaceForward(cabin, scale);
             BuildInterior(cabin, palette);
 
-            var crawler = Group(shellRoot.transform, CrawlerName, Vector3.zero);
+            var crawler = Group(shellRoot, CrawlerName, Vector3.zero);
             FaceForward(crawler, scale);
-            BuildCrawler(crawler, palette);
+            BuildWraparoundHarvester(crawler, palette);
 
-            var cab = Group(shellRoot.transform, CabName, Vector3.zero);
+            var cab = Group(shellRoot, CabName, Vector3.zero);
             FaceForward(cab, scale);
-            BuildCab(cab, palette);
+            BuildReinforcedHeavyCab(cab, palette);
 
-            ApplyShell(root, style);
-
-            // The seat pose lives beside the shells, not inside one: the room is shared, so
-            // there is exactly one answer to where the pilot's eyes go. It is authored in
-            // the finished (-Z facing) frame, which is why z is positive here.
-            var anchor = Group(shellRoot.transform, SeatAnchorName,
+            // SeatAnchor sits under shellRoot (already centred on the 2x2x2 volume) in finished -Z space.
+            var anchor = Group(shellRoot, SeatAnchorName,
                 new Vector3(SeatEye.x, SeatEye.y, -SeatEye.z) * scale);
-            anchor.transform.localRotation = Quaternion.Euler(6f, 180f, 0f);
+            anchor.transform.localRotation = Quaternion.Euler(2.5f, 180f, 0f);
+
+            SyncColliderBounds(root, cellSize, style);
+            ApplyShell(root, style);
         }
 
         private static void RemoveGeneratedChild(Transform parent, string name)
@@ -150,7 +206,7 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>
         /// Show the shell this cockpit wears. Both live in the prefab, so this only flips
-        /// which hull is active - no rebuild, and nothing duplicated.
+        /// which hull subtree is active.
         /// </summary>
         public static void ApplyShell(GameObject root, int style)
         {
@@ -166,8 +222,7 @@ namespace VoxelEngine.GridSystem
             if (cab != null) cab.gameObject.SetActive(cabWanted);
         }
 
-        /// <summary>Give a cockpit a shell: the field, the visual, and the record of which
-        /// one it wears, in that order.</summary>
+        /// <summary>Assigns shell style, activates visuals, updates collider bounds and recalculates durability.</summary>
         public static void SetShell(GridCockpit cockpit, int style)
         {
             if (cockpit == null) return;
@@ -176,353 +231,421 @@ namespace VoxelEngine.GridSystem
             cockpit.ApplyShellDurability();
         }
 
-        /// <summary>True when this cockpit's prefab carries a shell and therefore a seat
-        /// pose. A prefab that has not been through Setup says no, and the pilot keeps the
-        /// standing camera instead of being pushed into geometry.</summary>
+        /// <summary>Returns the pilot eye pose in the cockpit root's local frame.</summary>
         public static bool TryGetSeatAnchor(GameObject root, out Vector3 localPosition, out Quaternion localRotation)
         {
             localPosition = Vector3.zero;
             localRotation = Quaternion.identity;
             if (root == null) return false;
 
-            var anchor = root.transform.Find(ShellRootName + "/" + SeatAnchorName);
+            var shellRoot = root.transform.Find(ShellRootName);
+            if (shellRoot == null) return false;
+            var anchor = shellRoot.Find(SeatAnchorName);
             if (anchor == null) return false;
 
-            localPosition = anchor.localPosition;
-            localRotation = anchor.localRotation;
+            localPosition = shellRoot.localPosition + shellRoot.localRotation * Vector3.Scale(shellRoot.localScale, anchor.localPosition);
+            localRotation = shellRoot.localRotation * anchor.localRotation;
             return true;
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  THE CABIN
+        //  SHARED OPEN-SIGHTLINE CABIN ([-2, +2]^3 FOR LARGE 4m x 4m x 4m BLOCK)
         // ═══════════════════════════════════════════════════════════════════════
         private static void BuildInterior(GameObject root, Palette p)
         {
-            const float cs = CellUnit;
-            float h = cs * 0.5f;
+            // Rear structural bulkhead (seals z = -2.0 face cleanly against attached hull blocks)
+            Box(root, p.HullDark, "Bulkhead_Main", new Vector3(0f, 0.00f, -1.93f), new Vector3(3.86f, 3.84f, 0.12f), Vector3.zero);
+            Box(root, p.Dark, "Bulkhead_Stiffener_Top", new Vector3(0f, 1.72f, -1.85f), new Vector3(3.64f, 0.22f, 0.08f), Vector3.zero);
+            Box(root, p.Dark, "Bulkhead_Stiffener_Bot", new Vector3(0f, -1.72f, -1.85f), new Vector3(3.64f, 0.22f, 0.08f), Vector3.zero);
+            Box(root, p.MetalDark, "Bulkhead_Rib_L", new Vector3(-1.32f, 0f, -1.85f), new Vector3(0.14f, 3.30f, 0.07f), Vector3.zero);
+            Box(root, p.MetalDark, "Bulkhead_Rib_R", new Vector3(1.32f, 0f, -1.85f), new Vector3(0.14f, 3.30f, 0.07f), Vector3.zero);
 
-            // ── Room ────────────────────────────────────────────────────────────
-            Box(root, p.Dark, "Floor", new Vector3(0f, -h + 0.08f, 0f), new Vector3(1.94f, 0.10f, 1.94f), Vector3.zero);
-            for (int i = 0; i < 5; i++)
-                Box(root, p.Metal, "Floor_Rib_" + i, new Vector3(0f, -h + 0.15f, -0.68f + i * 0.34f),
-                    new Vector3(1.70f, 0.02f, 0.06f), Vector3.zero);
-
-            Box(root, p.Hull, "Bulkhead", new Vector3(0f, -0.06f, -0.94f), new Vector3(1.94f, 1.70f, 0.08f), Vector3.zero);
-            Box(root, p.Hull, "Bulkhead_Header", new Vector3(0f, 0.86f, -0.94f), new Vector3(1.94f, 0.30f, 0.08f), Vector3.zero);
-            Box(root, p.Dark, "Hatch_Frame", new Vector3(0f, -0.26f, -0.90f), new Vector3(0.92f, 1.20f, 0.05f), Vector3.zero);
-            Box(root, p.Hull, "Hatch", new Vector3(0f, -0.26f, -0.86f), new Vector3(0.76f, 1.02f, 0.04f), Vector3.zero);
+            // Pressurized rear crew hatch
+            Box(root, p.Dark, "Hatch_Frame", new Vector3(0f, -0.34f, -1.84f), new Vector3(1.36f, 2.26f, 0.08f), Vector3.zero);
+            Box(root, p.Hull, "Hatch_Door", new Vector3(0f, -0.34f, -1.79f), new Vector3(1.14f, 2.04f, 0.06f), Vector3.zero);
+            Box(root, p.Glass, "Hatch_Porthole", new Vector3(0f, 0.22f, -1.75f), new Vector3(0.42f, 0.30f, 0.03f), Vector3.zero);
+            Box(root, p.Accent, "Hatch_HeaderStripe", new Vector3(0f, 0.84f, -1.80f), new Vector3(1.10f, 0.055f, 0.03f), Vector3.zero);
             for (int i = 0; i < 3; i++)
             {
-                float y = -0.62f + i * 0.36f;
-                Box(root, p.Metal, "Hatch_Dog_L" + i, new Vector3(-0.33f, y, -0.83f), new Vector3(0.10f, 0.05f, 0.04f), Vector3.zero);
-                Box(root, p.Metal, "Hatch_Dog_R" + i, new Vector3(0.33f, y, -0.83f), new Vector3(0.10f, 0.05f, 0.04f), Vector3.zero);
+                float hy = -0.96f + i * 0.62f;
+                Box(root, p.Metal, "Hatch_Dog_L" + i, new Vector3(-0.50f, hy, -1.75f), new Vector3(0.12f, 0.06f, 0.05f), Vector3.zero);
+                Box(root, p.Metal, "Hatch_Dog_R" + i, new Vector3(0.50f, hy, -1.75f), new Vector3(0.12f, 0.06f, 0.05f), Vector3.zero);
             }
 
-            // ── Seat ────────────────────────────────────────────────────────────
-            Box(root, p.Dark, "Seat_Pedestal", new Vector3(0f, -0.76f, -0.40f), new Vector3(0.44f, 0.30f, 0.38f), Vector3.zero);
-            Box(root, p.Seat, "Seat_Pan", new Vector3(0f, -0.58f, -0.40f), new Vector3(0.64f, 0.12f, 0.56f), Vector3.zero);
-            Box(root, p.Seat, "Seat_Back", new Vector3(0f, -0.20f, -0.66f), new Vector3(0.64f, 0.74f, 0.13f), new Vector3(-12f, 0f, 0f));
-            Box(root, p.Seat, "Seat_Head", new Vector3(0f, 0.24f, -0.72f), new Vector3(0.40f, 0.24f, 0.11f), new Vector3(-12f, 0f, 0f));
-            Box(root, p.Seat, "Seat_Bolster_L", new Vector3(-0.35f, -0.45f, -0.40f), new Vector3(0.11f, 0.28f, 0.50f), Vector3.zero);
-            Box(root, p.Seat, "Seat_Bolster_R", new Vector3(0.35f, -0.45f, -0.40f), new Vector3(0.11f, 0.28f, 0.50f), Vector3.zero);
-            Box(root, p.Seat, "Armrest_L", new Vector3(-0.41f, -0.36f, -0.28f), new Vector3(0.13f, 0.08f, 0.44f), new Vector3(-4f, 0f, 0f));
-            Box(root, p.Seat, "Armrest_R", new Vector3(0.41f, -0.36f, -0.28f), new Vector3(0.13f, 0.08f, 0.44f), new Vector3(-4f, 0f, 0f));
-            Box(root, p.Strap, "Harness_L", new Vector3(-0.14f, 0.02f, -0.58f), new Vector3(0.09f, 0.52f, 0.03f), new Vector3(-13f, 0f, 4f));
-            Box(root, p.Strap, "Harness_R", new Vector3(0.14f, 0.02f, -0.58f), new Vector3(0.09f, 0.52f, 0.03f), new Vector3(-13f, 0f, -4f));
-            Box(root, p.Strap, "Harness_Lap", new Vector3(0f, -0.50f, -0.34f), new Vector3(0.54f, 0.09f, 0.03f), Vector3.zero);
-            Box(root, p.Metal, "Seat_Rail_L", new Vector3(-0.44f, -0.90f, -0.40f), new Vector3(0.06f, 0.08f, 0.62f), Vector3.zero);
-            Box(root, p.Metal, "Seat_Rail_R", new Vector3(0.44f, -0.90f, -0.40f), new Vector3(0.06f, 0.08f, 0.62f), Vector3.zero);
+            // Narrow central operator spine (x in [-0.44, +0.44]): deliberately leaves left, right,
+            // and forward floor completely open so Wraparound floor glass has unobstructed sightlines!
+            Box(root, p.Dark, "Spine_Catwalk", new Vector3(0f, -1.88f, -0.66f), new Vector3(0.88f, 0.14f, 2.36f), Vector3.zero);
+            Box(root, p.MetalDark, "Spine_Trim_L", new Vector3(-0.45f, -1.84f, -0.66f), new Vector3(0.04f, 0.18f, 2.38f), Vector3.zero);
+            Box(root, p.MetalDark, "Spine_Trim_R", new Vector3(0.45f, -1.84f, -0.66f), new Vector3(0.04f, 0.18f, 2.38f), Vector3.zero);
+            for (int i = 0; i < 6; i++)
+                Box(root, p.Metal, "Catwalk_Tread_" + i, new Vector3(0f, -1.80f, -1.62f + i * 0.42f),
+                    new Vector3(0.76f, 0.02f, 0.08f), Vector3.zero);
 
-            // ── Floating display rail: three working screens, no tall dashboard ──
-            // Keep the MFD object names and panel dimensions: GridCockpitMfd attaches
-            // to these same transforms at runtime. Only the bulky binnacle and hood are
-            // removed, leaving the pilot a clean view through the wraparound glazing.
-            Quaternion screenTilt = Quaternion.Euler(-14f, 180f, 0f);
-            Vector3 screenFace = screenTilt * Vector3.forward;
+            // Footwell rudder / travel pedals forward on the narrow spine
+            Box(root, p.Dark, "Pedal_Box", new Vector3(0f, -1.72f, 0.34f), new Vector3(0.68f, 0.16f, 0.34f), new Vector3(-14f, 0f, 0f));
+            Box(root, p.Metal, "Pedal_L", new Vector3(-0.19f, -1.56f, 0.44f), new Vector3(0.16f, 0.24f, 0.04f), new Vector3(-28f, 0f, 0f));
+            Box(root, p.Metal, "Pedal_R", new Vector3(0.19f, -1.56f, 0.44f), new Vector3(0.16f, 0.24f, 0.04f), new Vector3(-28f, 0f, 0f));
 
-            Box(root, p.Dark, "Console_SupportRail", new Vector3(0f, -0.08f, 0.52f),
-                new Vector3(1.40f, 0.045f, 0.065f), Vector3.zero);
-            Box(root, p.Metal, "Console_SupportArm_L", new Vector3(-0.52f, -0.19f, 0.47f),
-                new Vector3(0.035f, 0.28f, 0.045f), new Vector3(-10f, 0f, -4f));
-            Box(root, p.Metal, "Console_SupportArm_R", new Vector3(0.52f, -0.19f, 0.47f),
-                new Vector3(0.035f, 0.28f, 0.045f), new Vector3(-10f, 0f, 4f));
+            // Elevated air-ride industrial operator seat (eye sits cleanly at y = +0.36, z = -0.16)
+            Box(root, p.Dark, "Seat_Riser", new Vector3(0f, -1.36f, -0.34f), new Vector3(0.54f, 0.90f, 0.52f), Vector3.zero);
+            Cylinder(root, p.MetalDark, "Seat_Shock", new Vector3(0f, -1.10f, -0.34f), new Vector3(0.30f, 0.36f, 0.30f), Vector3.zero);
+            Box(root, p.Seat, "Seat_Pan", new Vector3(0f, -0.68f, -0.26f), new Vector3(0.78f, 0.16f, 0.72f), new Vector3(-4f, 0f, 0f));
+            Box(root, p.Seat, "Seat_Back", new Vector3(0f, -0.10f, -0.58f), new Vector3(0.76f, 1.02f, 0.16f), new Vector3(-11f, 0f, 0f));
+            Box(root, p.Seat, "Seat_Headrest", new Vector3(0f, 0.54f, -0.69f), new Vector3(0.46f, 0.28f, 0.13f), new Vector3(-11f, 0f, 0f));
+            Box(root, p.Seat, "Seat_Bolster_L", new Vector3(-0.42f, -0.52f, -0.26f), new Vector3(0.12f, 0.30f, 0.64f), Vector3.zero);
+            Box(root, p.Seat, "Seat_Bolster_R", new Vector3(0.42f, -0.52f, -0.26f), new Vector3(0.12f, 0.30f, 0.64f), Vector3.zero);
+            Box(root, p.Strap, "Harness_L", new Vector3(-0.17f, 0.10f, -0.49f), new Vector3(0.09f, 0.68f, 0.035f), new Vector3(-12f, 0f, 4f));
+            Box(root, p.Strap, "Harness_R", new Vector3(0.17f, 0.10f, -0.49f), new Vector3(0.09f, 0.68f, 0.035f), new Vector3(-12f, 0f, -4f));
+            Box(root, p.Metal, "Harness_Buckle", new Vector3(0f, -0.22f, -0.42f), new Vector3(0.13f, 0.11f, 0.04f), Vector3.zero);
+
+            // Chair-mounted side control pods (kept strictly beside the hips at y = -0.42, out of all outward glass!)
+            Box(root, p.Dark, "Armrest_Pod_L", new Vector3(-0.56f, -0.44f, -0.06f), new Vector3(0.20f, 0.12f, 0.72f), new Vector3(-4f, 0f, 0f));
+            Box(root, p.Dark, "Armrest_Pod_R", new Vector3(0.56f, -0.44f, -0.06f), new Vector3(0.20f, 0.12f, 0.72f), new Vector3(-4f, 0f, 0f));
+
+            // Left hand: multi-axis control stick
+            Cylinder(root, p.Metal, "Stick_Shaft", new Vector3(-0.56f, -0.28f, 0.20f), new Vector3(0.045f, 0.13f, 0.045f), new Vector3(-12f, 0f, 0f));
+            Box(root, p.Seat, "Stick_Grip", new Vector3(-0.56f, -0.14f, 0.23f), new Vector3(0.085f, 0.13f, 0.09f), new Vector3(-12f, 0f, 0f));
+            Box(root, p.Accent, "Stick_Trigger", new Vector3(-0.56f, -0.12f, 0.29f), new Vector3(0.035f, 0.04f, 0.03f), Vector3.zero);
+
+            // Right hand: twin industrial throttle levers + status keypad
+            Box(root, p.MetalDark, "Throttle_Base", new Vector3(0.56f, -0.35f, 0.18f), new Vector3(0.17f, 0.08f, 0.28f), Vector3.zero);
+            Box(root, p.Metal, "Throttle_Arm_A", new Vector3(0.52f, -0.23f, 0.21f), new Vector3(0.03f, 0.17f, 0.035f), new Vector3(-22f, 0f, 0f));
+            Box(root, p.Metal, "Throttle_Arm_B", new Vector3(0.60f, -0.23f, 0.19f), new Vector3(0.03f, 0.17f, 0.035f), new Vector3(-14f, 0f, 0f));
+            Box(root, p.Accent, "Throttle_Grip", new Vector3(0.56f, -0.14f, 0.24f), new Vector3(0.14f, 0.045f, 0.055f), Vector3.zero);
+            for (int k = 0; k < 3; k++)
+                Box(root, p.GlowDim, "Arm_Button_" + k, new Vector3(0.56f, -0.37f, -0.10f - k * 0.09f),
+                    new Vector3(0.07f, 0.02f, 0.055f), Vector3.zero);
+
+            // Low-profile cantilevered instrument arc:
+            // Positioned at y = -0.68, z = 0.88..0.94 (top edge sits ~37 degrees BELOW eye level!),
+            // leaving 100% of the forward horizon, upper glass, side glass, and lower floor glass open!
+            Box(root, p.MetalDark, "Console_Pedestal_L", new Vector3(-0.34f, -1.24f, 0.56f),
+                new Vector3(0.055f, 1.08f, 0.065f), new Vector3(24f, 0f, 0f));
+            Box(root, p.MetalDark, "Console_Pedestal_R", new Vector3(0.34f, -1.24f, 0.56f),
+                new Vector3(0.055f, 1.08f, 0.065f), new Vector3(24f, 0f, 0f));
+            Box(root, p.Dark, "Console_Crossbar", new Vector3(0f, -0.78f, 0.82f),
+                new Vector3(1.24f, 0.05f, 0.06f), Vector3.zero);
 
             for (int i = 0; i < 3; i++)
             {
-                float x = (i - 1) * 0.52f;
-                Vector3 centre = new Vector3(x, 0.24f, 0.66f);
+                float x = (i - 1) * 0.56f;
+                float z = i == 1 ? 0.94f : 0.86f;
+                float inwardYaw = (i - 1) * -14f;
+                Quaternion screenRot = Quaternion.Euler(-32f, 180f + inwardYaw, 0f);
+                Vector3 screenFace = screenRot * Vector3.forward;
+                Vector3 centre = new Vector3(x, -0.64f, z);
 
-                Box(root, p.Dark, "MFD_Bezel_" + i, centre, new Vector3(0.50f, 0.38f, 0.05f), screenTilt.eulerAngles);
-                Box(root, p.Screen, "MFD_Screen_" + i, centre + screenFace * 0.032f,
-                    new Vector3(0.44f, 0.32f, 0.012f), screenTilt.eulerAngles);
+                Box(root, p.Dark, "MFD_Bezel_" + i, centre, new Vector3(0.50f, 0.32f, 0.032f), screenRot.eulerAngles);
+                Box(root, p.Accent, "MFD_Trim_" + i, centre + screenRot * new Vector3(0f, 0.162f, 0.004f),
+                    new Vector3(0.46f, 0.012f, 0.034f), screenRot.eulerAngles);
+                Box(root, p.Screen, "MFD_Screen_" + i, centre + screenFace * 0.018f,
+                    new Vector3(0.45f, 0.27f, 0.010f), screenRot.eulerAngles);
 
-                // A small readout stays baked into the unpowered screen; live TextMeshes
-                // use the matching MFD_Screen_* surface in GridCockpitMfd.
-                Box(root, p.Glow, "MFD_Bar_" + i, centre + screenTilt * new Vector3(-0.10f, 0.09f, 0.040f),
-                    new Vector3(0.20f, 0.03f, 0.006f), screenTilt.eulerAngles);
-                Box(root, p.GlowDim, "MFD_Bar2_" + i, centre + screenTilt * new Vector3(-0.14f, 0.04f, 0.040f),
-                    new Vector3(0.12f, 0.025f, 0.006f), screenTilt.eulerAngles);
-                Box(root, p.Accent, "MFD_Tick_" + i, centre + screenTilt * new Vector3(0.13f, -0.10f, 0.040f),
-                    new Vector3(0.10f, 0.02f, 0.006f), screenTilt.eulerAngles);
+                Box(root, p.Glow, "MFD_Bar_" + i, centre + screenRot * new Vector3(-0.10f, 0.07f, 0.026f),
+                    new Vector3(0.18f, 0.024f, 0.005f), screenRot.eulerAngles);
+                Box(root, p.Accent, "MFD_Tick_" + i, centre + screenRot * new Vector3(0.12f, -0.08f, 0.026f),
+                    new Vector3(0.09f, 0.018f, 0.005f), screenRot.eulerAngles);
                 for (int g = 0; g < 3; g++)
                     Box(root, p.GlowDim, "MFD_Graph_" + i + "_" + g,
-                        centre + screenTilt * new Vector3(-0.12f + g * 0.09f, -0.06f, 0.040f),
-                        new Vector3(0.045f, 0.02f + g * 0.03f, 0.006f), screenTilt.eulerAngles);
+                        centre + screenRot * new Vector3(-0.11f + g * 0.08f, -0.05f, 0.026f),
+                        new Vector3(0.04f, 0.018f + g * 0.022f, 0.005f), screenRot.eulerAngles);
             }
 
-            // Side keypads, at hip height and angled inboard.
-            for (int side = -1; side <= 1; side += 2)
-            {
-                float x = side * 0.84f;
-                Box(root, p.Dark, "Side_Panel_" + side, new Vector3(x, -0.34f, 0.10f),
-                    new Vector3(0.22f, 0.46f, 0.92f), new Vector3(-8f, 0f, side * -10f));
-                for (int i = 0; i < 3; i++)
-                    Box(root, p.GlowDim, "Side_Key_" + side + "_" + i,
-                        new Vector3(x - side * 0.05f, -0.20f + i * 0.11f, 0.24f),
-                        new Vector3(0.06f, 0.035f, 0.05f), Vector3.zero);
-                Box(root, p.Accent, "Side_Toggle_" + side, new Vector3(x - side * 0.04f, -0.24f, -0.20f),
-                    new Vector3(0.05f, 0.10f, 0.05f), new Vector3(-18f, 0f, 0f));
-            }
+            // Compact overhead console tucked behind pilot sightline
+            Box(root, p.Dark, "Overhead_Pod", new Vector3(0f, 1.84f, -0.42f), new Vector3(1.18f, 0.10f, 0.56f), Vector3.zero);
+            Box(root, p.Glow, "Cabin_LightStrip", new Vector3(0f, 1.78f, -0.42f), new Vector3(0.92f, 0.02f, 0.12f), Vector3.zero);
 
-            // Throttle and stick, where a hand expects them.
-            Box(root, p.Metal, "Throttle_Housing", new Vector3(0.44f, -0.24f, 0.24f), new Vector3(0.18f, 0.10f, 0.26f), new Vector3(-16f, 0f, 0f));
-            Box(root, p.Accent, "Throttle_Lever", new Vector3(0.44f, -0.12f, 0.26f), new Vector3(0.04f, 0.18f, 0.04f), new Vector3(-20f, 0f, 0f));
-            Box(root, p.Dark, "Stick_Base", new Vector3(-0.44f, -0.30f, 0.20f), new Vector3(0.14f, 0.09f, 0.14f), Vector3.zero);
-            Cylinder(root, p.Metal, "Stick_Shaft", new Vector3(-0.44f, -0.14f, 0.20f), new Vector3(0.045f, 0.14f, 0.045f), new Vector3(-12f, 0f, 0f));
-            Box(root, p.Seat, "Stick_Grip", new Vector3(-0.44f, 0.00f, 0.22f), new Vector3(0.08f, 0.11f, 0.08f), new Vector3(-12f, 0f, 0f));
-            Box(root, p.Accent, "Stick_Trigger", new Vector3(-0.44f, 0.02f, 0.27f), new Vector3(0.035f, 0.035f, 0.03f), Vector3.zero);
-
-            // ── Overhead and light ──────────────────────────────────────────────
-            Box(root, p.Dark, "Overhead", new Vector3(0f, 0.90f, 0.10f), new Vector3(0.92f, 0.12f, 0.46f), new Vector3(6f, 0f, 0f));
-            for (int i = 0; i < 3; i++)
-                Box(root, p.GlowDim, "Overhead_Lamp_" + i, new Vector3(-0.24f + i * 0.24f, 0.84f, 0.18f),
-                    new Vector3(0.06f, 0.03f, 0.06f), Vector3.zero);
-            Box(root, p.Glow, "Cabin_Light", new Vector3(0f, 0.86f, -0.20f), new Vector3(0.86f, 0.02f, 0.10f), Vector3.zero);
-
-            var lamp = Group(root.transform, "Cabin_Lamp", new Vector3(0f, 0.70f, 0.02f));
+            var lamp = Group(root.transform, "Cabin_Lamp", new Vector3(0f, 1.54f, -0.10f));
             var light = lamp.AddComponent<Light>();
             light.type = LightType.Point;
-            light.color = new Color(0.74f, 0.88f, 1f);
-            light.intensity = 1.35f;
-            light.range = 3.2f;
+            light.color = new Color(0.78f, 0.91f, 1f);
+            light.intensity = 1.45f;
+            light.range = 5.4f;
             light.shadows = LightShadows.None;
             light.renderMode = LightRenderMode.ForcePixel;
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  SHELL 1 - the crawler nose
+        //  SHELL 1 - WRAPAROUND HARVESTER COCKPIT (FRONT + SIDES + BOTTOM GLASS)
         // ═══════════════════════════════════════════════════════════════════════
-        private static void BuildCrawler(GameObject root, Palette p)
+        private static void BuildWraparoundHarvester(GameObject root, Palette p)
         {
-            // Compact, low nose: the armor stays below the pilot's horizon.
-            Box(root, p.Hull, "Nose_ArmoredLow", new Vector3(0f, -0.70f, 0.80f),
-                new Vector3(1.90f, 0.48f, 0.42f), Vector3.zero);
-            Box(root, p.Dark, "Nose_Cowl", new Vector3(0f, -0.43f, 0.96f),
-                new Vector3(1.82f, 0.09f, 0.18f), new Vector3(-18f, 0f, 0f));
-            Box(root, p.Accent, "Nose_Ridge", new Vector3(0f, -0.39f, 1.01f),
-                new Vector3(1.42f, 0.025f, 0.025f), new Vector3(-18f, 0f, 0f));
-            Box(root, p.Metal, "Front_Bumper", new Vector3(0f, -1.00f, 0.94f),
-                new Vector3(1.96f, 0.20f, 0.20f), Vector3.zero);
-            Box(root, p.Accent, "Bumper_Stripe", new Vector3(0f, -0.97f, 1.045f),
-                new Vector3(1.60f, 0.055f, 0.025f), Vector3.zero);
-            Box(root, p.Metal, "Tow_Hook", new Vector3(0f, -1.12f, 0.99f),
-                new Vector3(0.20f, 0.09f, 0.14f), Vector3.zero);
-            Cylinder(root, p.Glow, "Lamp_L", new Vector3(-0.73f, -0.68f, 1.01f),
-                new Vector3(0.18f, 0.045f, 0.18f), new Vector3(90f, 0f, 0f));
-            Cylinder(root, p.Glow, "Lamp_R", new Vector3(0.73f, -0.68f, 1.01f),
-                new Vector3(0.18f, 0.045f, 0.18f), new Vector3(90f, 0f, 0f));
+            // Rear lower base anchor only under the rear seat bulkhead; everything forward
+            // and beside the central spine is floor glass!
+            Box(root, p.HullDark, "Harvester_RearBase", new Vector3(0f, -1.94f, -1.62f),
+                new Vector3(3.92f, 0.12f, 0.74f), Vector3.zero);
 
-            // One broad windscreen blends into two angled front wraps and full-length
-            // side panes. The visible structural posts are narrow enough to keep the
-            // panoramic feel from the supplied low-profile cockpit reference.
-            Box(root, p.Glass, "Glass_Centre", new Vector3(0f, 0.27f, 0.94f),
-                new Vector3(1.72f, 0.98f, 0.035f), new Vector3(-13f, 0f, 0f));
-            Box(root, p.Glass, "Glass_Wrap_L", new Vector3(-0.84f, 0.27f, 0.75f),
-                new Vector3(0.32f, 0.94f, 0.035f), new Vector3(-10f, 43f, 0f));
-            Box(root, p.Glass, "Glass_Wrap_R", new Vector3(0.84f, 0.27f, 0.75f),
-                new Vector3(0.32f, 0.94f, 0.035f), new Vector3(-10f, -43f, 0f));
-            Box(root, p.Glass, "Side_Glass_L", new Vector3(-0.97f, 0.27f, -0.02f),
-                new Vector3(0.035f, 0.90f, 1.58f), Vector3.zero);
-            Box(root, p.Glass, "Side_Glass_R", new Vector3(0.97f, 0.27f, -0.02f),
-                new Vector3(0.035f, 0.90f, 1.58f), Vector3.zero);
-            Box(root, p.Hull, "Cowl_L", new Vector3(-0.62f, -0.27f, 0.99f),
-                new Vector3(0.70f, 0.12f, 0.11f), new Vector3(-20f, 0f, 0f));
-            Box(root, p.Hull, "Cowl_R", new Vector3(0.62f, -0.27f, 0.99f),
-                new Vector3(0.70f, 0.12f, 0.11f), new Vector3(-20f, 0f, 0f));
-            Box(root, p.Dark, "Pillar_Centre_L", new Vector3(-0.88f, 0.27f, 0.91f),
-                new Vector3(0.045f, 0.99f, 0.085f), new Vector3(-13f, 0f, 0f));
-            Box(root, p.Dark, "Pillar_Centre_R", new Vector3(0.88f, 0.27f, 0.91f),
-                new Vector3(0.045f, 0.99f, 0.085f), new Vector3(-13f, 0f, 0f));
-            Box(root, p.Metal, "Wrap_Post_L", new Vector3(-0.99f, 0.25f, 0.61f),
-                new Vector3(0.045f, 0.92f, 0.07f), new Vector3(-9f, 42f, 0f));
-            Box(root, p.Metal, "Wrap_Post_R", new Vector3(0.99f, 0.25f, 0.61f),
-                new Vector3(0.045f, 0.92f, 0.07f), new Vector3(-9f, -42f, 0f));
+            // ── Full Bottom Observation Glass (Harvester Belly Floor) ───────────
+            // Three crystal-clear structural belly panes surrounding the central spine:
+            Box(root, p.Glass, "Glass_Floor_Front", new Vector3(0f, -1.95f, 0.62f),
+                new Vector3(3.74f, 0.045f, 1.54f), Vector3.zero);
+            Box(root, p.Glass, "Glass_Floor_Left", new Vector3(-1.16f, -1.95f, -0.62f),
+                new Vector3(1.42f, 0.045f, 1.26f), Vector3.zero);
+            Box(root, p.Glass, "Glass_Floor_Right", new Vector3(1.16f, -1.95f, -0.62f),
+                new Vector3(1.42f, 0.045f, 1.26f), Vector3.zero);
 
-            // A low canopy and thin rear roll structure protect the cabin without
-            // dropping a bulky hood across the glass.
-            Box(root, p.Hull, "Roof", new Vector3(0f, 0.94f, -0.04f),
-                new Vector3(1.94f, 0.14f, 1.82f), Vector3.zero);
-            Box(root, p.Dark, "Roof_Crown", new Vector3(0f, 1.045f, -0.12f),
-                new Vector3(1.30f, 0.07f, 1.18f), Vector3.zero);
-            for (int i = 0; i < 3; i++)
-                Box(root, p.Metal, "Canopy_Rib_" + i, new Vector3(0f, 1.02f, -0.50f + i * 0.46f),
-                    new Vector3(1.72f, 0.035f, 0.055f), Vector3.zero);
-            Box(root, p.Metal, "Roll_Bar_Rear", new Vector3(0f, 0.98f, -0.89f),
-                new Vector3(1.82f, 0.08f, 0.08f), Vector3.zero);
-            Box(root, p.Metal, "Roll_Bar_Post_L", new Vector3(-0.91f, 0.57f, -0.89f),
-                new Vector3(0.075f, 0.78f, 0.075f), Vector3.zero);
-            Box(root, p.Metal, "Roll_Bar_Post_R", new Vector3(0.91f, 0.57f, -0.89f),
-                new Vector3(0.075f, 0.78f, 0.075f), Vector3.zero);
-            Box(root, p.Glow, "Roof_Lamp_L", new Vector3(-0.34f, 1.04f, 0.82f),
-                new Vector3(0.20f, 0.045f, 0.075f), new Vector3(-12f, 0f, 0f));
-            Box(root, p.Glow, "Roof_Lamp_R", new Vector3(0.34f, 1.04f, 0.82f),
-                new Vector3(0.20f, 0.045f, 0.075f), new Vector3(-12f, 0f, 0f));
+            // Slender perimeter tubular safety frame around the floor glass
+            Box(root, p.Dark, "Floor_Frame_L", new Vector3(-1.93f, -1.94f, -0.26f),
+                new Vector3(0.11f, 0.11f, 3.44f), Vector3.zero);
+            Box(root, p.Dark, "Floor_Frame_R", new Vector3(1.93f, -1.94f, -0.26f),
+                new Vector3(0.11f, 0.11f, 3.44f), Vector3.zero);
+            Box(root, p.MetalDark, "Floor_Mullion_Cross", new Vector3(0f, -1.95f, 1.38f),
+                new Vector3(3.84f, 0.08f, 0.09f), Vector3.zero);
 
-            // Lower flanks and running gear keep the crawler silhouette visibly separate
-            // from the taller armored cab, while leaving all side glass above the sill open.
-            Box(root, p.Hull, "Flank_L", new Vector3(-0.94f, -0.67f, 0.00f),
-                new Vector3(0.14f, 0.50f, 1.86f), Vector3.zero);
-            Box(root, p.Hull, "Flank_R", new Vector3(0.94f, -0.67f, 0.00f),
-                new Vector3(0.14f, 0.50f, 1.86f), Vector3.zero);
-            Box(root, p.Accent, "Flank_Sill_L", new Vector3(-0.985f, -0.84f, -0.01f),
-                new Vector3(0.025f, 0.045f, 1.62f), Vector3.zero);
-            Box(root, p.Accent, "Flank_Sill_R", new Vector3(0.985f, -0.84f, -0.01f),
-                new Vector3(0.025f, 0.045f, 1.62f), Vector3.zero);
-            Box(root, p.Dark, "Fender_L", new Vector3(-0.99f, -1.00f, 0f),
-                new Vector3(0.13f, 0.32f, 1.78f), Vector3.zero);
-            Box(root, p.Dark, "Fender_R", new Vector3(0.99f, -1.00f, 0f),
-                new Vector3(0.13f, 0.32f, 1.78f), Vector3.zero);
-            Box(root, p.Metal, "Step_L", new Vector3(-0.85f, -1.13f, 0.52f),
-                new Vector3(0.26f, 0.06f, 0.40f), Vector3.zero);
-            Box(root, p.Metal, "Step_R", new Vector3(0.85f, -1.13f, 0.52f),
-                new Vector3(0.26f, 0.06f, 0.40f), Vector3.zero);
-            Box(root, p.Accent, "Tail_L", new Vector3(-0.84f, -0.60f, -0.98f),
-                new Vector3(0.12f, 0.08f, 0.04f), Vector3.zero);
-            Box(root, p.Accent, "Tail_R", new Vector3(0.84f, -0.60f, -0.98f),
-                new Vector3(0.12f, 0.08f, 0.04f), Vector3.zero);
+            // ── Raked Lower Harvester Chin Glass (connects floor at z=+1.38, y=-1.95 up to front nose z=+1.94, y=-0.78) ──
+            Box(root, p.Glass, "Glass_Chin_Centre", new Vector3(0f, -1.36f, 1.66f),
+                new Vector3(2.58f, 1.30f, 0.04f), new Vector3(25.5f, 0f, 0f));
+            Box(root, p.GlassSheen, "Glass_Chin_Sheen", new Vector3(-0.42f, -1.34f, 1.68f),
+                new Vector3(1.10f, 0.04f, 0.01f), new Vector3(25.5f, 0f, -18f));
+            Box(root, p.Glass, "Glass_Chin_Corner_L", new Vector3(-1.56f, -1.36f, 1.50f),
+                new Vector3(0.84f, 1.30f, 0.04f), new Vector3(22f, -38f, 0f));
+            Box(root, p.Glass, "Glass_Chin_Corner_R", new Vector3(1.56f, -1.36f, 1.50f),
+                new Vector3(0.84f, 1.30f, 0.04f), new Vector3(22f, 38f, 0f));
+
+            // Slim front waist-rail mullion joining chin glass to main tall windscreen cleanly
+            Box(root, p.Dark, "Nose_Transom_Bar", new Vector3(0f, -0.76f, 1.94f),
+                new Vector3(2.68f, 0.075f, 0.085f), Vector3.zero);
+            Box(root, p.Accent, "Nose_Transom_PinStripe", new Vector3(0f, -0.76f, 1.985f),
+                new Vector3(2.40f, 0.022f, 0.015f), Vector3.zero);
+
+            // Low tubular brush-guard bumper along bottom chin edge so rocks read without blocking view
+            Box(root, p.MetalDark, "Chin_BrushBar_Main", new Vector3(0f, -1.91f, 1.46f),
+                new Vector3(3.60f, 0.11f, 0.12f), Vector3.zero);
+            Box(root, p.Accent, "Chin_Hazard_L", new Vector3(-1.35f, -1.91f, 1.525f),
+                new Vector3(0.55f, 0.045f, 0.02f), Vector3.zero);
+            Box(root, p.Accent, "Chin_Hazard_R", new Vector3(1.35f, -1.91f, 1.525f),
+                new Vector3(0.55f, 0.045f, 0.02f), Vector3.zero);
+
+            // ── Tall Sweeping Harvester Front Windscreen & 45-Deg Corner Wraps ──
+            Box(root, p.Glass, "Glass_Front_Main", new Vector3(0f, 0.54f, 1.82f),
+                new Vector3(2.64f, 2.62f, 0.04f), new Vector3(-6.5f, 0f, 0f));
+            Box(root, p.GlassSheen, "Glass_Front_Sheen", new Vector3(-0.56f, 0.86f, 1.80f),
+                new Vector3(1.35f, 0.045f, 0.01f), new Vector3(-6.5f, 0f, -20f));
+            Box(root, p.Glass, "Glass_Wrap_Corner_L", new Vector3(-1.58f, 0.54f, 1.52f),
+                new Vector3(0.86f, 2.60f, 0.04f), new Vector3(-5f, -38f, 0f));
+            Box(root, p.Glass, "Glass_Wrap_Corner_R", new Vector3(1.58f, 0.54f, 1.52f),
+                new Vector3(0.86f, 2.60f, 0.04f), new Vector3(-5f, 38f, 0f));
+
+            // ── Full Floor-to-Ceiling Panoramic Side Glass ──────────────────────
+            Box(root, p.Glass, "Glass_Side_Main_L", new Vector3(-1.93f, -0.06f, -0.26f),
+                new Vector3(0.04f, 3.74f, 3.04f), Vector3.zero);
+            Box(root, p.Glass, "Glass_Side_Main_R", new Vector3(1.93f, -0.06f, -0.26f),
+                new Vector3(0.04f, 3.74f, 3.04f), Vector3.zero);
+            Box(root, p.GlassSheen, "Glass_Side_Sheen_L", new Vector3(-1.955f, 0.45f, 0.15f),
+                new Vector3(0.01f, 0.05f, 1.65f), new Vector3(16f, 0f, 0f));
+            Box(root, p.GlassSheen, "Glass_Side_Sheen_R", new Vector3(1.955f, 0.45f, 0.15f),
+                new Vector3(0.01f, 0.05f, 1.65f), new Vector3(16f, 0f, 0f));
+
+            // ── Slender Tubular ROPS Corner Posts (thin structural mullions, zero blindspots) ──
+            Box(root, p.Dark, "ROPS_FrontPost_L", new Vector3(-1.30f, 0.54f, 1.80f),
+                new Vector3(0.075f, 2.66f, 0.085f), new Vector3(-6.5f, 0f, 0f));
+            Box(root, p.Dark, "ROPS_FrontPost_R", new Vector3(1.30f, 0.54f, 1.80f),
+                new Vector3(0.075f, 2.66f, 0.085f), new Vector3(-6.5f, 0f, 0f));
+            Box(root, p.Dark, "ROPS_ChinPost_L", new Vector3(-1.30f, -1.36f, 1.65f),
+                new Vector3(0.075f, 1.32f, 0.085f), new Vector3(25.5f, 0f, 0f));
+            Box(root, p.Dark, "ROPS_ChinPost_R", new Vector3(1.30f, -1.36f, 1.65f),
+                new Vector3(0.075f, 1.32f, 0.085f), new Vector3(25.5f, 0f, 0f));
+            Box(root, p.Dark, "ROPS_SidePost_L", new Vector3(-1.92f, -0.04f, 1.24f),
+                new Vector3(0.085f, 3.80f, 0.085f), Vector3.zero);
+            Box(root, p.Dark, "ROPS_SidePost_R", new Vector3(1.92f, -0.04f, 1.24f),
+                new Vector3(0.085f, 3.80f, 0.085f), Vector3.zero);
+            Box(root, p.HullDark, "ROPS_RearPillar_L", new Vector3(-1.91f, 0.00f, -1.82f),
+                new Vector3(0.16f, 3.88f, 0.24f), Vector3.zero);
+            Box(root, p.HullDark, "ROPS_RearPillar_R", new Vector3(1.91f, 0.00f, -1.82f),
+                new Vector3(0.16f, 3.88f, 0.24f), Vector3.zero);
+
+            // Top-hinged pantograph wipers parked high at top edge out of sightline
+            Box(root, p.Metal, "Wiper_Arm_L", new Vector3(-0.62f, 1.54f, 1.72f),
+                new Vector3(0.03f, 0.56f, 0.03f), new Vector3(-6.5f, 0f, 74f));
+            Box(root, p.Metal, "Wiper_Arm_R", new Vector3(0.62f, 1.54f, 1.72f),
+                new Vector3(0.03f, 0.56f, 0.03f), new Vector3(-6.5f, 0f, -74f));
+
+            // ── Harvester Overhanging Canopy Roof & 6-Lamp Work Floodlight Visor ──
+            Box(root, p.Hull, "Canopy_Roof_Main", new Vector3(0f, 1.90f, -0.10f),
+                new Vector3(3.92f, 0.16f, 3.72f), Vector3.zero);
+            Box(root, p.Dark, "Canopy_Visor_Brow", new Vector3(0f, 1.88f, 1.84f),
+                new Vector3(3.84f, 0.14f, 0.30f), new Vector3(12f, 0f, 0f));
+            Box(root, p.Accent, "Canopy_Visor_Trim", new Vector3(0f, 1.95f, 1.97f),
+                new Vector3(3.56f, 0.035f, 0.04f), Vector3.zero);
+            Box(root, p.HullDark, "Canopy_HVAC_Pod", new Vector3(0f, 1.99f, -0.78f),
+                new Vector3(2.10f, 0.10f, 1.65f), Vector3.zero);
+            for (int r = 0; r < 4; r++)
+                Box(root, p.MetalDark, "Canopy_RoofRib_" + r, new Vector3(0f, 2.04f, -1.35f + r * 0.56f),
+                    new Vector3(1.94f, 0.03f, 0.07f), Vector3.zero);
+
+            // 6 Harvester Flood Work-Lamps across the brow
+            for (int i = 0; i < 6; i++)
+            {
+                float lx = -1.35f + i * 0.54f;
+                Box(root, p.Dark, "WorkLamp_Housing_" + i, new Vector3(lx, 1.84f, 1.95f),
+                    new Vector3(0.28f, 0.11f, 0.10f), new Vector3(14f, 0f, 0f));
+                Box(root, p.Glow, "WorkLamp_Lens_" + i, new Vector3(lx, 1.83f, 2.00f),
+                    new Vector3(0.23f, 0.075f, 0.02f), new Vector3(14f, 0f, 0f));
+            }
+
+            // Folding side mirrors mounted high on upper side posts + amber rear beacons
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Box(root, p.MetalDark, "Mirror_Arm_" + s, new Vector3(s * 1.96f, 1.38f, 1.24f),
+                    new Vector3(0.05f, 0.05f, 0.22f), Vector3.zero);
+                Box(root, p.Dark, "Mirror_Head_" + s, new Vector3(s * 1.98f, 1.18f, 1.32f),
+                    new Vector3(0.05f, 0.44f, 0.18f), new Vector3(0f, s * 14f, 0f));
+                Cylinder(root, p.WarnAmber, "Roof_Beacon_" + s, new Vector3(s * 1.72f, 2.04f, -1.72f),
+                    new Vector3(0.16f, 0.08f, 0.16f), Vector3.zero);
+                Box(root, p.Metal, "Grab_Rail_" + s, new Vector3(s * 1.97f, -0.35f, -1.62f),
+                    new Vector3(0.035f, 1.45f, 0.035f), Vector3.zero);
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  SHELL 2 - the boxy survey cab
+        //  SHELL 2 - REINFORCED HEAVY-DUTY MACHINERY COCKPIT (ARMORED CAB)
         // ═══════════════════════════════════════════════════════════════════════
-        private static void BuildCab(GameObject root, Palette p)
+        private static void BuildReinforcedHeavyCab(GameObject root, Palette p)
         {
-            // Broad windscreen and side glazing sit above a deliberate, continuous
-            // armored lower half. There is no glass in the bumper, sill or lower doors.
-            Box(root, p.Hull, "Armored_Lower_Nose", new Vector3(0f, -0.60f, 0.93f),
-                new Vector3(1.94f, 0.68f, 0.20f), Vector3.zero);
-            Box(root, p.Dark, "Cab_Sill", new Vector3(0f, -0.18f, 1.00f),
-                new Vector3(1.96f, 0.22f, 0.16f), Vector3.zero);
-            Box(root, p.Glass, "Windscreen", new Vector3(0f, 0.36f, 1.02f),
-                new Vector3(1.84f, 0.98f, 0.045f), new Vector3(-5f, 0f, 0f));
-            Box(root, p.Hull, "Front_Header", new Vector3(0f, 0.91f, 0.97f),
-                new Vector3(1.96f, 0.13f, 0.15f), new Vector3(-5f, 0f, 0f));
-            Box(root, p.Hull, "Front_Armor_Brow", new Vector3(0f, -0.28f, 1.07f),
-                new Vector3(1.88f, 0.16f, 0.16f), Vector3.zero);
+            // Solid heavy ribbed steel floor across the entire 4 m x 4 m footprint (zero floor glass)
+            Box(root, p.HullDark, "Cab_Solid_Floor", new Vector3(0f, -1.93f, 0f),
+                new Vector3(3.92f, 0.14f, 3.92f), Vector3.zero);
+            for (int i = 0; i < 6; i++)
+                Box(root, p.MetalDark, "Cab_Floor_PlateRib_" + i, new Vector3(0f, -1.85f, -1.45f + i * 0.58f),
+                    new Vector3(3.56f, 0.025f, 0.09f), Vector3.zero);
+
+            // ── Rugged Heavy-Machinery Lower Armored Hull & Sloped Glacis Nose ──
+            // Sill stays at y = -0.36 so everything from -18 deg UP to +33 deg is crisp clear glass!
+            Box(root, p.Hull, "Glacis_Main_Bulk", new Vector3(0f, -1.16f, 1.56f),
+                new Vector3(3.84f, 1.48f, 0.78f), Vector3.zero);
+            Box(root, p.HullDark, "Glacis_Sloped_Plate", new Vector3(0f, -0.46f, 1.66f),
+                new Vector3(3.80f, 0.24f, 0.72f), new Vector3(22f, 0f, 0f));
+            Box(root, p.ArmorPlate, "Glacis_Applique_L", new Vector3(-1.12f, -1.02f, 1.94f),
+                new Vector3(1.34f, 0.86f, 0.09f), Vector3.zero);
+            Box(root, p.ArmorPlate, "Glacis_Applique_R", new Vector3(1.12f, -1.02f, 1.94f),
+                new Vector3(1.34f, 0.86f, 0.09f), Vector3.zero);
+
+            // Heavy recessed center radiator louver grille between armor plates
+            Box(root, p.Dark, "Radiator_Recess", new Vector3(0f, -1.04f, 1.93f),
+                new Vector3(0.84f, 0.86f, 0.08f), Vector3.zero);
+            for (int g = 0; g < 6; g++)
+                Box(root, p.Metal, "Radiator_Louver_" + g, new Vector3(0f, -1.36f + g * 0.13f, 1.97f),
+                    new Vector3(0.74f, 0.045f, 0.04f), new Vector3(18f, 0f, 0f));
+
+            // Massive front push-dozer bumper, recovery clevises & hazard chevrons
+            Box(root, p.MetalDark, "Dozer_Bumper", new Vector3(0f, -1.74f, 1.88f),
+                new Vector3(3.96f, 0.44f, 0.24f), Vector3.zero);
+            Box(root, p.Metal, "Bumper_WearLip", new Vector3(0f, -1.94f, 1.94f),
+                new Vector3(3.92f, 0.09f, 0.16f), Vector3.zero);
+            Box(root, p.Accent, "Bumper_Hazard_L", new Vector3(-1.26f, -1.72f, 2.005f),
+                new Vector3(1.06f, 0.11f, 0.02f), Vector3.zero);
+            Box(root, p.Accent, "Bumper_Hazard_R", new Vector3(1.26f, -1.72f, 2.005f),
+                new Vector3(1.06f, 0.11f, 0.02f), Vector3.zero);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Box(root, p.Metal, "Tow_Clevis_" + s, new Vector3(s * 0.56f, -1.74f, 2.02f),
+                    new Vector3(0.16f, 0.22f, 0.14f), Vector3.zero);
+                Cylinder(root, p.Dark, "Tow_Pin_" + s, new Vector3(s * 0.56f, -1.74f, 2.05f),
+                    new Vector3(0.05f, 0.11f, 0.05f), new Vector3(0f, 0f, 90f));
+
+                // Armored headlight pods with protective rock cages
+                Box(root, p.Dark, "Headlight_Pod_" + s, new Vector3(s * 1.48f, -0.78f, 1.96f),
+                    new Vector3(0.50f, 0.24f, 0.09f), Vector3.zero);
+                Box(root, p.Glow, "Headlight_Lens_" + s, new Vector3(s * 1.48f, -0.78f, 2.005f),
+                    new Vector3(0.40f, 0.15f, 0.02f), Vector3.zero);
+                Box(root, p.Metal, "Headlight_GuardTop_" + s, new Vector3(s * 1.48f, -0.68f, 2.02f),
+                    new Vector3(0.52f, 0.025f, 0.03f), Vector3.zero);
+                Box(root, p.Metal, "Headlight_GuardMid_" + s, new Vector3(s * 1.48f, -0.78f, 2.025f),
+                    new Vector3(0.52f, 0.022f, 0.03f), Vector3.zero);
+                Box(root, p.Metal, "Headlight_GuardBot_" + s, new Vector3(s * 1.48f, -0.88f, 2.02f),
+                    new Vector3(0.52f, 0.025f, 0.03f), Vector3.zero);
+            }
+
+            // ── Wide, Tall Upper Panoramic Armored Windows (y = -0.34 .. +1.64 = 1.98 m clear height!) ──
+            Box(root, p.Glass, "Cab_Windscreen_Main", new Vector3(0f, 0.65f, 1.88f),
+                new Vector3(2.62f, 1.98f, 0.05f), new Vector3(-5f, 0f, 0f));
+            Box(root, p.GlassSheen, "Cab_Windscreen_Sheen", new Vector3(-0.52f, 0.90f, 1.86f),
+                new Vector3(1.20f, 0.045f, 0.01f), new Vector3(-5f, 0f, -18f));
+            Box(root, p.Glass, "Cab_QuarterGlass_L", new Vector3(-1.58f, 0.65f, 1.56f),
+                new Vector3(0.84f, 1.96f, 0.05f), new Vector3(-4f, -38f, 0f));
+            Box(root, p.Glass, "Cab_QuarterGlass_R", new Vector3(1.58f, 0.65f, 1.56f),
+                new Vector3(0.84f, 1.96f, 0.05f), new Vector3(-4f, 38f, 0f));
+            Box(root, p.Glass, "Cab_SideWindow_L", new Vector3(-1.90f, 0.65f, -0.10f),
+                new Vector3(0.05f, 1.94f, 2.74f), Vector3.zero);
+            Box(root, p.Glass, "Cab_SideWindow_R", new Vector3(1.90f, 0.65f, -0.10f),
+                new Vector3(0.05f, 1.94f, 2.74f), Vector3.zero);
+
+            // ── Heavy Lower Side Armor Skirts, Crew Doors, Steps & Fenders ──────
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Box(root, p.Hull, "Side_LowerArmor_" + s, new Vector3(s * 1.88f, -1.14f, -0.12f),
+                    new Vector3(0.22f, 1.58f, 3.66f), Vector3.zero);
+                Box(root, p.ArmorPlate, "Side_SkirtPlate_" + s, new Vector3(s * 1.97f, -1.36f, -0.12f),
+                    new Vector3(0.07f, 0.96f, 3.24f), Vector3.zero);
+                Box(root, p.Dark, "Side_CrewDoor_" + s, new Vector3(s * 1.975f, -1.02f, 0.06f),
+                    new Vector3(0.05f, 1.18f, 1.38f), Vector3.zero);
+                Box(root, p.Metal, "Side_DoorHandle_" + s, new Vector3(s * 2.00f, -0.82f, 0.52f),
+                    new Vector3(0.035f, 0.06f, 0.24f), Vector3.zero);
+                Box(root, p.Metal, "Side_DoorHingeA_" + s, new Vector3(s * 2.00f, -0.68f, -0.56f),
+                    new Vector3(0.04f, 0.14f, 0.09f), Vector3.zero);
+                Box(root, p.Metal, "Side_DoorHingeB_" + s, new Vector3(s * 2.00f, -1.32f, -0.56f),
+                    new Vector3(0.04f, 0.14f, 0.09f), Vector3.zero);
+                Box(root, p.Accent, "Side_HazardStripe_" + s, new Vector3(s * 2.005f, -1.72f, -0.12f),
+                    new Vector3(0.02f, 0.10f, 3.10f), Vector3.zero);
+                Box(root, p.MetalDark, "Side_StepUpper_" + s, new Vector3(s * 1.90f, -1.52f, 0.06f),
+                    new Vector3(0.20f, 0.06f, 0.68f), Vector3.zero);
+                Box(root, p.Metal, "Side_StepLower_" + s, new Vector3(s * 1.92f, -1.88f, 0.06f),
+                    new Vector3(0.22f, 0.06f, 0.68f), Vector3.zero);
+
+                // Beefy structural A / B / C FOPS cage pillars
+                Box(root, p.Dark, "FOPS_PillarA_" + s, new Vector3(s * 1.31f, 0.65f, 1.86f),
+                    new Vector3(0.13f, 2.04f, 0.16f), new Vector3(-5f, 0f, 0f));
+                Box(root, p.Dark, "FOPS_PillarWrap_" + s, new Vector3(s * 1.91f, 0.65f, 1.28f),
+                    new Vector3(0.14f, 2.04f, 0.16f), Vector3.zero);
+                Box(root, p.ArmorPlate, "FOPS_RearCorner_" + s, new Vector3(s * 1.88f, 0.04f, -1.72f),
+                    new Vector3(0.24f, 3.84f, 0.52f), Vector3.zero);
+                Box(root, p.MetalDark, "FOPS_RoofRail_" + s, new Vector3(s * 1.88f, 1.86f, -0.02f),
+                    new Vector3(0.16f, 0.22f, 3.88f), Vector3.zero);
+            }
+
+            // ── Heavy Armored FOPS Roof Cap, Rock-Guard Ribs, HVAC & Sensor Dome ──
+            Box(root, p.Hull, "Cab_Armored_Roof", new Vector3(0f, 1.80f, -0.02f),
+                new Vector3(3.86f, 0.24f, 3.88f), Vector3.zero);
+            Box(root, p.ArmorPlate, "Cab_Front_BrowArmor", new Vector3(0f, 1.72f, 1.90f),
+                new Vector3(3.92f, 0.24f, 0.22f), new Vector3(8f, 0f, 0f));
+            for (int r = 0; r < 5; r++)
+                Box(root, p.MetalDark, "FOPS_OverheadGuard_" + r, new Vector3(0f, 1.96f, -1.45f + r * 0.72f),
+                    new Vector3(3.64f, 0.075f, 0.14f), Vector3.zero);
+
+            // Recessed armored LED roof bar + amber marker lamps
             for (int i = 0; i < 4; i++)
-                Box(root, p.Metal, "Lower_Grille_" + i, new Vector3(0f, -0.67f + i * 0.10f, 1.045f),
-                    new Vector3(1.00f, 0.035f, 0.035f), Vector3.zero);
-            Box(root, p.Accent, "Front_Armor_Seam", new Vector3(0f, -0.37f, 1.045f),
-                new Vector3(1.74f, 0.035f, 0.025f), Vector3.zero);
-            Box(root, p.Metal, "Armored_Bumper", new Vector3(0f, -1.02f, 0.98f),
-                new Vector3(1.98f, 0.22f, 0.20f), Vector3.zero);
-            Box(root, p.Accent, "Bumper_RecoveryStripe", new Vector3(0f, -0.99f, 1.085f),
-                new Vector3(1.65f, 0.055f, 0.025f), Vector3.zero);
-            Cylinder(root, p.Glow, "Lamp_L", new Vector3(-0.79f, -0.46f, 1.03f),
-                new Vector3(0.18f, 0.05f, 0.18f), new Vector3(90f, 0f, 0f));
-            Cylinder(root, p.Glow, "Lamp_R", new Vector3(0.79f, -0.46f, 1.03f),
-                new Vector3(0.18f, 0.05f, 0.18f), new Vector3(90f, 0f, 0f));
+                Box(root, p.Glow, "Cab_RoofLamp_" + i, new Vector3(-1.05f + i * 0.70f, 1.74f, 2.00f),
+                    new Vector3(0.42f, 0.085f, 0.03f), Vector3.zero);
+            for (int m = -1; m <= 1; m++)
+                Box(root, p.WarnAmber, "Cab_ClearanceLamp_" + m, new Vector3(m * 1.55f, 1.86f, 1.99f),
+                    new Vector3(0.14f, 0.055f, 0.03f), Vector3.zero);
 
-            Box(root, p.Dark, "Pillar_A_L", new Vector3(-0.96f, 0.37f, 0.98f),
-                new Vector3(0.06f, 1.02f, 0.12f), new Vector3(-5f, 0f, 0f));
-            Box(root, p.Dark, "Pillar_A_R", new Vector3(0.96f, 0.37f, 0.98f),
-                new Vector3(0.06f, 1.02f, 0.12f), new Vector3(-5f, 0f, 0f));
-            Box(root, p.Metal, "Wiper_L", new Vector3(-0.27f, 0.11f, 1.055f),
-                new Vector3(0.022f, 0.42f, 0.022f), new Vector3(-5f, 0f, 12f));
-            Box(root, p.Metal, "Wiper_R", new Vector3(0.27f, 0.11f, 1.055f),
-                new Vector3(0.022f, 0.42f, 0.022f), new Vector3(-5f, 0f, -12f));
-
-            // Armored roof cap, reinforced rails and a compact equipment dome.
-            Box(root, p.Hull, "Roof", new Vector3(0f, 0.99f, -0.02f),
-                new Vector3(1.98f, 0.18f, 1.96f), Vector3.zero);
-            Box(root, p.Dark, "Roof_Armor_Ridge", new Vector3(0f, 1.105f, -0.12f),
-                new Vector3(1.36f, 0.07f, 1.44f), Vector3.zero);
-            for (int i = 0; i < 4; i++)
-                Box(root, p.Metal, "Roof_Rib_" + i, new Vector3(0f, 1.09f, -0.55f + i * 0.38f),
-                    new Vector3(1.72f, 0.035f, 0.065f), Vector3.zero);
-            for (int i = 0; i < 3; i++)
-                Box(root, p.Accent, "Roof_Marker_" + i, new Vector3(-0.30f + i * 0.30f, 1.105f, 0.96f),
-                    new Vector3(0.065f, 0.035f, 0.035f), Vector3.zero);
-            Cylinder(root, p.Dark, "Dome_Base", new Vector3(0.38f, 1.10f, -0.50f),
-                new Vector3(0.36f, 0.04f, 0.36f), Vector3.zero);
-            Sphere(root, p.Hull, "Dome", new Vector3(0.38f, 1.16f, -0.50f),
-                new Vector3(0.32f, 0.18f, 0.32f));
-            Cylinder(root, p.Metal, "Dome_Antenna", new Vector3(0.38f, 1.29f, -0.50f),
-                new Vector3(0.018f, 0.14f, 0.018f), Vector3.zero);
-            Box(root, p.Metal, "Roof_Rack_L", new Vector3(-0.74f, 1.10f, -0.24f),
-                new Vector3(0.045f, 0.055f, 0.84f), Vector3.zero);
-            Box(root, p.Metal, "Roof_Rack_R", new Vector3(-0.48f, 1.10f, -0.24f),
-                new Vector3(0.045f, 0.055f, 0.84f), Vector3.zero);
-
-            // Long side windows run from the front wrap to the rear pillar. Lower side
-            // armor and door plates stop at the window sill rather than climbing behind it.
-            Box(root, p.Glass, "Side_Glass_L", new Vector3(-0.96f, 0.36f, -0.03f),
-                new Vector3(0.04f, 0.94f, 1.70f), Vector3.zero);
-            Box(root, p.Glass, "Side_Glass_R", new Vector3(0.96f, 0.36f, -0.03f),
-                new Vector3(0.04f, 0.94f, 1.70f), Vector3.zero);
-            Box(root, p.Dark, "Pillar_B_L", new Vector3(-0.98f, 0.36f, -0.88f),
-                new Vector3(0.07f, 0.98f, 0.09f), Vector3.zero);
-            Box(root, p.Dark, "Pillar_B_R", new Vector3(0.98f, 0.36f, -0.88f),
-                new Vector3(0.07f, 0.98f, 0.09f), Vector3.zero);
-            Box(root, p.Hull, "Lower_Flank_L", new Vector3(-0.94f, -0.58f, 0.00f),
-                new Vector3(0.16f, 0.82f, 1.90f), Vector3.zero);
-            Box(root, p.Hull, "Lower_Flank_R", new Vector3(0.94f, -0.58f, 0.00f),
-                new Vector3(0.16f, 0.82f, 1.90f), Vector3.zero);
-            Box(root, p.Dark, "Door_Armor_L", new Vector3(-1.035f, -0.56f, -0.13f),
-                new Vector3(0.035f, 0.54f, 0.90f), Vector3.zero);
-            Box(root, p.Dark, "Door_Armor_R", new Vector3(1.035f, -0.56f, -0.13f),
-                new Vector3(0.035f, 0.54f, 0.90f), Vector3.zero);
-            Box(root, p.Accent, "Door_Seam_L", new Vector3(-1.057f, -0.61f, -0.13f),
-                new Vector3(0.018f, 0.025f, 0.92f), Vector3.zero);
-            Box(root, p.Accent, "Door_Seam_R", new Vector3(1.057f, -0.61f, -0.13f),
-                new Vector3(0.018f, 0.025f, 0.92f), Vector3.zero);
-            Box(root, p.Metal, "Door_Handle_L", new Vector3(-1.06f, -0.43f, 0.17f),
-                new Vector3(0.025f, 0.035f, 0.14f), Vector3.zero);
-            Box(root, p.Metal, "Door_Handle_R", new Vector3(1.06f, -0.43f, 0.17f),
-                new Vector3(0.025f, 0.035f, 0.14f), Vector3.zero);
-            Box(root, p.Accent, "Lower_Armor_Stripe_L", new Vector3(-1.035f, -0.84f, 0.02f),
-                new Vector3(0.026f, 0.075f, 1.72f), Vector3.zero);
-            Box(root, p.Accent, "Lower_Armor_Stripe_R", new Vector3(1.035f, -0.84f, 0.02f),
-                new Vector3(0.026f, 0.075f, 1.72f), Vector3.zero);
-            Box(root, p.Metal, "Side_Step_L", new Vector3(-0.84f, -1.11f, 0.54f),
-                new Vector3(0.28f, 0.06f, 0.44f), Vector3.zero);
-            Box(root, p.Metal, "Side_Step_R", new Vector3(0.84f, -1.11f, 0.54f),
-                new Vector3(0.28f, 0.06f, 0.44f), Vector3.zero);
-            Box(root, p.Dark, "Mudguard_L", new Vector3(-0.99f, -0.93f, 0.02f),
-                new Vector3(0.14f, 0.34f, 1.90f), Vector3.zero);
-            Box(root, p.Dark, "Mudguard_R", new Vector3(0.99f, -0.93f, 0.02f),
-                new Vector3(0.14f, 0.34f, 1.90f), Vector3.zero);
-            Box(root, p.Accent, "Tail_L", new Vector3(-0.82f, -0.52f, -0.99f),
-                new Vector3(0.12f, 0.16f, 0.04f), Vector3.zero);
-            Box(root, p.Accent, "Tail_R", new Vector3(0.82f, -0.52f, -0.99f),
-                new Vector3(0.12f, 0.16f, 0.04f), Vector3.zero);
+            // Twin heavy roof HVAC filtration packs + armored comms radome
+            Box(root, p.Dark, "Roof_HVAC_L", new Vector3(-0.88f, 1.99f, -0.82f),
+                new Vector3(0.86f, 0.16f, 1.34f), Vector3.zero);
+            Box(root, p.HullDark, "Roof_HVAC_R", new Vector3(0.88f, 1.98f, -1.06f),
+                new Vector3(0.82f, 0.14f, 0.92f), Vector3.zero);
+            Cylinder(root, p.Dark, "Radome_Mount", new Vector3(0.88f, 1.96f, -0.18f),
+                new Vector3(0.62f, 0.05f, 0.62f), Vector3.zero);
+            Sphere(root, p.ArmorPlate, "Radome_Cap", new Vector3(0.88f, 2.02f, -0.18f),
+                new Vector3(0.54f, 0.22f, 0.54f));
         }
 
         // ═══════════════════════════════════════════════════════════════════════
         //  MATERIALS
         // ═══════════════════════════════════════════════════════════════════════
-        /// <summary>
-        /// The cockpit's palette, built once per prefab. Every material goes through the
-        /// block builder's factory so a prefab saved by Setup holds asset references rather
-        /// than transient materials that vanish on the next domain reload.
-        /// </summary>
         private struct Palette
         {
             public readonly Material Hull;
+            public readonly Material HullDark;
+            public readonly Material ArmorPlate;
             public readonly Material Dark;
             public readonly Material Metal;
+            public readonly Material MetalDark;
             public readonly Material Glass;
+            public readonly Material GlassSheen;
             public readonly Material Accent;
+            public readonly Material WarnAmber;
             public readonly Material Glow;
             public readonly Material GlowDim;
             public readonly Material Screen;
@@ -531,35 +654,33 @@ namespace VoxelEngine.GridSystem
 
             public Palette(Color bodyColor)
             {
-                Color industrialGreen = new Color(0.19f, 0.25f, 0.16f);
-                Color hull = Color.Lerp(industrialGreen, bodyColor, 0.10f);
-                Hull = GridBlockMeshBuilder.CreateMaterial(hull, 0.55f, 0.45f);
-                Dark = GridBlockMeshBuilder.CreateMaterial(new Color(0.065f, 0.085f, 0.065f), 0.72f, 0.35f);
-                Metal = GridBlockMeshBuilder.CreateMaterial(new Color(0.53f, 0.60f, 0.52f), 0.82f, 0.55f);
-                Accent = GridBlockMeshBuilder.CreateMaterial(new Color(0.72f, 0.84f, 0.23f), 0.35f, 0.55f);
-                Seat = GridBlockMeshBuilder.CreateMaterial(new Color(0.15f, 0.18f, 0.15f), 0.05f, 0.25f);
-                Strap = GridBlockMeshBuilder.CreateMaterial(new Color(0.32f, 0.34f, 0.25f), 0.02f, 0.18f);
-                Glow = GridBlockMeshBuilder.CreateMaterial(new Color(0.70f, 0.94f, 1f), 0f, 0.9f,
-                    new Color(0.25f, 0.80f, 1f));
-                GlowDim = GridBlockMeshBuilder.CreateMaterial(new Color(0.20f, 0.48f, 0.46f), 0f, 0.8f,
-                    new Color(0.08f, 0.30f, 0.34f));
-                // The emissive screens remain unchanged in role: readable when unpowered,
-                // restrained enough to retain the clear outward sightline.
-                Screen = GridBlockMeshBuilder.CreateMaterial(new Color(0.03f, 0.05f, 0.07f), 0.10f, 0.75f,
-                    new Color(0.10f, 0.34f, 0.44f));
-                Glass = MakeGlass();
+                Color industrialBase = new Color(0.18f, 0.23f, 0.19f);
+                Color hull = Color.Lerp(industrialBase, bodyColor, 0.14f);
+                Hull = GridBlockMeshBuilder.CreateMaterial(hull, 0.58f, 0.46f);
+                HullDark = GridBlockMeshBuilder.CreateMaterial(hull * 0.72f, 0.64f, 0.38f);
+                ArmorPlate = GridBlockMeshBuilder.CreateMaterial(new Color(0.25f, 0.28f, 0.27f), 0.76f, 0.42f);
+                Dark = GridBlockMeshBuilder.CreateMaterial(new Color(0.065f, 0.078f, 0.078f), 0.72f, 0.36f);
+                Metal = GridBlockMeshBuilder.CreateMaterial(new Color(0.58f, 0.63f, 0.64f), 0.86f, 0.58f);
+                MetalDark = GridBlockMeshBuilder.CreateMaterial(new Color(0.30f, 0.34f, 0.36f), 0.80f, 0.48f);
+                Accent = GridBlockMeshBuilder.CreateMaterial(new Color(0.76f, 0.86f, 0.22f), 0.32f, 0.56f);
+                WarnAmber = GridBlockMeshBuilder.CreateMaterial(new Color(1.0f, 0.68f, 0.12f), 0.1f, 0.85f,
+                    new Color(0.95f, 0.52f, 0.06f));
+                Seat = GridBlockMeshBuilder.CreateMaterial(new Color(0.14f, 0.16f, 0.16f), 0.06f, 0.26f);
+                Strap = GridBlockMeshBuilder.CreateMaterial(new Color(0.34f, 0.36f, 0.24f), 0.04f, 0.20f);
+                Glow = GridBlockMeshBuilder.CreateMaterial(new Color(0.76f, 0.96f, 1f), 0f, 0.92f,
+                    new Color(0.32f, 0.84f, 1f));
+                GlowDim = GridBlockMeshBuilder.CreateMaterial(new Color(0.20f, 0.50f, 0.48f), 0f, 0.80f,
+                    new Color(0.08f, 0.32f, 0.36f));
+                Screen = GridBlockMeshBuilder.CreateMaterial(new Color(0.025f, 0.045f, 0.065f), 0.12f, 0.78f,
+                    new Color(0.08f, 0.30f, 0.40f));
+                Glass = MakeGlass(new Color(0.68f, 0.90f, 0.98f, 0.065f), 0.96f);
+                GlassSheen = MakeGlass(new Color(0.84f, 0.96f, 1.00f, 0.14f), 0.98f);
             }
 
-            private static Material MakeGlass()
+            private static Material MakeGlass(Color tint, float smoothness)
             {
-                Color tint = new Color(0.72f, 0.90f, 0.96f, 0.07f);
-                var glass = GridBlockMeshBuilder.CreateMaterial(tint, 0.08f, 0.95f);
+                var glass = GridBlockMeshBuilder.CreateMaterial(tint, 0.08f, smoothness);
                 if (glass == null) return null;
-
-                // The canonical URP transparent state lives in RuntimeMaterials: keyword,
-                // surface type, blend mode, both blend factors, the render queue and the
-                // depth/shadow passes. Setting only _Surface leaves the pane opaque, which
-                // is exactly what "I cannot see out of it" looks like from the seat.
                 VoxelEngine.Rendering.RuntimeMaterials.ApplyTranslucent(glass, tint);
                 return glass;
             }
