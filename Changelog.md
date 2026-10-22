@@ -1,9 +1,31 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.0-dev`
+**Current Version:** `17.44.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.1-dev] Placement Feel Fixes: Screen-Relative Nudge, Footprint Pitch, Alignment at a Distance, and a Card That Follows
+
+**Type:** PATCH - fixes and polish for the 17.44.0-dev placement layer only. No new systems, no new input actions, no save schema change: the pattern enums, the `BuildLock` keybind, the player-facing names and the prefab set are all untouched.
+
+**GitHub title:** `[17.44.1-dev] Fix frozen-hologram nudging, run spacing, Ctrl alignment range, and assist-card visibility and yaw`
+
+#### Fixed
+
+- **Arrow nudging no longer walks the hologram away in a curve (`Scripts/Building/PlacementLock.cs`, `BuildSystem.HandlePlacementLock`).** The nudge basis was rebuilt from the ghost's own position on every step, so on a round planet each step rotated the basis slightly against the previous one: a held arrow key curved the frozen pose away from the player, and the axes it moved along did not match the screen. Nudges are now measured along the camera's forward flattened onto the local gravity plane - left is left of the screen, up is away from you - and `Ctrl + arrow` still lifts and drops on the surface normal. The lock's step is unchanged, so a tap is still one lattice cell and `Shift` still moves five.
+- **A run is spaced by the block, not by the lattice (`BuildSystem.PatternPitch`, `PlacementPatternPlanner.Build`).** The lattice says where a cell starts; it says nothing about the room the block standing on it needs, so a 2.4 m machine was stepped 1 m and a SPAN or DECK read as one clump of overlapping previews. `BuildSystem` now measures each prefab's own axis-aligned half extents once (colliders, renderers as the fallback) and projects them onto the frame the run is being laid in, so the pitch per axis is the block's real footprint, never tighter than the lattice, plus 2 cm of air so flush cells touch without interpenetrating. SPAN, PILLAR and DECK all use it; the cell caps are unchanged.
+- **Ctrl lines up from a distance, and no longer needs the grid switched on (`BuildSystem.ResolvePlacementFrame`, `PlacementAlign.Host`).** Alignment only ever resolved the frame of whatever the crosshair hit, so aiming at the grass beside a wall lined up with nothing, and the feature appeared to require both a nearby block and `G`. A placement now falls back to the nearest placed block or deck within 8 m of the ghost (cached for a tenth of a second and rebuilt only when the ghost moves), and `Ctrl` quantises into that structure's frame whether or not the optional grid is enabled. `G` keeps its old meaning - quantise always, against whatever is aimed at - and the card now names the key.
+- **The assist card goes away when the hand is empty (`Scripts/GridSystem/UI/BlockRotationHud.cs`, `BuildSystem.SyncGhostStatics`).** The card resolved the held block from the first `Inventory` it could find, which could be a machine's, a rack's or another player's, and it stayed on screen with nothing in hand. Visibility is now owned by the builders (`HoldingBlock` / `HoldingGridBlock`), the direct inventory read survives only as a name source for an inventory that sits under a builder, and `HeldBlockItem` is cleared whenever the ghost dies.
+- **The body on the card turns when the block turns (`PlacementBodyElement.Draw`).** The card built its view basis from the block's own heading, which cancelled the yaw out: `R` changed the pose in the world and nothing on the card. The basis is now the frame the block is being placed in - local gravity plus the structure's own heading, or the world tangent on open ground - so the projected body and its three orbital rings follow the hologram's real pose, yaw included, against a ground plane that stays still to be read against. A Ctrl line-up therefore shows up on the card as a square-on body.
+
+#### Changed
+
+- **The lattice chip reports `G` instead of hiding it**, reading `1 m - OFF` when the optional grid is off, and the key legend names both Ctrl and the lattice key so neither is folklore.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No new item, prefab, recipe, research node or Setup step, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run for this release, and no other game's terminology is used anywhere in the code or the notes.
 
 ### [17.44.0-dev] Placement Feel: Build Patterns, Cross-Block Alignment, Freeze and Nudge, and a Placement Assist Card
 

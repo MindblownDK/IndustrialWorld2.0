@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.0-dev`
-**Roadmap Version:** `17.44.0-dev`
+**Current Version:** `17.44.1-dev`
+**Roadmap Version:** `17.44.1-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.1-dev - Placement Feel Fixes: Screen-Relative Nudge, Footprint Pitch, Alignment Range
+- Frozen-hologram nudges are measured along the camera's forward, so a held arrow key walks the block that way instead of curving off in a zigzag; Ctrl + arrow still lifts on the surface normal
+- SPAN / PILLAR / DECK pitch by each prefab's own projected footprint (never tighter than the lattice) instead of by the lattice alone, so a run of wide machines stops overlapping itself
+- Ctrl lines up against the nearest placed block or deck within 8 m of the ghost with or without the `G` lattice, the assist card is owned by the hologram so an empty hand puts it away, and the card's body turns with the block's yaw
+
 ### 17.44.0-dev - Placement Feel: Build Patterns, Alignment, Freeze and Nudge
 - Build patterns SPAN / PILLAR / DECK (with a lattice step of 1 m, 0.5 m or FREE) live on the second face of the build wheel behind Ctrl + scroll, and static blocks now have a build wheel at all
 - Static placement resolves the aimed structure's frame, inherits an identical neighbour's heading, and Ctrl lines the heading up on that structure's cardinals; `BuildLock` (V) freezes the hologram for arrow-key nudging
@@ -41,11 +46,6 @@
 - Sloped Grid Window variants (`Slope`, `InvertedSlope`, `HalfSlope`, `LongSlope`, `LongSlopeTwoCell`) now generate clean single-pane window sheets without extra side cheek walls or box rails
 - Reinforced Cockpit front, quarter, and side windows seal flush into the mitered 45-degree glacis, FOPS pillars, and roof with zero gaps
 - Wraparound Cockpit bottom floor frame, observation glass, waist rail, and canopy visor follow the exact 45-degree chamfered octagon with zero square corners sticking out
-
-### 17.43.3-dev - Pilot-Facing Cockpit MFDs & Streaming / Screen Fixes
-- All three cockpit MFDs use `Quaternion.LookRotation(SeatEye - centre, Vector3.up)` to tilt upward and angle inward directly at the pilot's eyes, with the 3D planet globe centered cleanly below the planet title
-- `SphereWorld` settles any stale-epoch `SurfaceNetsJob` / `SphereChunkGenJob` on recycled `Chunk` instances and places springs/lakes before `QueueMesh`
-- `GridBuilder.ShowGhost` strips `RailDisplayScreen` on ghosts and `RailDisplayScreen` guards destroyed `TextMesh` rows
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -134,7 +134,10 @@
 - Ctrl means LINE UP, never "snap harder": it snaps the heading to the aimed structure's cardinals and quantises inside that structure's frame. A pose that has been pitched or rolled by hand is left alone.
 - A manually turned ghost keeps its heading (`_rotationManual`); an untouched one inherits an identical neighbour's rotation. Ctrl + R is the way back to the surface default.
 - Clearing clearance is two-tier: `BlockItem.softClearance` is off by default and only permits soft-versus-soft overlap - soft versus hard and hard versus hard stay exactly as strict as they were.
-- A frozen hologram (`BuildLock`, V by default) owns its pose: it commits where it stands and needs nothing under the crosshair. Nudging is one lattice step, Shift + arrow is five, Ctrl + arrow is 0.05 m along the surface normal.
+- A frozen hologram (`BuildLock`, V by default) owns its pose: it commits where it stands and needs nothing under the crosshair. Nudging is one lattice step, Shift + arrow is five, Ctrl + arrow is 0.05 m along the surface normal - and nudges are measured along the camera's forward flattened onto the gravity plane, never along a tangent rebuilt at the ghost's own position, because on a round planet that basis rotates step by step and walks the block away in a curve (17.44.1-dev).
+- A run's pitch is the block's own projected footprint, never tighter than the lattice, plus 2 cm of air: the lattice says where a cell starts, the footprint says how much room the block standing on it needs (17.44.1-dev).
+- Line-up resolves the aimed structure first, then the nearest placed block or deck within 8 m of the ghost, and works with the optional `G` lattice off: `G` means "quantise always", Ctrl means "quantise onto the thing I am lining up with" (17.44.1-dev).
+- The assist card belongs to the hologram, not to whatever inventory happens to hold a block: an empty hand puts it away, and its body is drawn against a fixed gravity basis so a yaw turn is visible (17.44.1-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
 

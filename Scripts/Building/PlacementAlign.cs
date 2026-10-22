@@ -145,6 +145,17 @@ namespace VoxelEngine.Building
             return PlacementFrame.FromUp(at, surfaceUp, "GROUND", false);
         }
 
+        /// <summary>
+        /// The frame of a structure the player is NOT aiming at - a wall standing beside the
+        /// ghost. Same axes as if it had been hit, with the local surface deciding which way
+        /// is up. Ctrl uses this so lining up works from a few metres away.
+        /// </summary>
+        public static PlacementFrame Host(Transform host, Vector3 surfaceUp, string label)
+        {
+            if (host == null) return PlacementFrame.FromUp(Vector3.zero, surfaceUp, label, false);
+            return FromTransform(host, label, surfaceUp);
+        }
+
         private static PlacementFrame FromTransform(Transform host, string label, Vector3 surfaceUp)
         {
             Vector3 up = host.up;

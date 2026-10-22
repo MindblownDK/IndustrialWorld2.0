@@ -10,7 +10,7 @@
 // ║  Lock (V) takes the pose out of the crosshair's hands: the       ║
 // ║  ghost stays exactly where it was, the mouse is free to walk     ║
 // ║  around the machine and look at it from the far side, and the    ║
-// ║  arrow keys nudge it one lattice step at a time                 ║
+// ║  arrow keys nudge it one lattice step along the view            ║
 // ║  (Shift + arrow = five steps, Ctrl + arrow = lift / drop on the  ║
 // ║  surface normal). The next build click confirms exactly what is  ║
 // ║  on screen, and the lock survives the click so a second copy     ║
@@ -86,9 +86,10 @@ namespace VoxelEngine.Building
         /// <summary>
         /// Reads the arrow keys and applies them to the frozen pose. Safe to call every
         /// frame; does nothing unless a lock is held. Returns true when the pose moved,
-        /// so the caller can refresh the ghost.
+        /// so the caller can refresh the ghost. <paramref name="viewForward"/> is the
+        /// camera's forward: nudges are screen-relative, so left is always left.
         /// </summary>
-        public static bool Tick(BlockItem held, float step)
+        public static bool Tick(BlockItem held, float step, Vector3 viewForward)
         {
             if (!IsLocked) return false;
             if (held == null || held != Item) { Unlock(); return false; }
@@ -107,7 +108,22 @@ namespace VoxelEngine.Building
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
 
-            var frame = PlacementFrame.FromUp(Position, up, "LOCK", false);
+            // Nudge along what the PLAYER is looking at, never along a world-derived
+            // tangent. The old basis was rebuilt at the ghost's own position on every
+            // step, so on a curved planet each step rotated the basis slightly: a held
+            // arrow key walked the hologram away in a curve, and the axes did not agree
+            // with the screen. The view forward, flattened onto the local gravity plane,
+            // is the only reference a player can aim with.
+            Vector3 forward = Vector3.ProjectOnPlane(viewForward, up);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = PlacementFrame.FromUp(Position, up, "LOCK", false).forward;
+            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
+            forward.Normalize();
+
+            Vector3 right = Vector3.Cross(up, forward);
+            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
+            right.Normalize();
+
             Vector3 direction;
             if (ctrl)
             {
@@ -115,7 +131,7 @@ namespace VoxelEngine.Building
             }
             else
             {
-                direction = frame.right * Mathf.Sign(axis.x) + frame.forward * Mathf.Sign(axis.y);
+                direction = right * Mathf.Sign(axis.x) + forward * Mathf.Sign(axis.y);
                 if (direction.sqrMagnitude > 1f) direction.Normalize();
             }
 

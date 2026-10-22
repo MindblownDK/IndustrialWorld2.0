@@ -39,13 +39,21 @@ namespace VoxelEngine.Building
         /// </summary>
         public static int Build(PlacementPattern pattern, in PlacementFrame frame,
                                 Vector3 anchorPosition, Quaternion anchorRotation,
-                                Vector3 targetPosition, float step, int cellBudget,
+                                Vector3 targetPosition, float step, Vector3 pitch, int cellBudget,
                                 List<PlacementCell> cells)
         {
             if (cells == null) return 0;
             cells.Clear();
 
             if (step <= 0.0001f) step = 1f;
+
+            // 17.44.1-dev: the lattice step says where a cell starts, the pitch says how
+            // much room the block standing on it needs. A machine wider than one metre
+            // gets pitched by its own footprint so a run never lays it into its neighbour.
+            if (pitch.x <= 0.0001f) pitch.x = step;
+            if (pitch.y <= 0.0001f) pitch.y = step;
+            if (pitch.z <= 0.0001f) pitch.z = step;
+
             int budget = Mathf.Clamp(cellBudget, 1, PlacementOptions.MaxCells);
 
             // Slot 0 is always the anchor: a run is never empty, and a click with no drag
@@ -60,8 +68,8 @@ namespace VoxelEngine.Building
 
             if (pattern == PlacementPattern.Deck)
             {
-                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
-                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / pitch.x), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / pitch.z), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
 
                 Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
@@ -81,8 +89,8 @@ namespace VoxelEngine.Building
                         if (columns == 0 && r > 0) break;
                         if (cells.Count >= budget) return cells.Count;
 
-                        Vector3 offset = axisRight * (signRight * r * step)
-                                       + axisForward * (signForward * f * step);
+                        Vector3 offset = axisRight * (signRight * r * pitch.x)
+                                       + axisForward * (signForward * f * pitch.z);
                         cells.Add(new PlacementCell { position = anchorPosition + offset, rotation = anchorRotation });
                     }
                 }
@@ -90,14 +98,26 @@ namespace VoxelEngine.Building
             }
 
             // SPAN and PILLAR: one axis, the dominant one.
-            Vector3 axis = pattern == PlacementPattern.Pillar
-                ? (frame.valid ? frame.up : Vector3.up)
-                : DominantPlanarAxis(local, frame);
+            Vector3 axis;
+            float pitchAlong;
+            if (pattern == PlacementPattern.Pillar)
+            {
+                axis = frame.valid ? frame.up : Vector3.up;
+                pitchAlong = pitch.y;
+            }
+            else
+            {
+                bool alongRight = Mathf.Abs(local.x) >= Mathf.Abs(local.z);
+                axis = frame.valid
+                    ? (alongRight ? frame.right : frame.forward)
+                    : (alongRight ? Vector3.right : Vector3.forward);
+                pitchAlong = alongRight ? pitch.x : pitch.z;
+            }
 
             // How far the aim has moved ALONG the chosen axis. A drag across the run's
             // own axis contributes nothing, which is what keeps the run dead straight.
             float distance = Vector3.Dot(delta, axis);
-            int count = Mathf.RoundToInt(distance / step);
+            int count = Mathf.RoundToInt(distance / pitchAlong);
 
             int cap = Mathf.Min(PlacementOptions.MaxRun, budget - 1);
             count = Mathf.Clamp(count, -cap, cap);
@@ -105,7 +125,7 @@ namespace VoxelEngine.Building
             {
                 // A short drag still reads as a run: the first cell in the dragged
                 // direction, so the preview always answers the gesture.
-                float raw = Mathf.Abs(distance / step);
+                float raw = Mathf.Abs(distance / pitchAlong);
                 if (raw > 0.25f) count = distance > 0f ? 1 : -1;
             }
 
@@ -113,19 +133,11 @@ namespace VoxelEngine.Building
             {
                 cells.Add(new PlacementCell
                 {
-                    position = anchorPosition + axis * (Mathf.Sign(count) * i * step),
+                    position = anchorPosition + axis * (Mathf.Sign(count) * i * pitchAlong),
                     rotation = anchorRotation,
                 });
             }
             return cells.Count;
-        }
-
-        /// <summary>The frame axis (right / forward) the drag has moved furthest along.</summary>
-        private static Vector3 DominantPlanarAxis(Vector3 localDelta, in PlacementFrame frame)
-        {
-            Vector3 right = frame.valid ? frame.right : Vector3.right;
-            Vector3 forward = frame.valid ? frame.forward : Vector3.forward;
-            return Mathf.Abs(localDelta.x) >= Mathf.Abs(localDelta.z) ? right : forward;
         }
 
         /// <summary>

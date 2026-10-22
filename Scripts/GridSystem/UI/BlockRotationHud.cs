@@ -56,6 +56,7 @@ namespace VoxelEngine.GridSystem.UI
         private static Quaternion _lastRotation = Quaternion.identity;
         private static Vector3 _lastUp = Vector3.up;
         private static Vector3 _lastSteps = new(-1f, -1f, -1f);
+        private static Vector3 _lastFrameForward = new(float.PositiveInfinity, 0f, 0f);
         private static bool _lastValid, _lastAligned;
         private static string _lastLegendPrimary, _lastLegendSecondary;
         private static string _lastPatternText, _lastLatticeText, _lastLockText, _lastHeadingText;
@@ -226,24 +227,28 @@ namespace VoxelEngine.GridSystem.UI
             Vector3Int steps = gridBlock ? GridBuilder.RotationSteps
                 : VoxelEngine.Building.BuildSystem.RotationSteps;
 
+            // 17.44.1-dev: the card belongs to the HOLOGRAM, so only a builder may show it.
+            // It used to be shown whenever any Inventory in the scene happened to hold a
+            // block - including a machine's, a loot bag's or another player's - and stayed
+            // on screen with an empty hand. The direct inventory read is kept only as a name
+            // source, and only for an inventory that belongs to a player rig.
             string heldName = null;
-            if (TryResolveHeldDirect(out heldName))
+            if (staticBlock && !string.IsNullOrEmpty(VoxelEngine.Building.BuildSystem.HeldBlockName))
             {
-                steps = gridBlock ? GridBuilder.RotationSteps
-                    : VoxelEngine.Building.BuildSystem.RotationSteps;
+                heldName = VoxelEngine.Building.BuildSystem.HeldBlockName;
+                steps = VoxelEngine.Building.BuildSystem.RotationSteps;
             }
             else if (gridBlock && !string.IsNullOrEmpty(GridBuilder.HeldBlockName))
             {
                 heldName = GridBuilder.HeldBlockName;
                 steps = GridBuilder.RotationSteps;
             }
-            else if (staticBlock && !string.IsNullOrEmpty(VoxelEngine.Building.BuildSystem.HeldBlockName))
+            else if ((staticBlock || gridBlock) && TryResolveHeldDirect(out string directName))
             {
-                heldName = VoxelEngine.Building.BuildSystem.HeldBlockName;
-                steps = VoxelEngine.Building.BuildSystem.RotationSteps;
+                heldName = directName;
             }
 
-            bool show = heldName != null && !VoxelEngine.UI.UIState.IsBlocking;
+            bool show = !string.IsNullOrEmpty(heldName) && !VoxelEngine.UI.UIState.IsBlocking;
 
             // Bridge one-frame resolution flickers rather than blinking the card.
             if (!show && _lastName != null && heldName == null
@@ -278,17 +283,21 @@ namespace VoxelEngine.GridSystem.UI
                 _nameLabel.text = "\u25A3 " + heldName;
 
             // ── The body: pose, axes, validity ────────────────────────
+            var cardFrame = VoxelEngine.Building.BuildSystem.GhostFrame;
+            Vector3 frameForward = cardFrame.valid ? cardFrame.forward : Vector3.zero;
             Vector3 stepVector = new(steps.x * 90f, steps.y * 90f, steps.z * 90f);
             if (_lastRotation != rotation || _lastUp != up || _lastSteps != stepVector
+                || _lastFrameForward != frameForward
                 || _lastValid != valid || _lastAligned != aligned)
             {
                 _lastRotation = rotation;
                 _lastUp = up;
+                _lastFrameForward = frameForward;
                 _lastSteps = stepVector;
                 _lastValid = valid;
                 _lastAligned = aligned;
 
-                _body.SetPose(rotation, up, steps, valid, aligned);
+                _body.SetPose(rotation, up, frameForward, steps, valid, aligned);
                 _body.MarkDirtyRepaint();
             }
 
@@ -314,13 +323,16 @@ namespace VoxelEngine.GridSystem.UI
                     pattern == PlacementPattern.Single ? T.TextMuted : T.AccentCyan);
             }
 
-            string latticeText = PlacementOptions.StepName(PlacementOptions.Step);
+            bool gridOn = VoxelEngine.Building.BuildSystem.GridSnapActive;
+            string latticeText = PlacementOptions.StepName(PlacementOptions.Step)
+                                 + (gridOn ? string.Empty : " · OFF");
             if (_lastLatticeText != latticeText)
             {
                 _lastLatticeText = latticeText;
                 _latticeChip.text = latticeText;
                 _latticeChip.style.color = new StyleColor(
-                    PlacementOptions.Step == PlacementStep.Metre ? T.TextSecondary : T.AccentGold);
+                    !gridOn ? T.TextMuted
+                    : PlacementOptions.Step == PlacementStep.Metre ? T.TextSecondary : T.AccentGold);
             }
 
             bool locked = PlacementLock.IsLocked && block != null && PlacementLock.Item == block;
@@ -357,21 +369,24 @@ namespace VoxelEngine.GridSystem.UI
             string lockKey = GameSettings.GetKey(InputAction.BuildLock);
             string wheelKey = GameSettings.GetKey(InputAction.BuildWheel);
 
+            string gridKey = GameSettings.GetKey(InputAction.BuildToggleGrid);
+
             string primary, secondary;
             if (locked)
             {
-                primary = "ARROWS  nudge one cell  ·  SHIFT+ARROWS  five";
+                primary = "ARROWS  nudge one step  ·  SHIFT+ARROWS  five";
                 secondary = "CTRL+ARROWS  lift / drop  ·  " + lockKey + "  release lock";
             }
             else if (runCells > 1)
             {
                 primary = "RELEASE MOUSE  build the run";
-                secondary = "CTRL  line up  ·  " + lockKey + "  freeze the hologram";
+                secondary = "CTRL  line up  ·  " + lockKey + "  freeze  ·  " + gridKey + "  lattice";
             }
             else
             {
                 primary = turnKey + "  turn 90°   ·   SHIFT+" + turnKey + "  turn back   ·   CTRL+" + turnKey + "  reset";
-                secondary = "CTRL  line up   ·   " + wheelKey + "  pattern   ·   " + lockKey + "  freeze";
+                secondary = "CTRL  line up  ·  " + wheelKey + "  pattern  ·  " + gridKey + "  lattice  ·  "
+                            + lockKey + "  freeze";
             }
 
             if (_lastLegendPrimary != primary)
@@ -402,6 +417,12 @@ namespace VoxelEngine.GridSystem.UI
                 _inventoryCache = Object.FindAnyObjectByType<VoxelEngine.Items.Inventory>();
             if (_inventoryCache == null || _inventoryCache.ActiveStack.IsEmpty
                 || _inventoryCache.ActiveStack.item == null) return false;
+
+            // Only a rig that can actually place blocks: a container, a rack or a loot bag
+            // has an Inventory too, and reading one of those kept the card on screen.
+            if (_inventoryCache.GetComponentInParent<VoxelEngine.Building.BuildSystem>() == null
+                && _inventoryCache.GetComponentInParent<VoxelEngine.GridSystem.GridBuilder>() == null)
+                return false;
             var item = _inventoryCache.ActiveStack.item;
             if (item is VoxelEngine.GridSystem.GridBlockItem gbi)
             {
@@ -434,6 +455,7 @@ namespace VoxelEngine.GridSystem.UI
 
         private Quaternion _rotation = Quaternion.identity;
         private Vector3 _up = Vector3.up;
+        private Vector3 _referenceForward;
         private Vector3 _steps;
         private bool _valid = true;
         private bool _aligned;
@@ -444,10 +466,12 @@ namespace VoxelEngine.GridSystem.UI
             generateVisualContent += Draw;
         }
 
-        public void SetPose(Quaternion rotation, Vector3 up, Vector3Int steps, bool valid, bool aligned)
+        public void SetPose(Quaternion rotation, Vector3 up, Vector3 referenceForward,
+            Vector3Int steps, bool valid, bool aligned)
         {
             _rotation = rotation;
             _up = up.sqrMagnitude > 0.0001f ? up.normalized : Vector3.up;
+            _referenceForward = referenceForward;
             _steps = new Vector3(steps.x, steps.y, steps.z);
             _valid = valid;
             _aligned = aligned;
@@ -478,10 +502,18 @@ namespace VoxelEngine.GridSystem.UI
             Vector2 centre = new(rect.center.x, rect.center.y + 6f);
             float scale = Mathf.Min(rect.width, rect.height) * 0.30f;
 
-            // World → screen: build a basis whose up is the block's own up, so a block on a
-            // wall reads as being on a wall.
+            // World → screen. The card's basis is FIXED against gravity and a stable world
+            // tangent - it must never follow the block's own heading. It used to take its
+            // forward from the block, which cancelled the yaw out: turning a block with R
+            // changed nothing on the card, and the one thing the card exists to show was
+            // invisible. Against a fixed basis the body turns exactly as the hologram does,
+            // and the ground plane underneath stays put so a turn can be read.
             Vector3 up = _up;
-            Vector3 forward = Vector3.ProjectOnPlane(_rotation * Vector3.forward, up);
+            // The card's forward is the frame the block is being placed IN - the structure it
+            // is lining up with - not the block's own heading, which cancelled the yaw out.
+            Vector3 forward = Vector3.ProjectOnPlane(_referenceForward, up);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = PlacementFrame.FromUp(Vector3.zero, up, "CARD", false).forward;
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.ProjectOnPlane(Vector3.forward, up);
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.right;
             forward.Normalize();
