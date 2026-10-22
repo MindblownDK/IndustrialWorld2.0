@@ -53,7 +53,7 @@ namespace VoxelEngine.UI
             IsBlocking = false;
             _hardPauseCount = 0;
             IsHardPause = false;
-            TextInputActive = false;
+            ResetTextClaims();
             PauseConsumedFrame = -1;
         }
 
@@ -101,6 +101,36 @@ namespace VoxelEngine.UI
         // Set by UI panels while a text field owns the keyboard (recipe search).
         // PlayerController ignores movement / jetpack keys while this is true so
         // typing "w a s d" into the search bar doesn't fly the player around.
+        //
+        // 17.42.0-dev — TWO KINDS OF WRITER. GameUIController re-derives this flag
+        // from its own search fields every frame; a direct assignment from any other
+        // panel was stomped back to false on the next Update, which is why typing a
+        // screen name still toggled fly mode. Panels with their own fields now CLAIM
+        // the keyboard (Claim/Release, counted, balanced on focus-out and detach),
+        // and the per-frame re-derivation ORs the claims in. Readers are unchanged.
         public static bool TextInputActive { get; set; }
+
+        private static int _textClaims;
+        /// <summary>True while any claim-based text field holds the keyboard.</summary>
+        public static bool HasTextClaim => _textClaims > 0;
+
+        public static void ClaimTextInput()
+        {
+            _textClaims++;
+            TextInputActive = true;
+        }
+
+        public static void ReleaseTextInput()
+        {
+            _textClaims = System.Math.Max(0, _textClaims - 1);
+            if (_textClaims == 0) TextInputActive = false;
+        }
+
+        /// <summary>Drops every claim at once - scene changes only.</summary>
+        public static void ResetTextClaims()
+        {
+            _textClaims = 0;
+            TextInputActive = false;
+        }
     }
 }

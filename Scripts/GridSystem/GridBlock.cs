@@ -41,6 +41,13 @@ namespace VoxelEngine.GridSystem
         public virtual float PowerOutput => 0f;
         /// <summary>Power this block consumes (W). Override in consumers.</summary>
         public virtual float PowerDraw => 0f;
+        /// <summary>
+        /// 17.42.0-dev - the power this block would demand at full tilt (W). Equals
+        /// <see cref="PowerDraw"/> for blocks with a constant draw; throttled blocks
+        /// (thrusters) report their rated demand here so screens can show "required
+        /// power" honestly against "power in use".
+        /// </summary>
+        public virtual float RatedPowerDraw => PowerDraw;
 
         /// <summary>Extra mass (kg) from this block's contents — cargo items, stored
         /// fluids, ammunition, etc. Override in storage blocks. Added to BlockMass

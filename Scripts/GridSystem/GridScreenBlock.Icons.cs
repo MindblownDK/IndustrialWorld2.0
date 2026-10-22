@@ -70,35 +70,23 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
-            // The body's rendered rectangle: the same measurement the fit pass used.
-            if (_screenText == null) return;
-            var filter = _screenText.GetComponent<MeshFilter>();
-            Mesh mesh = filter != null ? filter.sharedMesh : null;
-            if (mesh == null) return;
-            if (mesh.bounds.size.x <= 0.0001f || mesh.bounds.size.y <= 0.0001f) return;
-
-            Vector3 localScale = _screenText.transform.localScale;
-            float bodyHeight = mesh.bounds.size.y * localScale.y;
-            if (bodyHeight <= 0.001f) return;
-
-            // 17.36.0-dev — measured from the LINE, not from the whole block.
+            // 17.42.0-dev — THE FIT PASS'S OWN MEASUREMENT.
             //
-            // The body is left-anchored, so its transform is the left edge of the text and
-            // its mesh height covers the rows that were actually printed. One row is that
-            // height divided by the printed rows, and one column is a row times the glyph
-            // aspect the page layout was computed with. Both numbers come from the same
-            // measurement the fit pass used, so a picture lands on its own column even when
-            // the page is shorter than the panel or the font is stretched.
-            int rows = Mathf.Max(1, _iconRows);
-            float lineHeight = bodyHeight / rows;
-            // The font style may stretch the glyphs horizontally; a column is as wide as the
-            // stretched advance, so the pictures follow the same stretch the text got.
-            float charWidth = Mathf.Max(0.0001f, lineHeight * 0.52f * StyleStretch(fontStyle));
+            // The fit stores the fitted cell size after sizing the ink layers; the pictures
+            // are laid out on that same cell, so they cannot drift away from their counts.
+            // Quads are also clamped inside the glass: an icon that would hang outside the
+            // panel is dropped instead of painted over the frame (which is how a stray bar
+            // used to appear at the bottom of a big screen).
+            if (_fittedLineHeight <= 0.0001f || _fittedCharWidth <= 0.0001f) return;
+            if (_bodyAnchor == null) return;
 
-            Vector3 origin = _screenText.transform.localPosition;
+            float lineHeight = _fittedLineHeight;
+            float charWidth = _fittedCharWidth;
 
             EnsureIconRoot();
             EnsureIconPool(requests.Count);
+
+            var (glassW, glassH) = GlassSize();
 
             for (int i = 0; i < _iconQuads.Count; i++)
             {
@@ -117,13 +105,38 @@ namespace VoxelEngine.GridSystem
                 BindIconMaterial(i, request.Item);
                 if (_iconMaterials[i] != null) quad.sharedMaterial = _iconMaterials[i];
 
-                float width = request.Width * charWidth * 0.84f;
-                float height = request.Height * lineHeight * 0.74f;
+                // THE PICTURE GOES ON ITS CELL, MEASURED FROM THE PRINTED BLOCK.
+                //
+                // Not from the anchor and not from a per-character guess: the fit reports
+                // the block's own left edge, top edge and size, and the canvas reports how
+                // many rows and columns that block is. A cell's centre is therefore a
+                // fraction of the block - exact even when the page does not start at the
+                // block's own origin, and immune to any error in the per-cell metrics
+                // (which accumulated across columns and is why pictures drifted off their
+                // counts on a wide page).
+                int columns = Mathf.Max(1, _iconColumns);
+                int rows = Mathf.Max(1, _iconRows);
+                float fx = (request.Column + request.Width * 0.5f) / columns;
+                float fy = (request.Row + request.Height * 0.5f) / rows;
 
-                // Cell centre in the body's own frame. The text anchor is UpperLeft, so
-                // columns advance right from the origin and rows descend from it.
-                float cx = origin.x + (request.Column + request.Width * 0.5f) * charWidth;
-                float cy = origin.y - (request.Row + request.Height * 0.5f) * lineHeight;
+                float width = request.Width / columns * _blockWidth * 0.84f;
+                float height = request.Height / rows * _blockHeight * 0.74f;
+
+                float cx = _blockLeft + fx * _blockWidth;
+                float cy = _blockTop - fy * _blockHeight;
+
+                // Inside the glass or nowhere at all. Positions live in the body
+                // anchor's frame - the page's top-left corner - so the glass is to the
+                // right and BELOW; the old centred-box clamp silently dropped every
+                // picture past the middle of the panel.
+                if (cx < -glassW * 0.02f || cx > glassW * 1.02f
+                    || cy > glassH * 0.12f || cy < -glassH * 1.05f)
+                {
+                    quad.enabled = false;
+                    continue;
+                }
+                width = Mathf.Min(width, glassW);
+                height = Mathf.Min(height, glassH);
 
                 quad.transform.localPosition = new Vector3(cx, cy, 0.004f);
                 quad.transform.localScale = new Vector3(width, height, 1f);
@@ -134,14 +147,16 @@ namespace VoxelEngine.GridSystem
         private void EnsureIconRoot()
         {
             if (_iconRoot != null) return;
-            Transform displayRoot = transform.Find("DisplayRoot");
-            if (displayRoot == null) return;
+            // Pictures ride the body anchor, so they inherit the page's corner and can
+            // never sit somewhere the text grid is not.
+            Transform parent = _bodyAnchor != null ? _bodyAnchor : transform.Find("DisplayRoot");
+            if (parent == null) return;
 
-            Transform existing = displayRoot.Find("PageIcons");
+            Transform existing = parent.Find("PageIcons");
             if (existing != null) { _iconRoot = existing; return; }
 
             var root = new GameObject("PageIcons");
-            root.transform.SetParent(displayRoot, false);
+            root.transform.SetParent(parent, false);
             _iconRoot = root.transform;
         }
 

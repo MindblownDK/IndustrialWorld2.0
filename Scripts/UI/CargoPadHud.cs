@@ -138,8 +138,24 @@ namespace VoxelEngine.UI
             var field = new TextField("Pad name") { value = _pad.HasCustomName ? _pad.PadName : "" };
             field.style.marginTop = 6;
             field.style.marginBottom = 4;
-            field.RegisterCallback<FocusInEvent>(_ => UIState.TextInputActive = true);
-            field.RegisterCallback<FocusOutEvent>(_ => { UIState.TextInputActive = false; Rebuild(); });
+            bool padNameHeld = false;
+            field.RegisterCallback<FocusInEvent>(_ =>
+            {
+                if (padNameHeld) return;
+                padNameHeld = true;
+                UIState.ClaimTextInput();
+            });
+            field.RegisterCallback<FocusOutEvent>(_ =>
+            {
+                if (padNameHeld) { padNameHeld = false; UIState.ReleaseTextInput(); }
+                Rebuild();
+            });
+            field.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                if (!padNameHeld) return;
+                padNameHeld = false;
+                UIState.ReleaseTextInput();
+            });
             field.RegisterValueChangedCallback(e => _pad.PadName = e.newValue);
             _body.Add(field);
 

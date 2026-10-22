@@ -17,9 +17,25 @@ namespace IndustrialWorld.Navigation
             field.RegisterCallback<AttachToPanelEvent>(_ => field.schedule.Execute(() => Paint(field)));
             if (field is TextField)
             {
-                field.RegisterCallback<FocusInEvent>(_ => UIState.TextInputActive = true);
-                field.RegisterCallback<FocusOutEvent>(_ => UIState.TextInputActive = false);
-                field.RegisterCallback<DetachFromPanelEvent>(_ => UIState.TextInputActive = false);
+                bool held = false;
+                field.RegisterCallback<FocusInEvent>(_ =>
+                {
+                    if (held) return;
+                    held = true;
+                    UIState.ClaimTextInput();
+                });
+                field.RegisterCallback<FocusOutEvent>(_ =>
+                {
+                    if (!held) return;
+                    held = false;
+                    UIState.ReleaseTextInput();
+                });
+                field.RegisterCallback<DetachFromPanelEvent>(_ =>
+                {
+                    if (!held) return;
+                    held = false;
+                    UIState.ReleaseTextInput();
+                });
             }
         }
 

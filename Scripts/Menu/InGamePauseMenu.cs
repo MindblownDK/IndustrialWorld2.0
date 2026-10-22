@@ -61,6 +61,10 @@ namespace VoxelEngine.Menu
         private void Update()
         {
             if (VoxelEngine.UI.UIState.PauseConsumedThisFrame) return;
+            // 17.42.0-dev — the screen editor's config panel is up: ESC closes it first.
+            // The editor marks the frame as consumed on its own close, so by the time a
+            // second Escape arrives here the editor is already gone.
+            if (VoxelEngine.GridSystem.UI.GridScreenConfigUI.IsOpen) return;
             if (!GameSettings.WasPressed(InputAction.Pause)) return;
 
             var hammerWheel = VoxelEngine.Building.Tiered.HammerBuildWheel.Instance;

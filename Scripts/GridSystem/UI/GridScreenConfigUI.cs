@@ -25,6 +25,13 @@ namespace VoxelEngine.GridSystem.UI
             private set => _instance = value;
         }
 
+        /// <summary>
+        /// 17.42.0-dev — ESC belongs to whoever is open. While the screen editor is up,
+        /// Escape must close it before it reaches the pause menu, so the menu asks this
+        /// before reacting; script order stops mattering.
+        /// </summary>
+        public static bool IsOpen => _instance != null && _instance._open;
+
         private UIDocument _doc;
         private VisualElement _root, _panel;
         private GridScreenBlock _target;
@@ -39,6 +46,11 @@ namespace VoxelEngine.GridSystem.UI
         private float _lastPreviewWidth = -1f, _lastPreviewHeight = -1f;
         private bool _open;
         private readonly List<Button> _sourceBtns = new();
+        /// <summary>The data-source rows and their searchable text, kept together so the
+        /// search field can hide the ones that do not match.</summary>
+        private readonly List<Button> _sourceButtons = new();
+        private readonly List<string> _sourceLabels = new();
+        private string _sourceQuery = string.Empty;
         // 17.36.0-dev: the address AND the instance id of the block each button links.
         // Addresses collide (a chest bolted to a wall reports the wall's cell), which is
         // why ticking one container used to tick every container on the construct.
@@ -54,7 +66,7 @@ namespace VoxelEngine.GridSystem.UI
         // 17.36.0-dev: layout and per-pane pages. A split panel is edited here, not on the
         // wall: four dropdowns over one glass would be four keypresses in Build mode.
         private readonly List<Button> _layoutBtns = new();
-        private readonly List<DropdownField> _paneFields = new();
+        private readonly List<StyledDropdownField> _paneFields = new();
         private readonly List<ScreenDataMode> _drawablePages = new();
         private readonly List<Button> _paneLabels = new();
         private VisualElement _paneSection;
@@ -164,6 +176,7 @@ namespace VoxelEngine.GridSystem.UI
             _root.style.justifyContent = Justify.Center;
             UIState.PushBlock();
             _sourceBtns.Clear(); _sourcePositions.Clear(); _sourceIds.Clear();
+            _sourceButtons.Clear(); _sourceLabels.Clear();
             _modeBtns.Clear(); _modeBtnModes.Clear();
             _borderBtns.Clear(); _fontBtns.Clear();
             _layoutBtns.Clear(); _paneFields.Clear(); _paneLabels.Clear(); _drawablePages.Clear();
@@ -182,6 +195,7 @@ namespace VoxelEngine.GridSystem.UI
 
         private void Hide()
         {
+            CloseOpenDropdown();
             _root.Clear(); _root.pickingMode = PickingMode.Ignore;
             _root.style.backgroundColor = new StyleColor(Color.clear);
         }
@@ -349,11 +363,24 @@ namespace VoxelEngine.GridSystem.UI
 
             _previewText = new Label(string.Empty);
             _previewText.style.flexGrow = 1;
-            _previewText.style.whiteSpace = WhiteSpace.Normal;
-            // Left-aligned, exactly like the glass: a page is a character grid, and the
-            // preview has to be honest about where each line starts.
+            // A page is a character grid, and the preview has to be honest about it: the
+            // same monospace face the wall draws in, no wrapping (a wrapped block glyph
+            // turns the whole panel into white bars), and no letter tracking (tracking
+            // slides each row off its own columns). This is the difference between a
+            // preview and a smear.
+            var previewFace = GridScreenBlock.DisplayFont;
+            if (previewFace != null)
+                _previewText.style.unityFontDefinition = new StyleFontDefinition(previewFace);
+            _previewText.style.whiteSpace = WhiteSpace.NoWrap;
+            _previewText.style.overflow = Overflow.Hidden;
+            _previewText.style.flexShrink = 0;
+            // Left-aligned, exactly like the glass: the preview has to be honest about
+            // where each line starts.
+            // The wall centres the printed block on the glass; so does the preview, or the
+            // two disagree about where the page sits.
             _previewText.style.unityTextAlign = TextAnchor.MiddleLeft;
-            _previewText.style.marginTop = 12; _previewText.style.marginBottom = 12;
+            _previewText.style.marginTop = 6; _previewText.style.marginBottom = 6;
+            _previewText.style.marginLeft = 0; _previewText.style.marginRight = 0;
             _previewBox.Add(_previewText);
 
             _previewStatus = new Label("LIVE");
@@ -469,6 +496,19 @@ namespace VoxelEngine.GridSystem.UI
             }
             else
             {
+                // SEARCH. A base with forty machines has forty rows under this heading, and
+                // the one the player wants is never the one at the top - so the list filters
+                // as they type, on the source's name and on its category.
+                var sourceSearch = new TextField();
+                sourceSearch.name = "ScreenSourceSearch";
+                sourceSearch.SetValueWithoutNotify(_sourceQuery ?? string.Empty);
+                sourceSearch.style.marginBottom = 6;
+                StyleTextInput(sourceSearch);
+                TrackTextField(sourceSearch);
+                right.Add(sourceSearch);
+
+                _sourceButtons.Clear();
+                _sourceLabels.Clear();
                 var srcScroll = new ScrollView(ScrollViewMode.Vertical);
                 srcScroll.style.maxHeight = 180;
                 srcScroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
@@ -500,7 +540,18 @@ namespace VoxelEngine.GridSystem.UI
                     _sourceBtns.Add(btn);
                     _sourcePositions.Add(idx);
                     _sourceIds.Add(instId);
+                    _sourceButtons.Add(btn);
+                    _sourceLabels.Add((provider.SourceName ?? string.Empty)
+                        + " " + (provider.DataCategory ?? string.Empty));
                 }
+
+                sourceSearch.RegisterValueChangedCallback(evt =>
+                {
+                    _sourceQuery = evt.newValue;
+                    ApplySourceFilter();
+                });
+                sourceSearch.schedule.Execute(() => StyleTextInput(sourceSearch));
+                ApplySourceFilter();
 
                 var clearBtn = new Button(() =>
                 {
@@ -721,6 +772,194 @@ namespace VoxelEngine.GridSystem.UI
             return label;
         }
 
+        // ── The panel's own dropdown ──────────────────────────────────────────
+        //
+        // The stock DropdownField brings a light theme into a dark panel - white
+        // boxes with dark text and a default menu that matches nothing. This is the
+        // same choice control drawn in the panel's own colours: a labelled button
+        // with a caret, and a dark list that opens under it, closes on any click
+        // outside, and never drags a foreign theme into the editor.
+
+        private VisualElement _dropdownCatcher;
+        private VisualElement _openDropdownList;
+
+        private void CloseOpenDropdown()
+        {
+            if (_openDropdownList != null)
+            {
+                _openDropdownList.RemoveFromHierarchy();
+                _openDropdownList = null;
+            }
+            if (_dropdownCatcher != null)
+            {
+                _dropdownCatcher.RemoveFromHierarchy();
+                _dropdownCatcher = null;
+            }
+        }
+
+        private void ShowDropdownList(StyledDropdownField field, VisualElement anchor)
+        {
+            CloseOpenDropdown();
+
+            var list = new VisualElement();
+            list.style.position = Position.Absolute;
+            list.style.backgroundColor = new StyleColor(new Color(0.045f, 0.055f, 0.075f, 0.98f));
+            list.style.borderLeftWidth = list.style.borderRightWidth =
+                list.style.borderTopWidth = list.style.borderBottomWidth = 1;
+            list.style.borderLeftColor = list.style.borderRightColor =
+                list.style.borderTopColor = list.style.borderBottomColor =
+                    new StyleColor(new Color(0.18f, 0.72f, 0.88f, 0.45f));
+            list.style.paddingTop = 2;
+            list.style.paddingBottom = 2;
+
+            var scroll = new ScrollView();
+            scroll.style.maxHeight = 220;
+            list.Add(scroll);
+
+            for (int i = 0; i < field.Options.Count; i++)
+            {
+                int pick = i;
+                var row = new Label(field.Options[i]);
+                row.style.color = new Color(0.90f, 0.93f, 0.97f);
+                row.style.fontSize = 11;
+                row.style.paddingLeft = 8;
+                row.style.paddingRight = 8;
+                row.style.paddingTop = 4;
+                row.style.paddingBottom = 4;
+                row.style.unityTextAlign = TextAnchor.MiddleLeft;
+                bool chosen = i == field.index;
+                if (chosen)
+                    row.style.backgroundColor = new StyleColor(new Color(0.12f, 0.32f, 0.45f, 0.55f));
+                row.RegisterCallback<ClickEvent>(_ =>
+                {
+                    CloseOpenDropdown();
+                    field.SetPicked(pick);
+                });
+                row.RegisterCallback<MouseEnterEvent>(_ =>
+                {
+                    row.style.backgroundColor = new StyleColor(new Color(0.16f, 0.42f, 0.58f, 0.65f));
+                });
+                row.RegisterCallback<MouseLeaveEvent>(_ =>
+                {
+                    row.style.backgroundColor = chosen
+                        ? new StyleColor(new Color(0.12f, 0.32f, 0.45f, 0.55f))
+                        : new StyleColor(Color.clear);
+                });
+                scroll.Add(row);
+            }
+
+            var catcher = new VisualElement();
+            catcher.style.position = Position.Absolute;
+            catcher.style.left = 0; catcher.style.right = 0;
+            catcher.style.top = 0; catcher.style.bottom = 0;
+            catcher.style.backgroundColor = new StyleColor(Color.clear);
+            catcher.pickingMode = PickingMode.Position;
+            catcher.RegisterCallback<ClickEvent>(_ => CloseOpenDropdown());
+
+            // The catcher spans the whole window so a click anywhere else closes the
+            // list. Both live on the window root, catcher first, list last: painting
+            // order decides the stacking (this Unity has no style.zIndex). The list is
+            // placed under its button in panel coordinates.
+            if (_root == null || anchor == null) { CloseOpenDropdown(); return; }
+            _root.Add(catcher);
+            _root.Add(list);
+            Rect anchorBox = anchor.worldBound;
+            Rect rootBox = _root.worldBound;
+            list.style.left = anchorBox.x - rootBox.x;
+            list.style.top = anchorBox.y - rootBox.y + anchorBox.height;
+            list.style.width = Mathf.Max(80f, anchorBox.width);
+            list.BringToFront();
+            _dropdownCatcher = catcher;
+            _openDropdownList = list;
+        }
+
+        private sealed class StyledDropdownField
+        {
+            public readonly VisualElement Root;
+            public readonly List<string> Options;
+            public System.Action<int> OnPicked;
+            public int index { get; private set; }
+
+            private readonly Label _value;
+            private readonly VisualElement _button;
+            private readonly GridScreenConfigUI _ui;
+
+            public VisualElement parent => Root.parent;
+
+            public StyledDropdownField(GridScreenConfigUI ui, string label, List<string> options, int startIndex)
+            {
+                _ui = ui;
+                Options = options ?? new List<string>();
+                index = Mathf.Clamp(startIndex, 0, Mathf.Max(0, Options.Count - 1));
+
+                Root = new VisualElement();
+                Root.style.position = Position.Relative;
+                Root.style.marginBottom = 6;
+
+                if (!string.IsNullOrEmpty(label))
+                {
+                    var caption = new Label(label);
+                    caption.style.color = new Color(0.62f, 0.66f, 0.74f);
+                    caption.style.fontSize = 10;
+                    caption.style.marginBottom = 2;
+                    Root.Add(caption);
+                }
+
+                _button = new VisualElement();
+                _button.style.flexDirection = FlexDirection.Row;
+                _button.style.alignItems = Align.Center;
+                _button.style.backgroundColor = new StyleColor(new Color(0.025f, 0.030f, 0.045f, 1f));
+                _button.style.borderLeftWidth = _button.style.borderRightWidth =
+                    _button.style.borderTopWidth = _button.style.borderBottomWidth = 1;
+                _button.style.borderLeftColor = _button.style.borderRightColor =
+                    _button.style.borderTopColor = _button.style.borderBottomColor =
+                        new StyleColor(new Color(0.18f, 0.72f, 0.88f, 0.35f));
+                _button.style.paddingLeft = 8;
+                _button.style.paddingRight = 6;
+                _button.style.paddingTop = 4;
+                _button.style.paddingBottom = 4;
+
+                _value = new Label(CurrentText());
+                _value.style.color = new Color(0.92f, 0.94f, 0.97f);
+                _value.style.fontSize = 11;
+                _value.style.flexGrow = 1;
+                _value.style.unityTextAlign = TextAnchor.MiddleLeft;
+                _button.Add(_value);
+
+                var caret = new Label("▾");
+                caret.style.color = new Color(0.55f, 0.72f, 0.82f);
+                caret.style.fontSize = 10;
+                caret.style.paddingLeft = 4;
+                _button.Add(caret);
+
+                _button.RegisterCallback<ClickEvent>(_ => _ui.ShowDropdownList(this, Root));
+                _button.RegisterCallback<MouseEnterEvent>(_ =>
+                    _button.style.backgroundColor = new StyleColor(new Color(0.045f, 0.055f, 0.080f, 1f)));
+                _button.RegisterCallback<MouseLeaveEvent>(_ =>
+                    _button.style.backgroundColor = new StyleColor(new Color(0.025f, 0.030f, 0.045f, 1f)));
+
+                Root.Add(_button);
+            }
+
+            private string CurrentText()
+                => index >= 0 && index < Options.Count ? Options[index] : string.Empty;
+
+            public void SetValueWithoutNotify(string value)
+            {
+                int found = Options.IndexOf(value);
+                if (found >= 0) index = found;
+                _value.text = CurrentText();
+            }
+
+            public void SetPicked(int pick)
+            {
+                if (pick < 0 || pick >= Options.Count) return;
+                index = pick;
+                _value.text = CurrentText();
+                OnPicked?.Invoke(pick);
+            }
+        }
+
         /// <summary>The panel's own shape, so the preview is the same rectangle the player
         /// will look at on the wall. Width over height, from the sizes the prefabs use.</summary>
         private static float ScreenAspect(ScreenSize size) => size switch
@@ -792,12 +1031,11 @@ namespace VoxelEngine.GridSystem.UI
             _previewText.style.color = new StyleColor(banner ? new Color(0.12f, 0.09f, 0.06f) : _target.textColor);
             _previewText.style.unityFontStyleAndWeight =
                 (_target.fontStyle == 1 || _target.fontStyle == 3) ? FontStyle.Bold : FontStyle.Normal;
-            // The wide styles track out; the condensed one closes up. It is the closest the
-            // editor can get to the wall's own stretch, and it makes the four options read
-            // as four options instead of four identical button presses.
-            _previewText.style.letterSpacing = _target.fontStyle == 2 ? 1.6f
-                : _target.fontStyle == 1 ? 0.5f
-                : _target.fontStyle == 3 ? -0.4f : 0f;
+            // No tracking, ever: the wall's stretch is a scale on the glyph mesh, while
+            // editor letter spacing moves every character off the column the ink layers
+            // and the pictures are aligned to. Tracking here is what made the preview a
+            // different page from the one on the glass.
+            _previewText.style.letterSpacing = 0f;
 
             _previewStatus.text = _target.IsPowered ? "LIVE" : "NO PWR";
             _previewStatus.style.color = new StyleColor(new Color(
@@ -805,22 +1043,46 @@ namespace VoxelEngine.GridSystem.UI
 
             // Type size by the same rule the wall uses: the longest line and the line count
             // decide, so what fits in the editor is what fits on the glass.
-            int longest = 1, lineLength = 0, lines = 1;
-            for (int i = 0; i < styled.Length; i++)
+            // One pass over the text measures all three: the longest line, how many lines
+            // there are, and how many of those actually print something (a page ends with
+            // blank rows, and the wall sizes its type to the PRINTED block).
+            int longest = 1, lineLength = 0, printedLines = 0, printedLength = 0;
+            for (int i = 0; i <= styled.Length; i++)
             {
-                if (styled[i] == '\n') { lines++; lineLength = 0; continue; }
+                char c = i < styled.Length ? styled[i] : '\n';
+                if (c == '\n')
+                {
+                    if (printedLength > 0) printedLines++;
+                    lineLength = 0;
+                    printedLength = 0;
+                    continue;
+                }
                 lineLength++;
+                if (c != ' ' && c != '\r') printedLength = lineLength;
                 if (lineLength > longest) longest = lineLength;
             }
+            if (printedLines <= 0) printedLines = 1;
 
-            float boxW = Mathf.Max(60f, box.width - 24f);
-            float boxH = Mathf.Max(40f, box.height - 20f);
-            float byWidth = boxW / (longest * 0.62f);
-            float byHeight = boxH / (lines * 1.30f);
-            // No floor below the point a player can read: a preview that has to shrink past
-            // 9 points is telling you the page is too long for the panel, and the hint below
-            // says so in words.
-            _previewText.style.fontSize = Mathf.Clamp(Mathf.Min(byWidth, byHeight), 9f, 34f);
+            // The box the wall gives the page: 96 by 90 percent of the glass.
+            float boxW = Mathf.Max(60f, box.width * 0.96f - 8f);
+            float boxH = Mathf.Max(40f, box.height * 0.90f - 8f);
+
+            // The wall sizes type to the PRINTED block, on a cell grid whose columns come
+            // from the panel's own shape. The preview does the same two things, so the page
+            // in the editor is the page on the glass: type big enough to fill the box, on a
+            // character grid - and the pictures and gauges land in the same cells.
+            float stretch = GridScreenBlock.StyleStretch(_target.fontStyle);
+            // THE SAME RULE THE WALL USES, in the editor's units.
+            //
+            // On the glass a cell is measured from the baked mesh and the scale is solved
+            // so the PRINTED block fills the panel, capped so a two-line page cannot become
+            // two letters tall. Here a monospace glyph advances ~0.60 em and a line sits
+            // ~1.12 em apart, so the same solve is:
+            float byWidth = boxW / (Mathf.Max(1, longest) * 0.60f * stretch);
+            float byHeight = boxH / (Mathf.Max(1, printedLines) * 1.12f);
+            float byLineCap = (boxH / 4f) / 1.12f;
+            _previewText.style.fontSize =
+                Mathf.Clamp(Mathf.Min(byWidth, Mathf.Min(byHeight, byLineCap)), 4f, 96f);
 
             // Border: the block's own borderStyle, drawn in the player's own colour.
             float weight = _target.borderStyle <= 0 ? 1f : _target.borderStyle == 1 ? 2f : _target.borderStyle == 2 ? 3f : 4f;
@@ -871,6 +1133,22 @@ namespace VoxelEngine.GridSystem.UI
             if (isOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
             btn.style.borderRightWidth = btn.style.borderTopWidth = btn.style.borderBottomWidth = 0;
             return btn;
+        }
+
+        /// <summary>Show only the sources whose name or category contains the query.
+        /// Case-insensitive, and a blank query shows everything.</summary>
+        private void ApplySourceFilter()
+        {
+            string query = (_sourceQuery ?? string.Empty).Trim();
+            for (int i = 0; i < _sourceButtons.Count; i++)
+            {
+                var button = _sourceButtons[i];
+                if (button == null) continue;
+                bool match = query.Length == 0
+                    || (i < _sourceLabels.Count
+                        && _sourceLabels[i].IndexOf(query, System.StringComparison.OrdinalIgnoreCase) >= 0);
+                button.style.display = match ? DisplayStyle.Flex : DisplayStyle.None;
+            }
         }
 
         private void RefreshHighlights()
@@ -978,18 +1256,17 @@ namespace VoxelEngine.GridSystem.UI
             for (int i = 0; i < _drawablePages.Count; i++)
                 names.Add(ScreenPageCatalog.For(_drawablePages[i]).Label);
 
-            var field = new DropdownField(null, names, 0);
-            field.style.flexGrow = 1;
-            field.style.fontSize = 10;
-            field.RegisterValueChangedCallback(evt =>
+            var field = new StyledDropdownField(this, null, names, 0);
+            field.Root.style.flexGrow = 1;
+            int paneIndex = index;
+            field.OnPicked = picked =>
             {
-                int picked = field.index;
                 if (picked < 0 || picked >= _drawablePages.Count) return;
-                _target.SetPanePage(index, _drawablePages[picked]);
+                _target.SetPanePage(paneIndex, _drawablePages[picked]);
                 RefreshModeHighlights();
                 RefreshPageInfo();
-            });
-            row.Add(field);
+            };
+            row.Add(field.Root);
 
             _paneSection.Add(row);
             _paneFields.Add(field);
@@ -1023,23 +1300,51 @@ namespace VoxelEngine.GridSystem.UI
             }
         }
 
+        /// <summary>
+        /// Rebuild the page-option block after a choice that changes what options exist.
+        ///
+        /// The graph's panel-series pickers only exist for the panels the layout shows, so
+        /// changing the panel count has to re-create the pickers; without that the player
+        /// is left with the old rows, which either write nowhere or write to a panel that
+        /// is no longer drawn - the "I can only change the other graph by leaving the
+        /// editor" symptom. Deferred by one scheduled tick so the element that raised the
+        /// event is not destroyed inside its own callback.
+        /// </summary>
+        private void SchedulePageOptionsRefresh()
+        {
+            if (_root == null) return;
+            _root.schedule.Execute(() =>
+            {
+                RefreshPageOptions();
+                RefreshPreview(true);
+            }).ExecuteLater(1);
+        }
+
         private void RefreshPageOptions()
         {
             if (_pageOptionsSlot == null || _target == null) return;
+            CloseOpenDropdown();
             _pageOptionsSlot.Clear();
             ScreenDataMode activeMode = _target.splitMode > 0
                 ? _target.PanePage(Mathf.Clamp(_activePane, 0, 3))
                 : _target.dataMode;
 
             bool hasOptions = activeMode == ScreenDataMode.Manifest
+                || activeMode == ScreenDataMode.FillBars
+                || activeMode == ScreenDataMode.Inventory
+                || activeMode == ScreenDataMode.InventoryGrid
                 || activeMode == ScreenDataMode.PowerGraph
                 || activeMode == ScreenDataMode.BatteryBank;
             _pageOptionsSlot.style.display = hasOptions ? DisplayStyle.Flex : DisplayStyle.None;
             if (!hasOptions) return;
 
             _pageOptionsSlot.Add(SectionHeader("PAGE OPTIONS", 12));
-            if (activeMode == ScreenDataMode.Manifest)
+
+            if (activeMode == ScreenDataMode.Manifest || activeMode == ScreenDataMode.FillBars
+                || activeMode == ScreenDataMode.Inventory)
             {
+                // The heading is shared: manifest, fill bars and the storage monitor all
+                // answer to the player's own name before they answer to a container's.
                 var field = new TextField("Heading");
                 field.value = _target.manifestTitle ?? string.Empty;
                 field.tooltip = "Leave blank to use the selected container or construct name.";
@@ -1055,22 +1360,109 @@ namespace VoxelEngine.GridSystem.UI
                 _pageOptionsSlot.Add(field);
                 field.schedule.Execute(() => StyleTextInput(field));
             }
-            else if (activeMode == ScreenDataMode.PowerGraph)
+
+            if (activeMode == ScreenDataMode.Inventory)
             {
-                var panels = new DropdownField("Graph panels", new List<string>
+                var note = new TextField("Bottom-left note");
+                note.value = _target.storageNote ?? string.Empty;
+                note.tooltip = "A free line printed in the bottom-left corner of the storage monitor.";
+                note.style.marginBottom = 6;
+                note.RegisterValueChangedCallback(evt =>
                 {
-                    "1 · Grid power", "2 · Grid + solar", "3 · Grid + solar + batteries",
-                }, Mathf.Clamp(_target.powerGraphPanels, 1, 3) - 1);
-                panels.tooltip = "The Power Graph can show one, two or three compact history plots.";
-                panels.RegisterValueChangedCallback(_ =>
+                    if (_target == null) return;
+                    _target.storageNote = evt.newValue;
+                    RefreshPreview(true);
+                });
+                note.RegisterCallback<GeometryChangedEvent>(_ => StyleTextInput(note));
+                TrackTextField(note);
+                _pageOptionsSlot.Add(note);
+                note.schedule.Execute(() => StyleTextInput(note));
+
+                var weight = new Toggle("Show item weight") { value = _target.showStorageWeight };
+                weight.tooltip = "Print each item's mass under its count.";
+                weight.RegisterValueChangedCallback(evt =>
+                {
+                    if (_target == null) return;
+                    _target.showStorageWeight = evt.newValue;
+                    RefreshPreview(true);
+                });
+                _pageOptionsSlot.Add(weight);
+            }
+
+            if (activeMode == ScreenDataMode.InventoryGrid)
+            {
+                var fillToggle = new Toggle("Show fill bar at top") { value = _target.showInventoryFill };
+                fillToggle.tooltip = "The hold's fill percentage and bar across the top of the grid.";
+                fillToggle.RegisterValueChangedCallback(evt =>
+                {
+                    if (_target == null) return;
+                    _target.showInventoryFill = evt.newValue;
+                    RefreshPreview(true);
+                });
+                _pageOptionsSlot.Add(fillToggle);
+            }
+
+            if (activeMode == ScreenDataMode.PowerGraph)
+            {
+                var panels = new StyledDropdownField(this, "Graph panels", new List<string> { "1", "2", "3" },
+                    Mathf.Clamp(_target.powerGraphPanels, 1, 3) - 1);
+                panels.OnPicked = _ =>
                 {
                     if (_target == null) return;
                     _target.powerGraphPanels = Mathf.Clamp(panels.index + 1, 1, 3);
+                    SchedulePageOptionsRefresh();
+                };
+                _pageOptionsSlot.Add(panels.Root);
+
+                var span = new StyledDropdownField(this, "Time span",
+                    new List<string> { "5 min", "15 min", "30 min", "1 hour", "12 hours", "24 hours", "All time" },
+                    Mathf.Clamp(_target.powerGraphSpan, 0, 6));
+                span.OnPicked = _ =>
+                {
+                    if (_target == null) return;
+                    _target.powerGraphSpan = Mathf.Clamp(span.index, 0, 6);
                     RefreshPreview(true);
-                });
-                _pageOptionsSlot.Add(panels);
+                };
+                _pageOptionsSlot.Add(span.Root);
+
+                // One series picker per visible panel: what each plot asks of the construct.
+                var names = new List<string>(ScreenGraphSeriesCatalog.All.Length);
+                for (int i = 0; i < ScreenGraphSeriesCatalog.All.Length; i++)
+                    names.Add(ScreenGraphSeriesCatalog.All[i].Label);
+
+                int visiblePanels = Mathf.Clamp(_target.powerGraphPanels, 1, 3);
+                for (int p = 0; p < visiblePanels; p++)
+                {
+                    string current = p switch
+                    {
+                        0 => _target.graphSeriesA,
+                        1 => _target.graphSeriesB,
+                        _ => _target.graphSeriesC,
+                    };
+                    int index = 0;
+                    var parsed = ScreenGraphSeriesCatalog.Parse(current, ScreenGraphSeries.usage);
+                    for (int i = 0; i < ScreenGraphSeriesCatalog.All.Length; i++)
+                        if (ScreenGraphSeriesCatalog.All[i].Series == parsed) { index = i; break; }
+
+                    int pane = p; // capture for the closure
+                    var picker = new StyledDropdownField(this, "Panel " + (p + 1) + " series", names, index);
+                    picker.OnPicked = _ =>
+                    {
+                        if (_target == null) return;
+                        string value = ScreenGraphSeriesCatalog.All[Mathf.Clamp(picker.index, 0, names.Count - 1)].Series.ToString();
+                        switch (pane)
+                        {
+                            case 0: _target.graphSeriesA = value; break;
+                            case 1: _target.graphSeriesB = value; break;
+                            default: _target.graphSeriesC = value; break;
+                        }
+                        SchedulePageOptionsRefresh();
+                    };
+                    _pageOptionsSlot.Add(picker.Root);
+                }
             }
-            else
+
+            if (activeMode == ScreenDataMode.BatteryBank)
             {
                 var rates = new Toggle("Show battery power rates")
                 {
@@ -1198,7 +1590,7 @@ namespace VoxelEngine.GridSystem.UI
             field.RegisterCallback<FocusInEvent>(_ =>
             {
                 _focusedTextField = field;
-                UIState.TextInputActive = true;
+                UIState.ClaimTextInput();
             });
             field.RegisterCallback<FocusOutEvent>(_ => ClearTrackedTextField(field));
             field.RegisterCallback<DetachFromPanelEvent>(_ => ClearTrackedTextField(field));
@@ -1208,7 +1600,7 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (_focusedTextField != field) return;
             _focusedTextField = null;
-            UIState.TextInputActive = false;
+            UIState.ReleaseTextInput();
         }
 
         private void ReleaseTextFieldFocus()
@@ -1216,7 +1608,7 @@ namespace VoxelEngine.GridSystem.UI
             var field = _focusedTextField;
             _focusedTextField = null;
             if (field != null) field.Blur();
-            UIState.TextInputActive = false;
+            if (field != null) UIState.ReleaseTextInput();
         }
 
         private static void StyleTextInput(TextField field)

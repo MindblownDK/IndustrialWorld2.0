@@ -77,9 +77,28 @@ namespace VoxelEngine.UI
             _nameField.maxLength = GridIdentity.MaxNameLength;
             _nameField.style.marginBottom = 4;
             // While a text field has focus the game's hotkeys must stand down, or typing
-            // an "m" in a station name would throw open the orbital map.
-            _nameField.RegisterCallback<FocusInEvent>(_ => UIState.TextInputActive = true);
-            _nameField.RegisterCallback<FocusOutEvent>(_ => UIState.TextInputActive = false);
+            // an "m" in a station name would throw open the orbital map. The keyboard is
+            // CLAIMED, not flagged: GameUIController re-derives the typing flag every
+            // frame and would otherwise stomp it back mid-name.
+            bool nameFieldHeld = false;
+            _nameField.RegisterCallback<FocusInEvent>(_ =>
+            {
+                if (nameFieldHeld) return;
+                nameFieldHeld = true;
+                UIState.ClaimTextInput();
+            });
+            _nameField.RegisterCallback<FocusOutEvent>(_ =>
+            {
+                if (!nameFieldHeld) return;
+                nameFieldHeld = false;
+                UIState.ReleaseTextInput();
+            });
+            _nameField.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                if (!nameFieldHeld) return;
+                nameFieldHeld = false;
+                UIState.ReleaseTextInput();
+            });
             _nameField.RegisterValueChangedCallback(e =>
             {
                 if (_target == null) return;

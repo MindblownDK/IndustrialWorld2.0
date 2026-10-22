@@ -71,6 +71,11 @@ namespace VoxelEngine.GridSystem
             }
         }
 
+        /// <summary>17.42.0-dev - rated demand at full throttle, for the screens'
+        /// "required power" reading. Hydrogen thrusters still demand no watts.</summary>
+        public override float RatedPowerDraw
+            => Grid == null || !Enabled || thrusterType == ThrusterType.Hydrogen ? 0f : powerAtMaxThrust;
+
         /// <summary>
         /// 0..1 fraction of max thrust this specific engine is producing right now.
         /// Set by GridEntity each physics frame based on the pilot's input and this

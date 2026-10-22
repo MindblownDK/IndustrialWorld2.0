@@ -77,10 +77,40 @@ namespace VoxelEngine.GridSystem
             if (!marker.gameObject.activeSelf) marker.gameObject.SetActive(true);
 
             var orientation = marker.GetComponent<GridGhostOrientation>();
-            if (orientation != null && orientation._laidOut) return;
+            // "Laid out" is only true while the marker still HAS its parts. A rebuild of
+            // the ghost, or a caption destroyed with it, leaves the flag set on a marker
+            // with nothing in it - the marker then never comes back.
+            if (orientation != null && orientation._laidOut && HasParts(marker)) return;
+            if (orientation != null) orientation._laidOut = false;
 
-            Layout(marker, ghost);
-            if (orientation != null) orientation._laidOut = true;
+            // A ghost is instantiated and shown in the same frame, and on that frame its
+            // renderers have no local bounds yet and its TextMesh has not baked - so a
+            // layout attempt can legitimately fail. It must not be recorded as done: the
+            // marker would then stay empty (no FRONT plate, no up-chevrons) for the whole
+            // life of the ghost, which is exactly how the placement marker went missing.
+            bool laidOut = Layout(marker, ghost);
+            if (orientation != null && laidOut) orientation._laidOut = true;
+        }
+
+        private static bool HasParts(Transform marker)
+            => marker.Find("Box") != null && marker.Find("Label") != null && marker.Find("Arrows") != null;
+
+        /// <summary>
+        /// Keep the marker's captions alive while the ghost exists.
+        ///
+        /// A caption is a text mesh on a runtime dynamic font: its quads are baked against
+        /// an atlas that can be rebuilt at any moment (any new character on any screen does
+        /// it), and a caption whose fit failed on the frame the ghost appeared is scaled
+        /// from nonsense. Both are checked here, cheaply, rather than assumed once.
+        /// </summary>
+        private void LateUpdate()
+        {
+            Transform label = transform.Find("Label");
+            Transform arrows = transform.Find("Arrows");
+            if (label == null || arrows == null) { _laidOut = false; return; }
+
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(label.GetComponent<TextMesh>());
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(arrows.GetComponent<TextMesh>());
         }
 
         /// <summary>
@@ -93,10 +123,10 @@ namespace VoxelEngine.GridSystem
 
         // ── Building and sizing ─────────────────────────────────────────────────
 
-        private static void Layout(Transform marker, GameObject ghost)
+        private static bool Layout(Transform marker, GameObject ghost)
         {
-            if (!TryLocalBounds(ghost, out Bounds bounds)) return;
-            if (bounds.size.x <= 0.001f || bounds.size.y <= 0.001f) return;
+            if (!TryLocalBounds(ghost, out Bounds bounds)) return false;
+            if (bounds.size.x <= 0.001f || bounds.size.y <= 0.001f) return false;
 
             // The ghost's own local space: a block is built facing -Z, so its front face is
             // the minimum Z of its renderers.
@@ -116,7 +146,7 @@ namespace VoxelEngine.GridSystem
 
             Transform label = marker.Find("Label");
             if (label == null) label = BuildText(marker.transform, "Label", "FRONT", 64);
-            FitTo(label.GetComponent<TextMesh>(), boxSize.x * 0.80f, boxSize.y * 0.74f);
+            bool labelFitted = FitTo(label.GetComponent<TextMesh>(), boxSize.x * 0.80f, boxSize.y * 0.74f);
             label.localPosition = new Vector3(0f, 0f, -0.004f);
 
             // Three chevrons above the box: the one thing a head-on view of a flat panel
@@ -125,8 +155,12 @@ namespace VoxelEngine.GridSystem
             Transform arrows = marker.Find("Arrows");
             if (arrows == null) arrows = BuildText(marker.transform, "Arrows", "\u25B2\u25B2\u25B2", 64);
             float arrowHeight = height * 0.10f;
-            FitTo(arrows.GetComponent<TextMesh>(), width * 0.46f, arrowHeight);
+            bool arrowsFitted = FitTo(arrows.GetComponent<TextMesh>(), width * 0.46f, arrowHeight);
             arrows.localPosition = new Vector3(0f, boxSize.y * 0.5f + arrowHeight * 0.85f, -0.004f);
+
+            // Both captions only count as laid out once their glyph meshes have really
+            // been measured and scaled; until then the ghost asks again next frame.
+            return labelFitted && arrowsFitted;
         }
 
         private static Transform BuildBox(Transform parent)
@@ -157,6 +191,11 @@ namespace VoxelEngine.GridSystem
             go.transform.SetParent(parent, false);
 
             var mesh = go.AddComponent<TextMesh>();
+            // The screen's own face, because it is the one font in the project that is
+            // guaranteed to carry the box-drawing and arrow glyphs these captions use; the
+            // built-in fallback face drops them silently.
+            var face = GridScreenBlock.DisplayFont;
+            if (face != null) mesh.font = face;
             mesh.text = text;
             mesh.fontSize = fontSize;
             mesh.characterSize = 0.1f;
@@ -178,18 +217,23 @@ namespace VoxelEngine.GridSystem
         /// <summary>Scale a finished TextMesh so its measured mesh fits a box. Same rule the
         /// screens use: measure what the font actually produced rather than trusting a
         /// constant about how many metres a character is.</summary>
-        private static void FitTo(TextMesh mesh, float maxWidth, float maxHeight)
+        private static bool FitTo(TextMesh mesh, float maxWidth, float maxHeight)
         {
-            if (mesh == null) return;
+            if (mesh == null) return false;
+            // The caption is a runtime dynamic font: its mesh may not exist yet on the frame
+            // the ghost appears, and a text mesh scaled from a missing bounds is unreadable.
+            if (mesh.font != null) WorldTextMaterial.SyncAtlas(mesh);
             var filter = mesh.GetComponent<MeshFilter>();
             Mesh built = filter != null ? filter.sharedMesh : null;
-            if (built == null) return;
+            if (built == null) return false;
 
             Bounds bounds = built.bounds;
-            if (bounds.size.x <= 0.0001f || bounds.size.y <= 0.0001f) return;
+            if (bounds.size.x <= 0.0001f || bounds.size.y <= 0.0001f) return false;
 
             float scale = Mathf.Min(maxWidth / bounds.size.x, maxHeight / bounds.size.y);
-            mesh.transform.localScale = Vector3.one * Mathf.Max(0.0001f, scale);
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f) return false;
+            mesh.transform.localScale = Vector3.one * scale;
+            return true;
         }
 
         private static Material BoxMaterial()

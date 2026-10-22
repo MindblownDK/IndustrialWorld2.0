@@ -45,6 +45,13 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
+            // Every frame, not on the telemetry timer: a dynamic font's atlas can be
+            // replaced at any point after a caption is set, and the caption must not be
+            // seen sampling the old one even once.
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(_speedDisplayText);
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(_airDisplayText);
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(_planetNameText);
+
             if (_mfdTextFitPending && Time.frameCount >= _fitTextAfterFrame)
                 RefreshMfdTextFits();
             TickCockpitDisplays();

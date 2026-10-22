@@ -4,7 +4,9 @@
 // v5.57.3-dev — Screen text depth fix without self-occluding the display.
 
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
+using VoxelEngine.GridSystem.UI;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
 
@@ -56,12 +58,28 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Page in pane 4 (bottom right, quadrants only)")]
         public ScreenDataMode splitPageD = ScreenDataMode.Environment;
         public string customText = "CUSTOM DISPLAY";
-        [Tooltip("Optional heading for the cargo manifest. Blank uses the selected container name or the grid name.")]
-        public string manifestTitle = "";
         [Range(1, 3), Tooltip("Number of compact history plots on the Power Graph page: grid power, solar output and battery transfer.")]
         public int powerGraphPanels = 3;
         [Tooltip("Show each battery's current charge/discharge and its rated maximum instead of the compact battery-cell grid.")]
         public bool showBatteryPowerRates;
+        // ── 17.42.0-dev — the remake's page options. All additive: older saves load with
+        // the defaults below and get the reference layouts.
+        [Tooltip("Custom heading shared by the Manifest, Fill Bars and Storage Monitor pages. Blank falls back to the container or grid name.")]
+        public string manifestTitle = "";
+        [Tooltip("Power Graph panel 1 series (usage, usageScaled, battery, batteryIn, batteryOut, batteryInOut, batteryInOutAuto, solar, reactor, h2engine, storedOxygen, storedHydrogen).")]
+        public string graphSeriesA = "usage";
+        [Tooltip("Power Graph panel 2 series.")]
+        public string graphSeriesB = "solar";
+        [Tooltip("Power Graph panel 3 series.")]
+        public string graphSeriesC = "batteryInOut";
+        [Tooltip("Power Graph time span: 0=5 min, 1=15 min, 2=30 min, 3=1 hour, 4=12 hours, 5=24 hours, 6=all recorded.")]
+        public int powerGraphSpan = 1;
+        [Tooltip("Show the fill bar across the top of the Inventory Grid page.")]
+        public bool showInventoryFill = true;
+        [Tooltip("Show each item's mass under its count on the Storage Monitor page.")]
+        public bool showStorageWeight;
+        [Tooltip("Free line printed at the bottom-left of the Storage Monitor page.")]
+        public string storageNote = "";
         /// <summary>TeamBanner mode (14.37.0): whose banner the screen shows.
         /// Set when the mode is chosen in the config panel - the banner itself
         /// is edited in PAUSE > TEAMS, never here. "" = default emblem.</summary>
@@ -98,6 +116,18 @@ namespace VoxelEngine.GridSystem
         private readonly List<IGridDataProvider> _cachedProviders = new();
         private readonly Dictionary<Vector3Int, int> _lastChecked = new();
         private TextMesh _screenText, _titleText, _statusText;
+        // 17.42.0-dev — one mesh per ink, stacked on the same cell grid. _screenText is
+        // the Primary layer and still owns the measurement; the other layers borrow its
+        // transform so every glyph stays in its own cell.
+        private readonly TextMesh[] _inkLayers = new TextMesh[5];
+        private readonly string[] _inkTexts = new string[5];
+        private Transform _bodyAnchor;
+        private ScreenPalette _palette;
+        private int _paletteForMode = -1;
+        private Color _paletteBase;
+        // Frame the text was last changed on, so the fit can re-run against the rebuilt
+        // mesh (fitting against a stale mesh is how a screen ends up with tiny type).
+        private int _textChangedFrame = -1;
         private Renderer _screenSurfaceRenderer;
         private Renderer _glowStripRenderer;
         private readonly List<Renderer> _cornerDotRenderers = new();
@@ -112,10 +142,8 @@ namespace VoxelEngine.GridSystem
         private float _glassWidth;
         private float _glassHeight;
         private float _faceZ = -0.02f;
-        // Last strings the text was fitted to, so a fit is only recomputed when the
-        // characters actually change (Update runs every frame).
-        private string _fittedBody, _fittedTitle, _fittedStatus;
-        private bool _textFitDirty;
+        // Last strings the text was fitted to are gone (17.42.0-dev): the fit now keys on
+        // the frame the text changed on and re-runs a frame later against the rebuilt mesh.
         private bool _cameraFeedVisible;
         private bool _initialized;
         private PowerConsumer _power;
@@ -178,45 +206,11 @@ namespace VoxelEngine.GridSystem
                 if (managed != null) return managed;
                 if (dataMode == ScreenDataMode.Camera) return CameraStatusDisplay();
                 if (dataMode == ScreenDataMode.TeamBanner) return BannerTextDisplay();
-                if (dataMode == ScreenDataMode.Power) return PowerDisplay();
 
-                // 17.36.0-dev — LESS FURNITURE, MORE READING.
-                //
-                // The old page drew a `──┘` rule between every source and repeated the
-                // section name in capitals above each one. On a Small panel that was half
-                // the glass spent on decoration, and on a Large panel it still read as a
-                // form rather than an instrument. A source is now introduced by its own
-                // name and nothing else, and the rules are gone.
-                var sources = ResolveAllProviders();
-                if (sources.Count == 0) return "ONLINE\nNO DATA\nRight-click to configure";
-
-                int max = MaxDisplayLines;
-                int linesPerSource = Mathf.Max(2, max / sources.Count);
-
-                var result = new System.Text.StringBuilder();
-                for (int s = 0; s < sources.Count; s++)
-                {
-                    var p = sources[s];
-                    string raw = p.GetDisplayData();
-                    if (string.IsNullOrEmpty(raw)) continue;
-
-                    int remaining = max - CountLines(result.ToString());
-                    if (remaining <= 0) break;
-
-                    switch (dataMode)
-                    {
-                        case ScreenDataMode.Bars:
-                            result.AppendLine(FormatBars(raw, p.SourceName, Mathf.Min(linesPerSource, remaining)));
-                            break;
-                        case ScreenDataMode.System:
-                            result.AppendLine(FormatSection(raw, p.SourceName.ToUpperInvariant(), Mathf.Min(linesPerSource, remaining)));
-                            break;
-                        default:
-                            result.AppendLine(TruncateLines(p.SourceName + "\n" + raw, Mathf.Min(linesPerSource, remaining)));
-                            break;
-                    }
-                }
-                return result.ToString().Trim();
+                // 17.42.0-dev — every remaining mode has a managed page above. A mode that
+                // somehow escapes both says so plainly rather than dumping provider text
+                // onto the glass at whatever size the fit happens to give it.
+                return "NO PAGE";
             }
         }
 
@@ -230,9 +224,17 @@ namespace VoxelEngine.GridSystem
 
         private int MaxDisplayLines => screenSize switch
         {
-            ScreenSize.Small => 3, ScreenSize.Wide => 4,
-            ScreenSize.Medium => 6, ScreenSize.Large => 10,
-            ScreenSize.ExtraLarge => 16, _ => 3
+            // 17.42.0-dev — THE DENSITY OF THE GLASS.
+            //
+            // The old counts (3, 4, 6, 10, 16) were chosen when pages were a handful of
+            // lines each. On a wall panel that made the page "a tiny part of the grid":
+            // a sixteen-row canvas over a sixteen-metre screen, with content occupying a
+            // corner of it. These counts let a page actually fill its panel - graphs get
+            // shape, monitors get a real item grid - while a Small screen still prints
+            // four readable lines rather than sixteen unreadable ones.
+            ScreenSize.Small => 4, ScreenSize.Wide => 5,
+            ScreenSize.Medium => 8, ScreenSize.Large => 14,
+            ScreenSize.ExtraLarge => 20, _ => 4
         };
 
         private IGridCameraFeedProvider ResolveCameraProvider()
@@ -258,117 +260,6 @@ namespace VoxelEngine.GridSystem
                 return "CAMERA\nSOURCE OFFLINE";
 
             return "CAMERA\n" + (cameraProvider.IsFeedInUse ? "LIVE FEED" : "READY") + "\n" + cameraProvider.SourceName;
-        }
-
-        /// <summary>
-        /// The instant power reading, with the two figures drawn against the larger of them
-        /// so a deficit is visible before the number is read. The graph page next to it in
-        /// the picker is the same question over time; this one is "right now".
-        /// </summary>
-        private string PowerDisplay()
-        {
-            if (Grid == null)
-                return "POWER\nNO GRID";
-
-            float gain = Mathf.Max(0f, Grid.PowerGenerated);
-            float loss = Mathf.Max(0f, Grid.PowerConsumed);
-            float net = gain - loss;
-            float scale = Mathf.Max(1f, Mathf.Max(gain, loss));
-            string state = net >= -0.1f ? "STABLE" : "DEFICIT";
-
-            return "POWER " + state + "\n" +
-                   "GEN " + PlainBar(gain / scale) + " " + FormatWatts(gain) + "\n" +
-                   "USE " + PlainBar(loss / scale) + " " + FormatWatts(loss) + "\n" +
-                   "NET " + (net >= 0f ? "+" : "-") + FormatWatts(Mathf.Abs(net));
-        }
-
-        private static string FormatWatts(float watts)
-        {
-            float abs = Mathf.Abs(watts);
-            if (abs >= 1000000f) return (watts / 1000000f).ToString("0.##") + " MW";
-            if (abs >= 1000f) return (watts / 1000f).ToString("0.#") + " kW";
-            return watts.ToString("0") + " W";
-        }
-
-        // ── Formatting ────────────────────────────────────────────────
-        /// <summary>One source's lines under its own name, with no decoration around them.</summary>
-        private string FormatSection(string raw, string section, int max)
-        {
-            var lines = raw.Split('\n');
-            var r = new System.Text.StringBuilder();
-            int c = 0;
-            foreach (var l in lines)
-            {
-                string t = l.Trim();
-                if (t.Length == 0) continue;
-                r.AppendLine(t);
-                c++; if (c >= max) break;
-            }
-            return r.ToString().Trim();
-        }
-
-        private string TruncateLines(string text, int max)
-        {
-            var lines = text.Split('\n');
-            if (lines.Length <= max) return text;
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < max; i++) sb.AppendLine(lines[i]);
-            return sb.ToString().Trim();
-        }
-
-        private string FormatBars(string raw, string sourceName, int maxLines)
-        {
-            var result = new System.Text.StringBuilder();
-            result.AppendLine("[" + sourceName.ToUpperInvariant() + "]");
-            var lines = raw.Split('\n');
-            int bars = 0;
-            foreach (var l in lines)
-            {
-                string t = l.Trim();
-                if (t.Length == 0) continue;
-                if (bars >= maxLines - 1) break;
-                float pct = ExtractPercentage(t);
-                if (pct >= 0f) { result.AppendLine(" " + BarString(pct)); bars++; }
-                else if (bars < maxLines - 2) { result.AppendLine(" " + t); bars++; }
-            }
-            if (result.ToString().Trim().Length <= sourceName.Length + 4) return raw;
-            return result.ToString().Trim();
-        }
-
-        private static float ExtractPercentage(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return -1f;
-            int idx = text.IndexOf('%');
-            if (idx < 1) return -1f;
-            int start = idx - 1;
-            while (start >= 0 && (char.IsDigit(text[start]) || text[start] == '.' || text[start] == ',')) start--;
-            start++;
-            if (start >= idx) return -1f;
-            if (float.TryParse(text.Substring(start, idx - start), System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out float val))
-                return Mathf.Clamp01(val / 100f);
-            return -1f;
-        }
-
-        /// <summary>Ten block steps and nothing else - no percentage, for the rows that
-        /// already print their own number.</summary>
-        private static string PlainBar(float v01)
-        {
-            int full = Mathf.Clamp(Mathf.FloorToInt(Mathf.Clamp01(v01) * 10f), 0, 10);
-            var sb = new System.Text.StringBuilder(10);
-            for (int i = 0; i < full; i++) sb.Append('\u2588');
-            for (int i = full; i < 10; i++) sb.Append('\u2591');
-            return sb.ToString();
-        }
-
-        private static string BarString(float v01)
-        {
-            int full = Mathf.Clamp(Mathf.FloorToInt(v01 * 10f), 0, 10);
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < full; i++) sb.Append('\u2588');
-            for (int i = full; i < 10; i++) sb.Append('\u2591');
-            sb.Append(" " + (v01 * 100f).ToString("0") + "%");
-            return sb.ToString();
         }
 
         // ── Lifecycle ─────────────────────────────────────────────────
@@ -398,6 +289,10 @@ namespace VoxelEngine.GridSystem
             if (!_initialized) { EnsureDisplay(); return; }
             if (_screenText == null) return;
 
+            // The power history is kept whether or not the graph page is showing - a
+            // chart that only records while watched has nothing to draw when opened.
+            SampleGraphHistory();
+
             IGridCameraFeedProvider cameraProvider = dataMode == ScreenDataMode.Camera ? ResolveCameraProvider() : null;
             bool showCameraFeed = IsPowered && cameraProvider != null && cameraProvider.IsOnline;
             // Team banner (14.37.0): the cloth fills the surface through the
@@ -409,29 +304,52 @@ namespace VoxelEngine.GridSystem
             SetMainTextVisible(!showCameraFeed);
             ApplyLiveAppearance(showCameraFeed || showBanner);
 
+            // 17.42.0-dev — THE TEXT IS A STACK OF INKS.
+            //
+            // Managed pages paint every ink layer; legacy pages (Custom, banner, camera)
+            // speak in one colour and leave the other layers empty. The layers share one
+            // anchor and one scale, so a warn-red label still sits in its own cell.
             string text = showCameraFeed ? string.Empty : StyleText(FormattedDisplay, fontStyle);
-            if (_screenText.text != text)
+            bool textChanged = false;
+            for (int ink = 0; ink < _inkTexts.Length; ink++)
             {
-                _screenText.text = text;
-                _textFitDirty = true;
+                // A managed page published its five layers already; the body layer gets
+                // its own share, never the merged page - a merged page here would ghost
+                // every glyph in white under its real colour (and drift apart on a
+                // tilted glass, so names print twice). Only a page that never painted
+                // inks (Custom text, a bare status line) rides the body layer whole.
+                string layer = ink == 0
+                    ? (_pageInksPublished ? (_inkTexts[0] ?? string.Empty) : (text ?? string.Empty))
+                    : (_inkTexts[ink] ?? string.Empty);
+                if (_inkLayers[ink] == null) continue;
+                if (_inkLayers[ink].text != layer)
+                {
+                    _inkLayers[ink].text = layer;
+                    textChanged = true;
+                }
+            }
+            if (textChanged)
+            {
                 _iconsDirty = true;
+                _textChangedFrame = Time.frameCount;
             }
 
             if (_power != null) _power.wattsPerSecond = Enabled ? PowerDraw : 0f;
 
             var (dw, dh) = GlassSize();
+            RefreshPalette();
 
             if (!Enabled)
             {
                 Color d = new Color(0.3f, 0.3f, 0.3f, 0.3f);
-                _screenText.color = d;
+                ApplyBodyColour(d);
                 if (_titleText != null) _titleText.color = d;
                 if (_statusText != null) { _statusText.text = "OFF"; _statusText.color = d; }
             }
             else if (!IsPowered)
             {
                 Color w = new Color(0.8f, 0.15f, 0.10f, 0.6f);
-                _screenText.color = w;
+                ApplyBodyColour(w);
                 if (_titleText != null) _titleText.color = w;
                 if (_statusText != null) { _statusText.text = "NO PWR"; _statusText.color = w; }
             }
@@ -452,7 +370,7 @@ namespace VoxelEngine.GridSystem
             else if (showBanner)
             {
                 Color ink = new Color(0.14f, 0.10f, 0.08f);
-                _screenText.color = ink;
+                ApplyBodyColour(ink);
                 Color gold = new Color(0.85f, 0.68f, 0.21f);
                 if (_titleText != null)
                 {
@@ -469,42 +387,81 @@ namespace VoxelEngine.GridSystem
             else if (!HasAnySource)
             {
                 Color i = new Color(0.40f, 0.44f, 0.52f);
-                _screenText.color = i;
+                ApplyBodyColour(i);
                 if (_titleText != null) { _titleText.text = "NO SOURCE"; _titleText.color = i; }
                 if (_statusText != null) { _statusText.text = "IDLE"; _statusText.color = i; }
             }
             else
             {
-                float pulse = 0.7f + 0.15f * Mathf.Sin(Time.realtimeSinceStartup * 1.8f);
-                _screenText.color = new Color(textColor.r, textColor.g, textColor.b, pulse);
+                // A slow breath on the alpha only - the page's own colours are the
+                // message; the pulse is just proof the panel is alive.
+                float pulse = 0.88f + 0.12f * Mathf.Sin(Time.realtimeSinceStartup * 1.8f);
+                ApplyPaletteLayers(pulse);
                 var sources = ResolveAllProviders();
                 if (_titleText != null)
                 {
-                    // 17.35.0-dev: a managed page names itself along the top. "2 sources"
-                    // told a player nothing about what they were looking at; "BATTERIES"
-                    // does, and the page is the same on every screen that shows it.
-                    // A split panel is named after its layout, not after one of its pages:
-                    // the pages name themselves inside their own corners.
+                    // A managed page names itself in its own grid, so the strip above it
+                    // stays empty - the page's title and the strip's copy of it read as a
+                    // double print. A split panel is named after its layout; the panes
+                    // name themselves inside.
                     _titleText.text = IsSplit
                         ? "SPLIT x" + SplitPaneCount
                         : IsManagedPage(dataMode)
-                            ? ScreenPageCatalog.For(dataMode).Label.ToUpperInvariant()
+                            ? string.Empty
                             : sources.Count + " source" + (sources.Count != 1 ? "s" : "");
-                    _titleText.color = new Color(textColor.r * 0.7f, textColor.g * 0.7f, textColor.b * 0.7f, 0.8f);
+                    _titleText.color = new Color(_palette.Accent.r, _palette.Accent.g, _palette.Accent.b, 0.72f);
                 }
-                if (_statusText != null) { _statusText.text = dataMode == ScreenDataMode.Camera ? "CAM" : "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }
+                if (_statusText != null)
+                {
+                    _statusText.text = dataMode == ScreenDataMode.Camera ? "CAM" : "LIVE";
+                    _statusText.color = new Color(_palette.Dim.r * 1.35f, _palette.Dim.g * 1.35f, _palette.Dim.b * 1.35f);
+                }
             }
 
             if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.455f, 0);
             if (_statusText != null) _statusText.transform.localPosition = new Vector3(dw * 0.455f, -dh * 0.455f, 0);
-            if (_screenText != null) _screenText.transform.localPosition = new Vector3(-dw * 0.47f, dh * 0.34f, 0f);
+            // The body anchor belongs to the fit pass, which centres the printed block on
+            // the glass. Pinning it to a corner offset here - as this used to do every
+            // frame - put the page back in the top-left corner immediately after the fit
+            // had centred it, which is exactly how every page ended up hugging the corner
+            // of its panel with dead glass to the right and below.
 
-            // 17.35.1-dev: the type is measured against the glass after the text is set,
-            // so it fits the panel it is actually on rather than a fixed guess.
+            // The type is measured against the glass after the text is set, so it fits
+            // the panel it is actually on rather than a fixed guess - and fitted again a
+            // frame later, once Unity has rebuilt the meshes.
             RefreshTextFit();
-            // 17.36.0-dev: item pictures are placed from that same measurement, so a
-            // picture can never drift away from the count it belongs to.
+            // Item pictures are placed from that same measurement, so a picture can never
+            // drift away from the count it belongs to.
             RefreshPageIcons();
+        }
+
+        /// <summary>The page's palette: its own signature for a managed page, the screen's
+        /// text colour for Custom, and the instrument family when a split mixes pages.</summary>
+        private void RefreshPalette()
+        {
+            int modeKey = IsSplit ? -2 : (int)dataMode;
+            if (modeKey == _paletteForMode && _paletteBase == textColor) return;
+            _paletteForMode = modeKey;
+            _paletteBase = textColor;
+            _palette = IsSplit
+                ? ScreenPalette.Monochrome(textColor)
+                : ScreenPalette.ForPage(dataMode, textColor);
+        }
+
+        private void ApplyBodyColour(Color colour)
+        {
+            for (int i = 0; i < _inkLayers.Length; i++)
+                if (_inkLayers[i] != null) _inkLayers[i].color = colour;
+        }
+
+        private void ApplyPaletteLayers(float alphaScale)
+        {
+            for (int i = 0; i < _inkLayers.Length; i++)
+            {
+                if (_inkLayers[i] == null) continue;
+                Color c = _palette.For((ScreenInk)i);
+                _inkLayers[i].color = new Color(c.r, c.g, c.b, Mathf.Clamp01(c.a * alphaScale));
+            }
         }
 
         private void EnsureDisplay()
@@ -569,21 +526,37 @@ namespace VoxelEngine.GridSystem
             _titleText.fontStyle = FontStyle.Bold;
             MakeTextOpaque(_titleText);
 
-            var dObj = new GameObject("ScreenDisplayText");
-            dObj.transform.SetParent(root.transform, false);
-            // 17.36.0-dev — LEFT-ALIGNED, FROM THE LEFT EDGE.
+            // 17.42.0-dev — ONE ANCHOR, FIVE INKS.
             //
-            // A page is a character grid: a bar starts at column zero and an item picture
-            // sits above the column its count was printed in. Centre-aligned text centres
-            // EACH LINE separately, so two rows of different lengths no longer share a
-            // column grid and the pictures have nothing to line up with. The body is now
-            // anchored at the left edge of the glass, which is also how a monitor reads.
-            dObj.transform.localPosition = new Vector3(-_glassWidth * 0.47f, _glassHeight * 0.34f, 0f);
-            _screenText = dObj.AddComponent<TextMesh>();
-            _screenText.text = "STARTING"; _screenText.fontSize = 24;
-            _screenText.characterSize = charSize; _screenText.color = textColor;
-            _screenText.anchor = TextAnchor.UpperLeft; _screenText.alignment = TextAlignment.Left;
-            MakeTextOpaque(_screenText);
+            // The anchor carries the page's corner; every ink layer is a TextMesh at the
+            // anchor's origin with its own colour. Because they share one parent and one
+            // fitted scale, a red warning and a green reading sit in the same character
+            // grid - which is the entire point of drawing pages on a grid.
+            //
+            // LEFT-ALIGNED, FROM THE LEFT EDGE: a page is a character grid, and
+            // centre-aligned text centres EACH LINE separately, so two rows of different
+            // lengths would no longer share a column grid and item pictures would have
+            // nothing to line up with.
+            _bodyAnchor = new GameObject("BodyAnchor").transform;
+            _bodyAnchor.SetParent(root.transform, false);
+            _bodyAnchor.localPosition = new Vector3(-_glassWidth * 0.47f, _glassHeight * 0.34f, 0f);
+
+            for (int i = 0; i < _inkLayers.Length; i++)
+            {
+                var layerObj = new GameObject("InkLayer_" + (ScreenInk)i);
+                layerObj.transform.SetParent(_bodyAnchor, false);
+                layerObj.transform.localPosition = Vector3.zero;
+                var layer = layerObj.AddComponent<TextMesh>();
+                layer.text = string.Empty;
+                layer.fontSize = 24;
+                layer.characterSize = charSize;
+                layer.anchor = TextAnchor.UpperLeft;
+                layer.alignment = TextAlignment.Left;
+                MakeTextOpaque(layer);
+                _inkLayers[i] = layer;
+                _inkTexts[i] = string.Empty;
+            }
+            _screenText = _inkLayers[0];
 
             var sObj = new GameObject("ScreenStatusText");
             sObj.transform.SetParent(root.transform, false);
@@ -597,7 +570,6 @@ namespace VoxelEngine.GridSystem
 
             // Everything above was created at the right scale for the first time; the fit
             // pass below then measures the meshes and corrects them.
-            _textFitDirty = true;
             FitScreenText();
         }
 
@@ -683,7 +655,7 @@ namespace VoxelEngine.GridSystem
             float blockX = Mathf.Max(0.0001f, Mathf.Abs(blockScale.x));
             float blockY = Mathf.Max(0.0001f, Mathf.Abs(blockScale.y));
 
-            // A cube is 1 m at scale 1, so size-on-screen is localBounds times lossy scale.
+            // A cube is 1 m at scale 1, scale.
             _glassWidth = Mathf.Max(0.05f, Mathf.Abs(lossy.x) * boundsSize.x / blockX);
             _glassHeight = Mathf.Max(0.05f, Mathf.Abs(lossy.y) * boundsSize.y / blockY);
 
@@ -713,46 +685,237 @@ namespace VoxelEngine.GridSystem
                     _glassHeight > 0.001f ? _glassHeight : fh);
         }
 
-        /// <summary>Refit the three text meshes when their character content has changed.</summary>
-        private void RefreshTextFit()
-        {
-            string body = _screenText != null ? _screenText.text : null;
-            string title = _titleText != null ? _titleText.text : null;
-            string status = _statusText != null ? _statusText.text : null;
+        // 17.42.0-dev — fitted geometry, shared with the icon pass so a picture lands
+        // on the same cell its number was printed in.
+        private float _fittedLineHeight;
+        private float _fittedCharWidth;
 
-            if (!_textFitDirty
-                && body == _fittedBody && title == _fittedTitle && status == _fittedStatus) return;
+        /// <summary>Refit the text meshes when their character content has changed. The
+        /// first pass may still measure Unity's previous mesh, so a change schedules a
+        /// <summary>
+        /// Fit the page to its glass - every frame, in one step, exactly.
+        ///
+        /// The old pass corrected the scale against the union box of the built meshes,
+        /// which is a moving target: the box includes every blank row of the grid and it
+        /// changes the moment the scale changes, so the correction chased its own tail and
+        /// could settle anywhere - a page of a few rows landed on type you need a
+        /// magnifier for. Nothing in that loop was stable.
+        ///
+        /// This pass does not iterate. A monospace text mesh's bounds are baked by the
+        /// font size and `characterSize`, NOT by the transform's scale, so one cell's size
+        /// can be measured once and the exact scale that fits the PRINTED block into the
+        /// panel solved for directly:
+        ///
+        ///   cell      = mesh bounds ÷ (lines, characters on the longest line)
+        ///   block     = cells the page actually printed  (rows × columns, no blank borders)
+        ///   scale     = the largest that keeps block ≤ box, with a line-height cap so a
+        ///               two-line page does not become two letters tall
+        ///
+        /// Measured once, solved once, applied once. Re-running it is free and idempotent,
+        /// which is what makes it safe to run every frame - and what makes a page look the
+        /// same on a Small panel and an Extra Large one: the same layout, scaled to the
+        /// glass it is on.
+        /// </summary>
+        private void RefreshTextFit() => FitScreenText();
 
-            _textFitDirty = false;
-            if (!FitScreenText())
-            {
-                // The TextMesh had not built its mesh yet this frame; ask again next frame
-                // rather than recording a fit that never happened.
-                _textFitDirty = true;
-                return;
-            }
-            _fittedBody = body; _fittedTitle = title; _fittedStatus = status;
-        }
+        /// <summary>The scale the ink layers are drawn at, so a change can dirty the
+        /// pictures and nothing else has to know.</summary>
+        private float _appliedFitScale = 1f;
 
-        /// <summary>Fit all three texts; returns false when the body mesh was not ready.</summary>
+        /// <summary>The printed block in the body anchor's own space, kept for the icon
+        /// pass so a picture is placed against what was printed, not against a guess.</summary>
+        private float _blockLeft, _blockTop, _blockWidth, _blockHeight;
+
+        /// <summary>How many lines a single line's height may occupy at most: a page of
+        /// two rows is allowed to be half the panel, not all of it.</summary>
+        private const float MinLinesForFill = 4f;
+
         private bool FitScreenText()
         {
+            if (_bodyAnchor == null) return false;
+
             var (gw, gh) = GlassSize();
             float stretch = StyleStretch(fontStyle);
+            float boxW = gw * 0.96f;
+            float boxH = gh * 0.90f;
 
-            // 17.36.1-dev — THE LINE CAP COUNTS THE LINES THAT ARE THERE.
-            //
-            // It used to divide the panel's maximum line count (3, 4, 6, 10, 16) into the
-            // body band, which meant a two-line page on a sixteen-line panel was capped at
-            // one sixteenth of the glass and printed as a caption floating in a black box.
-            // The cap exists to stop a two-word page filling the panel with giant letters,
-            // so it has to count the page's own lines.
-            int bodyLines = _screenText != null ? Mathf.Max(1, CountLines(_screenText.text)) : 1;
-            bool fitted = FitTextMesh(_screenText, gw * 0.94f, gh * 0.72f,
-                gh * 0.68f / bodyLines, stretch);
-            FitTextMesh(_titleText, gw * 0.94f, gh * 0.11f);
-            FitTextMesh(_statusText, gw * 0.36f, gh * 0.10f);
-            return fitted;
+            // ── What the page printed, from its text - always available, never a mesh.
+            int printedRows = 0, firstRow = int.MaxValue, longestLine = 0;
+            for (int i = 0; i < _inkLayers.Length; i++)
+            {
+                var layer = _inkLayers[i];
+                if (layer == null || string.IsNullOrEmpty(layer.text)) continue;
+                PrintedMetrics(layer.text, out int span, out int first, out int longest);
+                if (span <= 0) continue;
+                if (first < firstRow) firstRow = first;
+                printedRows = Mathf.Max(printedRows, first + span);
+                if (longest > longestLine) longestLine = longest;
+            }
+            if (printedRows <= 0 || longestLine <= 0) return false;
+            if (firstRow == int.MaxValue) firstRow = 0;
+
+            // ── One cell, measured from the baked mesh. The mesh describes the whole text
+            // laid out in that font, so dividing by the line count and by the character
+            // count of the longest line gives the cell - independent of the transform's
+            // scale, which is what makes the solve below a single step.
+            float cellH = 0f, cellW = 0f;
+            float lineZeroTop = 0f;
+            bool haveTop = false;
+            for (int i = 0; i < _inkLayers.Length; i++)
+            {
+                var layer = _inkLayers[i];
+                if (layer == null || string.IsNullOrEmpty(layer.text)) continue;
+                var filter = layer.GetComponent<MeshFilter>();
+                Mesh mesh = filter != null ? filter.sharedMesh : null;
+                if (mesh == null) continue;
+
+                Bounds b = mesh.bounds;
+                if (b.size.x <= 0.0001f || b.size.y <= 0.0001f) continue;
+
+                int lines = Mathf.Max(1, CountLines(layer.text));
+                int widest = LongestLineLength(layer.text);
+
+                // A single-line mesh describes the glyph ink and not the line box, so it
+                // reads short; layers with two or more lines measure the real advance.
+                float h = b.size.y / lines * (lines >= 2 ? 1f : 1.18f);
+                float w = b.size.x / Maths_Max1(widest);
+
+                if (lines >= 2)
+                {
+                    cellH = Mathf.Max(cellH, h);
+                    cellW = Mathf.Max(cellW, w);
+                }
+                else if (cellH <= 0.0001f)
+                {
+                    // Only single-line layers exist: accept the estimate, in case nothing
+                    // else ever says anything.
+                    cellH = Mathf.Max(cellH, h);
+                    cellW = Mathf.Max(cellW, w);
+                }
+
+                if (!haveTop || b.max.y > lineZeroTop) { lineZeroTop = b.max.y; haveTop = true; }
+            }
+
+            if (cellH <= 0.0001f || cellW <= 0.0001f)
+            {
+                // Nothing measurable yet - the font's mesh has not been built. Carry the
+                // last known cell forward rather than shrinking the page to nothing.
+                if (_fittedLineHeight <= 0.0001f || _fittedCharWidth <= 0.0001f) return false;
+                cellH = _fittedLineHeight;
+                cellW = _fittedCharWidth / Mathf.Max(0.0001f, stretch);
+                lineZeroTop = 0f;
+            }
+
+            // ── Solve for the scale. One step, both dimensions, with the line cap.
+            float blockHeightPerScale = printedRows * cellH;
+            float blockWidthPerScale = longestLine * cellW * stretch;
+            float byHeight = boxH / Mathf.Max(0.0001f, blockHeightPerScale);
+            float byWidth = boxW / Mathf.Max(0.0001f, blockWidthPerScale);
+            float byLineCap = (boxH / MinLinesForFill) / Mathf.Max(0.0001f, cellH);
+            float scale = Mathf.Min(byHeight, Mathf.Min(byWidth, byLineCap));
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f) scale = 0.01f;
+            // The ceiling is only a sanity stop, not a design choice: the scale a TextMesh
+            // needs is (panel) over (a mesh whose characterSize is a fraction of a cell), so
+            // it can legitimately be in the hundreds. The old caps - five, then forty - are
+            // why a page could sit at a readable size in the editor's numbers and be
+            // unreadable on a real panel.
+            scale = Mathf.Clamp(scale, 0.0005f, 500f);
+
+            bool scaleChanged = !Mathf.Approximately(_appliedFitScale, scale);
+            _appliedFitScale = scale;
+
+            var applied = new Vector3(scale * stretch, scale, scale);
+            for (int i = 0; i < _inkLayers.Length; i++)
+                if (_inkLayers[i] != null && _inkLayers[i].transform.localScale != applied)
+                    _inkLayers[i].transform.localScale = applied;
+
+            // ── Where the printed block sits inside the anchor's space, and its size.
+            // The anchor is the text origin (UpperLeft), so line zero's top is the mesh's
+            // own top edge and the block starts `firstRow` lines below it.
+            float printedTop = lineZeroTop - firstRow * cellH;
+            _blockLeft = 0f;
+            _blockTop = printedTop * scale;
+            _blockWidth = longestLine * cellW * stretch * scale;
+            _blockHeight = printedRows * cellH * scale;
+
+            _fittedLineHeight = Mathf.Max(0.0001f, cellH * scale);
+            _fittedCharWidth = Mathf.Max(0.0001f, cellW * stretch * scale);
+
+            // ── Centre the printed block on the glass.
+            float centreX = _blockLeft + _blockWidth * 0.5f;
+            float centreY = _blockTop - _blockHeight * 0.5f;
+            var anchorPosition = new Vector3(-centreX, -centreY, 0f);
+            if (_bodyAnchor.localPosition != anchorPosition)
+            {
+                _bodyAnchor.localPosition = anchorPosition;
+                _iconsDirty = true;
+            }
+            if (scaleChanged) _iconsDirty = true;
+            return true;
+        }
+
+        private static int Maths_Max1(int value) => value < 1 ? 1 : value;
+
+        /// <summary>The longest line of a string, trailing spaces included - the width a
+        /// text mesh actually laid out, which is what the cell's width is measured from.</summary>
+        private static int LongestLineLength(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 1;
+            int longest = 1, current = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n')
+                {
+                    if (current > longest) longest = current;
+                    current = 0;
+                    continue;
+                }
+                current++;
+            }
+            if (current > longest) longest = current;
+            return longest;
+        }
+
+        /// <summary>The printed shape of a layer's text: how many rows its glyphs span
+        /// from first to last (blank rows between counted, blank rows beyond ignored),
+        /// and the longest line with trailing spaces ignored. String truth, no mesh.</summary>
+        private static void PrintedMetrics(string text, out int span, out int longest)
+            => PrintedMetrics(text, out span, out _, out longest);
+
+        /// <summary>As above, with the first printed row: a page that starts part-way down
+        /// its grid has to be measured from where its ink actually begins.</summary>
+        private static void PrintedMetrics(string text, out int span, out int first, out int longest)
+        {
+            span = 0;
+            longest = 0;
+            first = 0;
+            if (string.IsNullOrEmpty(text)) return;
+
+            int firstPrinted = -1, last = -1, row = 0, lineLength = 0, linePrinted = 0;
+            for (int i = 0; i <= text.Length; i++)
+            {
+                char c = i < text.Length ? text[i] : '\n';
+                if (c == '\n')
+                {
+                    if (linePrinted > 0)
+                    {
+                        if (firstPrinted < 0) firstPrinted = row;
+                        last = row;
+                        if (linePrinted > longest) longest = linePrinted;
+                    }
+                    row++;
+                    lineLength = 0;
+                    linePrinted = 0;
+                    continue;
+                }
+                lineLength++;
+                if (c != ' ' && c != '\r') linePrinted = lineLength;
+            }
+            if (last >= 0)
+            {
+                first = Mathf.Max(0, firstPrinted);
+                span = last - firstPrinted + 1;
+            }
         }
 
         /// <summary>
@@ -789,6 +952,23 @@ namespace VoxelEngine.GridSystem
 
             scale = Mathf.Max(0.0001f, scale);
             tm.transform.localScale = new Vector3(scale * Mathf.Max(0.01f, xStretch), scale, scale);
+
+            // One nudge against the true glyph box: mesh bounds times the applied scale,
+            // in parent-local units where maxWidth/maxHeight live. Never the world
+            // axis-aligned renderer box - a tilted screen inflates it and shrank the
+            // title type on every angled glass.
+            Bounds box = mesh.bounds;
+            if (box.size.x > 0.0001f && box.size.y > 0.0001f)
+            {
+                float widthLocal = box.size.x * scale * Mathf.Max(0.01f, xStretch);
+                float heightLocal = box.size.y * scale;
+                float corr = Mathf.Min(maxWidth / Mathf.Max(0.0001f, widthLocal),
+                                       maxHeight / Mathf.Max(0.0001f, heightLocal));
+                corr = Mathf.Clamp(corr, 0.2f, 5f);
+                if (Mathf.Abs(corr - 1f) > 0.02f)
+                    tm.transform.localScale = new Vector3(
+                        scale * Mathf.Max(0.01f, xStretch) * corr, scale * corr, scale * corr);
+            }
             return true;
         }
 
@@ -821,7 +1001,9 @@ namespace VoxelEngine.GridSystem
             Color baseColor = new Color(accent.r, accent.g, accent.b, borderVisible ? 1f : 0f);
             Color emission = accent * Mathf.Max(0.05f, strength * pulse);
 
-            ApplyRendererAccent(_glowStripRenderer, borderVisible, baseColor, emission);
+            // The case's glow strip used to double as a border; seen through the glass it
+            // is just a stray bar lying over the page. The frame draws on the glass now.
+            ApplyRendererAccent(_glowStripRenderer, false, baseColor, emission);
             for (int i = 0; i < _cornerDotRenderers.Count; i++)
                 ApplyRendererAccent(_cornerDotRenderers[i], borderVisible && safeBorderStyle >= 2, baseColor, emission);
 
@@ -829,6 +1011,12 @@ namespace VoxelEngine.GridSystem
             // border setting tinted the case glow strip and the corner dots and nothing else,
             // which from the front read as "the border button does nothing".
             UpdateBorderFrame(safeBorderStyle, accent);
+
+            // The atlas can be replaced the moment a page prints a new letter; every
+            // mesh follows it (see SyncFontAtlas) before anything is drawn this frame.
+            for (int i = 0; i < _inkLayers.Length; i++) SyncFontAtlas(_inkLayers[i]);
+            SyncFontAtlas(_titleText);
+            SyncFontAtlas(_statusText);
 
             ApplyFontStyle();
         }
@@ -859,8 +1047,10 @@ namespace VoxelEngine.GridSystem
             EnsureBorderQuads(root);
 
             var (gw, gh) = GlassSize();
-            float thickness = style == 1 ? gw * 0.008f : style == 2 ? gw * 0.016f : gw * 0.024f;
-            thickness = Mathf.Max(0.012f, thickness);
+            // Thin lines, like the reference frames: the border marks the glass, it does
+            // not eat it. Thin 0.5, Thick 1.0, Glow 1.6 percent of the panel.
+            float thickness = style == 1 ? gw * 0.005f : style == 2 ? gw * 0.010f : gw * 0.016f;
+            thickness = Mathf.Max(0.008f, thickness);
             float inset = thickness * 0.5f;
 
             float alpha = style == 3 ? 1f : style == 2 ? 0.85f : 0.6f;
@@ -1000,7 +1190,6 @@ namespace VoxelEngine.GridSystem
             // 60 Hz costs more than the whole page renderer does.
             if (safeFontStyle == _appliedFontStyle) return;
             _appliedFontStyle = safeFontStyle;
-            _textFitDirty = true;
 
             bool bold = safeFontStyle == 1 || safeFontStyle == 3;
             FontStyle displayStyle = bold ? FontStyle.Bold : FontStyle.Normal;
@@ -1022,6 +1211,17 @@ namespace VoxelEngine.GridSystem
                 _screenText.fontSize = displayFontSize;
                 _screenText.fontStyle = displayStyle;
                 _screenText.lineSpacing = lineSpacing;
+            }
+            // EVERY ink layer, not just the primary one: layers with different fontSize or
+            // lineSpacing build meshes with different row heights, and the five inks stop
+            // sharing a cell grid - a warn label drifts half a row from the reading it
+            // annotates. One style, five layers, no drift.
+            for (int i = 1; i < _inkLayers.Length; i++)
+            {
+                if (_inkLayers[i] == null) continue;
+                _inkLayers[i].fontSize = displayFontSize;
+                _inkLayers[i].fontStyle = displayStyle;
+                _inkLayers[i].lineSpacing = lineSpacing;
             }
             if (_titleText != null)
             {
@@ -1188,20 +1388,64 @@ namespace VoxelEngine.GridSystem
 
         private void SetMainTextVisible(bool visible)
         {
-            if (_screenText == null) return;
-            var renderer = _screenText.GetComponent<MeshRenderer>();
-            if (renderer != null) renderer.enabled = visible;
+            for (int i = 0; i < _inkLayers.Length; i++)
+            {
+                if (_inkLayers[i] == null) continue;
+                var renderer = _inkLayers[i].GetComponent<MeshRenderer>();
+                if (renderer != null) renderer.enabled = visible;
+            }
         }
 
         /// <summary>Ensures TextMesh respects depth so screen text cannot render through terrain or blocks.</summary>
-        private static void MakeTextOpaque(TextMesh tm)
+        private static Font _screenFont;
+
+        /// <summary>
+        /// The screens speak in a monospace face. The whole page design is a character
+        /// grid - ink layers overlay cell for cell, icons sit on column boundaries - and
+        /// a proportional font slides every layer under its neighbours (thirteen spaces
+        /// are not the width of "HOLD 0%", so column 13 prints on top of column 7).
+        /// OS mono faces in preference order; the built-in face stays as the last word.
+        /// </summary>
+        /// <summary>The face the wall draws in, for the editor's live preview: the page is a
+        /// character grid, and a preview in any other font cannot show that grid.</summary>
+        public static Font DisplayFont => ScreenFont;
+
+        private static Font ScreenFont
         {
+            get
+            {
+                if (_screenFont == null)
+                    _screenFont = Font.CreateDynamicFontFromOSFont(
+                        new[] { "Cascadia Mono", "Consolas", "Courier New", "Liberation Mono", "DejaVu Sans Mono" },
+                        24);
+                return _screenFont;
+            }
+        }
+
+        /// <summary>
+        /// A dynamic font replaces its whole glyph atlas when new characters appear, and a
+        /// text mesh baked against the old atlas samples one letter's slice for another.
+        /// The shared helper tracks the atlas by version and re-bakes on any change; a
+        /// screen calls it through here for every ink layer and every caption.
+        /// </summary>
+        private static void SyncFontAtlas(TextMesh tm)
+            => VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(tm);
+
+        private void MakeTextOpaque(TextMesh tm)
+        {
+            // The font first: Apply() below reads the renderer's material, which the
+            // font assignment points at the face's own glyph atlas.
+            var mono = ScreenFont;
+            if (mono != null && tm.font != mono) tm.font = mono;
+            SyncFontAtlas(tm);
+
             // The old copy-the-font-material approach set _ZTest properties
             // that the stock font shader never reads - its ZTest Always is
             // hard-coded, which is exactly why screen text kept shining
             // through terrain and blocks. The shared depth-tested world-text
             // material fixes it for real (14.37.2).
             VoxelEngine.Rendering.WorldTextMaterial.Apply(tm);
+            SyncFontAtlas(tm);
         }
 
         // ── Multi-source management ───────────────────────────────────
@@ -1227,7 +1471,7 @@ namespace VoxelEngine.GridSystem
                 IGridDataProvider provider = ResolveByInstanceId(storedId);
                 if (provider == null && UnifiedGridTopology.TryResolveAddress(Grid, pos, out var block))
                 {
-                    provider = ResolveProviderComponent(block);
+                    provider = ProviderFor(block);
                     if (provider != null && block is GridBlock resolved && !IsDefaultId(storedId))
                         dataSourceInstanceIds[i] = resolved.GetEntityId();
                 }
@@ -1254,7 +1498,7 @@ namespace VoxelEngine.GridSystem
             {
                 if (block == null || block == this) continue;
                 if (block.GetEntityId() != id) continue;
-                return ResolveProviderComponent(block);
+                return ProviderFor(block);
             }
             return null;
         }
@@ -1334,7 +1578,7 @@ namespace VoxelEngine.GridSystem
             {
                 if (block == null || block == this) continue;
                 if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(block)) continue;
-                var provider = ResolveProviderComponent(block);
+                var provider = ProviderFor(block);
                 if (provider == null) continue;
                 float distance = Vector3.Distance(block.transform.position, transform.position);
                 if (distance >= bestDistance) continue;
@@ -1345,6 +1589,91 @@ namespace VoxelEngine.GridSystem
             }
             if (best != null && bestBlock != null)
                 ToggleSource(bestAddress, bestBlock.GetEntityId());
+        }
+
+        /// <summary>
+        /// The reading a screen gets from a block: its own provider if it has one, and a
+        /// plain readout if it does not.
+        ///
+        /// Half the construct's interesting blocks never implemented IGridDataProvider -
+        /// a solar panel above all - so they could not be picked as a screen's data
+        /// source at all, and a Power page could only ever be pointed at the blocks that
+        /// happened to speak the interface. Any block with a power reading now reports
+        /// one, which is exactly the set a power or machine board wants to be pointed at.
+        /// </summary>
+        private IGridDataProvider ProviderFor(GridBlock block)
+        {
+            if (block == null) return null;
+
+            var provider = ResolveProviderComponent(block);
+            if (provider != null) return provider;
+            if (!IsReadableBlock(block)) return null;
+
+            if (!_readouts.TryGetValue(block, out var readout) || readout == null)
+            {
+                readout = new BlockReadout(block);
+                _readouts[block] = readout;
+            }
+            return readout;
+        }
+
+        private readonly Dictionary<GridBlock, BlockReadout> _readouts = new();
+
+        /// <summary>A block worth pointing a screen at even though it cannot describe
+        /// itself: it makes power, it takes power, or it is a rated machine.</summary>
+        private static bool IsReadableBlock(GridBlock block)
+        {
+            switch (block)
+            {
+                case GridSolarPanel solar when solar.maxOutput > 0.01f: return true;
+                case GridHydrogenEngine h2 when h2.wattsOutput > 0.01f: return true;
+                case GridPortableReactor reactor when reactor.wattsOutput > 0.01f: return true;
+            }
+            return block.PowerOutput > 0.01f
+                || block.PowerDraw > 0.01f
+                || block.RatedPowerDraw > 0.01f;
+        }
+
+        /// <summary>
+        /// A block's reading, for blocks that predate the provider interface. It says what
+        /// the block is and what it is drawing or making, in the same shape the provider
+        /// pages expect: one reading per line.
+        /// </summary>
+        private sealed class BlockReadout : IGridDataProvider
+        {
+            public readonly GridBlock Block;
+
+            public BlockReadout(GridBlock block) => Block = block;
+
+            public string SourceName =>
+                Block != null && !string.IsNullOrEmpty(Block.blockName) ? Block.blockName : "BLOCK";
+
+            public string DataCategory =>
+                Block != null && (Block.PowerOutput > 0.01f || IsRatedGenerator(Block))
+                    ? "Power" : "Machine";
+
+            private static bool IsRatedGenerator(GridBlock block) => block switch
+            {
+                GridSolarPanel solar => solar.maxOutput > 0.01f,
+                GridHydrogenEngine h2 => h2.wattsOutput > 0.01f,
+                GridPortableReactor reactor => reactor.wattsOutput > 0.01f,
+                _ => false,
+            };
+
+            public string GetDisplayData()
+            {
+                if (Block == null) return string.Empty;
+                var sb = new System.Text.StringBuilder(48);
+                sb.Append("OUT ").Append(Format(Block.PowerOutput));
+                sb.Append("  USE ").Append(Format(Block.PowerDraw));
+                return sb.ToString();
+            }
+
+            private static string Format(float watts)
+            {
+                if (watts >= 1000f) return (watts / 1000f).ToString("0.#", CultureInfo.InvariantCulture) + " kW";
+                return watts.ToString("0", CultureInfo.InvariantCulture) + " W";
+            }
         }
 
         private static IGridDataProvider ResolveProviderComponent(GridBlock block)
@@ -1368,7 +1697,7 @@ namespace VoxelEngine.GridSystem
             {
                 if (block == null || block == this) continue;
                 if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(block)) continue;
-                var provider = ResolveProviderComponent(block);
+                var provider = ProviderFor(block);
                 if (provider != null)
                     list.Add((UnifiedGridTopology.AddressOf(block), provider));
             }

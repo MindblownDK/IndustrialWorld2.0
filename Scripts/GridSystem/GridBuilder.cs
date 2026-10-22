@@ -2061,7 +2061,25 @@ namespace VoxelEngine.GridSystem
                         windowPreview.SetPaneStyle(_ghostWindowPaneStyle);
                     }
                     foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
-                    foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
+
+                    // A ghost is a picture of a shape, not a working machine. Every block
+                    // behaviour is switched off BEFORE it is destroyed (Destroy is deferred
+                    // to the end of the frame, so a screen would otherwise still run its
+                    // Start and build a whole page of text inside the ghost), and every
+                    // text mesh the prefab carries is removed outright: tinted with the
+                    // ghost material, a page of glyphs reads as noise crawling over the
+                    // block - and on a screen ghost it was the page itself.
+                    foreach (var b in _ghost.GetComponentsInChildren<GridBlock>(true))
+                    {
+                        b.enabled = false;
+                        Destroy(b);
+                    }
+                    foreach (var t in _ghost.GetComponentsInChildren<TextMesh>(true))
+                    {
+                        var tr = t.GetComponent<MeshRenderer>();
+                        if (tr != null) tr.enabled = false;
+                        Destroy(t.gameObject);
+                    }
 
                     // The preview wears the shell the wheel armed, and the FRONT marker is
                     // measured after this so it lands on the nose of that shell.
@@ -2138,6 +2156,9 @@ namespace VoxelEngine.GridSystem
                 // The orientation marker is not part of the block: tinting it would turn a
                 // sign that says FRONT into another translucent copy of the shape.
                 if (GridGhostOrientation.IsMarker(r)) continue;
+                // Nor is any text: a glyph quad under a translucent lit material is a
+                // smear, and it is what made a ghost look like it was covered in noise.
+                if (r.GetComponent<TextMesh>() != null) continue;
                 r.sharedMaterial = _ghostMat;
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }

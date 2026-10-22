@@ -25,6 +25,18 @@ namespace VoxelEngine.Rendering
         private static Shader _shader;
         private static bool _hooked;
 
+        /// <summary>Bumped every time the font engine rebuilds an atlas. A text mesh's
+        /// baked quads describe the atlas that existed when it was built, and a mesh built
+        /// before a rebuild samples the wrong slice for every glyph - the "alien script"
+        /// that appears on a caption that was set a moment too early. Comparing the
+        /// MATERIAL's texture cannot detect this: the rebuild hook below has already
+        /// re-pointed every material at the new atlas, so the texture matches while the
+        /// mesh is still stale. Only a version, taken at bake time, can.</summary>
+        private static int _atlasVersion;
+
+        /// <summary>The version a given text mesh was last baked against.</summary>
+        private static readonly Dictionary<TextMesh, int> _bakedAtVersion = new();
+
         /// <summary>Swap this TextMesh onto the depth-tested world-text
         /// shader. Safe to call for any TextMesh; if the shader is missing
         /// the text simply keeps the stock (x-ray) font material.</summary>
@@ -60,6 +72,45 @@ namespace VoxelEngine.Rendering
             renderer.sharedMaterial = depthTested;
         }
 
+        /// <summary>
+        /// Re-bake a text mesh's quads against the atlas its font has now.
+        ///
+        /// Two things invalidate a mesh: the font's material texture changing, and the
+        /// engine rebuilding the atlas (which also changes every UV). The first is visible
+        /// on the material; the second is only knowable from the version counter, because
+        /// the rebuild hook has already fixed the material's texture by the time anything
+        /// looks at it.
+        /// </summary>
+        public static void SyncAtlas(TextMesh tm)
+        {
+            if (tm == null) return;
+            var font = tm.font;
+            if (font == null || font.material == null) return;
+            var renderer = tm.GetComponent<MeshRenderer>();
+            if (renderer == null || renderer.sharedMaterial == null) return;
+
+            Texture atlas = font.material.mainTexture;
+            bool textureMoved = atlas != null && renderer.sharedMaterial.mainTexture != atlas;
+            if (textureMoved) renderer.sharedMaterial.mainTexture = atlas;
+
+            bool stale = textureMoved
+                || !_bakedAtVersion.TryGetValue(tm, out int baked)
+                || baked != _atlasVersion;
+            if (!stale) return;
+
+            // Text meshes are created and destroyed constantly in a big base (every ghost,
+            // every rebuilt page); the map is trimmed rather than allowed to grow for ever.
+            if (_bakedAtVersion.Count > 512) _bakedAtVersion.Clear();
+
+            _bakedAtVersion[tm] = _atlasVersion;
+            // Clearing first is deliberate: assigning the same string back is not
+            // guaranteed to rebuild the quads, and a rebuild that does not happen is
+            // exactly the state this method exists to leave behind.
+            string text = tm.text;
+            tm.text = string.Empty;
+            tm.text = text;
+        }
+
         /// <summary>Depth-test every TextMesh in a hierarchy.
         ///
         /// Prefabs authored by the editor tools cannot carry the swapped-in material:
@@ -83,6 +134,7 @@ namespace VoxelEngine.Rendering
             // swapped material must follow or its text turns to squares.
             Font.textureRebuilt += _ =>
             {
+                _atlasVersion++;
                 foreach (var pair in _byFontMaterial)
                 {
                     if (pair.Key == null || pair.Value == null) continue;

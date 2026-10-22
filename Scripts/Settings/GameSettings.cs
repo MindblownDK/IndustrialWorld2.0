@@ -631,8 +631,20 @@ namespace VoxelEngine.Settings
         public static bool IsHeld(InputAction a)        => Read(a, false);
         public static bool WasPressed(InputAction a)    => Read(a, true);
 
+        /// <summary>
+        /// 17.42.0-dev — TYPING IS NOT PLAYING.
+        ///
+        /// While a text field has focus the keyboard is words, not controls: a route name
+        /// must not brake the ship and a manifest heading must not toggle fly mode. Every
+        /// action goes quiet except Pause - Escape always works, because the one thing a
+        /// typing player must be able to do is leave.
+        /// </summary>
+        private static bool SwallowedByTyping(InputAction a)
+            => VoxelEngine.UI.UIState.TextInputActive && a != InputAction.Pause;
+
         private static bool Read(InputAction a, bool downEdge)
         {
+            if (SwallowedByTyping(a)) return false;
             string code = GetKey(a);
             if (string.IsNullOrEmpty(code) || code == "None") return false;
 
@@ -697,6 +709,7 @@ namespace VoxelEngine.Settings
 
         public static bool IsHeld(InputAction a)
         {
+            if (VoxelEngine.UI.UIState.TextInputActive && a != InputAction.Pause) return false;
             string code = GetKey(a);
             if (string.IsNullOrEmpty(code) || code == "None") return false;
             if (!StripCtrlCombo(ref code, out bool needCtrl)) return false;
@@ -711,6 +724,7 @@ namespace VoxelEngine.Settings
         }
         public static bool WasPressed(InputAction a)
         {
+            if (VoxelEngine.UI.UIState.TextInputActive && a != InputAction.Pause) return false;
             string code = GetKey(a);
             if (string.IsNullOrEmpty(code) || code == "None") return false;
             if (!StripCtrlCombo(ref code, out bool needCtrl)) return false;

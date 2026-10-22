@@ -92,6 +92,24 @@ namespace VoxelEngine.GridSystem
         public float PowerAvailability01 { get; private set; } = 1f;
         /// <summary>Requested non-battery watts that could not be supplied this fixed tick.</summary>
         public float UnservedPowerWatts { get; private set; }
+
+        // ── Power ledger, opened up (17.42.0-dev) ──────────────────
+        // PowerGenerated/PowerConsumed mix battery transfer into the bus totals, which is
+        // right for "is the grid powered" and wrong for "what is making power". A battery
+        // discharging 255 W into a 255 W load used to read as GEN 255 / USE 255 on the
+        // Power page - the battery is not a generator. These four figures keep the roles
+        // apart so screens can show the truth.
+        /// <summary>Watts produced by generators this tick (solar, reactors, engines, wind, steam).</summary>
+        public float GeneratorWatts { get; private set; }
+        /// <summary>Watts demanded by consumers this tick, excluding battery charging.</summary>
+        public float LoadWatts { get; private set; }
+        /// <summary>Watts flowing into batteries this tick.</summary>
+        public float BatteryChargeWatts { get; private set; }
+        /// <summary>Watts flowing out of batteries this tick.</summary>
+        public float BatteryDischargeWatts { get; private set; }
+        /// <summary>Rated maximum demand of every enabled consumer - what the load would
+        /// draw at full tilt. Graph pages scale against it.</summary>
+        public float MaxRequiredWatts { get; private set; }
         private readonly List<GridBattery> _batteryScratch = new(8);
         private readonly List<GridElectricalPropeller> _electricalPropellerScratch = new(8);
 
@@ -99,6 +117,9 @@ namespace VoxelEngine.GridSystem
         public float HydrogenStored { get; set; }
         public float HydrogenCapacity { get; private set; }
         public float OxygenStored   { get; set; }
+        /// <summary>17.42.0-dev - rated oxygen store, so screens can draw oxygen as a
+        /// level instead of a bare number.</summary>
+        public float OxygenCapacity { get; private set; }
 
         // ── Thrust ─────────────────────────────────────────────────
         public Vector3 ThrustInput { get; set; }
@@ -1454,8 +1475,10 @@ namespace VoxelEngine.GridSystem
             // reflect the latest mechanical-simulation tick.
             float generatedWatts = 0f;
             float consumedWatts = 0f;
+            float maxRequiredWatts = 0f;
             float h2Cap = 0f;
             float h2Stored = 0f;
+            float o2Cap = 0f;
             float o2Stored = 0f;
             var batteries = _batteryScratch;
             batteries.Clear();
@@ -1480,6 +1503,7 @@ namespace VoxelEngine.GridSystem
 
                 generatedWatts += Mathf.Max(0f, block.PowerOutput);
                 consumedWatts += Mathf.Max(0f, block.PowerDraw);
+                maxRequiredWatts += Mathf.Max(0f, block.RatedPowerDraw);
 
                 if (block is GridElectricalPropeller electricalPropeller)
                     electricalPropellers.Add(electricalPropeller);
@@ -1493,6 +1517,7 @@ namespace VoxelEngine.GridSystem
                     }
                     else if (gasTank.gasType == Gas.GasType.Oxygen)
                     {
+                        o2Cap += gasTank.capacity;
                         o2Stored += gasTank.stored;
                     }
                 }
@@ -1566,9 +1591,17 @@ namespace VoxelEngine.GridSystem
 
             PowerGenerated = generatedWatts + totalBatteryDischarge;
             PowerConsumed = consumedWatts + totalBatteryCharge;
+            // 17.42.0-dev - the ledger, opened up: generators, load, rated demand and the
+            // battery flows stay separate so the Power and Graph pages can tell the truth.
+            GeneratorWatts = generatedWatts;
+            LoadWatts = consumedWatts;
+            MaxRequiredWatts = maxRequiredWatts;
+            BatteryChargeWatts = totalBatteryCharge;
+            BatteryDischargeWatts = totalBatteryDischarge;
             HydrogenCapacity = h2Cap;
             HydrogenStored = h2Stored;
             OxygenStored = o2Stored;
+            OxygenCapacity = o2Cap;
         }
 
         private static float SupplyDemandFromBatteries(List<GridBattery> batteries, GridBatteryMode mode,

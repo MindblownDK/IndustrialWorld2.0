@@ -416,7 +416,11 @@ namespace VoxelEngine.UI
             if (!HasLivePanel()) return;
 
             // Keyboard capture state — suppress player movement/jetpack keys while typing.
-            VoxelEngine.UI.UIState.TextInputActive = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
+            // Claim-based panels (the screen editor, naming HUDs, navigation fields) hold
+            // their own focus state; without OR-ing their claims in, this re-derivation
+            // stomped their flag to false every frame and typed letters reached the game.
+            VoxelEngine.UI.UIState.TextInputActive = VoxelEngine.UI.UIState.HasTextClaim
+                || _searchHasFocus || RecipeBrowserUI.IsSearchFocused
                 || VoxelEngine.Research.ResearchUI.IsSearchFocused
                 || VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused
                 || SteampunkTheme.IsTextInputFocused
