@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.5-dev`
+**Current Version:** `17.42.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.42.6-dev] Fit the Drawn Ink to the Panel, Edge to Edge
+
+**Type:** PATCH - replaces the character-count fit with a measurement of the drawn ink box, so a page fills whatever panel it is on; no save schema change.
+
+**GitHub title:** `[17.42.6-dev] Page fit measured from the drawn ink, edge to edge`
+
+#### Fixed
+
+- **A page could occupy a small corner of its screen.** The previous fit solved the scale from character counts - one cell as mesh bounds over the line count and the longest line - but those counts do not describe a page. The canvas pads every line out to the full width and every layer out to the full height, so a page with ink on fourteen columns of a twenty-four-column grid reported twenty-four, and a page with two printed rows of a twenty-row canvas reported twenty. Dividing by that gave a scale of the wrong magnitude in either direction, which is why the same page was sometimes a corner and sometimes a blow-out.
+- The fit now measures the **ink box**: the union of the five layers' mesh bounds, which covers exactly the glyphs that were drawn, is expressed in the anchor's own space, and does not depend on the transform's scale. The scale is one division - the larger of what fits the width and what fits the height - so the page fills the panel edge to edge on one axis and is centred on the other. Because it measures the drawing and not a count, it is correct for every screen size, for the cockpit MFDs, and for split panes, without a density table.
+- The margins are the panel's, not a page's: 98 by 94 percent of the glass, up from 96 by 90. A page that printed fewer than three rows is still capped at that fraction of the height, so a two-line readout does not become two enormous letters.
+- **Item pictures keep their own frame.** Pictures are placed as fractions of the CANVAS grid, so publishing the ink box as the block would have slid them inwards on every page whose longest line is not its last column. The fit now publishes the canvas grid for the picture pass and keeps the ink box to itself.
+- **The editor preview** uses the same box and the same three-row cap, with the page's own margins removed so the preview is edge to edge too.
+- An orphaned documentation comment left over from an earlier rewrite of the fit is gone, and two helpers that the new pass made obsolete are removed.
+
+#### Validation
+
+- `git diff --check`, the delimiter scan, the duplicate-field scan and the local-shadowing scan pass over the touched files. Unity and a C# compiler remain unavailable here. Still to verify in game: that each page fills its panel on every size class, that pictures still sit on their rows, and that the mining page no longer differs between the editor and the glass.
 
 ### [17.42.5-dev] Solve the Fit Instead of Chasing It, Version the Glyph Atlas, and Clean the Ghost
 

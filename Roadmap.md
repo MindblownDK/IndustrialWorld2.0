@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.5-dev`
-**Roadmap Version:** `17.42.5-dev`
+**Current Version:** `17.42.6-dev`
+**Roadmap Version:** `17.42.6-dev`
 **Date:** 2026-10-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.42.6-dev - Ink Box Fit, Edge to Edge
+- The fit measures the union of the five ink layers' mesh bounds - what was actually drawn - instead of counting characters the canvas padded, and maps it onto 98x94 percent of the glass in one division; sparse pages are capped at a third of the height
+- The canvas grid is published separately for the picture pass, so icons keep their rows while the fit works from the ink
+- The editor preview uses the same box and the same cap, with the page's own margins removed
+
 ### 17.42.5-dev - Exact Fit, Versioned Atlas, Clean Ghost
 - The fit solves instead of iterating: one cell measured from the baked mesh (bounds over line count and longest line), the printed block scaled into the panel in a single step, re-run every frame and idempotent - so the same layout fills a Small, an Extra Large or a cockpit panel
 - Glyph recovery is version-tracked (a rebuild bumps a counter, each mesh remembers its bake version and re-bakes on mismatch), because comparing material textures missed the case the engine's own rebuild hook had already fixed the material but not the mesh
@@ -48,11 +53,6 @@
 - The page is centred on the glass by its own measured block (not a fixed corner offset) and may fill 96 x 90 percent of the panel; the character grid's column count comes from the measured cell shape, so a full page fills both dimensions instead of coming out short
 - All four cargo boards - manifest, storage monitor, inventory grid and mining cargo - read only the holds picked as that screen's sources (explicit container, then picked holds, then the whole construct); storage tiles print the name across its own cell with the picture and counts beneath, and the battery bank spends the leftover rows on the cells with width-aware captions
 - The mining dial is a ring of radial tick marks in two halves around the middle rule; the editor's live preview draws in the wall's monospace face with no wrapping or tracking; verified statically only, in-game acceptance stays open in the stage rows
-
-### 17.42.1-dev - Ghost-Free Ink Stack, Never-Fail Fit, and the Battery/Power Boards
-- The printed block fills the glass (the fit scales the union glyph box of all five ink layers onto the panel, and icon cells come from the same measurement), all ink layers align cell for cell on a monospace face whose atlas swaps are re-synced every frame, and the managed-page title prints once, in the page; the case glow strip stays dark and the icon clamp follows the page's frame
-- Power is a selection-first generator board (the chosen sources grouped with count, output/rating and effectiveness; the whole bus only when nothing relevant is selected) over the battery bank both battery views share: centred flow line and header between full-width rules, outline cells with five full-block charge bars and a mode letter; the mining dial is a segmented circle, the planet a quadrant-smoothed disc on the reference chart, and the power graph records always, rescales to its window, and takes a per-screen time span (5 min to 24 h or all recorded)
-- Editor dropdowns use the panel's dark theme and text fields hold counted `UIState` claims; verified statically only, in-game acceptance and the remaining page tile work stay open in their stage rows
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

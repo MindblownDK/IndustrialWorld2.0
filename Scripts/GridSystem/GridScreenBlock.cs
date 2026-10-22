@@ -690,31 +690,30 @@ namespace VoxelEngine.GridSystem
         private float _fittedLineHeight;
         private float _fittedCharWidth;
 
-        /// <summary>Refit the text meshes when their character content has changed. The
-        /// first pass may still measure Unity's previous mesh, so a change schedules a
         /// <summary>
-        /// Fit the page to its glass - every frame, in one step, exactly.
+        /// Fit the page to its glass: the drawn ink box is mapped onto the panel.
         ///
-        /// The old pass corrected the scale against the union box of the built meshes,
-        /// which is a moving target: the box includes every blank row of the grid and it
-        /// changes the moment the scale changes, so the correction chased its own tail and
-        /// could settle anywhere - a page of a few rows landed on type you need a
-        /// magnifier for. Nothing in that loop was stable.
+        /// Every earlier attempt solved this from CHARACTER COUNTS - a cell measured as
+        /// mesh bounds over the line count and the longest line, scaled until
+        /// rows x cell fitted the box. It cannot work reliably, because those counts are
+        /// not the page: the canvas pads every line out to its full width and every layer
+        /// out to its full height, so the count says twenty-four columns and seven rows
+        /// where the panel has ink on fourteen and two. Divide by that and the page is
+        /// scaled to a fraction of the glass - the "content is a small part of the screen"
+        /// report - or blown past its edges, depending on which way the padding fell.
         ///
-        /// This pass does not iterate. A monospace text mesh's bounds are baked by the
-        /// font size and `characterSize`, NOT by the transform's scale, so one cell's size
-        /// can be measured once and the exact scale that fits the PRINTED block into the
-        /// panel solved for directly:
+        /// The ink box has no such problem. A text mesh's bounds cover exactly the glyphs
+        /// that were drawn, they are expressed in the layer's own space, and they do not
+        /// depend on the transform's scale - so one union of all five layers is a
+        /// scale-independent measurement of what the page actually looks like, for ANY
+        /// panel size and any number of rows. Mapping that onto the panel is one division:
         ///
-        ///   cell      = mesh bounds ÷ (lines, characters on the longest line)
-        ///   block     = cells the page actually printed  (rows × columns, no blank borders)
-        ///   scale     = the largest that keeps block ≤ box, with a line-height cap so a
-        ///               two-line page does not become two letters tall
+        ///   scale = min(boxW / inkW, boxH / inkH)         - fills the glass on one axis,
+        ///   capped so a two-row page cannot become two    - never past the other, and
+        ///   letters tall                                    - never absurd when sparse.
         ///
-        /// Measured once, solved once, applied once. Re-running it is free and idempotent,
-        /// which is what makes it safe to run every frame - and what makes a page look the
-        /// same on a Small panel and an Extra Large one: the same layout, scaled to the
-        /// glass it is on.
+        /// Runs every frame and is idempotent, so a page is re-fitted the moment its
+        /// content or its panel changes.
         /// </summary>
         private void RefreshTextFit() => FitScreenText();
 
@@ -723,102 +722,79 @@ namespace VoxelEngine.GridSystem
         private float _appliedFitScale = 1f;
 
         /// <summary>The printed block in the body anchor's own space, kept for the icon
-        /// pass so a picture is placed against what was printed, not against a guess.</summary>
+        /// pass so a picture is placed against what was drawn.</summary>
         private float _blockLeft, _blockTop, _blockWidth, _blockHeight;
 
-        /// <summary>How many lines a single line's height may occupy at most: a page of
-        /// two rows is allowed to be half the panel, not all of it.</summary>
-        private const float MinLinesForFill = 4f;
+        /// <summary>The fewest lines a page is allowed to fill: a page of one or two rows
+        /// is drawn at a third of the glass rather than as two enormous letters.</summary>
+        private const float MinLinesForFill = 3f;
 
         private bool FitScreenText()
         {
             if (_bodyAnchor == null) return false;
 
             var (gw, gh) = GlassSize();
+            if (gw <= 0.0001f || gh <= 0.0001f) return false;
             float stretch = StyleStretch(fontStyle);
-            float boxW = gw * 0.96f;
-            float boxH = gh * 0.90f;
+            // Edge to edge: the panel's own margin, not a page-sized one.
+            float boxW = gw * 0.98f;
+            float boxH = gh * 0.94f;
 
-            // ── What the page printed, from its text - always available, never a mesh.
-            int printedRows = 0, firstRow = int.MaxValue, longestLine = 0;
+            // ── The ink box: the union of every layer's mesh, in the anchor's space.
+            // Mesh bounds are independent of the transform's scale, so this measures the
+            // page at scale one whatever the layers are currently scaled to.
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            int printedRows = 0, longestLine = 0, firstRow = int.MaxValue;
+            bool measured = false;
+
             for (int i = 0; i < _inkLayers.Length; i++)
             {
                 var layer = _inkLayers[i];
                 if (layer == null || string.IsNullOrEmpty(layer.text)) continue;
-                PrintedMetrics(layer.text, out int span, out int first, out int longest);
-                if (span <= 0) continue;
-                if (first < firstRow) firstRow = first;
-                printedRows = Mathf.Max(printedRows, first + span);
-                if (longest > longestLine) longestLine = longest;
-            }
-            if (printedRows <= 0 || longestLine <= 0) return false;
-            if (firstRow == int.MaxValue) firstRow = 0;
 
-            // ── One cell, measured from the baked mesh. The mesh describes the whole text
-            // laid out in that font, so dividing by the line count and by the character
-            // count of the longest line gives the cell - independent of the transform's
-            // scale, which is what makes the solve below a single step.
-            float cellH = 0f, cellW = 0f;
-            float lineZeroTop = 0f;
-            bool haveTop = false;
-            for (int i = 0; i < _inkLayers.Length; i++)
-            {
-                var layer = _inkLayers[i];
-                if (layer == null || string.IsNullOrEmpty(layer.text)) continue;
                 var filter = layer.GetComponent<MeshFilter>();
                 Mesh mesh = filter != null ? filter.sharedMesh : null;
                 if (mesh == null) continue;
-
                 Bounds b = mesh.bounds;
                 if (b.size.x <= 0.0001f || b.size.y <= 0.0001f) continue;
 
-                int lines = Mathf.Max(1, CountLines(layer.text));
-                int widest = LongestLineLength(layer.text);
+                // The layer sits at the anchor's origin, so its mesh box is already in the
+                // anchor's space; only the layer's own offset needs adding.
+                Vector3 o = layer.transform.localPosition;
+                float layerMinX = b.min.x + o.x, layerMaxX = b.max.x + o.x;
+                float layerMinY = b.min.y + o.y, layerMaxY = b.max.y + o.y;
 
-                // A single-line mesh describes the glyph ink and not the line box, so it
-                // reads short; layers with two or more lines measure the real advance.
-                float h = b.size.y / lines * (lines >= 2 ? 1f : 1.18f);
-                float w = b.size.x / Maths_Max1(widest);
+                if (layerMinX < minX) minX = layerMinX;
+                if (layerMaxX > maxX) maxX = layerMaxX;
+                if (layerMinY < minY) minY = layerMinY;
+                if (layerMaxY > maxY) maxY = layerMaxY;
+                measured = true;
 
-                if (lines >= 2)
-                {
-                    cellH = Mathf.Max(cellH, h);
-                    cellW = Mathf.Max(cellW, w);
-                }
-                else if (cellH <= 0.0001f)
-                {
-                    // Only single-line layers exist: accept the estimate, in case nothing
-                    // else ever says anything.
-                    cellH = Mathf.Max(cellH, h);
-                    cellW = Mathf.Max(cellW, w);
-                }
-
-                if (!haveTop || b.max.y > lineZeroTop) { lineZeroTop = b.max.y; haveTop = true; }
+                PrintedMetrics(layer.text, out int span, out int first, out int longest);
+                if (span > printedRows) printedRows = span;
+                if (first < firstRow) firstRow = first;
+                if (longest > longestLine) longestLine = longest;
             }
 
-            if (cellH <= 0.0001f || cellW <= 0.0001f)
-            {
-                // Nothing measurable yet - the font's mesh has not been built. Carry the
-                // last known cell forward rather than shrinking the page to nothing.
-                if (_fittedLineHeight <= 0.0001f || _fittedCharWidth <= 0.0001f) return false;
-                cellH = _fittedLineHeight;
-                cellW = _fittedCharWidth / Mathf.Max(0.0001f, stretch);
-                lineZeroTop = 0f;
-            }
+            if (!measured) return false;
 
-            // ── Solve for the scale. One step, both dimensions, with the line cap.
-            float blockHeightPerScale = printedRows * cellH;
-            float blockWidthPerScale = longestLine * cellW * stretch;
-            float byHeight = boxH / Mathf.Max(0.0001f, blockHeightPerScale);
-            float byWidth = boxW / Mathf.Max(0.0001f, blockWidthPerScale);
-            float byLineCap = (boxH / MinLinesForFill) / Mathf.Max(0.0001f, cellH);
-            float scale = Mathf.Min(byHeight, Mathf.Min(byWidth, byLineCap));
-            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f) scale = 0.01f;
-            // The ceiling is only a sanity stop, not a design choice: the scale a TextMesh
-            // needs is (panel) over (a mesh whose characterSize is a fraction of a cell), so
-            // it can legitimately be in the hundreds. The old caps - five, then forty - are
-            // why a page could sit at a readable size in the editor's numbers and be
-            // unreadable on a real panel.
+            float inkW = Mathf.Max(0.00001f, maxX - minX);
+            float inkH = Mathf.Max(0.00001f, maxY - minY);
+            if (printedRows <= 0) printedRows = 1;
+            if (longestLine <= 0) longestLine = 1;
+            if (firstRow == int.MaxValue) firstRow = 0;
+
+            // ── Solve. The two box terms fill the glass; the third is the sparse-page cap:
+            // a page that printed fewer than MinLinesForFill rows is allowed to use that
+            // fraction of the height instead of the whole of it.
+            float byWidth = (boxW / inkW) / Mathf.Max(0.01f, stretch);
+            float byHeight = boxH / inkH;
+            float sparseCap = byHeight * Mathf.Clamp01(printedRows / MinLinesForFill);
+            float scale = Mathf.Min(byWidth, Mathf.Min(byHeight, sparseCap));
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f) return false;
+            // Only a sanity stop: a text mesh whose character size is a fraction of a cell
+            // legitimately needs a large scale, so this may not be a design ceiling.
             scale = Mathf.Clamp(scale, 0.0005f, 500f);
 
             bool scaleChanged = !Mathf.Approximately(_appliedFitScale, scale);
@@ -829,19 +805,29 @@ namespace VoxelEngine.GridSystem
                 if (_inkLayers[i] != null && _inkLayers[i].transform.localScale != applied)
                     _inkLayers[i].transform.localScale = applied;
 
-            // ── Where the printed block sits inside the anchor's space, and its size.
-            // The anchor is the text origin (UpperLeft), so line zero's top is the mesh's
-            // own top edge and the block starts `firstRow` lines below it.
-            float printedTop = lineZeroTop - firstRow * cellH;
-            _blockLeft = 0f;
-            _blockTop = printedTop * scale;
-            _blockWidth = longestLine * cellW * stretch * scale;
-            _blockHeight = printedRows * cellH * scale;
-
+            // ── Cell metrics, for the pages that lay themselves out on a character grid:
+            // the ink box over what was printed, which stays honest even when the canvas
+            // pads its text out to full width and full height.
+            float cellH = Mathf.Max(0.0001f, inkH / printedRows);
+            float cellW = Mathf.Max(0.0001f, inkW / longestLine);
             _fittedLineHeight = Mathf.Max(0.0001f, cellH * scale);
             _fittedCharWidth = Mathf.Max(0.0001f, cellW * stretch * scale);
 
-            // ── Centre the printed block on the glass.
+            // ── The block the PICTURES are placed against. Two extents matter and they are
+            // not the same: the fit maps the INK onto the glass, while a picture belongs to
+            // a cell of the CANVAS - including the blank cells beside a short line. Placing
+            // pictures as fractions of the ink box would slide them inwards on every page
+            // whose longest line is not its last column, so the canvas grid is published
+            // here and the ink box stays a local of this method.
+            var pageGrid = PageGrid();
+            _blockLeft = 0f;
+            // The canvas's row zero sits above the first printed row, by however many blank
+            // rows the page left at the top.
+            _blockTop = (maxY + firstRow * cellH) * scale;
+            _blockWidth = pageGrid.columns * cellW * stretch * scale;
+            _blockHeight = pageGrid.rows * cellH * scale;
+
+            // ── Centre the drawn block on the glass.
             float centreX = _blockLeft + _blockWidth * 0.5f;
             float centreY = _blockTop - _blockHeight * 0.5f;
             var anchorPosition = new Vector3(-centreX, -centreY, 0f);
@@ -852,28 +838,6 @@ namespace VoxelEngine.GridSystem
             }
             if (scaleChanged) _iconsDirty = true;
             return true;
-        }
-
-        private static int Maths_Max1(int value) => value < 1 ? 1 : value;
-
-        /// <summary>The longest line of a string, trailing spaces included - the width a
-        /// text mesh actually laid out, which is what the cell's width is measured from.</summary>
-        private static int LongestLineLength(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return 1;
-            int longest = 1, current = 0;
-            for (int i = 0; i < text.Length; i++)
-            {
-                if (text[i] == '\n')
-                {
-                    if (current > longest) longest = current;
-                    current = 0;
-                    continue;
-                }
-                current++;
-            }
-            if (current > longest) longest = current;
-            return longest;
         }
 
         /// <summary>The printed shape of a layer's text: how many rows its glyphs span

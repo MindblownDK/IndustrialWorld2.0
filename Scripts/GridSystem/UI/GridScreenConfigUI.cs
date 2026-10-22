@@ -379,8 +379,10 @@ namespace VoxelEngine.GridSystem.UI
             // The wall centres the printed block on the glass; so does the preview, or the
             // two disagree about where the page sits.
             _previewText.style.unityTextAlign = TextAnchor.MiddleLeft;
-            _previewText.style.marginTop = 6; _previewText.style.marginBottom = 6;
-            _previewText.style.marginLeft = 0; _previewText.style.marginRight = 0;
+            // Edge to edge: the page's own box is the panel, and the type size already
+            // leaves the wall's 1%/3% margin.
+            _previewText.style.marginTop = 2; _previewText.style.marginBottom = 2;
+            _previewText.style.marginLeft = 2; _previewText.style.marginRight = 2;
             _previewBox.Add(_previewText);
 
             _previewStatus = new Label("LIVE");
@@ -1063,9 +1065,10 @@ namespace VoxelEngine.GridSystem.UI
             }
             if (printedLines <= 0) printedLines = 1;
 
-            // The box the wall gives the page: 96 by 90 percent of the glass.
-            float boxW = Mathf.Max(60f, box.width * 0.96f - 8f);
-            float boxH = Mathf.Max(40f, box.height * 0.90f - 8f);
+            // The box the wall gives the page, edge to edge: 98 by 94 percent of the glass,
+            // which is the same margin the fit pass uses.
+            float boxW = Mathf.Max(24f, box.width * 0.98f);
+            float boxH = Mathf.Max(16f, box.height * 0.94f);
 
             // The wall sizes type to the PRINTED block, on a cell grid whose columns come
             // from the panel's own shape. The preview does the same two things, so the page
@@ -1080,7 +1083,10 @@ namespace VoxelEngine.GridSystem.UI
             // ~1.12 em apart, so the same solve is:
             float byWidth = boxW / (Mathf.Max(1, longest) * 0.60f * stretch);
             float byHeight = boxH / (Mathf.Max(1, printedLines) * 1.12f);
-            float byLineCap = (boxH / 4f) / 1.12f;
+            // The wall's sparse-page cap: a page that printed fewer than three rows is
+            // allowed that fraction of the height, not all of it. Same divisor, so a
+            // two-line page looks the same in the editor and on the glass.
+            float byLineCap = byHeight * Mathf.Clamp01(printedLines / 3f);
             _previewText.style.fontSize =
                 Mathf.Clamp(Mathf.Min(byWidth, Mathf.Min(byHeight, byLineCap)), 4f, 96f);
 
