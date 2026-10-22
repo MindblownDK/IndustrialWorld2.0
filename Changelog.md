@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.0-dev`
+**Current Version:** `17.43.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.43.1-dev] Add Generic Collections Import to GridBuilder
+
+**Type:** PATCH - fixes missing namespace import in `GridBuilder.cs`; no save schema or gameplay balance change.
+
+**GitHub title:** `[17.43.1-dev] Fix missing System.Collections.Generic import in GridBuilder`
+
+#### Fixed
+
+- **Missing generic collections namespace in `GridBuilder.cs`.** Added `using System.Collections.Generic;` at the top of `Scripts/GridSystem/GridBuilder.cs` so `List<Vector3Int>` and `IReadOnlyList<Vector3Int>` used by multi-cell cockpit and window footprint helpers resolve cleanly during compilation.
+
+#### Validation
+
+- Passed `git diff --check`, generic-collection namespace scan across all touched `.cs` files, delimiter balance verification, forbidden external naming scan, and workspace size check.
 
 ### [17.43.0-dev] Spacious 2x2x2 Cockpits, Sealed Corner Windows, Steady Cameras, and Clean Dismounts
 

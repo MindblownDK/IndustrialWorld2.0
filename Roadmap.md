@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.43.0-dev`
-**Roadmap Version:** `17.43.0-dev`
+**Current Version:** `17.43.1-dev`
+**Roadmap Version:** `17.43.1-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 17.43.1-dev - GridBuilder Collections Import Fix
+- Added `using System.Collections.Generic;` to `GridBuilder.cs` so multi-cell footprint helpers compile cleanly
+
 ### 17.43.0-dev - 2x2x2 Cockpits, Sealed Corner Windows, Steady Cameras & Clean Dismounts
 - Modern cockpits span a save-compatible 2x2x2 Large-grid volume with unobstructed low-arc MFDs, harvester front/side/floor glazing (`0.80x` HP) and a reinforced armored cab (`1.85x` HP)
 - All 8 Grid Window variants use flush industrial frames, cell-aligned slopes with side cheek glazing, and a sealed 3-pane chamfered Corner Wrap with zero gaps
@@ -46,10 +49,6 @@
 - Centring reads the ink box again; the canvas block is only the frame pictures are placed in, so a page that starts low on its canvas no longer prints above the panel
 - Cockpit captions are fitted by comparing world extents (panel size times parent scale against text bounds times its own), absolutely rather than off a placeholder, and clamped inside the panel
 - Cockpit captions use the screen face, whose atlas is the one the tracker re-bakes
-
-### 17.42.7-dev - Text Bounds From the Renderer
-- Root cause of every "the page is a corner of the glass": a TextMesh has no MeshFilter, so every fit in the project (screen pages, cockpit MFD captions, placement marker captions) measured null and gave up on its first line
-- One shared helper reads the renderer's own bounds; the MFD captions re-fit when the font atlas rebuilds, and a page is centred even before its mesh exists
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

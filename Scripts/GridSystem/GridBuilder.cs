@@ -12,6 +12,7 @@
 //   • GridBuilder now handles PipeFamily detection and per-engine caps with
 //     user feedback.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
