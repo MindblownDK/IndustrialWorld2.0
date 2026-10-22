@@ -835,6 +835,16 @@ namespace VoxelEngine.GridSystem
             _fittedLineHeight = Mathf.Max(0.0001f, cellH * scale);
             _fittedCharWidth = Mathf.Max(0.0001f, cellW * stretch * scale);
 
+            // ── Centre the DRAWN page on the glass.
+            //
+            // This uses the ink box, and it must: the block published for the picture pass
+            // describes the whole canvas, blank rows included, so centring on it pushed a
+            // page that starts partway down its canvas up off the top of the panel - which
+            // is exactly how a page ends up printed in the air above its own screen.
+            float centreX = (minX * scale * stretch) + (inkW * scale * stretch) * 0.5f;
+            float centreY = (maxY * scale) - (inkH * scale) * 0.5f;
+            var anchorPosition = new Vector3(-centreX, -centreY, 0f);
+
             // ── The block the PICTURES are placed against. Two extents matter and they are
             // not the same: the fit maps the INK onto the glass, while a picture belongs to
             // a cell of the CANVAS - including the blank cells beside a short line. Placing
@@ -848,11 +858,6 @@ namespace VoxelEngine.GridSystem
             _blockTop = (maxY + firstRow * cellH) * scale;
             _blockWidth = pageGrid.columns * cellW * stretch * scale;
             _blockHeight = pageGrid.rows * cellH * scale;
-
-            // ── Centre the drawn block on the glass.
-            float centreX = _blockLeft + _blockWidth * 0.5f;
-            float centreY = _blockTop - _blockHeight * 0.5f;
-            var anchorPosition = new Vector3(-centreX, -centreY, 0f);
             if (_bodyAnchor.localPosition != anchorPosition)
             {
                 _bodyAnchor.localPosition = anchorPosition;

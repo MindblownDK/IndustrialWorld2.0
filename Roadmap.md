@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.7-dev`
-**Roadmap Version:** `17.42.7-dev`
+**Current Version:** `17.42.8-dev`
+**Roadmap Version:** `17.42.8-dev`
 **Date:** 2026-10-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.42.8-dev - Pages On Their Panel
+- Centring reads the ink box again; the canvas block is only the frame pictures are placed in, so a page that starts low on its canvas no longer prints above the panel
+- Cockpit captions are fitted by comparing world extents (panel size times parent scale against text bounds times its own), absolutely rather than off a placeholder, and clamped inside the panel
+- Cockpit captions use the screen face, whose atlas is the one the tracker re-bakes
+
 ### 17.42.7-dev - Text Bounds From the Renderer
 - Root cause of every "the page is a corner of the glass": a TextMesh has no MeshFilter, so every fit in the project (screen pages, cockpit MFD captions, placement marker captions) measured null and gave up on its first line
 - One shared helper reads the renderer's own bounds; the MFD captions re-fit when the font atlas rebuilds, and a page is centred even before its mesh exists
@@ -47,11 +52,6 @@
 - The text fit is a per-frame servo (measure the drawn ink union, step the scale toward the box, re-centre the block, repeat with a two percent deadband) and degrades to carried-forward metrics instead of abandoning a pass, so a page can no longer be left small in a corner
 - Every block with a power reading is a pickable data source through a generic block readout, the source list filters as the player types, and pictures are placed as a fraction of the measured printed block; the ghost's FRONT plate and chevrons retry until measurable
 - The storage board is the reference's heading-rule-tile grid, the chart trace is a half-height line with vertical joins, the battery bank packs to the panel, the dial ring is one cell thick, and the preview sizes type by the printed block
-
-### 17.42.3-dev - Page Placement, Source Scoping, and Reference Charts
-- The fit owns the body anchor (the per-frame update no longer resets it), so the printed block is centred on the glass on every size class and every split layout instead of hugging the top-left corner
-- Every construct board - Power, Battery Status, Power Graph, Manifest, Storage Monitor, Inventory Grid, Mining Cargo - reads only the data sources ticked in the editor and prints `NO DATA SOURCES` when none are; the banner, camera and planet map remain the only pages that read the world unasked
-- The mining dial is a lamp-thick tick ring, the battery cell a plain case with one continuous quantised fill, tiles wrap their names, graph panels are framed plots with chip legends and a time axis (side by side on a wide glass), the cockpit MFDs re-sync their font atlas every frame, and page options that change the option list rebuild it; verified statically only
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

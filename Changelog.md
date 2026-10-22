@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.42.7-dev`
+**Current Version:** `17.42.8-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.42.8-dev] Keep Pages On Their Panel, and Size Cockpit Captions Properly
+
+**Type:** PATCH - corrects where a page is centred and how cockpit captions are scaled; no save schema change.
+
+**GitHub title:** `[17.42.8-dev] Pages centred on their ink, cockpit captions scaled against their panels`
+
+#### Fixed
+
+- **Pages printed in the air above their own screen.** Centring read the block that had been published for the picture pass - which describes the whole CANVAS, blank rows included - instead of the ink that was drawn. A page whose first line sits partway down its canvas was therefore pushed up by the height of those blank rows, far enough to leave the panel entirely; that is the whole family of "Mixed, Bars, Flight and Power are outside the screen, but correct once a data type is set". Centring is now taken from the ink box, and the canvas block stays what it always was: the frame the pictures are placed in.
+- **Cockpit MFD captions were scaled against the wrong thing.** The fit divided the panel's own local scale by the text's local bounds, which is only correct when the caption and its panel hang under the same scale - the cabin shell scales everything under it, so the result was out by that ratio, and captions came out larger than the panel or as a smear. The two extents are now both measured in world units before they are divided, the correction is absolute rather than relative to a placeholder, and the caption is clamped inside its panel.
+- **Cockpit captions now use the screen face** rather than the engine's built-in font. That is the font whose atlas the tracker and the re-bake path are written for, so a caption cannot be left sampling a slice of an atlas it was never baked against; the built-in dynamic font is shared with every text object in the project and is rebuilt by anything that prints a new character.
+- A page whose text is momentarily unmeasurable is centred rather than left where it was, and the MFD captions re-fit when the atlas is rebuilt.
+- A compile error in the caption fit is fixed: it read the world scale off the TextMesh component, where it does not exist, instead of off its transform.
+
+#### Validation
+
+- `git diff --check`, the delimiter scan, the duplicate-field scan and the local-shadowing scan pass over the touched files. Unity and a C# compiler remain unavailable here. Still to verify in game: that no page prints beyond its panel on any page or data type, that switching pages repeatedly no longer empties a page, and that the cockpit captions are legible and no longer scrambled.
 
 ### [17.42.7-dev] Measure Text From the Renderer, and Let the Page Fill the Panel
 

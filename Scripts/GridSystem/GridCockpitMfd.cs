@@ -130,6 +130,13 @@ namespace VoxelEngine.GridSystem
 
             text.anchor = anchor;
             text.alignment = alignment;
+            // The screen's face, not the engine's built-in one. The built-in dynamic font
+            // is shared with every other text object in the project and its atlas is
+            // rebuilt by anything that prints a new character; the screen face is the one
+            // the atlas tracker and the re-bake path were written for, so a caption on it
+            // cannot be left sampling a slice of an atlas it was not baked against.
+            var face = GridScreenBlock.DisplayFont;
+            if (face != null) text.font = face;
             text.fontSize = 32;
             text.characterSize = 1f;
             text.lineSpacing = 0.95f;
@@ -199,11 +206,39 @@ namespace VoxelEngine.GridSystem
 
             Vector3 bounds = measured.size;
             if (bounds.x <= 0.0001f || bounds.y <= 0.0001f) return false;
-            float fitX = panel.localScale.x * widthFraction / bounds.x;
-            float fitY = panel.localScale.y * heightFraction / bounds.y;
-            float fit = Mathf.Min(fitX, fitY);
-            if (float.IsNaN(fit) || float.IsInfinity(fit) || fit <= 0f) return false;
-            text.transform.localScale = new Vector3(-fit, fit, fit);
+
+            // Both extents in WORLD units so they can be divided: the panel's authored size
+            // times its parent's scale, against the text's local bounds times the scale it
+            // is drawn at. A caption and its panel can hang under differently scaled parents
+            // (the cabin shell scales everything under it), so without this the fit is out by
+            // the ratio of the parent scales - which is how a caption ends up larger than the
+            // panel it belongs to.
+            Vector3 current = text.transform.localScale;
+            float currentMagnitude = Mathf.Max(0.0000001f, Mathf.Abs(current.y));
+            // lossyScale lives on the Transform, not on the TextMesh component.
+            Vector3 textWorld = text.transform.lossyScale;
+            // The scale one unit of local size gets from the parents alone.
+            float parentScaleX = Mathf.Abs(textWorld.x) / Mathf.Max(0.0000001f, Mathf.Abs(current.x));
+            float parentScaleY = Mathf.Abs(textWorld.y) / currentMagnitude;
+            if (parentScaleX <= 0.0000001f || parentScaleY <= 0.0000001f) return false;
+
+            Vector3 panelParent = panel.parent != null ? panel.parent.lossyScale : Vector3.one;
+            float panelWorldX = Mathf.Abs(panel.localScale.x * panelParent.x);
+            float panelWorldY = Mathf.Abs(panel.localScale.y * panelParent.y);
+
+            // The local size that puts the text exactly inside its share of the panel.
+            // Absolute, not a correction on the current scale: a placeholder caption and a
+            // real one then land in the same place on the first frame after they change.
+            float fitX = (panelWorldX * widthFraction) / (bounds.x * parentScaleX);
+            float fitY = (panelWorldY * heightFraction) / (bounds.y * parentScaleY);
+            float magnitude = Mathf.Min(fitX, fitY);
+            if (float.IsNaN(magnitude) || float.IsInfinity(magnitude) || magnitude <= 0f)
+                return false;
+            magnitude = Mathf.Clamp(magnitude, 0.0005f, 4f);
+
+            // The X sign is the panel's facing, not a size: keep the handedness.
+            float sign = current.x < 0f ? -1f : 1f;
+            text.transform.localScale = new Vector3(sign * magnitude, magnitude, magnitude);
             return true;
         }
 
