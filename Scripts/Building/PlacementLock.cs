@@ -162,20 +162,23 @@ namespace VoxelEngine.Building
                 // from the frozen pose's frame, so a wobbling camera basis can change WHICH
                 // cardinal a press means, but it can never make two consecutive steps fight
                 // each other - which is the zigzag.
-                // Left/right and up/down are committed to a perpendicular PAIR of lattice
-                // axes, so the four arrows always describe a square grid rather than four
-                // directions that can collapse onto each other at 45 degrees.
-                SnapPlanarAxes(upNow, out Vector3 axisRight, out Vector3 axisAway);
+                // 17.44.8-dev: SCREEN AXES, flat out. The previous release committed each
+                // press to the frozen pose's own lattice axes, which is stable but wrong in
+                // the hand: standing edge-on to a machine, screen-right IS the machine's
+                // forward, so pressing right walked the block forwards and backwards instead
+                // of sideways. Left must always be left of the screen. The basis is the
+                // cached one, captured once per lock, so this stays just as steady - the
+                // stability was never the lattice's job, it was the caching.
                 bool horizontal = Mathf.Abs(axis.x) >= Mathf.Abs(axis.y);
                 if (horizontal)
                 {
                     intent = axis.x > 0f ? 1 : -1;
-                    direction = axisRight * Mathf.Sign(axis.x);
+                    direction = _nudgeRight * Mathf.Sign(axis.x);
                 }
                 else
                 {
                     intent = axis.y > 0f ? 2 : -2;
-                    direction = axisAway * Mathf.Sign(axis.y);
+                    direction = _nudgeAway * Mathf.Sign(axis.y);
                 }
             }
 
@@ -211,38 +214,6 @@ namespace VoxelEngine.Building
 
             Nudge(offset, freshPress);
             return true;
-        }
-
-        /// <summary>
-        /// Maps the two screen directions onto a perpendicular pair of the frozen pose's own
-        /// lattice axes: <paramref name="axisRight"/> answers left/right of the screen and
-        /// <paramref name="axisAway"/> the remaining axis, signed toward screen-up. A step is
-        /// therefore always a whole cell along the block's lattice, and the pair can never
-        /// fold onto itself.
-        /// </summary>
-        private static void SnapPlanarAxes(Vector3 up, out Vector3 axisRight, out Vector3 axisAway)
-        {
-            Vector3 a = Frame.valid ? Vector3.ProjectOnPlane(Frame.right, up) : default(Vector3);
-            Vector3 b = Frame.valid ? Vector3.ProjectOnPlane(Frame.forward, up) : default(Vector3);
-            if (a.sqrMagnitude < 0.0001f) a = Vector3.ProjectOnPlane(Vector3.right, up);
-            if (b.sqrMagnitude < 0.0001f) b = Vector3.ProjectOnPlane(Vector3.forward, up);
-
-            if (a.sqrMagnitude < 0.0001f || b.sqrMagnitude < 0.0001f)
-            {
-                // No usable frame: stay screen-relative rather than freezing the arrows.
-                axisRight = _nudgeRight;
-                axisAway = _nudgeAway;
-                return;
-            }
-
-            a.Normalize();
-            b.Normalize();
-
-            bool rightIsA = Mathf.Abs(Vector3.Dot(_nudgeRight, a)) >= Mathf.Abs(Vector3.Dot(_nudgeRight, b));
-            axisRight = (rightIsA ? a : b) * Mathf.Sign(Vector3.Dot(_nudgeRight, rightIsA ? a : b));
-            Vector3 other = rightIsA ? b : a;
-            axisAway = other * Mathf.Sign(Vector3.Dot(_nudgeAway, other));
-            if (Mathf.Approximately(Vector3.Dot(_nudgeAway, other), 0f)) axisAway = other;
         }
 
         /// <summary>The frozen pose's vertical: the surface normal, or the frame's up.</summary>

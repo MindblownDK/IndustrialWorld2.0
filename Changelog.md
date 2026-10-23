@@ -1,9 +1,29 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.7-dev`
+**Current Version:** `17.44.8-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.8-dev] Screen-Relative Nudging and a Run That Follows the Crosshair Again
+
+**Type:** PATCH - two behavioural corrections in the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.8-dev] Nudge strictly by screen axis and stop the run from reading its own tip as the aim`
+
+#### Fixed
+
+- **Arrows move the hologram in screen directions again (`PlacementLock.Tick`).** 17.44.7-dev committed every press to the frozen pose's own lattice axes. That is stable but wrong in the hand: standing edge-on to a machine, screen-right IS the machine's forward, so pressing right walked the block forwards and backwards instead of sideways, from any position. Nudges step along the cached screen basis again - left is left of the screen, up is away from the player - and the steadiness that the lattice snapping was there to provide comes from that basis being captured once per lock rather than rebuilt per frame.
+- **A run reads the crosshair, not its own tip (`BuildSystem.GhostAimPosition`).** 17.44.3-dev made the hologram stand at the tip of an armed run. The planner's target was still read back from the hologram transform, so from the second frame of a drag the "aim" was the tip from the frame before: the run collapsed to one cell, the ghost jumped back, the aim returned, and the whole thing oscillated instead of growing. The pose the crosshair resolved is now published separately before any run moves the hologram, and the planner, the arming check and the anchor all read that. A drag grows a run again.
+- **A frozen hologram explains itself (`HandlePlacementPattern`).** A multi-cell pattern selected while the hologram is frozen cannot drag a run - the lock owns the pose - and that used to be silent. A build press in that state now says so and names the lock key.
+
+#### Changed
+
+- The build-press trace reports whether the held block is pattern-eligible at all, so an ineligible item that silently cannot lay runs is visible in one line.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.7-dev] Lattice-Axis Nudging, Ctrl as Lift Only, and a Run That Cannot Fail Silently
 

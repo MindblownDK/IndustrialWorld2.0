@@ -173,6 +173,15 @@ namespace VoxelEngine.Building
         public static VoxelEngine.Items.BlockItem HeldBlockItem { get; private set; }
         public static Quaternion GhostRotation { get; private set; } = Quaternion.identity;
         public static Vector3 GhostPosition { get; private set; }
+        /// <summary>
+        /// 17.44.8-dev: where the CROSSHAIR says the block goes, before any run moves the
+        /// hologram. A run needs this: while a run is armed the hologram stands at the tip
+        /// of it, so reading the ghost transform back would feed the tip in as the next
+        /// target and the run would collapse to one cell every other frame. This is the
+        /// aim, and only the aim.
+        /// </summary>
+        public static Vector3 GhostAimPosition { get; private set; }
+        public static Quaternion GhostAimRotation { get; private set; } = Quaternion.identity;
         public static Vector3 GhostUp { get; private set; } = Vector3.up;
         public static bool GhostValid { get; private set; }
         /// <summary>True when the heading came from the aimed structure or from Ctrl.</summary>
@@ -654,6 +663,9 @@ namespace VoxelEngine.Building
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             ShowStaticSurfaceLattice();
             _ghost.transform.SetPositionAndRotation(pos, rot);
+            // The aim, published before any pattern drags the hologram somewhere else.
+            GhostAimPosition = pos;
+            GhostAimRotation = rot;
             if (IsUnifiedPipe(block))
                 ConfigurePipeGhostConnection(block, null, pos, Mathf.Max(0.01f, gridSize));
 
@@ -1740,6 +1752,8 @@ namespace VoxelEngine.Building
             // The frozen pose IS the preview from here on.
             _ghost.SetActive(true);
             _ghost.transform.SetPositionAndRotation(PlacementLock.Position, PlacementLock.Rotation);
+            GhostAimPosition = PlacementLock.Position;
+            GhostAimRotation = PlacementLock.Rotation;
             if (PlacementLock.Position != GhostPosition)
                 PlacementFeedback.Snap(PlacementLock.Position, 1);
 
@@ -1767,6 +1781,7 @@ namespace VoxelEngine.Building
                 GhostFrame = default;
                 GhostFrameLabel = string.Empty;
                 PatternPreviewCount = 0;
+                GhostAimPosition = GhostPosition;
                 PlacementLattice.Hide();
                 return;
             }
@@ -1899,6 +1914,14 @@ namespace VoxelEngine.Building
             if (!wantsRun)
             {
                 if (_patternActive) CancelPattern();
+                // A frozen hologram cannot drag a run, and a multi-pattern selected while
+                // frozen used to do nothing at all, silently. Say why, once per press.
+                if (PlacementLock.IsLocked && GameSettings.WasPressed(InputAction.Build)
+                    && PlacementOptions.IsMultiPlace && PlacementOptions.IsPatternEligible(block))
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Hologram is frozen",
+                        "A frozen hologram places one block. Release the lock with " +
+                        GameSettings.GetKey(InputAction.BuildLock) + " to lay a run.",
+                        null, VoxelEngine.UI.UITheme.AccentAmber);
                 return;
             }
 
@@ -1924,8 +1947,7 @@ namespace VoxelEngine.Building
                 bool armable = false;
                 PlacementRefusal armRefusal = PlacementRefusal.None;
                 if (_ghost != null)
-                    armable = IsPlacementValid(_ghost.transform.position, block,
-                        _ghost.transform.rotation, out armRefusal);
+                    armable = IsPlacementValid(GhostAimPosition, block, GhostAimRotation, out armRefusal);
                 if (!((pressedEdge || pressed) && armable))
                 {
                     if ((pressedEdge || pressed) && !armable)
@@ -1936,8 +1958,8 @@ namespace VoxelEngine.Building
                 }
 
                 _patternActive = true;
-                _patternAnchorPosition = GhostPosition;
-                _patternAnchorRotation = GhostRotation;
+                _patternAnchorPosition = GhostAimPosition;
+                _patternAnchorRotation = GhostAimRotation;
                 _patternAnchorFrame = GhostFrame;
                 _patternSignature = -1;
                 PlacementFeedback.Snap(GhostPosition, 1);
@@ -1950,7 +1972,7 @@ namespace VoxelEngine.Building
             int planned = PlacementPatternPlanner.Build(
                 PlacementOptions.Pattern, _patternAnchorFrame,
                 _patternAnchorPosition, _patternAnchorRotation,
-                GhostPosition, step, pitch, budget, _plannedCells);
+                GhostAimPosition, step, pitch, budget, _plannedCells);
             PatternPreviewCount = planned;
             ShowPatternPreview(_plannedCells, block);
 
@@ -2071,7 +2093,9 @@ namespace VoxelEngine.Building
                 $"[placement] press: holding={(HoldingBlock ? _ghostItem?.name ?? "block" : "nothing")}, " +
                 $"uiBlocking={VoxelEngine.UI.UIState.IsBlocking}, " +
                 $"dialOpen={VoxelEngine.UI.RadialWheelController.AnyOpen}, " +
-                $"pattern={PlacementOptions.Pattern}, locked={PlacementLock.IsLocked}, " +
+                $"pattern={PlacementOptions.Pattern}, " +
+                $"eligible={PlacementOptions.IsPatternEligible(_ghostItem)}, " +
+                $"locked={PlacementLock.IsLocked}, " +
                 $"gridSnap={gridSnap}, patternOwnsClick={PatternOwnsClick}, " +
                 $"patternActive={_patternActive}, ghost={pose}");
         }

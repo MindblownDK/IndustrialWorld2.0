@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.7-dev`
-**Roadmap Version:** `17.44.7-dev`
+**Current Version:** `17.44.8-dev`
+**Roadmap Version:** `17.44.8-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.8-dev - Screen-Relative Nudging and the Run Following the Crosshair
+- Arrows step along the cached screen basis again (the lattice-axis commit walked the block forwards/backwards when standing edge-on); the steadiness comes from caching the basis, not from snapping it
+- The planner reads a separately published `GhostAimPosition` instead of the hologram transform, which had been reading the run's own tip back as the aim and collapsing every drag to one cell
+- A build press with a multi-pattern selected while the hologram is frozen now says why it cannot lay a run, and the press trace reports pattern eligibility
+
 ### 17.44.7-dev - Lattice-Axis Nudging and Lift-Only Ctrl
 - Each arrow press commits to a perpendicular pair of the frozen pose's lattice axes, so a nudge is a whole cell and two steps cannot fight each other - zigzag is removed by construction, from any viewing angle
 - Ctrl + left/right does nothing; Ctrl + up/down is the only lift/drop, and the card says so
@@ -41,10 +46,6 @@
 ### 17.44.5-dev - Nudging: A Held Arrow Steps Sideways, Once Per Step
 - The nudge basis is captured once per lock and rebuilt only on a real view turn (>20 degrees) or after 4 m of travel, so a held arrow no longer drifts into a zigzag
 - The hold-repeat is measured on which arrow is held rather than on the resulting direction vector, which is what let camera jitter count as a fresh press every frame; the nudge tick sounds once per press
-
-### 17.44.4-dev - Placement Feel Fix: The Frozen Hologram Was Unplaceable
-- `PatternOwnsClick` no longer claims the build click while the hologram is frozen: the pattern cannot arm a run in that state, so the click was claimed and then refused - no block, no run, and a green hologram
-- A run that places nothing reports the first real per-cell refusal instead of "No room", and a press that cannot arm a run leaves one `[placement]` console line
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -148,7 +149,8 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is a whole cell along a lattice axis, never a screen vector: the press is read as a screen direction and committed to a perpendicular pair of the frozen pose's own axes, so two steps can never fight each other and the result holds from any viewing angle (17.44.7-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A nudge is a screen direction, full stop: left is left of the screen from any viewing angle. Stability comes from capturing the basis once per lock, never from snapping the step to the block's own lattice, which reads as forwards/backwards when standing edge-on (17.44.8-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- Anything that is drawn at a derived pose hands its INPUT pose on separately. A run that reads its target back from the hologram it just moved reads its own tip and oscillates; the aim is published as `GhostAimPosition` before the pattern touches the ghost (17.44.8-dev).
 - Never gate an action on a presentation flag. `GhostValid` is the ghost's material, not the probe's answer - anything that must be true for a placement to happen asks `IsPlacementValid` directly (17.44.7-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
