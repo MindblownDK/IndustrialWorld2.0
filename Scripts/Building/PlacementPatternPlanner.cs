@@ -68,10 +68,11 @@ namespace VoxelEngine.Building
 
             if (pattern == PlacementPattern.Deck)
             {
-                // 17.44.9-dev: a deck is COUNTED per lattice step and SPACED per footprint.
-                // Counting on the footprint made the gesture unusable on anything wide: a
-                // four-by-four deck of 2.4 m machines would have needed ten metres of drag,
-                // so every drag came out as a single row and DECK looked exactly like SPAN.
+                // 17.44.11-dev: a deck is counted per lattice step and spaced by the LARGER of
+                // the step and the block, so the gesture is always "one metre of drag adds a
+                // row or a column" while neighbouring cells stay apart. Counting on the
+                // footprint made a four-by-four deck need ten metres of drag; spacing on the
+                // footprint alone made a deck of wide machines sprawl across fifteen.
                 int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
                 int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
@@ -106,7 +107,13 @@ namespace VoxelEngine.Building
             float pitchAlong;
             if (pattern == PlacementPattern.Pillar)
             {
-                axis = frame.valid ? frame.up : Vector3.up;
+                // 17.44.11-dev: a pillar is VERTICAL, always - straight up from the anchor
+                // along gravity. It used to take the frame's up, and a frame borrowed from a
+                // neighbouring machine can be rolled, so a "pillar" came out lying on the
+                // ground beside the block it started from.
+                axis = VoxelEngine.Cosmos.GravityProvider.GetUp(anchorPosition);
+                if (axis.sqrMagnitude < 0.0001f) axis = Vector3.up;
+                axis.Normalize();
                 pitchAlong = pitch.y;
             }
             else

@@ -89,6 +89,7 @@ namespace VoxelEngine.Building
         private readonly System.Collections.Generic.List<PlacementCell> _plannedCells = new(PlacementOptions.MaxCells);
         private readonly System.Collections.Generic.List<GameObject> _patternGhosts = new(12);
         private BlockItem _patternGhostItem;
+        private bool _plannedValid = true;
         private bool _patternActive;
         private Vector3 _patternAnchorPosition;
         private Quaternion _patternAnchorRotation = Quaternion.identity;
@@ -1630,7 +1631,12 @@ namespace VoxelEngine.Building
             // standing on another structure's lattice is what produced a machine sitting at
             // an odd angle beside a square row of them - and, once frozen, a pose the player
             // could not explain. A heading the player turned by hand is still left alone.
-            if (GridInput.Ctrl || !_rotationManual)
+            // 17.44.11-dev: align on Ctrl, or when the block is being built AGAINST something.
+            // Aligning an untouched ghost to whatever frame happened to resolve is what made
+            // the hologram visibly re-orient itself as the player swept the crosshair over
+            // open ground: the frame flickers between the world tangent and a neighbour, and
+            // the heading followed it. Open ground keeps the heading it had.
+            if (GridInput.Ctrl || frame.fromStructure)
             {
                 Quaternion aligned = PlacementAlign.AlignRotation(rot, frame);
                 if (aligned != rot) { rot = aligned; GhostAligned = true; }
@@ -1754,8 +1760,7 @@ namespace VoxelEngine.Building
             // Nudges step one cell of the block's own row: hand the lock the same pitch a run
             // of this block is laid at, plus the camera so the screen directions can be
             // resolved against the axis pair.
-            PlacementLock.Tick(_ghostItem,
-                PatternPitch(_ghostItem, PlacementLock.Rotation, PlacementLock.Frame),
+            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres),
                 shootCamera != null ? shootCamera.transform : null);
 
             // The frozen pose IS the preview from here on.
@@ -1891,19 +1896,58 @@ namespace VoxelEngine.Building
         private const float PatternGap = 0.02f;
 
         /// <summary>The widest a run cell is ever pitched, whatever a prefab claims.</summary>
-        private const float MaxPatternPitch = 12f;
+        private const float MaxPatternPitch = 6f;
 
-        /// <summary>The block's own extent along one frame axis, in metres.</summary>
-        private static float FrameExtent(BlockItem block, StaticPlacementPrefabProfile profile,
+        /// <summary>
+        /// The block's own extent along one frame axis, in metres - measured from the VISIBLE
+        /// model in the prefab's root space, cached once per item.
+        ///
+        /// 17.44.11-dev: this walked every collider in the prefab on every call, and a
+        /// prefab's collider set is not its footprint: one machine reported 4.9 m, 5.6 m and
+        /// 24.5 m on different axes, which is how a one-metre nudge and a four-cell deck both
+        /// came out wrong. Renderer bounds are the model the player sees, they are valid on a
+        /// prefab asset, and they cost one transform per call once cached.
+        /// </summary>
+        private float FrameExtent(BlockItem block, StaticPlacementPrefabProfile profile,
             Quaternion rotation, Vector3 axis)
         {
-            if (block == null || block.placedPrefab == null || profile == null) return 0f;
-            if (!TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders,
-                    rotation, axis, out float min, out float max))
-                return 0f;
-            float extent = max - min;
+            if (block == null || block.placedPrefab == null) return 0f;
+
+            if (!_footprintCache.TryGetValue(block, out Vector3 size))
+            {
+                size = Vector3.zero;
+                if (TryGetRendererBoundsInRoot(block.placedPrefab.transform, out Bounds visible))
+                    size = visible.size;
+                if (size.sqrMagnitude < 0.0001f)
+                {
+                    // No renderers at all: fall back to the collider set, once.
+                    var prefab = block.placedPrefab;
+                    if (TryGetPrefabColliderProjectionRange(prefab,
+                            prefab.GetComponentsInChildren<Collider>(true), Quaternion.identity,
+                            Vector3.right, out float minX, out float maxX)
+                        && TryGetPrefabColliderProjectionRange(prefab,
+                            prefab.GetComponentsInChildren<Collider>(true), Quaternion.identity,
+                            Vector3.up, out float minY, out float maxY)
+                        && TryGetPrefabColliderProjectionRange(prefab,
+                            prefab.GetComponentsInChildren<Collider>(true), Quaternion.identity,
+                            Vector3.forward, out float minZ, out float maxZ))
+                        size = new Vector3(maxX - minX, maxY - minY, maxZ - minZ);
+                }
+                if (size.sqrMagnitude < 0.0001f) size = Vector3.one;
+                _footprintCache[block] = size;
+            }
+
+            // Project the root-space box onto the axis, exactly as a rotated box would.
+            Vector3 x = rotation * Vector3.right;
+            Vector3 y = rotation * Vector3.up;
+            Vector3 z = rotation * Vector3.forward;
+            float extent = Mathf.Abs(Vector3.Dot(axis, x)) * size.x
+                         + Mathf.Abs(Vector3.Dot(axis, y)) * size.y
+                         + Mathf.Abs(Vector3.Dot(axis, z)) * size.z;
             return float.IsNaN(extent) || float.IsInfinity(extent) ? 0f : extent;
         }
+
+        private readonly System.Collections.Generic.Dictionary<BlockItem, Vector3> _footprintCache = new();
 
         /// <summary>
         /// Press, drag, release: SPAN / PILLAR / DECK. The press drops the anchor, the drag
@@ -2046,6 +2090,20 @@ namespace VoxelEngine.Building
             if (signature == _patternSignature) return;
             _patternSignature = signature;
 
+            // One validity pass per PLAN, not per frame: a full placement probe per preview
+            // cell ran twelve times a frame while the player dragged, which cost roughly
+            // forty frames a second on a busy field (17.44.11-dev).
+            _plannedValid = true;
+            for (int i = 0; i < wanted; i++)
+            {
+                _surfaceAttachmentHost = null;
+                _deckSnapHost = null;
+                if (IsPlacementValid(cells[i].position, block, cells[i].rotation, out _))
+                    continue;
+                _plannedValid = false;
+                break;
+            }
+
             while (_patternGhosts.Count < Mathf.Min(wanted, MaxPatternPreviews))
             {
                 GameObject preview;
@@ -2073,13 +2131,7 @@ namespace VoxelEngine.Building
                 if (ghost.activeSelf != used) ghost.SetActive(used);
                 if (!used) continue;
                 ghost.transform.SetPositionAndRotation(cells[i].position, cells[i].rotation);
-
-                // The run tells the truth before the click does: a cell the commit would
-                // refuse reads red here rather than placing nine of ten and looking broken.
-                _surfaceAttachmentHost = null;
-                _deckSnapHost = null;
-                bool cellValid = IsPlacementValid(cells[i].position, block, cells[i].rotation, out _);
-                ApplyGhostMaterialIfChangedTo(ghost, cellValid ? _ghostMaterialValid : _ghostMaterialInvalid);
+                ApplyGhostMaterialIfChangedTo(ghost, _plannedValid ? _ghostMaterialValid : _ghostMaterialInvalid);
             }
         }
 

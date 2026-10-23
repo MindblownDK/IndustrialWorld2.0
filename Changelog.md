@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.10-dev`
+**Current Version:** `17.44.11-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.11-dev] One-Metre Nudging, Footprints From the Model, a Vertical PILLAR, and the Frame Cost of Previewing a Run
+
+**Type:** PATCH - three corrections and one performance fix in the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.11-dev] Nudge by one metre, measure footprints from the model, keep PILLAR vertical, and stop probing every preview cell every frame`
+
+#### Fixed
+
+- **A nudge is one metre, along level screen axes (`PlacementLock.Tick`).** The step had been the block's own footprint, and the reported trace showed it measuring 4.905 m, 5.572 m and once 24.527 m: a press threw the battery across the field instead of stepping it, which read as "left and right do not work, it only moves along one line". It is exactly one lattice metre now, along the level screen axes the player sees - left is left, up is away - so sideways always works on any block, and pressing right N times then left N times returns it to the exact position it started from. Ctrl still lifts and drops 0.05 m; a horizontal arrow with Ctrl held still does nothing.
+- **Footprints are measured from the visible model (`BuildSystem.FrameExtent`).** The pitch of a run was measured by walking every collider in the prefab. A prefab's collider set is not its footprint - one machine reported 4.9 m, 5.6 m and 24.5 m on different axes - which is also what made a four-cell deck sprawl and a nudge step meaningless. Extents now come from the prefab's renderer bounds, are cached once per item, and cost one transform per call instead of a collider sweep.
+- **PILLAR is vertical, always (`PlacementPatternPlanner.Build`).** It took its axis from the resolved frame's up, and a frame borrowed from a neighbouring machine can be rolled, so a pillar came out lying on the ground beside the block it started from. A pillar now rises straight up along gravity from its anchor.
+- **The hologram stops re-orienting itself over open ground (`BuildSystem.RefineStaticPose`).** Heading alignment ran on every untouched ghost against whatever frame happened to resolve, and on open ground that frame flickers between the world tangent and a nearby structure - so the ghost visibly span as the crosshair swept the field. Alignment now runs on Ctrl, or when the block is actually being built against a structure; open ground keeps the heading it had.
+- **Previewing a run no longer costs forty frames (`BuildSystem.ShowPatternPreview`).** Every preview cell ran a full placement probe every frame while the player dragged - twelve probes a frame on a large run. The probes now run once per PLAN, and the whole pool shares the result, which restores the frame rate the run cost.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.10-dev] Level Lattices and Nudging by the Block's Own Row
 

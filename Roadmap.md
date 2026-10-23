@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.10-dev`
-**Roadmap Version:** `17.44.10-dev`
+**Current Version:** `17.44.11-dev`
+**Roadmap Version:** `17.44.11-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.11-dev - One-Metre Nudging, Model Footprints, Vertical PILLAR, Cheaper Runs
+- A nudge is exactly one metre along level screen axes, so sideways works on every block and any step is reversible by pressing the opposite arrow
+- Run pitch comes from the prefab's renderer bounds (cached), PILLAR rises along gravity, and the ghost no longer re-orients itself over open ground
+- Preview cells are probed once per plan instead of once per cell per frame, which was costing roughly forty frames a second while dragging
+
 ### 17.44.10-dev - Level Lattices, Nudging by the Block's Own Row
 - The lattice takes its up from gravity on anything floor-like, so a run on a dune is level instead of climbing with the sand; only a wall or a ceiling keeps its own up
 - A nudge commits to a perpendicular pair of the frozen pose's lattice axes and steps by that axis's pitch, so a nudged block lands exactly where the next one in its row would have
@@ -42,11 +47,6 @@
 - Arrows step along the cached screen basis again (the lattice-axis commit walked the block forwards/backwards when standing edge-on); the steadiness comes from caching the basis, not from snapping it
 - The planner reads a separately published `GhostAimPosition` instead of the hologram transform, which had been reading the run's own tip back as the aim and collapsing every drag to one cell
 - A build press with a multi-pattern selected while the hologram is frozen now says why it cannot lay a run, and the press trace reports pattern eligibility
-
-### 17.44.7-dev - Lattice-Axis Nudging and Lift-Only Ctrl
-- Each arrow press commits to a perpendicular pair of the frozen pose's lattice axes, so a nudge is a whole cell and two steps cannot fight each other - zigzag is removed by construction, from any viewing angle
-- Ctrl + left/right does nothing; Ctrl + up/down is the only lift/drop, and the card says so
-- Runs arm on a live `IsPlacementValid` instead of the ghost's material flag, and a release with an empty plan still commits its anchor
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -150,7 +150,10 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is ONE CELL OF THE FROZEN BLOCK'S OWN ROW: the press is read on screen and committed to a perpendicular pair of the frozen pose's lattice axes, stepped by that axis's pitch. The trade, chosen with the player: standing edge-on to a row, "left" runs along the row rather than across the screen. Stability comes from pinning the basis for the life of the lock, never from re-deriving it mid-sequence (17.44.8-dev, pinned 17.44.9-dev, row-stepped 17.44.10-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A nudge is ONE METRE along level screen axes: left is left, up is away, both flat on the gravity plane. The basis is pinned for the life of the lock, and because every step is a whole metre on a fixed axis, N presses one way and N the other return the block exactly where it started. Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev).
+- A vertical pattern is vertical: PILLAR rises along gravity from its anchor and never borrows a neighbouring frame's up, which can be rolled (17.44.11-dev).
+- Never run a placement probe per preview cell per frame. Probe once per plan and let the pool share the result (17.44.11-dev).
 - A lattice is LEVEL. Its up is gravity whenever the surface is floor-like; the hit normal only decides how a block is seated, and only a wall or a ceiling keeps its own up. A tilted lattice builds a staircase and calls it a straight line (17.44.10-dev).
 - A gesture must be implementable with the input it has. A crosshair on the ground has no vertical travel, so a vertical pattern has to be driven by the planar drag with a sign; count a pattern per lattice step and space it per footprint, or the footprint makes the gesture unreachable (17.44.9-dev).
 - Anything that is drawn at a derived pose hands its INPUT pose on separately. A run that reads its target back from the hologram it just moved reads its own tip and oscillates; the aim is published as `GhostAimPosition` before the pattern touches the ghost (17.44.8-dev).
