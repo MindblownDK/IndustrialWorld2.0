@@ -381,9 +381,11 @@ namespace VoxelEngine.Building.Tiered
             string cost = def != null
                 ? HammerTierSelection.Describe(HammerTierSelection.CostToReach(def, tier))
                 : "the target tier's materials";
+            // The toast takes a Sprite; the wheel icons are Texture2D, so this one carries
+            // no picture rather than an unsafe conversion.
             BuildFeedbackHud.Show("Upgrade target: " + HammerTierSelection.Name(tier),
                 $"Left-click a placed piece to take it straight to {HammerTierSelection.Name(tier)} for {cost} - the step you skipped is not charged.",
-                MachineShapeIcons.Upgrade, T.AccentGold);
+                null, T.AccentGold);
             AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.7f, 1.08f);
             _wheel.Invalidate();
             return true;

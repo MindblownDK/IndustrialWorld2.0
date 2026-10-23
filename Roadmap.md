@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.45.0-dev`
-**Roadmap Version:** `17.45.0-dev`
+**Current Version:** `17.45.1-dev`
+**Roadmap Version:** `17.45.1-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.45.1-dev - Compile Fixes on the New Dial Work
+- `BombHud` declares the fuse readout's row and hint, and the tier toast no longer passes a wheel icon where a Sprite is required
+- Two faults a syntax parser cannot see, so the delivery checks now also assert that every replacement matched and that every field a file uses is declared in it
+
 ### 17.45.0-dev - Lattice Nudging, Runs That Build What They Draw, Tier Target and Fuse Wheel
 - The four nudge directions are LATTICE axes chosen from the view once per press burst, so a press is a straight step on the grid and left then right cancels exactly
 - Runs, pillars and decks are judged against the site as found, not against the cells the same gesture just placed, and a floor plan is seated as one rigid move, so the plan is what gets built
@@ -46,11 +50,6 @@
 ### 17.44.13-dev - Nudges Follow the View, Runs Report Their Pitch
 - The nudge basis is derived from the camera on every press, so "left" is left of the screen from wherever the player is now standing rather than where they stood when they froze the block
 - The build-press and run-completion lines now print the measured pitch and the planned-versus-built cell counts, so spacing faults are read rather than inferred
-
-### 17.44.12-dev - Prefab-Asset Footprints, PILLAR From Any Drag, Seated Runs
-- Model bounds are read from the authored prefab without the `activeInHierarchy` test (false on every renderer of a prefab asset), which is why runs were spaced one metre and overlapped
-- PILLAR follows whichever moved further - the aim climbing a wall or the drag across the ground - so aiming up into the sky no longer does nothing
-- Run cells after the anchor are dropped onto the surface beneath them, so a deck on a slope sits on the ground instead of hovering
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

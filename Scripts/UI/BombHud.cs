@@ -35,8 +35,12 @@ namespace VoxelEngine.UI
         private const float FallbackFuse = 5f;
 
         private static VisualElement _root;
+        /// <summary>Full-width row that centres the readout pill. An absolutely positioned
+        /// child is placed by its edges, so the row is what makes the pill bottom-centre.</summary>
+        private static VisualElement _readoutRow;
         private static VisualElement _readout;
         private static Label _readoutLabel;
+        private static Label _readoutHint;
         private static VisualElement _timerLayer;
         private static readonly List<Label> _labels = new();
         private const int MAX_LABELS = 8;

@@ -1,9 +1,31 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.45.0-dev`
+**Current Version:** `17.45.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.45.1-dev] Two Compile Errors on the New Dial Work
+
+**Type:** PATCH - compile fixes only. No behaviour change, no new systems, no save or API change.
+
+**GitHub title:** `[17.45.1-dev] Declare the fuse readout's row and hint, and stop passing a Texture2D to a Sprite`
+
+#### Fixed
+
+- **`BombHud` did not declare `_readoutRow` or `_readoutHint` (CS0103, 27 sites).** The fields were referenced from `EnsureMounted` and `Tick` but the declaration edit that was supposed to add them landed on text an earlier edit had already changed, so it matched nothing and silently did nothing - the file kept the old four-field block while every use of the new two fields stayed. Both fields are declared now, next to `_readout` and `_readoutLabel`.
+- **`HammerBuildWheel.ConfirmTier` handed a `Texture2D` to a toast that takes a `Sprite` (CS1503).** `MachineShapeIcons.Upgrade` is a wheel icon and `BuildFeedbackHud.Show` takes a `Sprite`, which are unrelated Unity types with no implicit conversion. The tier toast carries no picture rather than an unsafe cast; every other toast added this round already passes `null`.
+
+#### Fixed during review
+
+- **The delivery process, not just the code.** 17.45.0-dev was checked with a C# grammar - which proves that a file parses - and with a local-name sweep, and both passed on a file whose field declarations were missing and a call whose argument type was wrong. Neither tool can see either fault, and neither was the right tool: a parser proves structure, and a name sweep proves names exist in a method, not that a field exists in a type or that an argument converts. Every source replacement is now asserted to have actually matched before the write, and every patched file gets two further sweeps: every `_field` the file uses must be declared somewhere in it, and every newly written call is read against the signature it targets.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean.
+- Field-declaration sweep clean for every patched file: every `_name` used is declared in the file it is used in.
+- Argument types read by hand against their targets for every call added this round (`BuildFeedbackHud.Show`, `RadialWheelController` members, `RadialOption` fields, `HammerTierSelection`, `BuildSystemV2.TryUpgradeTo`).
+- No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.45.0-dev] Lattice Nudging, Runs That Build What They Draw, a Named Upgrade Tier and a Fuse Wheel
 
