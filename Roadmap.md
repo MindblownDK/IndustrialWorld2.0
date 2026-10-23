@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.14-dev`
-**Roadmap Version:** `17.44.14-dev`
+**Current Version:** `17.44.15-dev`
+**Roadmap Version:** `17.44.15-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.44.15-dev - Nudge Directions That Re-Pin, Footprints Spanning Model and Solid
+- The four nudge directions are rigid within a burst of presses and re-pin to the camera after two thirds of a second idle, which removes both the world-grid diagonal and the left-right that stop cancelling when the player turns
+- Run and deck cells are spaced by the widest of the model and its collider extents, plus a small clearance, so a probe at a cell centre can no longer land inside the previous machine
+
 ### 17.44.14-dev - Runs Per Metre, Frozen Nudge Directions, Buildable Seats
 - A pattern counts one cell per metre of drag and still spaces cells by the block's footprint, so a run is reachable with a normal gesture instead of thirteen metres of crosshair travel
 - The four nudge directions are derived once per lock and never re-derived, which removes the zigzag by construction rather than by tolerance
@@ -42,11 +46,6 @@
 - Model bounds are read from the authored prefab without the `activeInHierarchy` test (false on every renderer of a prefab asset), which is why runs were spaced one metre and overlapped
 - PILLAR follows whichever moved further - the aim climbing a wall or the drag across the ground - so aiming up into the sky no longer does nothing
 - Run cells after the anchor are dropped onto the surface beneath them, so a deck on a slope sits on the ground instead of hovering
-
-### 17.44.11-dev - One-Metre Nudging, Model Footprints, Vertical PILLAR, Cheaper Runs
-- A nudge is exactly one metre along level screen axes, so sideways works on every block and any step is reversible by pressing the opposite arrow
-- Run pitch comes from the prefab's renderer bounds (cached), PILLAR rises along gravity, and the ghost no longer re-orients itself over open ground
-- Preview cells are probed once per plan instead of once per cell per frame, which was costing roughly forty frames a second while dragging
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -150,7 +149,9 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is ONE METRE along four directions derived ONCE per lock from the camera and then frozen for the life of that lock. Never re-derive any part of the basis per press - camera, gravity up, or axis pair: the trace proved that identical one-metre steps then run along axes that jump by up to ninety degrees, which is the zigzag, and no amount of stepping or tolerance work can fix an axis that moves (17.44.14-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A nudge is ONE METRE along four directions that are RIGID WITHIN A BURST and re-pin to the camera after a short idle. Freezing for the whole lock made every press diagonal once the player orbited the block; re-deriving every press made left and right stop being opposites once the player turned between them. Both were reported as the same zigzag, and the camera trace - ninety degrees of movement inside one lock - is what explains both (17.44.15-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- Space run cells by the WIDER of the model and its collider set, plus a small clearance: a cell is judged by a probe at its own centre, so a collider reaching past the mesh puts the next centre inside the previous machine and the run silently builds half of what it drew (17.44.15-dev).
+- A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A pattern counts cells from the DRAG IN LATTICE METRES and spaces them by the block's footprint. Dividing the drag by the footprint demands metres of travel per cell and makes runs and pillars unusable on anything large (17.44.14-dev).
 - Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev). Read those bounds WITHOUT the `activeInHierarchy` test - it is false for every renderer of a prefab asset, and the silent fallback is a one-metre block (17.44.12-dev).
 - A level lattice must still be SEATED: a run on a slope drops each cell onto the surface beneath it after planning, or the far cells hover and the run reads as a scatter (17.44.12-dev).

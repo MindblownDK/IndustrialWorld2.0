@@ -37,6 +37,11 @@ namespace VoxelEngine.Building
         private const float NudgeRepeatRate = 0.14f;
         private const float NudgeFineStep = 0.05f;
 
+        // How long the arrow keys must be idle before the four directions re-pin to the
+        // camera. Long enough that a burst of presses is one rigid basis, short enough that
+        // looking at the block from somewhere else hands the arrow keys back to the screen.
+        private const float NudgeRepinIdle = 0.6f;
+
         public static bool IsLocked { get; private set; }
         public static Vector3 Position { get; private set; }
         public static Quaternion Rotation { get; private set; } = Quaternion.identity;
@@ -57,6 +62,7 @@ namespace VoxelEngine.Building
         private static Vector3 _nudgeRight = Vector3.right;
         private static Vector3 _nudgeAway = Vector3.forward;
         private static Vector3 _nudgeUp = Vector3.up;
+        private static float _nudgeLastPress = -999f;
         private static Vector3 _nudgeBasisAt;
 
         /// <summary>Which arrow is being held: 0 none, +/-1 left-right, +/-2 back-away, +/-3 down-up.</summary>
@@ -76,6 +82,7 @@ namespace VoxelEngine.Building
             _nextNudge = 0f;
             _nudgeIntent = 0;
             _nudgeBasisValid = false;
+            _nudgeLastPress = -999f;
             VoxelEngine.UI.BuildFeedbackHud.Show("Hologram locked",
                 "It stays put while you walk around it. Arrow keys nudge, Shift + arrow moves five, Ctrl + up or down lifts.",
                 null, VoxelEngine.UI.UITheme.AccentGold);
@@ -168,6 +175,20 @@ namespace VoxelEngine.Building
                 // back somewhere else, which is the zigzag. Four fixed directions per lock
                 // make it arithmetically impossible: press left N times and right N times and
                 // the block is where it started, always.
+                // ── 17.44.15-dev: FROZEN DURING A BURST, RE-PINNED WHEN YOU LOOK AWAY ──
+                // Two builds failed here for opposite reasons. Frozen for the whole lock, the
+                // block moved on a world grid while the player orbited it, so every press was
+                // diagonal on screen and the path read as a zigzag. Re-derived on every press,
+                // left and right were no longer opposites once the player turned between them,
+                // so the block wandered instead of cancelling out.
+                //
+                // The trace settled it: the frozen basis never moved, but the camera walked
+                // ninety degrees between presses. So the basis is now rigid for a burst of
+                // presses and re-pins to the camera once the player has stopped pressing and
+                // looked at it from somewhere else. Within a burst every step is exactly one
+                // metre and exactly reversible; between bursts the arrows follow the screen.
+                if (Time.unscaledTime - _nudgeLastPress > NudgeRepinIdle) _nudgeBasisValid = false;
+                _nudgeLastPress = Time.unscaledTime;
                 if (!_nudgeBasisValid) RefreshNudgeBasis(view, upNow);
 
                 // ── 17.44.11-dev: LEVEL SCREEN AXES, ONE METRE AT A TIME ────────────

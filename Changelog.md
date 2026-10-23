@@ -1,9 +1,29 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.14-dev`
+**Current Version:** `17.44.15-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.15-dev] Nudge Directions That Re-Pin When You Look Away, and Cells Spaced by the Widest of Model and Solid
+
+**Type:** PATCH - two corrections in the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.15-dev] Re-pin nudge directions between bursts and space run cells by model and collider together`
+
+#### Fixed
+
+- **Nudge directions are rigid within a burst and re-pin between bursts (`PlacementLock.Tick`).** Two builds failed here for opposite reasons and the trace showed why. Frozen for the whole lock, the four directions never moved - but the camera walked ninety degrees between presses (`liveCamRight` went from `(0.07, 0.60, 0.80)` to `(0.30, 0.91, -0.29)` to `(0.18, 0.18, -0.97)` inside a single lock), so every press slid the block diagonally across the screen and the path read as a zigzag. Re-derived on every press instead, left and right stopped being opposites the moment the player turned between them, and the block wandered rather than cancelling out. The directions now stay rigid for a burst of presses - every step exactly one metre, every burst exactly reversible - and re-pin to the camera once the arrow keys have been idle for two thirds of a second, so looking at the block from somewhere else hands the arrows back to the screen.
+- **Run cells are spaced by the wider of the model and its solid (`BuildSystem.FrameExtent`).** A cell is judged by a probe at its own centre, so a collider that reaches further than the mesh puts the next cell's centre inside the previous machine and the probe refuses it. That is exactly the run that reported seven cells and built four, and three refused two. Spacing now takes the componentwise maximum of the renderer bounds and the collider extents, with a collider trusted only up to twice the model plus half a metre - one machine reports a twenty-four metre collider, which is a proximity volume rather than a footprint.
+- **Cells are laid a few centimetres clear of touching (`PlacementPatternPlanner.Build`).** Runs and decks add four per cent plus twelve centimetres to the spacing, so two machines sized exactly to their neighbour are never judged to be interpenetrating on the last millimetre.
+
+#### Fixed during review
+
+- **A compile error in `FrameExtent` (CS0136).** The new collider-clamp loop used `axis` as its index, which the method already owns as a parameter, so the file did not build. The index is renamed and the clamp is branch-free. A C# grammar parses both versions identically - a parser proves structure, never scope - so the same-name check now runs over every patched file before delivery, and any local that re-uses an enclosing parameter or an earlier local of the same block is treated as a build failure rather than shipped.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean, and the name-collision sweep is clean for every patched file. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.14-dev] Runs Counted in Metres, Nudge Directions Frozen for the Lock, and Seats That Must Be Buildable
 

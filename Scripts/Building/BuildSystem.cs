@@ -1918,21 +1918,42 @@ namespace VoxelEngine.Building
                 size = Vector3.zero;
                 if (TryGetPrefabModelBounds(block.placedPrefab, out Bounds visible))
                     size = visible.size;
-                if (size.sqrMagnitude < 0.0001f)
+
+                // 17.44.15-dev: THE WIDEST OF MODEL AND SOLID. Cells are spaced by this size
+                // and each cell is checked by a probe at its own centre, so if a collider
+                // reaches further than the mesh the next cell's centre lands INSIDE the
+                // previous machine and the probe refuses it - which is precisely the run
+                // that draws seven cells and builds four. A collider is only trusted up to
+                // twice the model plus half a metre: one machine reports a twenty-four metre
+                // collider, which is a proximity volume, not a footprint.
+                var prefab = block.placedPrefab;
+                var colliders = prefab.GetComponentsInChildren<Collider>(true);
+                if (colliders != null && colliders.Length > 0)
                 {
-                    // No renderers at all: fall back to the collider set, once.
-                    var prefab = block.placedPrefab;
-                    if (TryGetPrefabColliderProjectionRange(prefab,
-                            prefab.GetComponentsInChildren<Collider>(true), Quaternion.identity,
-                            Vector3.right, out float minX, out float maxX)
-                        && TryGetPrefabColliderProjectionRange(prefab,
-                            prefab.GetComponentsInChildren<Collider>(true), Quaternion.identity,
-                            Vector3.up, out float minY, out float maxY)
-                        && TryGetPrefabColliderProjectionRange(prefab,
-                            prefab.GetComponentsInChildren<Collider>(true), Quaternion.identity,
+                    Vector3 solid = Vector3.zero;
+                    if (TryGetPrefabColliderProjectionRange(prefab, colliders, Quaternion.identity,
+                            Vector3.right, out float minX, out float maxX))
+                        solid.x = maxX - minX;
+                    if (TryGetPrefabColliderProjectionRange(prefab, colliders, Quaternion.identity,
+                            Vector3.up, out float minY, out float maxY))
+                        solid.y = maxY - minY;
+                    if (TryGetPrefabColliderProjectionRange(prefab, colliders, Quaternion.identity,
                             Vector3.forward, out float minZ, out float maxZ))
-                        size = new Vector3(maxX - minX, maxY - minY, maxZ - minZ);
+                        solid.z = maxZ - minZ;
+
+                    // The loop index is deliberately not called "axis": this method's
+                    // parameter already owns that name, and a nested declaration of it is a
+                    // compile error (CS0136).
+                    for (int component = 0; component < 3; component++)
+                    {
+                        float model = component == 0 ? size.x : component == 1 ? size.y : size.z;
+                        float limit = model > 0.0001f ? model * 2f + 0.5f : 12f;
+                        if (solid[component] > limit)
+                            solid[component] = model > 0.0001f ? model : limit;
+                    }
+                    size = Vector3.Max(size, solid);
                 }
+
                 if (size.sqrMagnitude < 0.0001f) size = Vector3.one;
                 _footprintCache[block] = size;
             }

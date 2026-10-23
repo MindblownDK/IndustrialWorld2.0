@@ -84,6 +84,9 @@ namespace VoxelEngine.Building
                 float signForward = Mathf.Sign(alongForward);
                 float signRight = Mathf.Sign(alongRight);
 
+                float pitchRight = pitch.x * 1.04f + 0.12f;
+                float pitchForward = pitch.z * 1.04f + 0.12f;
+
                 for (int f = 0; f <= rows; f++)
                 {
                     // A drag with no depth is a run, not a one-cell-wide deck.
@@ -94,8 +97,8 @@ namespace VoxelEngine.Building
                         if (columns == 0 && r > 0) break;
                         if (cells.Count >= budget) return cells.Count;
 
-                        Vector3 offset = axisRight * (signRight * r * pitch.x)
-                                       + axisForward * (signForward * f * pitch.z);
+                        Vector3 offset = axisRight * (signRight * r * pitchRight)
+                                       + axisForward * (signForward * f * pitchForward);
                         cells.Add(new PlacementCell { position = anchorPosition + offset, rotation = anchorRotation });
                     }
                 }
@@ -149,6 +152,11 @@ namespace VoxelEngine.Building
 
             // How far the aim has moved ALONG the chosen axis. A drag across the run's
             // own axis contributes nothing, which is what keeps the run dead straight.
+            // 17.44.15-dev: a probe at a cell's own centre must not land inside its
+            // neighbour, so cells are laid a few centimetres clear of touching. Two machines
+            // sized exactly to their neighbour were being refused on every second cell.
+            pitchAlong = pitchAlong * 1.04f + 0.12f;
+
             float distance = Vector3.Dot(delta, axis);
 
             // 17.44.9-dev: a pillar could never be dragged at all. The aim rides the ground,
