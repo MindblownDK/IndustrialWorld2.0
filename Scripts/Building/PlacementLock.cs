@@ -43,7 +43,22 @@ namespace VoxelEngine.Building
         public static BlockItem Item { get; private set; }
 
         private static float _nextNudge;
-        private static Vector3 _lastNudgeDirection;
+
+        // ── The nudge basis ────────────────────────────────────────────────────
+        // Screen axes, captured ONCE per lock and rebuilt only when the player really
+        // turns their view. Rebuilding them every frame sounds more accurate and is the
+        // opposite: the basis is derived from a gravity up that moves with the ghost and a
+        // camera that is never perfectly still, so it drifts a fraction of a degree per
+        // step. Hold an arrow and those fractions add up in one direction - the block
+        // walks away in a slow zigzag instead of stepping sideways.
+        private static bool _nudgeBasisValid;
+        private static Vector3 _nudgeRight = Vector3.right;
+        private static Vector3 _nudgeAway = Vector3.forward;
+        private static Vector3 _nudgeUp = Vector3.up;
+        private static Vector3 _nudgeBasisAt;
+
+        /// <summary>Which arrow is being held: 0 none, +/-1 left-right, +/-2 back-away, +/-3 down-up.</summary>
+        private static int _nudgeIntent;
 
         /// <summary>Freezes the pose that is currently on screen.</summary>
         public static void Lock(BlockItem item, Vector3 position, Quaternion rotation)
@@ -54,7 +69,8 @@ namespace VoxelEngine.Building
             Position = position;
             Rotation = rotation;
             _nextNudge = 0f;
-            _lastNudgeDirection = Vector3.zero;
+            _nudgeIntent = 0;
+            _nudgeBasisValid = false;
             VoxelEngine.UI.BuildFeedbackHud.Show("Hologram locked",
                 "It stays put while you walk around it. Arrow keys nudge, Shift + arrow moves five, Ctrl + arrow lifts.",
                 null, VoxelEngine.UI.UITheme.AccentGold);
@@ -66,18 +82,23 @@ namespace VoxelEngine.Building
             if (!IsLocked) return;
             IsLocked = false;
             Item = null;
-            _lastNudgeDirection = Vector3.zero;
+            _nudgeIntent = 0;
+            _nudgeBasisValid = false;
         }
 
         /// <summary>True while the lock is held for this item and it is still in hand.</summary>
         public static bool Matches(BlockItem item) => IsLocked && item != null && Item == item;
 
-        public static void Nudge(Vector3 worldOffset)
+        public static void Nudge(Vector3 worldOffset, bool sound = true)
         {
             if (!IsLocked) return;
             Position += worldOffset;
-            VoxelEngine.FX.AudioManager.PlayUI(
-                VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.UiHover), 0.35f, 1.24f);
+
+            // One tick per press. A held arrow repeats several times a second, and a click
+            // on every repeat turns a nudge into a rattle.
+            if (sound)
+                VoxelEngine.FX.AudioManager.PlayUI(
+                    VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.UiHover), 0.35f, 1.24f);
         }
 
         /// <summary>Moves the frozen pose by a rotation step, keeping it where it is.</summary>
@@ -104,76 +125,100 @@ namespace VoxelEngine.Building
             Vector2 axis = ReadArrowAxis();
             if (axis.sqrMagnitude < 0.01f)
             {
-                _lastNudgeDirection = Vector3.zero;
+                _nudgeIntent = 0;
                 return false;
             }
 
             bool ctrl = VoxelEngine.GridSystem.GridInput.Ctrl;
             bool shift = VoxelEngine.GridSystem.GridInput.Shift;
-            Vector3 up = GravityProvider.GetUp(Position);
-            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
-            up.Normalize();
+            Vector3 upNow = GravityProvider.GetUp(Position);
+            if (upNow.sqrMagnitude < 0.0001f) upNow = Vector3.up;
+            upNow.Normalize();
 
-            // ── 17.44.3-dev: SCREEN AXES, NOT A TANGENT ──────────────────────────
-            // Two earlier versions both failed here. Flattening the camera's FORWARD is
-            // unstable the moment the player looks down at a machine - a builder's normal
-            // view - because that projection shrinks to nearly nothing and its direction
-            // stops meaning anything, which is how left/right could move a block "up".
-            // The camera's RIGHT vector projected onto the ground plane never degenerates
-            // while the player is looking at the ground, so that is the reference: right is
-            // screen right, and away is the ground direction that reads as screen up.
-            Vector3 right;
-            if (view != null)
-            {
-                right = Vector3.ProjectOnPlane(view.right, up);
-                if (right.sqrMagnitude < 0.04f)
-                    right = Vector3.ProjectOnPlane(view.up, up);
-            }
-            else right = Vector3.ProjectOnPlane(Vector3.right, up);
-
-            if (right.sqrMagnitude < 0.0001f)
-                right = PlacementFrame.FromUp(Position, up, "LOCK", false).right;
-            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
-            right.Normalize();
-
-            Vector3 away = Vector3.Cross(right, up);
-            if (away.sqrMagnitude < 0.0001f) away = Vector3.forward;
-            away.Normalize();
-
+            int intent;
             Vector3 direction;
             if (ctrl)
             {
-                direction = up * Mathf.Sign(axis.y);
+                // Lift / drop: straight along the local surface normal.
+                intent = axis.y >= 0f ? 3 : -3;
+                direction = upNow * Mathf.Sign(axis.y);
             }
             else
             {
-                // One axis per press. Pressing two arrows at once used to blend them into a
-                // diagonal that the repeat logic then measured against - which is the rest
-                // of the "zigzag" report. The stronger axis wins.
-                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y)) direction = right * Mathf.Sign(axis.x);
-                else direction = away * Mathf.Sign(axis.y);
+                EnsureNudgeBasis(view, upNow, Position);
+
+                // 17.44.5-dev: one arrow, one axis, always - the light that moved was the
+                // axis-blend, not the basis. Left and right are screen right; up and down
+                // are the ground direction that reads as screen up.
+                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y))
+                {
+                    intent = axis.x > 0f ? 1 : -1;
+                    direction = _nudgeRight * Mathf.Sign(axis.x);
+                }
+                else
+                {
+                    intent = axis.y > 0f ? 2 : -2;
+                    direction = _nudgeAway * Mathf.Sign(axis.y);
+                }
             }
 
             float amount = ctrl ? NudgeFineStep : (shift ? step * 5f : step);
             Vector3 offset = direction * amount;
 
-            // A tap moves once, a held plain arrow repeats at a walking pace, and a Shift
-            // nudge is one deliberate five-cell move with no repeat at all.
-            bool freshPress = direction != _lastNudgeDirection;
-            _lastNudgeDirection = direction;
+            // 17.44.5-dev: repeat is measured on the ARROW, never on the resulting vector.
+            // Comparing directions meant a single drifting basis or a gravity up that
+            // changed with the ghost counted as a brand-new press every frame - so a held
+            // key nudged sixty times a second and crawled the block away.
+            bool freshPress = intent != _nudgeIntent;
+            _nudgeIntent = intent;
             if (freshPress)
             {
                 _nextNudge = Time.unscaledTime + NudgeRepeatDelay;
             }
             else
             {
+                // Shift and Ctrl move once per press: five cells and 0.05 m are decisions.
                 if (shift || ctrl) return false;
                 if (Time.unscaledTime < _nextNudge) return false;
                 _nextNudge = Time.unscaledTime + NudgeRepeatRate;
             }
 
-            Nudge(offset);
+            Nudge(offset, freshPress);
             return true;
+        }
+
+        /// <summary>
+        /// Locks the screen basis for nudging. It is rebuilt only when the player has turned
+        /// their view by more than about 20 degrees, or when the frozen pose has travelled
+        /// far enough that the local surface is a different place.
+        /// </summary>
+        private static void EnsureNudgeBasis(Transform view, Vector3 up, Vector3 position)
+        {
+            bool stale = !_nudgeBasisValid || (position - _nudgeBasisAt).sqrMagnitude > 16f;
+
+            Vector3 candidate = view != null ? Vector3.ProjectOnPlane(view.right, up) : Vector3.zero;
+            if (!stale && candidate.sqrMagnitude > 0.04f
+                && Vector3.Dot(candidate.normalized, _nudgeRight) < 0.94f)
+                stale = true;   // the view has turned: sideways means something else now
+
+            if (!stale) return;
+
+            // The camera's RIGHT, flattened onto the ground, never its forward: a forward
+            // projection collapses toward zero whenever the player looks down at a machine.
+            Vector3 right = candidate;
+            if (right.sqrMagnitude < 0.04f && view != null)
+                right = Vector3.ProjectOnPlane(view.up, up);
+            if (right.sqrMagnitude < 0.0001f)
+                right = PlacementFrame.FromUp(position, up, "LOCK", false).right;
+            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
+
+            _nudgeRight = right.normalized;
+            Vector3 away = Vector3.Cross(_nudgeRight, up);
+            if (away.sqrMagnitude < 0.0001f) away = Vector3.Cross(_nudgeRight, Vector3.up);
+            _nudgeAway = away.normalized;
+            _nudgeUp = up;
+            _nudgeBasisAt = position;
+            _nudgeBasisValid = true;
         }
 
         private static Vector2 ReadArrowAxis()

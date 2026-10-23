@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.4-dev`
-**Roadmap Version:** `17.44.4-dev`
+**Current Version:** `17.44.5-dev`
+**Roadmap Version:** `17.44.5-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.44.5-dev - Nudging: A Held Arrow Steps Sideways, Once Per Step
+- The nudge basis is captured once per lock and rebuilt only on a real view turn (>20 degrees) or after 4 m of travel, so a held arrow no longer drifts into a zigzag
+- The hold-repeat is measured on which arrow is held rather than on the resulting direction vector, which is what let camera jitter count as a fresh press every frame; the nudge tick sounds once per press
+
 ### 17.44.4-dev - Placement Feel Fix: The Frozen Hologram Was Unplaceable
 - `PatternOwnsClick` no longer claims the build click while the hologram is frozen: the pattern cannot arm a run in that state, so the click was claimed and then refused - no block, no run, and a green hologram
 - A run that places nothing reports the first real per-cell refusal instead of "No room", and a press that cannot arm a run leaves one `[placement]` console line
@@ -42,11 +46,6 @@
 - Run pitch is measured with the prefab projection helper rather than `Collider.bounds` (empty on a prefab asset), so SPAN / PILLAR / DECK finally space wide machines by their own footprint
 - Ground placement joins the neighbouring structure's lattice, and the neighbour search reaches 6 m (12 m with Ctrl) with or without the `G` lattice; interior-lattice machines now take part in alignment at all
 - An untouched heading always agrees with the frame and a freeze captures the pose on screen, so no odd-angle ghost appears beside a square row; nudge repeat drops to a walking pace and the assist card cannot outlive its hologram
-
-### 17.44.1-dev - Placement Feel Fixes: Screen-Relative Nudge, Footprint Pitch, Alignment Range
-- Frozen-hologram nudges are measured along the camera's forward, so a held arrow key walks the block that way instead of curving off in a zigzag; Ctrl + arrow still lifts on the surface normal
-- SPAN / PILLAR / DECK pitch by each prefab's own projected footprint (never tighter than the lattice) instead of by the lattice alone, so a run of wide machines stops overlapping itself
-- Ctrl lines up against the nearest placed block or deck within 8 m of the ghost with or without the `G` lattice, the assist card is owned by the hologram so an empty hand puts it away, and the card's body turns with the block's yaw
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -143,6 +142,7 @@
 - Line-up reaches six metres around the ghost and twelve while Ctrl is held, applies to ground placement by taking the neighbour's lattice across the ground while keeping the surface-flush height, and covers interior-lattice machines whose own lattice still owns the position (17.44.2-dev).
 - An untouched heading always agrees with the frame it is landing in; only a heading the player turned by hand is exempt, and a freeze captures the transform that is on screen rather than the published statics from the frame before (17.44.2-dev). Line-up is a YAW and never a tilt: the block keeps its own vertical, and a neighbour lends its up only when it stands square to the surface (17.44.2-dev).
 - Nudging a frozen hologram walks: plain arrows repeat at 0.14 s after a 0.32 s delay, Shift and Ctrl nudge exactly once per press (17.44.2-dev). The basis is screen right projected onto the ground plane, one arrow axis per press, because flattening the camera's forward degenerates the moment a player looks down at a machine (17.44.3-dev).
+- That basis is captured ONCE per lock and rebuilt only on a real view turn (more than ~20 degrees) or after 4 m of travel, and the hold-repeat is measured on the ARROW being held rather than on the resulting direction vector - a per-frame basis plus a vector comparison nudges sixty times a second and crawls the block away (17.44.5-dev).
 - A run's preview pool belongs to one item and is destroyed when the held block changes, the hologram itself stands at the run's tip while dragging, and each preview cell is tinted by its own validity (17.44.3-dev).
 - A HUD may never refresh the timestamp its own grace period is measured against: that is how the assist card latched on with an empty hand, and why the fix had to be structural rather than another guard (17.44.3-dev).
 - A click claim must be exactly as wide as the path that answers it: `PatternOwnsClick` suppresses all other placement, so it may never be true in a state the pattern refuses to act in - frozen hologram, or an open wheel (17.44.4-dev).

@@ -1,9 +1,24 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.4-dev`
+**Current Version:** `17.44.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.5-dev] Nudging: A Held Arrow Steps Sideways, Once Per Step
+
+**Type:** PATCH - one movement fix in the frozen-hologram nudger. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.5-dev] Make frozen-hologram nudging step cleanly sideways instead of drifting`
+
+#### Fixed
+
+- **A held arrow walked the hologram away in a slow zigzag (`PlacementLock.Tick`, `EnsureNudgeBasis`).** Two independent faults pointed the same way. The screen basis was rebuilt every step from the live camera and a gravity up that moves with the ghost, so it drifted a fraction of a degree per nudge - invisible on a tap, a curve on a hold. And the hold-repeat compared the resulting DIRECTION vector, so that drift (and any camera jitter) counted as a brand-new press every frame: a held key nudged many times a second rather than on its repeat interval. The basis is now captured once per lock and rebuilt only when the player really turns their view (more than about 20 degrees) or the frozen pose has travelled far enough to be on different ground, and the repeat is measured on which ARROW is held - never on the resulting vector. Left and right are screen right; up and down are the ground direction that reads as screen up; one arrow, one axis, always.
+- **The nudge tick sounds once per press**, not once per repeat: a held arrow used to machine-gun the UI hover.
+
+#### Validation
+
+- Parsed `PlacementLock.cs` with a C# grammar; parses clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.4-dev] Fix the Dead Build Click While a Pattern Is Selected and the Hologram Is Frozen
 
