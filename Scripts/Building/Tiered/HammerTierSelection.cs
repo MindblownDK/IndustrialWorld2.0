@@ -107,7 +107,12 @@ namespace VoxelEngine.Building.Tiered
 
             var step = definition.GetUpgradeCost(PreviousTier(destination));
             if (step?.items == null || step.items.Length == 0) return step;
-            if (UpgradeCostMultiplier <= 1) return step;
+
+            // Read through Mathf.Max so the multiplier staying at 1 is a runtime value rather
+            // than a constant the compiler folds away - a literal `if (2 <= 1) return;` is
+            // unreachable code and CS0162 says so (17.47.3-dev).
+            int factor = Mathf.Max(1, UpgradeCostMultiplier);
+            if (factor == 1) return step;
 
             // A copy, never the definition's own array: scaling it in place would double the
             // cost again on the next call and rewrite the asset's value for the session.
@@ -115,7 +120,7 @@ namespace VoxelEngine.Building.Tiered
             for (int i = 0; i < step.items.Length; i++)
             {
                 var ingredient = step.items[i];
-                ingredient.count = Mathf.Max(0, ingredient.count * UpgradeCostMultiplier);
+                ingredient.count = Mathf.Max(0, ingredient.count * factor);
                 scaled[i] = ingredient;
             }
             return new TierCost { items = scaled };

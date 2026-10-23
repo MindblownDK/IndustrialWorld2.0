@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.2-dev`
-**Roadmap Version:** `17.47.2-dev`
+**Current Version:** `17.47.3-dev`
+**Roadmap Version:** `17.47.3-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 17.47.3-dev - A Type Where the Compiler Looks for It
+- `DeckPlane` is called by the name the namespace gives it rather than as a nested type of the planner, and the doubled upgrade cost is read at runtime so no branch is unreachable
+
 ### 17.47.2-dev - Wall Planes and an Outline That Fits
 - A deck aimed at a face names its plane outright - up the wall along gravity, along the wall as normal cross gravity - because a frame borrowed from a wall keeps the wall's normal as its up
 - The hammer outline writes exactly its twenty-four vertices, so marking a piece no longer throws
@@ -46,11 +49,6 @@
 - SPAN and DECK count cells in the block's own pitch, so the plan fills out to the crosshair instead of saturating on the lattice
 - The pattern dial's third face chooses LEVEL or FOLLOW GROUND seating; every fuse and tier wedge carries a badge, and the tiers have icons
 - Nudging steps along the frozen pose's own axes, a charge goes off on the first point of damage, and explosions damage hammer pieces and grid hulls
-
-### 17.45.0-dev - Lattice Nudging, Runs That Build What They Draw, Tier Target and Fuse Wheel
-- The four nudge directions are LATTICE axes chosen from the view once per press burst, so a press is a straight step on the grid and left then right cancels exactly
-- Runs, pillars and decks are judged against the site as found, not against the cells the same gesture just placed, and a floor plan is seated as one rigid move, so the plan is what gets built
-- The Building Hammer takes a piece to a NAMED tier for that tier's single material step; explosives arm from a fuse wheel on the build key and no longer count down on their hologram
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

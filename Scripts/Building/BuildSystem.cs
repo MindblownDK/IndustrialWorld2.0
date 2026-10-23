@@ -2116,7 +2116,7 @@ namespace VoxelEngine.Building
             // The plan's two axes are therefore named here: up the wall (gravity) and along
             // the wall (normal cross gravity). Without this, a deck dragged up a wall still
             // measured its drag along the wrong axis and only ever filled flat ground.
-            var plane = default(PlacementPatternPlanner.DeckPlane);
+            var plane = default(DeckPlane);
             if (faceDeck)
             {
                 Vector3 faceUp = GravityProvider.GetUp(_patternAnchorPosition);
@@ -2135,7 +2135,7 @@ namespace VoxelEngine.Building
                 var gravityFrame = PlacementFrame.FromUp(_patternAnchorPosition, faceUp, "FACE", true);
                 Vector3 facePitch = PatternPitch(block, _patternAnchorRotation, gravityFrame);
 
-                plane = new PlacementPatternPlanner.DeckPlane
+                plane = new DeckPlane
                 {
                     valid = true,
                     axisA = along,

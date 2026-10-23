@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.2-dev`
+**Current Version:** `17.47.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.47.3-dev] A Type Where the Compiler Looks for It
+
+**Type:** PATCH - two compile faults and nothing else. No behaviour change.
+
+**GitHub title:** `[17.47.3-dev] Call the deck plane by the name the compiler can see, and let the cost multiplier be read at runtime`
+
+#### Fixed
+
+- **`BuildSystem` referred to `PlacementPatternPlanner.DeckPlane`, which does not exist (CS0426, two sites).** `DeckPlane` is a sibling type in `VoxelEngine.Building`, not a type nested inside the planner, so the qualified name was a type the compiler had never heard of. Both call sites use the bare name now, which is what the namespace already provides.
+- **`HammerTierSelection.CostToReach` had an unreachable branch (CS0162).** `if (UpgradeCostMultiplier <= 1) return step;` is compiled against a `const int` of 2, so the compiler folds the test to false and calls the statement after it unreachable. The multiplier is read through `Mathf.Max(1, ...)` into a local now, which is a runtime value and cannot be folded.
+
+#### Validation
+
+- Parse: 18 of 18 changed files clean.
+- Fields: clean - every `_name` used in every changed file is declared in it, comments and string literals excluded from the search (a shader property string and a line-wrapped field had been reading as faults before).
+- Type scope: printed for every type the change set touches, and `DeckPlane` confirmed as `VoxelEngine.Building.DeckPlane`, a namespace sibling - the exact fact the CS0426 cost.
+- Qualified type positions: clean across the whole change set.
+- Not run in Unity.
 
 ### [17.47.2-dev] An Outline That Stays Inside Its Buffer, and a Wall Plane Stated Outright
 
