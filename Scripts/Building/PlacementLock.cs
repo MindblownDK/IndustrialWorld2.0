@@ -41,6 +41,8 @@ namespace VoxelEngine.Building
         public static Vector3 Position { get; private set; }
         public static Quaternion Rotation { get; private set; } = Quaternion.identity;
         public static BlockItem Item { get; private set; }
+        /// <summary>The lattice frame the pose was frozen in: the axes nudges step along.</summary>
+        public static PlacementFrame Frame { get; private set; }
 
         private static float _nextNudge;
 
@@ -61,18 +63,21 @@ namespace VoxelEngine.Building
         private static int _nudgeIntent;
 
         /// <summary>Freezes the pose that is currently on screen.</summary>
-        public static void Lock(BlockItem item, Vector3 position, Quaternion rotation)
+        public static void Lock(BlockItem item, Vector3 position, Quaternion rotation,
+            PlacementFrame frame = default(PlacementFrame))
         {
             if (item == null) return;
             IsLocked = true;
             Item = item;
             Position = position;
             Rotation = rotation;
+            Frame = frame.valid ? frame : PlacementFrame.FromUp(position, GravityProvider.GetUp(position),
+                "LOCK", false);
             _nextNudge = 0f;
             _nudgeIntent = 0;
             _nudgeBasisValid = false;
             VoxelEngine.UI.BuildFeedbackHud.Show("Hologram locked",
-                "It stays put while you walk around it. Arrow keys nudge, Shift + arrow moves five, Ctrl + arrow lifts.",
+                "It stays put while you walk around it. Arrow keys nudge, Shift + arrow moves five, Ctrl + up or down lifts.",
                 null, VoxelEngine.UI.UITheme.AccentGold);
             VoxelEngine.FX.AudioManager.PlayUI(VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.UiClick), 0.5f, 0.88f);
         }
@@ -139,26 +144,38 @@ namespace VoxelEngine.Building
             Vector3 direction;
             if (ctrl)
             {
-                // Lift / drop: straight along the local surface normal.
-                intent = axis.y >= 0f ? 3 : -3;
-                direction = upNow * Mathf.Sign(axis.y);
+                // 17.44.7-dev: Ctrl means LIFT and DROP, nothing else. A horizontal arrow
+                // with Ctrl held is not a fine sideways nudge - it does nothing at all.
+                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y)) return false;
+
+                intent = axis.y > 0f ? 3 : -3;
+                direction = FrameAxis(upNow, vertical: true) * Mathf.Sign(axis.y);
             }
             else
             {
                 EnsureNudgeBasis(view, upNow, Position);
 
-                // 17.44.5-dev: one arrow, one axis, always - the light that moved was the
-                // axis-blend, not the basis. Left and right are screen right; up and down
-                // are the ground direction that reads as screen up.
-                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y))
+                // 17.44.7-dev: the press is read as a SCREEN direction, then committed to
+                // the nearest lattice axis and stepped along that. Two things fall out of
+                // it. A step is always a whole cell on the block's own lattice, never a
+                // fraction of one. And the axis cannot drift between steps: it is chosen
+                // from the frozen pose's frame, so a wobbling camera basis can change WHICH
+                // cardinal a press means, but it can never make two consecutive steps fight
+                // each other - which is the zigzag.
+                // Left/right and up/down are committed to a perpendicular PAIR of lattice
+                // axes, so the four arrows always describe a square grid rather than four
+                // directions that can collapse onto each other at 45 degrees.
+                SnapPlanarAxes(upNow, out Vector3 axisRight, out Vector3 axisAway);
+                bool horizontal = Mathf.Abs(axis.x) >= Mathf.Abs(axis.y);
+                if (horizontal)
                 {
                     intent = axis.x > 0f ? 1 : -1;
-                    direction = _nudgeRight * Mathf.Sign(axis.x);
+                    direction = axisRight * Mathf.Sign(axis.x);
                 }
                 else
                 {
                     intent = axis.y > 0f ? 2 : -2;
-                    direction = _nudgeAway * Mathf.Sign(axis.y);
+                    direction = axisAway * Mathf.Sign(axis.y);
                 }
             }
 
@@ -194,6 +211,46 @@ namespace VoxelEngine.Building
 
             Nudge(offset, freshPress);
             return true;
+        }
+
+        /// <summary>
+        /// Maps the two screen directions onto a perpendicular pair of the frozen pose's own
+        /// lattice axes: <paramref name="axisRight"/> answers left/right of the screen and
+        /// <paramref name="axisAway"/> the remaining axis, signed toward screen-up. A step is
+        /// therefore always a whole cell along the block's lattice, and the pair can never
+        /// fold onto itself.
+        /// </summary>
+        private static void SnapPlanarAxes(Vector3 up, out Vector3 axisRight, out Vector3 axisAway)
+        {
+            Vector3 a = Frame.valid ? Vector3.ProjectOnPlane(Frame.right, up) : default(Vector3);
+            Vector3 b = Frame.valid ? Vector3.ProjectOnPlane(Frame.forward, up) : default(Vector3);
+            if (a.sqrMagnitude < 0.0001f) a = Vector3.ProjectOnPlane(Vector3.right, up);
+            if (b.sqrMagnitude < 0.0001f) b = Vector3.ProjectOnPlane(Vector3.forward, up);
+
+            if (a.sqrMagnitude < 0.0001f || b.sqrMagnitude < 0.0001f)
+            {
+                // No usable frame: stay screen-relative rather than freezing the arrows.
+                axisRight = _nudgeRight;
+                axisAway = _nudgeAway;
+                return;
+            }
+
+            a.Normalize();
+            b.Normalize();
+
+            bool rightIsA = Mathf.Abs(Vector3.Dot(_nudgeRight, a)) >= Mathf.Abs(Vector3.Dot(_nudgeRight, b));
+            axisRight = (rightIsA ? a : b) * Mathf.Sign(Vector3.Dot(_nudgeRight, rightIsA ? a : b));
+            Vector3 other = rightIsA ? b : a;
+            axisAway = other * Mathf.Sign(Vector3.Dot(_nudgeAway, other));
+            if (Mathf.Approximately(Vector3.Dot(_nudgeAway, other), 0f)) axisAway = other;
+        }
+
+        /// <summary>The frozen pose's vertical: the surface normal, or the frame's up.</summary>
+        private static Vector3 FrameAxis(Vector3 up, bool vertical)
+        {
+            if (!vertical) return up;
+            if (Frame.valid && Vector3.Dot(Frame.up, up) > 0.9f) return Frame.up.normalized;
+            return up;
         }
 
         /// <summary>

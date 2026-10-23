@@ -1719,7 +1719,10 @@ namespace VoxelEngine.Building
                 // statics are one frame behind, and freezing onto a pose the ghost has
                 // already left is how a frozen hologram could appear to jump or turn.
                 else if (GhostValid) PlacementLock.Lock(_ghostItem,
-                    _ghost.transform.position, _ghost.transform.rotation);
+                    _ghost.transform.position, _ghost.transform.rotation,
+                    GhostFrame.valid ? GhostFrame : PlacementFrame.FromUp(
+                        _ghost.transform.position, GravityProvider.GetUp(_ghost.transform.position),
+                        "LOCK", false));
                 else
                     VoxelEngine.UI.BuildFeedbackHud.Show("Nothing to freeze",
                         "The hologram has to be on a valid cell before it can be locked.",
@@ -1909,11 +1912,26 @@ namespace VoxelEngine.Building
                 // could be claimed by the pattern and never answer it.
                 bool pressed = GameSettings.WasPressed(InputAction.Build);
                 bool pressedEdge = held && !_buildWasHeld;
-                if (!((pressedEdge || pressed) && GhostValid))
+
+                // 17.44.7-dev: arm on a freshly computed answer, not on the published
+                // GhostValid flag. That flag only says which material the ghost is wearing,
+                // and a ghost can be wearing the valid material for a frame while the probe
+                // that matters refuses the cell - which read as "the run silently does not
+                // exist" while a single click, which re-checks for itself, still worked.
+                // The refusal is declared up front and always assigned: reading it from an
+                // `out var` inside a short-circuited `&&` leaves it unassigned whenever the
+                // first operand is false (CS0165).
+                bool armable = false;
+                PlacementRefusal armRefusal = PlacementRefusal.None;
+                if (_ghost != null)
+                    armable = IsPlacementValid(_ghost.transform.position, block,
+                        _ghost.transform.rotation, out armRefusal);
+                if (!((pressedEdge || pressed) && armable))
                 {
-                    if ((pressedEdge || pressed) && !GhostValid)
+                    if ((pressedEdge || pressed) && !armable)
                         UnityEngine.Debug.Log($"[placement] run did not arm: '{block.displayName}' " +
-                            "is not on a valid cell");
+                            $"at {(_ghost != null ? _ghost.transform.position.ToString() : "no ghost")} - " +
+                            $"{armRefusal} (published ghost valid: {GhostValid})");
                     return;
                 }
 
@@ -1949,6 +1967,18 @@ namespace VoxelEngine.Building
             }
 
             if (held) return;
+
+            // 17.44.7-dev: a run that planned nothing still commits its anchor. A click in
+            // a pattern mode must never be able to do nothing at all.
+            if (_plannedCells.Count == 0)
+            {
+                _plannedCells.Add(new PlacementCell
+                {
+                    position = _patternAnchorPosition,
+                    rotation = _patternAnchorRotation,
+                });
+                PatternPreviewCount = 1;
+            }
 
             // Released: build the plan, anchor first.
             int built = CommitRun(block);

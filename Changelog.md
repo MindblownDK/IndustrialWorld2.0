@@ -1,9 +1,26 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.6-dev`
+**Current Version:** `17.44.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.7-dev] Lattice-Axis Nudging, Ctrl as Lift Only, and a Run That Cannot Fail Silently
+
+**Type:** PATCH - corrections to the frozen-hologram nudger and the run arming path. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.7-dev] Nudge along the frozen lattice, make Ctrl lift-only, and arm runs on a live validity check`
+
+#### Fixed
+
+- **Nudging steps along the frozen pose's own lattice axes (`PlacementLock.SnapPlanarAxes`).** Each press is read as a screen direction and then committed to a perpendicular PAIR of the frozen pose's lattice axes: left/right answers screen-right, up/down answers the remaining axis, so the four arrows always describe a square grid and can never fold onto each other at 45 degrees. A step is a whole cell of the block's lattice, and two consecutive steps cannot fight each other - the drift that read as a zigzag is gone by construction rather than by tuning, and it holds however the player stands relative to the block.
+- **Ctrl is lift and drop only (`PlacementLock.Tick`).** A horizontal arrow with Ctrl held now does nothing at all. It used to fall through into the fine-nudge path, which is why Ctrl + left/right appeared to move a block it should not have touched. The lock toast and the assist card's legend now say "Ctrl + up/down".
+- **A run arms on a live validity check, not on the ghost's material (`HandlePlacementPattern`).** `GhostValid` only reports which translucent material the hologram is wearing, so a ghost could look green while the probe refused the cell - and the run silently never existed while a single click, which re-checks for itself, kept working. Arming now runs `IsPlacementValid` on the pose on screen, and the refusal line prints that answer beside the published flag.
+- **A release with an empty plan still commits its anchor.** A click in a pattern mode can no longer do nothing at all: if the planner produced no cells, the anchor cell is committed on its own.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.6-dev] Placement Diagnostics and the Pinned-Dial Trap
 

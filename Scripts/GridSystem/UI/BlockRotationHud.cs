@@ -395,7 +395,7 @@ namespace VoxelEngine.GridSystem.UI
             if (locked)
             {
                 primary = "ARROWS  nudge one step  ·  SHIFT+ARROWS  five";
-                secondary = "CTRL+ARROWS  lift / drop  ·  " + lockKey + "  release lock";
+                secondary = "CTRL+UP/DOWN  lift / drop  ·  " + lockKey + "  release lock";
             }
             else if (runCells > 1)
             {
