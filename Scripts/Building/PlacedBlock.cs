@@ -45,6 +45,18 @@ namespace VoxelEngine.Building
 
         public void Damage(int amount, Inventory recipient)
         {
+            // 17.45.3-dev: A CHARGE IS SET OFF BY A HIT, NOT ATTIRED IN HIT POINTS.
+            // A bomb's health lived on this component, so shooting one or striking it with a
+            // pickaxe chipped at four hundred hit points like a wall and it only disappeared
+            // once they were gone - which is why the MANUAL fuse looked broken: nothing ever
+            // set it off. An explosive takes the first point of damage and goes.
+            var charge = GetComponentInChildren<VoxelEngine.Combat.IExplosiveCharge>(true);
+            if (charge != null && amount > 0)
+            {
+                charge.Detonate();
+                return;
+            }
+
             Hp -= amount;
             if (Hp > 0)
             {

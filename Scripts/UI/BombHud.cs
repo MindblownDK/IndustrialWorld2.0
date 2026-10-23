@@ -161,6 +161,9 @@ namespace VoxelEngine.UI
                 Title = "DEFAULT",
                 Description = "Whatever this charge is authored with",
                 Icon = null,
+                // 17.45.3-dev: every wedge carries its own value, so the dial can be read
+                // without flicking round it one option at a time.
+                Badge = "DEF",
                 Available = true,
                 Affordable = true,
                 Selected = ExplosiveBlock.NextFuse < 0f,
@@ -180,6 +183,7 @@ namespace VoxelEngine.UI
                         : choice <= 5f ? "The demolition standard"
                         : "Enough time to reach the next room",
                     Icon = null,
+                    Badge = manual ? "MAN" : Mathf.RoundToInt(choice) + "s",
                     Available = true,
                     Affordable = true,
                     Selected = ExplosiveBlock.NextFuse >= 0f && Mathf.Abs(current - choice) < 0.01f,

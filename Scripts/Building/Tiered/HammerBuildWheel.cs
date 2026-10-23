@@ -342,7 +342,8 @@ namespace VoxelEngine.Building.Tiered
                     Description = offered
                         ? HammerTierSelection.Blurb(tier)
                         : "Wood is where pieces start - pick Stone or above",
-                    Icon = null,
+                    Icon = HammerTierSelection.Icon(tier),
+                    Badge = null,
                     Details = _detailScratch.ToArray(),
                     DetailsOk = _detailOkScratch.ToArray(),
                     Available = true,

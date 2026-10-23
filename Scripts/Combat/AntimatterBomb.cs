@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace VoxelEngine.Combat
 {
-    public class AntimatterBomb : Damageable
+    public class AntimatterBomb : Damageable, IExplosiveCharge
     {
         [Header("Antimatter Bomb")]
         public float fuse = 8f;
@@ -59,6 +59,9 @@ namespace VoxelEngine.Combat
         }
 
         protected override void Die(DamageEvent e) => Trigger();
+
+        /// <summary>Set the charge off now (the block-damage path and any manual trigger).</summary>
+        public void Detonate() => Trigger();
 
         private void Trigger()
         {

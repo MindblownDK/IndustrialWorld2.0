@@ -32,6 +32,7 @@ namespace VoxelEngine.UI
             Base = 0,      // the owning wheel's own options
             Pattern = 1,   // SINGLE / SPAN / PILLAR / DECK
             Step = 2,      // 1 m / 0.5 m / FREE
+            Seat = 3,      // LEVEL / FOLLOW GROUND - how a run sits on the ground
         }
 
         private readonly RadialWheelController _wheel;
@@ -62,7 +63,7 @@ namespace VoxelEngine.UI
         }
 
         /// <summary>True while the ring is showing its own options.</summary>
-        public bool ShowingOwnOptions => Stage.Pattern == _stage || Stage.Step == _stage;
+        public bool ShowingOwnOptions => Stage.Pattern == _stage || Stage.Step == _stage || Stage.Seat == _stage;
 
         /// <summary>
         /// Call once per frame from the owning wheel's Update, immediately BEFORE
@@ -89,9 +90,17 @@ namespace VoxelEngine.UI
                 case Stage.Step:
                     _wheel.GroupLabel = "LATTICE STEP";
                     _wheel.SwapHint = string.Empty;
-                    _wheel.CtrlSwapHint = _home ? "BACK TO PATTERNS" : "BACK TO " + (_baseLabel ?? string.Empty);
+                    _wheel.CtrlSwapHint = _home ? "RUN SEATING" : "BACK TO " + (_baseLabel ?? string.Empty);
                     _wheel.IdleTitle = "KEEP STEP";
                     _wheel.IdleIcon = PlacementPatternIcons.ForStep(PlacementOptions.Step);
+                    break;
+
+                case Stage.Seat:
+                    _wheel.GroupLabel = "RUN SEATING";
+                    _wheel.SwapHint = string.Empty;
+                    _wheel.CtrlSwapHint = "BACK TO PATTERNS";
+                    _wheel.IdleTitle = "KEEP SEATING";
+                    _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
                     break;
 
                 default:
@@ -109,7 +118,8 @@ namespace VoxelEngine.UI
             _stage = _stage switch
             {
                 Stage.Pattern => Stage.Step,
-                Stage.Step => _home ? Stage.Pattern : Stage.Base,
+                Stage.Step => _home ? Stage.Seat : Stage.Base,
+                Stage.Seat => Stage.Pattern,
                 _ => Stage.Pattern,
             };
             Tick();
@@ -159,6 +169,28 @@ namespace VoxelEngine.UI
                 return true;
             }
 
+            if (_stage == Stage.Seat)
+            {
+                // 17.45.2-dev: LEVEL or FOLLOW GROUND, as its own face of the same dial,
+                // so a slope can be built on without changing the pattern to get there.
+                var current = PlacementOptions.Seat;
+                for (int i = 0; i < 2; i++)
+                {
+                    var seat = PlacementOptions.SeatAt(i);
+                    options.Add(new RadialOption
+                    {
+                        Title = PlacementOptions.SeatName(seat),
+                        Description = PlacementOptions.SeatBlurb(seat),
+                        Badge = PlacementOptions.SeatBadge(seat),
+                        Icon = null,
+                        Available = true,
+                        Affordable = true,
+                        Selected = seat == current,
+                    });
+                }
+                return true;
+            }
+
             return false;
         }
 
@@ -190,6 +222,16 @@ namespace VoxelEngine.UI
                 return true;
             }
 
+            if (_stage == Stage.Seat)
+            {
+                if (index > 1) return true;
+                var seat = PlacementOptions.SeatAt(index);
+                PlacementOptions.SetSeat(seat);
+                BuildFeedbackHud.Show("Run Seating", PlacementOptions.SeatName(seat),
+                    null, UITheme.AccentGold);
+                return true;
+            }
+
             return false;
         }
 
@@ -202,12 +244,15 @@ namespace VoxelEngine.UI
         {
             string pattern = PlacementOptions.PatternName(PlacementOptions.Pattern);
             if (PlacementOptions.Pattern == PlacementPattern.Single) return pattern;
-            return pattern + " · " + PlacementOptions.StepName(PlacementOptions.Step);
+            // 17.45.3-dev: the seating is part of the gesture's state now, so it belongs on
+            // the pill with the pattern and the step rather than hidden one wheel face away.
+            return pattern + " · " + PlacementOptions.StepName(PlacementOptions.Step)
+                + " · " + PlacementOptions.SeatName(PlacementOptions.Seat);
         }
 
         /// <summary>The Ctrl hint, spelled with whatever key the player actually uses.</summary>
         public static string CtrlHint()
-            => "CTRL+SCROLL  PLACEMENT";
+            => "CTRL+SCROLL  PATTERN / STEP / SEATING";
 
     }
 }

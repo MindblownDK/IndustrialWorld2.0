@@ -244,18 +244,23 @@ namespace VoxelEngine.Building
         /// </summary>
         private static void RepinNudgeBasis(Transform view, Vector3 up)
         {
-            var frame = Frame.valid ? Frame : PlacementFrame.FromUp(Position, up, "LOCK", false);
-            Vector3 axisA = Vector3.ProjectOnPlane(frame.right, up).normalized;
-            if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.ProjectOnPlane(Vector3.forward, up).normalized;
-            if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.ProjectOnPlane(Vector3.up, up).normalized;
+            // ── 17.45.3-dev: THE BLOCK'S OWN AXES, NOT THE WORLD'S ──────────────
+            // The pair came from the placement frame, which on open ground is the planet's
+            // tangent - world X and Z. A block turned to face some other way therefore moved
+            // along axes that had nothing to do with its own front, and the arrows read as
+            // "it only goes sideways". The pair is the FROZEN POSE'S OWN heading now: right
+            // is the block's right, away is the block's front. Those are the axes its
+            // neighbours sit on, so a step always lands on a cell, and the arrows mean what
+            // the machine's own front says they mean.
+            Vector3 axisA = Vector3.ProjectOnPlane(Rotation * Vector3.right, up).normalized;
+            if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.ProjectOnPlane(Vector3.right, up).normalized;
             if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.forward;
 
             // Axis B must be SQUARE to axis A, not merely close: a pair that is twenty
             // degrees off would move the block sideways as well as forward, which is the
             // diagonal the player reports as a zigzag, and pressing one arrow then the other
-            // would not close the rectangle. Orthogonalise, then re-derive if that collapses.
-            Vector3 axisB = Vector3.ProjectOnPlane(frame.forward, up);
-            if (axisB.sqrMagnitude < 0.0001f) axisB = Vector3.ProjectOnPlane(Vector3.right, up);
+            // would not close the rectangle.
+            Vector3 axisB = Vector3.ProjectOnPlane(Rotation * Vector3.forward, up);
             float skew = Vector3.Dot(axisA, axisB);
             if (Mathf.Abs(skew) > 0.001f) axisB -= axisA * skew;
             if (axisB.sqrMagnitude < 0.0001f) axisB = Vector3.Cross(up, axisA);

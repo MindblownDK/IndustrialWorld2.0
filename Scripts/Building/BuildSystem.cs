@@ -2220,6 +2220,16 @@ namespace VoxelEngine.Building
             bool pivotAnchored = profile != null && profile.anchorAtPivot;
             float clearance = StaticPlacementSurfaceOffset(block, pivotAnchored);
 
+            // 17.45.2-dev: FOLLOW GROUND is the player's choice on the placement wheel, and
+            // when it is on every cell drops onto the surface under it. Both seatings used to
+            // be applied at different times with no way to choose, so the same gesture came
+            // out flat on one site and draped on the next.
+            if (PlacementOptions.Seat == PlacementSeat.FollowGround)
+            {
+                SeatCellsIndividually(cells, block, clearance);
+                return;
+            }
+
             Vector3 up = GravityProvider.GetUp(_patternAnchorPosition);
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
@@ -2247,6 +2257,38 @@ namespace VoxelEngine.Building
             {
                 var cell = cells[i];
                 cell.position += up * lift;
+                cells[i] = cell;
+            }
+        }
+
+        /// <summary>
+        /// Drops every cell onto the ground under its OWN centre - the draped seating a deck,
+        /// a foundation run or a rail bed wants on a slope. A cell whose seat the click would
+        /// refuse keeps its planned position, so the preview never draws a cell that cannot
+        /// be built because of the drop.
+        /// </summary>
+        private void SeatCellsIndividually(System.Collections.Generic.List<PlacementCell> cells, BlockItem block,
+            float clearance)
+        {
+            for (int i = 1; i < cells.Count; i++)
+            {
+                var cell = cells[i];
+                Vector3 up = GravityProvider.GetUp(cell.position);
+                if (up.sqrMagnitude < 0.0001f) continue;
+                up.Normalize();
+
+                var probe = new Ray(cell.position + up * 4f, -up);
+                if (!TryRaycastIgnoringSelf(probe, out var ground, 12f)) continue;
+
+                Vector3 normal = ground.normal.sqrMagnitude > 0.0001f ? ground.normal.normalized : up;
+                Vector3 seated = ground.point + normal * clearance;
+                if (Mathf.Abs(Vector3.Dot(seated - cell.position, up)) > 4f) continue;
+
+                _surfaceAttachmentHost = null;
+                _deckSnapHost = null;
+                if (!IsPlacementValid(seated, block, cell.rotation, out _)) continue;
+
+                cell.position = seated;
                 cells[i] = cell;
             }
         }

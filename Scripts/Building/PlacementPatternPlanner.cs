@@ -73,8 +73,16 @@ namespace VoxelEngine.Building
                 // row or a column" while neighbouring cells stay apart. Counting on the
                 // footprint made a four-by-four deck need ten metres of drag; spacing on the
                 // footprint alone made a deck of wide machines sprawl across fifteen.
-                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
-                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                // 17.45.2-dev: a deck is counted in the block's OWN pitch on both axes, so
+                // pointing at a spot fills the rectangle out to that spot. Counted in lattice
+                // metres, a machine four metres across needed four metres of aim per column
+                // and the far aim saturated one axis while the other stayed at zero - which
+                // is a LINE, not an area, and is exactly what "deck places upwards and
+                // sideways, not an area" looked like on screen.
+                float deckPitchRight = Mathf.Max(step, pitch.x);
+                float deckPitchForward = Mathf.Max(step, pitch.z);
+                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / deckPitchRight), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / deckPitchForward), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
 
                 Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
@@ -211,17 +219,21 @@ namespace VoxelEngine.Building
             }
             else
             {
-                // ── 17.44.14-dev: count in METRES, space by the pitch ──────────────────
-                // A run is laid out across the ground, where the crosshair travels with the
-                // player's hand: one lattice metre of drag per cell, and the cells themselves
-                // are spaced by the footprint so neighbours cannot interpenetrate. Drag
-                // distance is the player's, spacing is the block's.
-                count = Mathf.Clamp(Mathf.RoundToInt(distance / step), -cap, cap);
+                // ── 17.45.2-dev: a SPAN fills out to where the player is POINTING ──────
+                // Counted in lattice metres, one metre of aim added a cell, so a machine four
+                // metres wide - and an aim that can reach a distant hillside - saturated the
+                // ten-cell cap the instant the player looked up. Counted in the block's own
+                // pitch the run simply covers the gap between the anchor and the crosshair:
+                // point one machine further on and the run is one cell longer, point at the
+                // horizon and it stops at the cap. Spacing is unchanged, so cells still sit
+                // flush against each other.
+                float spanPitch = Mathf.Max(step, rawPitch);
+                count = Mathf.Clamp(Mathf.RoundToInt(distance / spanPitch), -cap, cap);
                 if (count == 0)
                 {
                     // A short drag still reads as a run: the first cell in the dragged
                     // direction, so the preview always answers the gesture.
-                    if (Mathf.Abs(distance / step) > 0.2f) count = distance > 0f ? 1 : -1;
+                    if (Mathf.Abs(distance / spanPitch) > 0.25f) count = distance > 0f ? 1 : -1;
                 }
             }
 

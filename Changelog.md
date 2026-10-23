@@ -1,9 +1,40 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.45.1-dev`
+**Current Version:** `17.46.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.46.0-dev] Runs That Point Where You Point, a Seating Face, Block-Axis Nudging and Blasts That Break Construction
+
+**Type:** MINOR - one new placement option (run seating), wheel badges and tier icons, and corrections across placement, charges and explosions. No save schema change, no chunk format change, no removed system.
+
+**GitHub title:** `[17.46.0-dev] Span and deck fill to the crosshair, a level/follow-ground face, block-axis nudging, and blasts that break hammer builds and grid hulls`
+
+#### Added
+
+- **Run seating: LEVEL or FOLLOW GROUND, on its own face of the placement dial (`PlacementOptions.PlacementSeat`, `PlacementModeRing.Stage.Seat`, `BuildSystem.SeatCellsIndividually`).** The Ctrl face of the pattern wheel now cycles PATTERN, then LATTICE STEP, then RUN SEATING. LEVEL keeps the whole plan flat and square - what a machine wants on rolling ground; FOLLOW GROUND drops every cell onto the surface beneath it - what a deck, a foundation run or a rail bed wants on a slope. Both seatings existed already and were applied at different times with no way for the player to choose, which is why the same gesture could come out flat on one site and draped on the next. The choice persists, and the prompt pill under the crosshair reports it beside the pattern and the step.
+- **Every wedge of the fuse dial and the tier dial now carries its own value (`RadialOption.Badge`, `RadialWheelView.ApplyBadge`).** The fuse wheel reads DEF, 1s, 2s, 3s, 5s, 10s, 20s, 30s, MAN; the seating face reads LEVEL and GROUND. A badge is drawn only when an option has one and no picture, so no existing wheel changes.
+- **The hammer's tier dial has icons (`HammerTierSelection.Icon`).** Each tier gets its own glyph from the shared icon atlas - planks for wood, a block for stone, a roof angle for iron, a diamond for steel.
+- **Explosions break construction (`Explosion.Detonate`).** A blast damaged creatures, the player and ordinary placed blocks, and had no opinion at all about Building Hammer pieces or grid hulls - so a charge flattened the ground around a wall built with the hammer and left the wall standing. Tiered pieces and `GridBlock`s are now collected in the same pass and damaged with a distance falloff - full force at the surface of the charge, a third of it at the rim - and a blast is never refused by a piece's mining tier.
+
+#### Fixed
+
+- **A SPAN saturated the moment the player looked anywhere (`PlacementPatternPlanner.Build`).** The count was the aim's travel in lattice metres, so one metre of crosshair movement added a cell and an aim that can reach a distant hillside filled the ten-cell cap instantly - "span goes to maximum distance when we look, not really controllable". It is counted in the block's own pitch now: the run covers the gap between the anchor and the crosshair, one machine further on is one cell longer, and the cells still sit flush. Foundations, whose pitch is the lattice, behave exactly as before.
+- **A DECK came out as a line or a staircase, never an area (`PlacementPatternPlanner.Build`).** The same metre-counting made the two axes unrelated to the block: a four-metre machine needed four metres of aim per column, the far aim saturated one axis while the other stayed at zero, and the "rectangle" was one cell wide - which is what "it can place upwards and sideways, but not an area" was. Both axes are counted in the block's own pitch now, so pointing diagonally fills a real rectangle out to the crosshair.
+- **Nudging moved along the world, not along the block (`PlacementLock.RepinNudgeBasis`).** The four directions came from the placement frame, which on open ground is the planet's tangent - world X and Z. A machine turned to face another way therefore stepped along axes that had nothing to do with its own front, and the arrows read as sideways-only. The pair is the FROZEN POSE'S OWN heading now: right is its right, away is its front, both orthogonalised, so a step always lands on a cell a neighbour could stand on.
+- **A MANUAL charge never went off (`PlacedBlock.Damage`, `IExplosiveCharge`).** A bomb's health lives on `PlacedBlock`, so shooting one or striking it with a pickaxe chipped at its block hit points like a wall; the object only disappeared once they were gone, and nothing ever set the charge off. Any explosive now implements `IExplosiveCharge`, and `PlacedBlock.Damage` hands the FIRST point of damage straight to it: a charge is set off by a hit, never attired in hit points. Chain detonations still run through the damageable path as before.
+
+#### Balance
+
+- **Hammer upgrades cost double (`HammerTierSelection.UpgradeCostMultiplier`).** A named destination is charged two of its single material step - Iron is 4 Iron Ingot, not 2 - because the stopovers are skipped and the top tier should stay a decision rather than a purchase. The wheel shows the doubled figure and the build system takes the same figure, since both read one cost. The multiplier is one constant; a scaled copy is returned, never the definition's own array, so nothing compounds across calls.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all fourteen parse clean.
+- Field sweep: every `_name` used in every patched file is declared in that file.
+- Every call added this round read against its target signature: `PlacedTieredBlock.Damage(int, int, Inventory)`, `GridBlock.Damage(float)`, `RadialOption.Badge`, `IconAtlas.Get(string, Action<LineArtBuilder>)`, `PlacementOptions.SeatAt/SetSeat`, `IExplosiveCharge.Detonate`.
+- Not run in Unity. The feel checks are: a two-metre step on a SPAN, a diagonal drag filling a deck as an area, the seating face on Ctrl+scroll, the block following its own axes when nudged, a MANUAL charge going off on the first hit, a bomb breaking a hammer wall and a grid hull, and 4 Iron Ingot showing in the tier wheel.
 
 ### [17.45.1-dev] Two Compile Errors on the New Dial Work
 

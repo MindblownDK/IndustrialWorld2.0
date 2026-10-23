@@ -31,6 +31,15 @@ namespace VoxelEngine.Building.Tiered
     {
         private const string K_TIER = "ve.hammerUpgradeTier";
 
+        /// <summary>
+        /// 17.45.3-dev: what the hammer charges, as a multiple of the authored upgrade cost.
+        /// A named destination skips the stopovers, so it costs more than the single step it
+        /// is charged against - two of that step, decided with the player. It scales the
+        /// number the wheel shows and the number the build system takes, because both read
+        /// the same cost.
+        /// </summary>
+        public const int UpgradeCostMultiplier = 2;
+
         /// <summary>Wood is the tier everything is born at, so it is never a destination.</summary>
         public static readonly BuildTier[] Offerable =
         {
@@ -95,7 +104,21 @@ namespace VoxelEngine.Building.Tiered
         {
             if (definition == null) return null;
             if (destination <= BuildTier.Wood) return null;
-            return definition.GetUpgradeCost(PreviousTier(destination));
+
+            var step = definition.GetUpgradeCost(PreviousTier(destination));
+            if (step?.items == null || step.items.Length == 0) return step;
+            if (UpgradeCostMultiplier <= 1) return step;
+
+            // A copy, never the definition's own array: scaling it in place would double the
+            // cost again on the next call and rewrite the asset's value for the session.
+            var scaled = new Ingredient[step.items.Length];
+            for (int i = 0; i < step.items.Length; i++)
+            {
+                var ingredient = step.items[i];
+                ingredient.count = Mathf.Max(0, ingredient.count * UpgradeCostMultiplier);
+                scaled[i] = ingredient;
+            }
+            return new TierCost { items = scaled };
         }
 
         /// <summary>The tier below this one; Wood is its own floor.</summary>
@@ -121,6 +144,40 @@ namespace VoxelEngine.Building.Tiered
             }
             return builder.Length == 0 ? "Free" : builder.ToString();
         }
+
+        /// <summary>
+        /// A wedge icon for one tier. The tier dial's choices are materials, not machines,
+        /// so each one gets its own glyph: planks for wood, a block for stone, a roof angle
+        /// for iron, a diamond for steel. Cached by the shared icon atlas like every other
+        /// wheel icon in the game.
+        /// </summary>
+        public static Texture2D Icon(BuildTier tier) => tier switch
+        {
+            BuildTier.Stone => VoxelEngine.UI.IconAtlas.Get("hammer:tier:stone", b =>
+            {
+                b.Polyline(new Vector2(-0.34f, -0.30f), new Vector2(-0.34f, 0.30f),
+                           new Vector2(0.34f, 0.30f), new Vector2(0.34f, -0.30f),
+                           new Vector2(-0.34f, -0.30f));
+                b.Line(new Vector2(-0.34f, 0.02f), new Vector2(0.34f, 0.02f));
+            }),
+            BuildTier.Iron => VoxelEngine.UI.IconAtlas.Get("hammer:tier:iron", b =>
+            {
+                b.Polyline(new Vector2(-0.40f, -0.14f), new Vector2(0f, 0.24f), new Vector2(0.40f, -0.14f));
+                b.Line(new Vector2(-0.26f, -0.34f), new Vector2(0.26f, -0.34f));
+            }),
+            BuildTier.Steel => VoxelEngine.UI.IconAtlas.Get("hammer:tier:steel", b =>
+            {
+                b.Polyline(new Vector2(0f, 0.38f), new Vector2(0.34f, 0f), new Vector2(0f, -0.38f),
+                           new Vector2(-0.34f, 0f), new Vector2(0f, 0.38f));
+                b.Line(new Vector2(-0.16f, 0f), new Vector2(0.16f, 0f));
+            }),
+            _ => VoxelEngine.UI.IconAtlas.Get("hammer:tier:wood", b =>
+            {
+                b.Line(new Vector2(-0.34f, 0.26f), new Vector2(0.34f, 0.26f));
+                b.Line(new Vector2(-0.34f, 0f), new Vector2(0.34f, 0f));
+                b.Line(new Vector2(-0.34f, -0.26f), new Vector2(0.34f, -0.26f));
+            }),
+        };
 
         private static void EnsureLoaded()
         {

@@ -24,18 +24,66 @@ namespace VoxelEngine.Combat
             var cols = Physics.OverlapSphere(pos, radius, ~0, QueryTriggerInteraction.Ignore);
             var damaged = new HashSet<IDamageable>();
             var brokenBlocks = new HashSet<VoxelEngine.Building.PlacedBlock>();
+
+            // ── 17.45.3-dev: A BLAST HAD NO OPINION ABOUT CONSTRUCTION. ──────────────
+            // Only damageables and ordinary placed blocks were ever harmed, so a Building
+            // Hammer wall, a foundation and every block on a grid hull simply stood there
+            // through a charge that flattened the ground around them. Both are handled here
+            // now, with the same distance falloff a blast should have: full force on the
+            // surface of the charge, nothing at the rim.
+            var tieredPieces = new HashSet<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+            var gridBlocks = new HashSet<VoxelEngine.GridSystem.GridBlock>();
+            var tieredDamage = new Dictionary<VoxelEngine.Building.Tiered.PlacedTieredBlock, int>();
+            var gridDamage = new Dictionary<VoxelEngine.GridSystem.GridBlock, float>();
+
             foreach (var c in cols)
             {
                 var d = c.GetComponentInParent<IDamageable>();
                 if (d != null && d.IsAlive) damaged.Add(d);
                 var pb = c.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
                 if (pb != null) brokenBlocks.Add(pb);
+
+                float dist = Vector3.Distance(pos, c.ClosestPoint(pos));
+                float falloff = Mathf.Clamp01(1f - dist / Mathf.Max(0.5f, radius));
+                int amount = Mathf.RoundToInt(damage * (0.35f + 0.65f * falloff));
+                if (amount <= 0) continue;
+
+                var tiered = c.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                if (tiered != null)
+                {
+                    tieredPieces.Add(tiered);
+                    if (!tieredDamage.TryGetValue(tiered, out int best) || amount > best)
+                        tieredDamage[tiered] = amount;
+                }
+
+                var gridBlock = c.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                if (gridBlock != null)
+                {
+                    gridBlocks.Add(gridBlock);
+                    if (!gridDamage.TryGetValue(gridBlock, out float bestHp) || amount > bestHp)
+                        gridDamage[gridBlock] = amount;
+                }
             }
             var de = new DamageEvent { amount = damage, type = DamageType.Explosive, point = pos, direction = up, source = owner };
             foreach (var d in damaged) d.TakeDamage(de);
             foreach (var pb in brokenBlocks)
             {
                 try { pb.Damage(Mathf.RoundToInt(damage), null); } catch { /* best-effort */ }
+            }
+
+            // Hammer construction: tier 4 is passed as the "tool" tier so a blast is never
+            // refused by a piece's mining tier - a charge is not a pickaxe.
+            foreach (var piece in tieredPieces)
+            {
+                if (piece == null) continue;
+                try { piece.Damage(tieredDamage[piece], 4, null); } catch { /* best-effort */ }
+            }
+
+            // Grid hulls: GridBlock owns its own destruction, including precision layers.
+            foreach (var block in gridBlocks)
+            {
+                if (block == null) continue;
+                try { block.Damage(gridDamage[block]); } catch { /* best-effort */ }
             }
             var ps = PlayerStats.Instance;   // the player isn't an IDamageable
             if (ps != null && Vector3.Distance(pos, ps.transform.position) <= radius)

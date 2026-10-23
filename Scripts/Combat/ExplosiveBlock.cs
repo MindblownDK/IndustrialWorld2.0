@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace VoxelEngine.Combat
 {
-    public class ExplosiveBlock : Damageable
+    public class ExplosiveBlock : Damageable, IExplosiveCharge
     {
         [Header("Powder Keg")]
         [Tooltip("Seconds after placement before it detonates on its own.")]
@@ -38,7 +38,7 @@ namespace VoxelEngine.Combat
         private bool _detonated;
         private Light _glow;
         private float _initialFuse;
-        /// <summary>Armed with no countdown. It still detonates the instant it takes damage.</summary>
+        /// <summary>Armed with no countdown. Any damage sets it off, as does a chain blast.</summary>
         public bool manualFuse;
 
         protected override void Awake()

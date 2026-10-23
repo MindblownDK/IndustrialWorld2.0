@@ -25,6 +25,12 @@ namespace VoxelEngine.UI
         public string Title;
         public string Description;
         public Texture2D Icon;
+        /// <summary>
+        /// 17.45.2-dev: a short word or number drawn IN the wedge, for a dial whose choices
+        /// are values rather than pictures - a fuse length, a tier name. Empty draws nothing,
+        /// so every existing wheel is untouched.
+        /// </summary>
+        public string Badge;
         /// <summary>Requirement lines for the hub, for example "50 x Wood  (985,703)".</summary>
         public string[] Details;
         /// <summary>Per-line satisfaction; drives the green/red colour of each detail line.</summary>
@@ -281,6 +287,21 @@ namespace VoxelEngine.UI
                 slot.style.backgroundImage = new StyleBackground(_options[index].Icon);
             slot.style.backgroundRepeat = new BackgroundRepeat(Repeat.NoRepeat, Repeat.NoRepeat);
             slot.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
+
+            // The badge sits in the same ring slot as an icon and is shown only when the
+            // option has one and no picture, so the two never fight for the same place.
+            var badge = new Label(_options[index].Badge ?? string.Empty);
+            badge.style.position = Position.Absolute;
+            badge.style.left = 0; badge.style.top = 0; badge.style.right = 0; badge.style.bottom = 0;
+            badge.style.unityTextAlign = TextAnchor.MiddleCenter;
+            badge.style.fontSize = 12;
+            badge.style.unityFontStyleAndWeight = FontStyle.Bold;
+            badge.style.color = new StyleColor(IconIdle);
+            badge.style.display = string.IsNullOrEmpty(_options[index].Badge) || _options[index].Icon != null
+                ? DisplayStyle.None
+                : DisplayStyle.Flex;
+            badge.pickingMode = PickingMode.Ignore;
+            slot.Add(badge);
             slot.style.transitionProperty = new List<StylePropertyName> { "scale" };
             slot.style.transitionDuration = new List<TimeValue> { new(0.07f, TimeUnit.Second) };
             slot.style.transitionTimingFunction = new List<EasingFunction> { new(EasingMode.EaseOutCubic) };
@@ -407,6 +428,7 @@ namespace VoxelEngine.UI
                 _options[i] = options[i];
                 if (i < _iconSlots.Count && options[i].Icon != null)
                     _iconSlots[i].style.backgroundImage = new StyleBackground(options[i].Icon);
+                if (i < _iconSlots.Count) ApplyBadge(_iconSlots[i], options[i], null);
             }
             Refresh(_hovered);
         }
@@ -432,9 +454,31 @@ namespace VoxelEngine.UI
                 _iconSlots[i].style.unityBackgroundImageTintColor = new StyleColor(tint);
                 _iconSlots[i].style.scale = new StyleScale(new Scale(
                     hot ? new Vector3(1.22f, 1.22f, 1f) : Vector3.one));
+                ApplyBadge(_iconSlots[i], option, tint);
             }
 
             RefreshHub();
+        }
+
+        /// <summary>Writes a wedge's badge text and tint, hiding it when the option carries
+        /// a picture or no badge at all.</summary>
+        private static void ApplyBadge(VisualElement slot, RadialOption option, Color? tint = null)
+        {
+            if (slot == null) return;
+            Label badge = null;
+            // The badge is the only Label this view ever puts inside an icon slot.
+            var children = slot.Children();
+            foreach (var child in children)
+            {
+                if (child is Label label) { badge = label; break; }
+            }
+            if (badge == null) return;
+
+            badge.text = option.Badge ?? string.Empty;
+            badge.style.display = string.IsNullOrEmpty(option.Badge) || option.Icon != null
+                ? DisplayStyle.None
+                : DisplayStyle.Flex;
+            if (tint.HasValue) badge.style.color = new StyleColor(tint.Value);
         }
 
         private void RefreshHub()

@@ -44,6 +44,21 @@ namespace VoxelEngine.Building
     }
 
     /// <summary>
+    /// How a run sits on the ground it is laid over.
+    ///
+    /// 17.45.2-dev: LEVEL is the default and is what a machine wants - the whole plan moves
+    /// together, so a deck is flat and square however the dune rolls. FOLLOW GROUND drops
+    /// every cell onto the surface beneath it, which is what foundations, decks and rail
+    /// beds want on a slope. Both were being applied at once at different times, which is
+    /// why the same gesture could come out level on one site and scattered on the next.
+    /// </summary>
+    public enum PlacementSeat
+    {
+        Level = 0,
+        FollowGround = 1,
+    }
+
+    /// <summary>
     /// The player's current placement pattern and lattice step, plus the rule that says
     /// which items are allowed to use them. Read-only outside <see cref="CycledPattern"/>
     /// and friends so no builder can drift out of agreement with the HUD.
@@ -61,6 +76,7 @@ namespace VoxelEngine.Building
 
         private const string K_PATTERN = "ve.placePattern";
         private const string K_STEP = "ve.placeStep";
+        private const string K_SEAT = "ve.placeSeat";
 
         /// <summary>Raised whenever the pattern, the step or the eligibility changes.</summary>
         public static event System.Action Changed;
@@ -68,6 +84,7 @@ namespace VoxelEngine.Building
         private static bool _loaded;
         private static PlacementPattern _pattern = PlacementPattern.Single;
         private static PlacementStep _step = PlacementStep.Metre;
+        private static PlacementSeat _seat = PlacementSeat.Level;
 
         public static PlacementPattern Pattern
         {
@@ -77,6 +94,12 @@ namespace VoxelEngine.Building
         public static PlacementStep Step
         {
             get { EnsureLoaded(); return _step; }
+        }
+
+        /// <summary>Level keeps a plan flat; Follow Ground drapes it over the surface.</summary>
+        public static PlacementSeat Seat
+        {
+            get { EnsureLoaded(); return _seat; }
         }
 
         /// <summary>True when a click should lay a run instead of a single block.</summary>
@@ -120,6 +143,25 @@ namespace VoxelEngine.Building
             _ => "The structural metre every foundation and machines share.",
         };
 
+        public static string SeatName(PlacementSeat seat) => seat switch
+        {
+            PlacementSeat.FollowGround => "FOLLOW GROUND",
+            _ => "LEVEL",
+        };
+
+        public static string SeatBlurb(PlacementSeat seat) => seat switch
+        {
+            PlacementSeat.FollowGround => "Every cell drops onto the surface under it - decks and foundations on a slope",
+            _ => "The whole plan stays flat and level, however the ground rolls",
+        };
+
+        /// <summary>Short caption for a wedge badge.</summary>
+        public static string SeatBadge(PlacementSeat seat)
+            => seat == PlacementSeat.FollowGround ? "GROUND" : "LEVEL";
+
+        public static PlacementSeat SeatAt(int index)
+            => index == 1 ? PlacementSeat.FollowGround : PlacementSeat.Level;
+
         public static PlacementPattern PatternAt(int index)
             => index switch
             {
@@ -143,6 +185,16 @@ namespace VoxelEngine.Building
             if (_pattern == pattern) return;
             _pattern = pattern;
             PlayerPrefs.SetInt(K_PATTERN, (int)_pattern);
+            PlayerPrefs.Save();
+            Changed?.Invoke();
+        }
+
+        public static void SetSeat(PlacementSeat seat)
+        {
+            EnsureLoaded();
+            if (_seat == seat) return;
+            _seat = seat;
+            PlayerPrefs.SetInt(K_SEAT, (int)_seat);
             PlayerPrefs.Save();
             Changed?.Invoke();
         }
@@ -201,8 +253,10 @@ namespace VoxelEngine.Building
             _loaded = true;
             int pattern = PlayerPrefs.GetInt(K_PATTERN, 0);
             int step = PlayerPrefs.GetInt(K_STEP, 0);
+            int seat = PlayerPrefs.GetInt(K_SEAT, 0);
             _pattern = (PlacementPattern)Mathf.Clamp(pattern, 0, 3);
             _step = (PlacementStep)Mathf.Clamp(step, 0, 2);
+            _seat = (PlacementSeat)Mathf.Clamp(seat, 0, 1);
         }
     }
 }
