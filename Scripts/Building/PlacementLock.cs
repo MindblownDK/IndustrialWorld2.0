@@ -61,6 +61,8 @@ namespace VoxelEngine.Building
 
         /// <summary>Which arrow is being held: 0 none, +/-1 left-right, +/-2 back-away, +/-3 down-up.</summary>
         private static int _nudgeIntent;
+        private static float _pitchRight = 1f;
+        private static float _pitchForward = 1f;
 
         /// <summary>Freezes the pose that is currently on screen.</summary>
         public static void Lock(BlockItem item, Vector3 position, Quaternion rotation,
@@ -121,11 +123,13 @@ namespace VoxelEngine.Building
         /// left of the screen and up is always away from the player, whatever the camera is
         /// doing - looking level, looking down on the machine, or anything between.
         /// </summary>
-        public static bool Tick(BlockItem held, float step, Transform view)
+        public static bool Tick(BlockItem held, Vector3 pitch, Transform view)
         {
             if (!IsLocked) return false;
             if (held == null || held != Item) { Unlock(); return false; }
-            if (step <= 0.0001f) step = 1f;
+            if (pitch.x <= 0.0001f) pitch.x = 1f;
+            if (pitch.y <= 0.0001f) pitch.y = 1f;
+            if (pitch.z <= 0.0001f) pitch.z = 1f;
 
             Vector2 axis = ReadArrowAxis();
             if (axis.sqrMagnitude < 0.01f)
@@ -142,6 +146,9 @@ namespace VoxelEngine.Building
 
             int intent;
             Vector3 direction;
+            // A step is one cell of the block's own row: the pitch its neighbours sit at, so
+            // a nudged machine lands exactly where the next one in the row would have.
+            float stepAlong = Mathf.Max(0.25f, pitch.y);
             if (ctrl)
             {
                 // 17.44.7-dev: Ctrl means LIFT and DROP, nothing else. A horizontal arrow
@@ -162,27 +169,35 @@ namespace VoxelEngine.Building
                 // from the frozen pose's frame, so a wobbling camera basis can change WHICH
                 // cardinal a press means, but it can never make two consecutive steps fight
                 // each other - which is the zigzag.
-                // 17.44.8-dev: SCREEN AXES, flat out. The previous release committed each
-                // press to the frozen pose's own lattice axes, which is stable but wrong in
-                // the hand: standing edge-on to a machine, screen-right IS the machine's
-                // forward, so pressing right walked the block forwards and backwards instead
-                // of sideways. Left must always be left of the screen. The basis is the
-                // cached one, captured once per lock, so this stays just as steady - the
-                // stability was never the lattice's job, it was the caching.
-                bool horizontal = Mathf.Abs(axis.x) >= Mathf.Abs(axis.y);
-                if (horizontal)
+                // ── 17.44.10-dev: ONE CELL OF THE FROZEN BLOCK'S OWN ROW ────────────
+                // The press is read on screen, then committed to a perpendicular PAIR of the
+                // frozen pose's lattice axes: left/right answers the axis that points
+                // screen-right, up/down the other one. Every step is therefore a whole cell
+                // on the same lattice the block was frozen on, so nudged blocks line up with
+                // the row beside them instead of landing between cells - and because the
+                // pair is derived from the PINNED basis, the same key always moves the same
+                // way for as long as the lock is held. Standing edge-on, screen-right really
+                // is the block's forward, and a step goes along its row: that is the
+                // intended trade for lattice-perfect placement.
+                _pitchRight = Mathf.Max(0.25f, pitch.x);
+                _pitchForward = Mathf.Max(0.25f, pitch.z);
+                SnapLatticeAxes(upNow, out Vector3 axisRight, out Vector3 axisAway,
+                    out float pitchRight, out float pitchAway);
+                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y))
                 {
                     intent = axis.x > 0f ? 1 : -1;
-                    direction = _nudgeRight * Mathf.Sign(axis.x);
+                    direction = axisRight * Mathf.Sign(axis.x);
+                    stepAlong = pitchRight;
                 }
                 else
                 {
                     intent = axis.y > 0f ? 2 : -2;
-                    direction = _nudgeAway * Mathf.Sign(axis.y);
+                    direction = axisAway * Mathf.Sign(axis.y);
+                    stepAlong = pitchAway;
                 }
             }
 
-            float amount = ctrl ? NudgeFineStep : (shift ? step * 5f : step);
+            float amount = ctrl ? NudgeFineStep : (shift ? stepAlong * 5f : stepAlong);
             Vector3 offset = direction * amount;
 
             // 17.44.5-dev: repeat is measured on the ARROW, never on the resulting vector.
@@ -214,6 +229,48 @@ namespace VoxelEngine.Building
 
             Nudge(offset, freshPress);
             return true;
+        }
+
+        /// <summary>
+        /// The frozen pose's own lattice axes, mapped to the two screen directions: the first
+        /// answers left/right, the second up/down. Both are whole lattice axes, so a step is
+        /// a cell of the row the block sits on rather than an arbitrary metre.
+        /// </summary>
+        private static void SnapLatticeAxes(Vector3 up, out Vector3 axisRight, out Vector3 axisAway,
+            out float pitchRight, out float pitchAway)
+        {
+            pitchRight = 1f;
+            pitchAway = 1f;
+            Vector3 a = Frame.valid ? Vector3.ProjectOnPlane(Frame.right, up) : default(Vector3);
+            Vector3 b = Frame.valid ? Vector3.ProjectOnPlane(Frame.forward, up) : default(Vector3);
+            if (a.sqrMagnitude < 0.0001f) a = Vector3.ProjectOnPlane(Vector3.right, up);
+            if (b.sqrMagnitude < 0.0001f) b = Vector3.ProjectOnPlane(Vector3.forward, up);
+
+            if (a.sqrMagnitude < 0.0001f || b.sqrMagnitude < 0.0001f)
+            {
+                // No usable frame (frozen before a frame resolved): fall back to the screen
+                // basis rather than freezing the arrows.
+                axisRight = _nudgeRight;
+                axisAway = _nudgeAway;
+                return;
+            }
+
+            a.Normalize();
+            b.Normalize();
+
+            bool rightIsA = Mathf.Abs(Vector3.Dot(_nudgeRight, a)) >= Mathf.Abs(Vector3.Dot(_nudgeRight, b));
+            Vector3 chosen = rightIsA ? a : b;
+            axisRight = chosen * Mathf.Sign(Vector3.Dot(_nudgeRight, chosen));
+
+            Vector3 other = rightIsA ? b : a;
+            axisAway = other * Mathf.Sign(Vector3.Dot(_nudgeAway, other));
+            if (axisAway.sqrMagnitude < 0.5f) axisAway = other;   // exactly 45 degrees: keep it usable
+
+            // Which lattice component each axis came from, so the caller can step by that
+            // axis's own pitch (a machine's width across, its height up).
+            bool rightIsFrameRight = rightIsA;
+            pitchRight = Mathf.Max(0.25f, rightIsFrameRight ? _pitchRight : _pitchForward);
+            pitchAway = Mathf.Max(0.25f, rightIsA ? _pitchForward : _pitchRight);
         }
 
         /// <summary>The frozen pose's vertical: the surface normal, or the frame's up.</summary>

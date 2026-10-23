@@ -1,9 +1,24 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.9-dev`
+**Current Version:** `17.44.10-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.10-dev] Level Lattices and Nudging by the Block's Own Row
+
+**Type:** PATCH - two corrections in the placement layer, both decided with the player. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.10-dev] Keep runs level on slopes and nudge one cell of the frozen block's own row`
+
+#### Fixed
+
+- **A run on a slope climbed away from the player (`BuildSystem.RefineStaticPose`).** The lattice took its up from the HIT NORMAL, so a SPAN or DECK laid on a dune was built in a plane tilted with the sand: a line of blocks climbed as it receded and a rectangle came out as a skewed staircase. A floor, a dune or a slope is now DOWN as far as the lattice is concerned - the surface normal only decides how the block is seated - and only a wall or a ceiling keeps its own up. Runs come out level.
+- **A nudge steps one cell of the frozen block's own row (`PlacementLock.Tick`, `SnapLatticeAxes`).** The direction is still read on screen, but it is committed to a perpendicular pair of the FROZEN POSE's lattice axes, and the step is that axis's own pitch - the distance its neighbours in a run sit at. A nudged machine therefore lands exactly where the next one in the row would have, instead of a metre along an arbitrary diagonal that put it between cells. The pair is derived from the pinned basis, so the same key moves the same way for as long as the lock is held. The trade, chosen deliberately: standing edge-on to a row, "left" runs along the row rather than across the screen.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run. The nudge trace from 17.44.6-dev confirmed the basis was stable and every step exact before this change.
 
 ### [17.44.9-dev] Working PILLAR and DECK, a Longer Build Reach, and a Nudge Basis That Stays Put
 

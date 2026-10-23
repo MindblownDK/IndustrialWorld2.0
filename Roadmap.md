@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.9-dev`
-**Roadmap Version:** `17.44.9-dev`
+**Current Version:** `17.44.10-dev`
+**Roadmap Version:** `17.44.10-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.44.10-dev - Level Lattices, Nudging by the Block's Own Row
+- The lattice takes its up from gravity on anything floor-like, so a run on a dune is level instead of climbing with the sand; only a wall or a ceiling keeps its own up
+- A nudge commits to a perpendicular pair of the frozen pose's lattice axes and steps by that axis's pitch, so a nudged block lands exactly where the next one in its row would have
+
 ### 17.44.9-dev - Working PILLAR and DECK, Longer Build Reach, Pinned Nudge Basis
 - PILLAR grows from the planar drag when the aim cannot climb (a ground aim has zero vertical travel, so the count was always zero) and DECK counts per lattice step, so the two are no longer the same gesture as SPAN
 - A held block raycasts to the build reach instead of the interaction reach, so machines can be placed from the distance the build system already allowed
@@ -43,10 +47,6 @@
 - Each arrow press commits to a perpendicular pair of the frozen pose's lattice axes, so a nudge is a whole cell and two steps cannot fight each other - zigzag is removed by construction, from any viewing angle
 - Ctrl + left/right does nothing; Ctrl + up/down is the only lift/drop, and the card says so
 - Runs arm on a live `IsPlacementValid` instead of the ghost's material flag, and a release with an empty plan still commits its anchor
-
-### 17.44.6-dev - Placement Diagnostics and the Pinned-Dial Trap
-- A tapped build dial no longer pins: a pinned dial blocks the world (no hologram, no placement, no run) while a frozen hologram still answers arrows, which imitates a broken builder exactly
-- A press edge arms a pattern on its own, and every build press and nudge press now leaves one console line naming the gates or the basis it used
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -150,7 +150,8 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is a screen direction, full stop: left is left of the screen from any viewing angle. Stability comes from capturing the basis once per lock and PINNING it there, never from snapping the step to the block's own lattice, which reads as forwards/backwards when standing edge-on (17.44.8-dev, pinned 17.44.9-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A nudge is ONE CELL OF THE FROZEN BLOCK'S OWN ROW: the press is read on screen and committed to a perpendicular pair of the frozen pose's lattice axes, stepped by that axis's pitch. The trade, chosen with the player: standing edge-on to a row, "left" runs along the row rather than across the screen. Stability comes from pinning the basis for the life of the lock, never from re-deriving it mid-sequence (17.44.8-dev, pinned 17.44.9-dev, row-stepped 17.44.10-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A lattice is LEVEL. Its up is gravity whenever the surface is floor-like; the hit normal only decides how a block is seated, and only a wall or a ceiling keeps its own up. A tilted lattice builds a staircase and calls it a straight line (17.44.10-dev).
 - A gesture must be implementable with the input it has. A crosshair on the ground has no vertical travel, so a vertical pattern has to be driven by the planar drag with a sign; count a pattern per lattice step and space it per footprint, or the footprint makes the gesture unreachable (17.44.9-dev).
 - Anything that is drawn at a derived pose hands its INPUT pose on separately. A run that reads its target back from the hologram it just moved reads its own tip and oscillates; the aim is published as `GhostAimPosition` before the pattern touches the ghost (17.44.8-dev).
 - Never gate an action on a presentation flag. `GhostValid` is the ghost's material, not the probe's answer - anything that must be true for a placement to happen asks `IsPlacementValid` directly (17.44.7-dev).

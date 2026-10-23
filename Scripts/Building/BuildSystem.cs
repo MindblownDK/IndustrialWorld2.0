@@ -1578,9 +1578,17 @@ namespace VoxelEngine.Building
                 return;
             if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block)) return;
 
-            Vector3 surfaceUp = hit.normal.sqrMagnitude > 0.0001f
-                ? hit.normal.normalized
-                : GravityProvider.GetUp(pos);
+            // 17.44.10-dev: THE LATTICE IS LEVEL. Its up used to be the hit normal, so a run
+            // laid on a dune was built in a plane tilted with the sand: a "straight" line of
+            // blocks climbed away from the player and a "rectangular" deck came out as a
+            // skewed staircase. A floor, a dune or a slope is still DOWN as far as a lattice
+            // is concerned - only a wall or a ceiling genuinely has its own up.
+            Vector3 gravityUp = GravityProvider.GetUp(pos);
+            if (gravityUp.sqrMagnitude < 0.0001f) gravityUp = Vector3.up;
+            gravityUp.Normalize();
+
+            Vector3 normal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : gravityUp;
+            Vector3 surfaceUp = Vector3.Dot(normal, gravityUp) > 0.72f ? gravityUp : normal;
             var frame = ResolvePlacementFrame(hit.collider, pos, surfaceUp);
             GhostFrame = frame;
             GhostFrameLabel = frame.label;
@@ -1743,10 +1751,11 @@ namespace VoxelEngine.Building
 
             if (!PlacementLock.IsLocked || !PlacementLock.Matches(_ghostItem)) return;
 
-            // Nudges are screen-relative: hand the lock the camera itself so it can derive
-            // screen right on the ground plane instead of guessing from a forward vector
-            // that collapses to nothing whenever the player looks down at the machine.
-            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres),
+            // Nudges step one cell of the block's own row: hand the lock the same pitch a run
+            // of this block is laid at, plus the camera so the screen directions can be
+            // resolved against the axis pair.
+            PlacementLock.Tick(_ghostItem,
+                PatternPitch(_ghostItem, PlacementLock.Rotation, PlacementLock.Frame),
                 shootCamera != null ? shootCamera.transform : null);
 
             // The frozen pose IS the preview from here on.
