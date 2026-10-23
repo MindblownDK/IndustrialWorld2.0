@@ -44,6 +44,9 @@ namespace VoxelEngine.Building.Tiered
         public float yawStep = 90f;
 
         // Runtime
+        /// <summary>True while a piece hologram is in the world and following the crosshair.</summary>
+        public bool GhostShown => _ghost != null && _ghost.activeSelf;
+
         private GameObject _ghost;
         private TieredBlockDefinition _ghostDef;
         private float _ghostYaw;
@@ -75,6 +78,12 @@ namespace VoxelEngine.Building.Tiered
             Instance = this;
             _matValid   = MakeGhostMaterial(new Color(0.40f, 0.90f, 0.45f, ghostAlpha));
             _matInvalid = MakeGhostMaterial(new Color(0.95f, 0.30f, 0.25f, ghostAlpha));
+
+            // 17.46.1-dev: with the hammer out and no piece armed, the crosshair marks what
+            // it is looking at instead of promising a block. Created here because this is the
+            // one tiered system guaranteed to exist in a scene that can build anything.
+            if (GetComponent<AimedPieceHighlight>() == null)
+                gameObject.AddComponent<AimedPieceHighlight>();
         }
 
         private void Update()
@@ -110,6 +119,19 @@ namespace VoxelEngine.Building.Tiered
             // Build mode now requires holding the Hammer AND having picked a family in the wheel.
             var stack = inventory.ActiveStack;
             bool holdingHammer = !stack.IsEmpty && stack.item is VoxelEngine.Items.ToolItem t && t.toolType == VoxelEngine.Items.ToolType.Other && stack.item.GetType().Name == "Hammer";
+
+            // ── 17.46.1-dev: A GHOST IS A PROMISE THAT A CLICK BUILDS A PIECE. ──────
+            // The upgrade and repair faces of the hammer dial are not build mode, but the
+            // family picked before them survived in ActiveFamily, so the last piece's ghost
+            // stayed in the world and a click laid another piece instead of upgrading the
+            // one being aimed at. Nothing but the family face may raise a ghost now, and the
+            // aimed piece is outlined instead (AimedPieceHighlight).
+            if (HammerBuildWheel.Instance != null
+                && (HammerBuildWheel.Instance.IsUpgradeMode || HammerBuildWheel.Instance.IsRepairMode))
+            {
+                HideGhost();
+                return;
+            }
 
             BuildFamily? wheelFam = HammerBuildWheel.Instance != null ? HammerBuildWheel.Instance.ActiveFamily : null;
             // Legacy BuildToken support: if a token is held, it overrides the wheel selection.

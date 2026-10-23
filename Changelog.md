@@ -1,9 +1,34 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.46.0-dev`
+**Current Version:** `17.47.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.47.0-dev] Decks That Keep Both Sides, and a Hammer That Marks Instead of Promising
+
+**Type:** MINOR - a deck now fills an area on both axes, the hammer's upgrade and repair faces stop raising a piece hologram, and a new aiming mark outlines the piece under the crosshair. No save schema change, no removed system.
+
+**GitHub title:** `[17.47.0-dev] Decks keep both sides when the plan is too big, and the hammer outlines the piece it is pointed at`
+
+#### Added
+
+- **The hammer marks what it is pointed at (`Building/Tiered/AimedPieceHighlight`).** With the Building Hammer out and no piece armed, the crosshair no longer carries a hologram — it is not promising to build anything. Instead the piece under it is boxed in a thin unlit outline drawn from its own renderer bounds: twelve line-topology edges, one draw call, no shader and no second copy of the model. Gold means a click would change the piece, teal means it is repair work, cool grey means it is already at the tier the hammer is set to. The outline breathes slowly so it reads as a mark rather than a strobe, ignores effect renderers so a plume never stretches the box, stands down while any dial owns the cursor or a piece hologram is up, and exposes `AimedPieceHighlight.Instance.AimedPiece` for the assist card that is still to come.
+
+#### Fixed
+
+- **A DECK collapsed into a single sideways row (`PlacementPatternPlanner.Build`).** The rectangle shrink that keeps a plan inside the cell budget subtracted from whichever side was LARGER - and on a square aim the two sides are equal, so the FORWARD axis was always the one shortened, all the way to zero. Every diagonal deck came out as one row running sideways, which is exactly "deck only works sideways". The shrink now keeps the aim's proportions: each pass shortens whichever axis is further past its own aim, so a square aim stays square and both sides give way together. Measured on the new rule: a square 2.5 m aim on a 4.65 m machine with a four-block stack is 2 x 2, and a 2.2 m by 1.6 m aim on metre foundations is 3 x 3 in a sixteen-block stack.
+- **A deck needed half a pitch of aim before its second row existed (`PlacementPatternPlanner.DeckCount`).** A row now appears once the aim has covered about a third of the block's own pitch on that axis, so a slight drift off an axis still fills instead of leaving the plan one cell deep.
+- **A deck's cells were emitted row by row (`PlacementPatternPlanner.Build`).** Anything that drew only the first few of a plan showed the anchor's own row - the sideways line again. Cells are emitted by rings now, one step from the anchor, then two, so a truncated draw is a centred patch of the deck.
+- **The preview pool could not draw a full deck (`BuildSystem.MaxPatternPreviews`).** The cap was twelve bodies while a plan may be sixteen cells, so a four-by-four deck was silently truncated. The cap is the cell budget now.
+- **The hammer's last build ghost survived into upgrade and repair mode (`BuildSystemV2.UpdateGhost`, `HammerBuildWheel.ConfirmTier`).** Naming a tier left the family picked before it armed, so the last piece's hologram came back after the dial closed and the next click laid a new piece instead of upgrading the one under the crosshair. Naming a tier now clears the family and arms upgrade mode, and no piece hologram is raised unless the family face is the one in charge - so a click can only ever mean what the dial says it means. The tier toast also quotes the cost of the piece actually under the crosshair.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all five parse clean this round.
+- Field sweep clean (only the pre-existing `"_V"` string-literal hit in `BuildSystem`).
+- Every call added this round read against its target signature: `Physics.RaycastNonAlloc(Ray, RaycastHit[], float, int, QueryTriggerInteraction)`, `PlayerRaycastFilter.IsOwnPlayerCollider(Collider, Transform)`, `RadialWheelController.AnyOpen`, `PlacedTieredBlock.tier` / `.definition`, `PlacedBlock.Damage01`, `Inventory.ActiveStack`, `ItemStack.IsEmpty`, `TieredBlockRegistry.Get(BuildFamily)`, and the `MeshTopology.Lines` / `MeshRenderer` / `LightProbeUsage` members used by the mark.
+- Not run in Unity. Feel checks: a diagonal drag on a deck gives a rectangle; the same drag with four blocks in the pack gives a 2 x 2 rather than a row; picking IRON with U leaves no hologram and a click only upgrades; the aimed piece is outlined in gold, and grey once it is already Iron; picking a family again brings the piece ghost back.
 
 ### [17.46.0-dev] Runs That Point Where You Point, a Seating Face, Block-Axis Nudging and Blasts That Break Construction
 

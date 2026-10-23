@@ -114,7 +114,9 @@ namespace VoxelEngine.Building
         private bool _rotationManual;
         /// <summary>True when this frame's aim resolved a real placement frame.</summary>
         private bool _frameResolvedThisFrame;
-        private const int MaxPatternPreviews = 12;
+        // A full plan must always be drawable: a four-by-four deck is sixteen cells, and a
+        // cap below that silently truncated the deck to its first rows (17.46.1-dev).
+        private const int MaxPatternPreviews = PlacementOptions.MaxCells;
 
         private sealed class StaticPlacementPrefabProfile
         {

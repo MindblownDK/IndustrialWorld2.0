@@ -33,6 +33,23 @@ namespace VoxelEngine.Building
     public static class PlacementPatternPlanner
     {
         /// <summary>
+        /// How many cells one axis of a deck reaches for a given aim offset.
+        ///
+        /// A row appears once the aim has covered about a third of the block's own pitch on
+        /// that axis - not half. Half a pitch meant a machine 4.65 m across demanded 2.3 m of
+        /// aim before the first row existed, so an aim that drifted slightly off one axis
+        /// produced a deck with no depth at all.
+        /// </summary>
+        private static int DeckCount(float offset, float pitch, int cap)
+        {
+            float reach = Mathf.Abs(offset);
+            if (reach <= 0.0001f || pitch <= 0.0001f) return 0;
+            int count = Mathf.FloorToInt(reach / pitch + 0.5f);
+            if (count == 0 && reach > pitch * 0.34f) count = 1;
+            count = Mathf.Clamp(count, 0, cap);
+            return offset < 0f ? -count : count;
+        }
+        /// <summary>
         /// Fills <paramref name="cells"/> with the run from <paramref name="anchor"/> toward
         /// <paramref name="target"/>, anchor first. Returns the number of cells written
         /// (always at least one when the pattern is valid).
@@ -81,8 +98,9 @@ namespace VoxelEngine.Building
                 // sideways, not an area" looked like on screen.
                 float deckPitchRight = Mathf.Max(step, pitch.x);
                 float deckPitchForward = Mathf.Max(step, pitch.z);
-                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / deckPitchRight), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
-                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / deckPitchForward), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                int sideCap = PlacementOptions.MaxDeckSide - 1;
+                int alongRight = DeckCount(local.x, deckPitchRight, sideCap);
+                int alongForward = DeckCount(local.z, deckPitchForward, sideCap);
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
 
                 Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
@@ -98,23 +116,41 @@ namespace VoxelEngine.Building
                 // is the lopsided, scattered shape the player reported. The rectangle now
                 // shrinks its longer side until the whole plan fits, so every deck the
                 // preview draws is complete and symmetrical.
+                //
+                // 17.46.1-dev: AND IT STILL COLLAPSED INTO A LINE. The shrink subtracted from
+                // whichever side was LARGER, and on a square aim the two are equal - so the
+                // forward axis was always the one shortened, all the way to zero, and a deck
+                // aimed diagonally came out as a single sideways row. That is exactly what
+                // "deck only works sideways" was. The shrink now keeps the aim's PROPORTIONS:
+                // each pass shortens whichever axis is further past its own aim, so a square
+                // aim stays square and both axes shrink together.
+                int aimedRows = rows;
+                int aimedColumns = columns;
                 while ((rows + 1) * (columns + 1) > budget && (rows > 0 || columns > 0))
                 {
-                    if (rows >= columns) rows--;
+                    if (rows == 0) { columns--; continue; }
+                    if (columns == 0) { rows--; continue; }
+                    float pastRows = aimedRows > 0 ? rows / (float)aimedRows : 0f;
+                    float pastColumns = aimedColumns > 0 ? columns / (float)aimedColumns : 0f;
+                    if (pastRows >= pastColumns) rows--;
                     else columns--;
                 }
 
                 float pitchRight = pitch.x * 1.04f + 0.12f;
                 float pitchForward = pitch.z * 1.04f + 0.12f;
 
-                for (int f = 0; f <= rows; f++)
+                // 17.46.1-dev: cells are emitted by RINGS - everything one step from the
+                // anchor, then everything two steps - instead of row by row. Anything that
+                // only draws the first few of a plan (a preview cap, a HUD counter) then
+                // shows a centred patch of the deck rather than the anchor's own row, which
+                // is the shape that made a deck look like a sideways line on screen.
+                for (int ring = 1; ring <= rows + columns; ring++)
                 {
-                    // A drag with no depth is a run, not a one-cell-wide deck.
-                    if (rows == 0 && f > 0) break;
-                    for (int r = 0; r <= columns; r++)
+                    for (int f = 0; f <= rows; f++)
                     {
+                        int r = ring - f;
+                        if (r < 0 || r > columns) continue;
                         if (f == 0 && r == 0) continue;
-                        if (columns == 0 && r > 0) break;
                         if (cells.Count >= budget) return cells.Count;
 
                         Vector3 offset = axisRight * (signRight * r * pitchRight)

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.46.0-dev`
-**Roadmap Version:** `17.46.0-dev`
+**Current Version:** `17.47.0-dev`
+**Roadmap Version:** `17.47.0-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 17.47.0-dev - Decks Keep Both Sides, the Hammer Marks Instead of Promising
+- A deck's rectangle shrinks in proportion, so a square aim stays square; a row appears at a third of the block's pitch, cells are emitted by rings, and the preview pool covers a full plan
+- Naming an upgrade tier clears the armed family, and no piece hologram is raised outside the family face
+- A new aiming mark outlines the piece under the hammer, coloured by what a click would do to it
 
 ### 17.46.0-dev - Runs That Point, a Seating Face, Block-Axis Nudge, Blasts vs Construction
 - SPAN and DECK count cells in the block's own pitch, so the plan fills out to the crosshair instead of saturating on the lattice
@@ -160,9 +165,12 @@
 - An explosive is never pattern-eligible: a run of ten armed charges is not a structure, and the build key belongs to its fuse wheel while one is in hand (17.45.0-dev).
 - A placement preview is not a placement: `StripGhost` disables every `Damageable`, every light and every simulation behaviour it instantiates, so a fuse never starts on a hologram (17.45.0-dev).
 - A charge is set off by the FIRST point of damage, never attired in block hit points. `IExplosiveCharge` exists for exactly this: a bomb's health lives on `PlacedBlock`, so a shot or a pickaxe used to chip at a wall's worth of health and the charge finally vanished without going off (17.46.0-dev).
+- A hologram is a PROMISE. It exists only on the face of the dial that builds; the upgrade and repair faces raise no piece ghost at all, and a click there can only mean the piece under the crosshair. Anything that would otherwise keep last turn's ghost alive is cleared when a tier is named (17.47.0-dev).
+- The hammer MARKS. What the crosshair is on is outlined from that object's own renderer bounds - gold for "a click changes this", teal for repair, grey for already-settled - and the mark never damages, upgrades or places (17.47.0-dev).
 - An explosion has an opinion about CONSTRUCTION. Tiered hammer pieces and grid hulls take blast damage with a distance falloff, and a blast is never refused by a piece's mining tier - a charge is not a pickaxe (17.46.0-dev).
 - A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A run or a deck counts its cells in the BLOCK'S OWN PITCH, and fills out to where the crosshair points: one machine further on is one cell longer. Counted in lattice metres a large machine saturated the cap the instant the player moved the aim, which read as "span goes to maximum distance" (17.45.0-dev, corrected 17.46.0-dev). Foundations, whose pitch is the lattice, are unchanged.
+- A plan that does not fit its cell budget shrinks in PROPORTION, never by subtracting from the longer side: an equal-sided aim has no "longer" side, and picking one to shorten first turns every diagonal deck into a single row (17.47.0-dev). A deck emits its cells by rings too, so a draw that stops early is a centred patch rather than the anchor's own row.
 - A vertical pattern uses a different count from a horizontal one: a PILLAR is counted in BLOCK HEIGHTS of aim above its anchor, everything else in the pitch across the ground, and never both in metres.
 - Seating is a PLAYER CHOICE, not a code path: LEVEL moves the whole plan together so a deck stays square, FOLLOW GROUND drops every cell onto its own patch of surface for foundations and rail beds on a slope. Both were applied at different times before the dial existed (17.46.0-dev).
 - Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev). Read those bounds WITHOUT the `activeInHierarchy` test - it is false for every renderer of a prefab asset, and the silent fallback is a one-metre block (17.44.12-dev).

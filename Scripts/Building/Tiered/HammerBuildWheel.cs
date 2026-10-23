@@ -378,7 +378,21 @@ namespace VoxelEngine.Building.Tiered
             }
 
             HammerTierSelection.Set(tier);
-            var def = ActiveFamily.HasValue && registry != null ? registry.Get(ActiveFamily.Value) : null;
+
+            // 17.46.1-dev: naming a tier is a statement about the PIECE you will hit, not
+            // about a piece you will build. The family armed before this dial therefore has
+            // to go, or the old ghost comes back after the dial closes and the next click
+            // lays a new block instead of upgrading the one under the crosshair.
+            ActiveFamily = null;
+            IsUpgradeMode = true;
+            IsRepairMode = false;
+
+            // The cost line names the piece actually under the crosshair when there is one -
+            // the dial is read while looking at a wall, so that is the piece being quoted.
+            var aimed = AimedPieceHighlight.Instance != null ? AimedPieceHighlight.Instance.AimedPiece : null;
+            var def = aimed != null && aimed.definition != null
+                ? aimed.definition
+                : ActiveFamily.HasValue && registry != null ? registry.Get(ActiveFamily.Value) : null;
             string cost = def != null
                 ? HammerTierSelection.Describe(HammerTierSelection.CostToReach(def, tier))
                 : "the target tier's materials";
