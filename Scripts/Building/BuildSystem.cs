@@ -36,6 +36,13 @@ namespace VoxelEngine.Building
         /// reach. Long enough to find the beach, the far bank or the hillside the player
         /// is actually looking at, so the ghost can be shown standing on it.</summary>
         private const float AimAssistReach = 220f;
+
+        /// <summary>
+        /// How far a surface's normal may lean from gravity and still count as a FACE. 0.72 is
+        /// about forty-four degrees from vertical: walls, cliff faces and steep banks are
+        /// faces; dunes, floors and gentle slopes are not (17.48.0-dev, was 0.55).
+        /// </summary>
+        private const float FaceVerticalDot = 0.72f;
         /// <summary>Seconds between "no target" HUD reminders while the aim stays empty.</summary>
         private const float AimHintCooldown = 6f;
 
@@ -638,7 +645,8 @@ namespace VoxelEngine.Building
                 // face's plane, where the crosshair meets it, however empty the rest of the
                 // view is.
                 if (block != null && PlacementOptions.Pattern == PlacementPattern.Deck
-                    && _hasLastFace && TryFacePlaneAim(ray, out Vector3 facePoint))
+                    && (_hasLastFace || PlacementOptions.DeckPlane == DeckPlaneMode.Wall)
+                    && TryFacePlaneAim(ray, out Vector3 facePoint))
                 {
                     Vector3 faceUp = GravityProvider.GetUp(facePoint);
                     if (faceUp.sqrMagnitude < 0.0001f) faceUp = Vector3.up;
@@ -787,10 +795,15 @@ namespace VoxelEngine.Building
             GhostSurfaceNormal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : Vector3.up;
             {
                 Vector3 localUp = GravityProvider.GetUp(hit.point);
-                GhostSurfaceIsVertical = Mathf.Abs(Vector3.Dot(GhostSurfaceNormal, localUp.normalized)) < 0.55f;
-                _hasLastFace = GhostSurfaceIsVertical;
-                if (_hasLastFace)
+                GhostSurfaceIsVertical =
+                    Mathf.Abs(Vector3.Dot(GhostSurfaceNormal, localUp.normalized)) < FaceVerticalDot;
+                // 17.48.0-dev: the last face is REMEMBERED, not re-learned each frame. It
+                // used to be cleared the moment the crosshair touched ground, so a deck set
+                // to WALL lost its wall as soon as the player glanced down - one more way the
+                // wall was hard to reach. It is forgotten only when the player walks away.
+                if (GhostSurfaceIsVertical)
                 {
+                    _hasLastFace = true;
                     _lastFacePoint = hit.point;
                     _lastFaceNormal = GhostSurfaceNormal;
                 }
@@ -2405,8 +2418,20 @@ namespace VoxelEngine.Building
             up.Normalize();
 
             // Signal one: the crosshair is on a face right now.
+            // 17.48.0-dev: WALL on the dial means the player has stated the answer. The deck
+            // fills the last face the crosshair saw - which may be seconds old and completely
+            // out of view now - and no detection is consulted at all.
+            if (PlacementOptions.DeckPlane == DeckPlaneMode.Wall && _hasLastFace)
+            {
+                _patternStanding = true;
+                _patternPlaneNormal = _lastFaceNormal.sqrMagnitude > 0.0001f
+                    ? _lastFaceNormal.normalized
+                    : up;
+                return;
+            }
+
             Vector3 normal = GhostSurfaceNormal.sqrMagnitude > 0.0001f ? GhostSurfaceNormal : Vector3.zero;
-            if (normal != Vector3.zero && Mathf.Abs(Vector3.Dot(normal.normalized, up)) < 0.55f)
+            if (normal != Vector3.zero && Mathf.Abs(Vector3.Dot(normal.normalized, up)) < FaceVerticalDot)
             {
                 _patternStanding = true;
                 _patternPlaneNormal = normal.normalized;
@@ -2415,7 +2440,7 @@ namespace VoxelEngine.Building
             // Signal two: the ghost's frame came from a structure whose own up is horizontal
             // - which is what a frame taken from a wall looks like.
             if (!_patternStanding && _patternAnchorFrame.fromStructure
-                && Mathf.Abs(Vector3.Dot(_patternAnchorFrame.up, up)) < 0.55f)
+                && Mathf.Abs(Vector3.Dot(_patternAnchorFrame.up, up)) < FaceVerticalDot)
             {
                 _patternStanding = true;
                 _patternPlaneNormal = _patternAnchorFrame.up.normalized;
@@ -2437,6 +2462,15 @@ namespace VoxelEngine.Building
         {
             point = default;
             if (!_hasLastFace) return false;
+
+            // A face remembered from the other side of the field is not this gesture's wall.
+            var aimCamera = shootCamera != null ? shootCamera : Camera.main;
+            if (aimCamera != null
+                && Vector3.Distance(_lastFacePoint, aimCamera.transform.position) > AimAssistReach * 0.15f)
+            {
+                _hasLastFace = false;
+                return false;
+            }
             var plane = new UnityEngine.Plane(_lastFaceNormal, _lastFacePoint);
             if (!plane.Raycast(ray, out float enter)) return false;
             if (enter <= 0f || enter > AimAssistReach) return false;
@@ -2451,6 +2485,10 @@ namespace VoxelEngine.Building
 
             var ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             var plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
+            // A stated WALL plan is measured against the remembered face plane, because the
+            // player may be looking anywhere at all while the plan still belongs to that wall.
+            if (PlacementOptions.DeckPlane == DeckPlaneMode.Wall && _hasLastFace)
+                plane = new UnityEngine.Plane(_patternPlaneNormal, _lastFacePoint);
             float limit = Mathf.Max(12f, reach) * 3f;
             if (plane.Raycast(ray, out float enter) && enter > 0f && enter < limit)
                 return ray.GetPoint(enter);

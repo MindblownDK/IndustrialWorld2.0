@@ -1,9 +1,33 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.5-dev`
+**Current Version:** `17.48.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.48.0-dev] A Wall You State Instead of a Wall You Have to Catch
+
+**Type:** MINOR - a new placement option (deck plane) on the dial, plus a more forgiving face test. No save schema change, no API break.
+
+**GitHub title:** `[17.48.0-dev] State the deck plane on the dial and remember the last face, so a wall is reached deliberately`
+
+#### Added
+
+- **DECK PLANE on the plot dial: AUTO or WALL (`PlacementOptions.DeckPlaneMode`, `PlacementModeRing.Stage.Plane`).** Ctrl+scroll now cycles PATTERN, then LATTICE STEP, then RUN SEATING, then DECK PLANE. AUTO is the behaviour that shipped: the deck reads the surface under the crosshair at the moment of the press. WALL removes the guess entirely - the deck fills the LAST FACE the crosshair saw, whatever the player is looking at now, so a wall becomes something stated rather than something caught. Both wedges carry a badge (AUTO / WALL) and the choice persists between sessions.
+- The prompt pill's Ctrl hint names all four faces: `PATTERN / STEP / SEATING / PLANE`.
+
+#### Fixed
+
+- **A wall was hard to reach (`BuildSystem`).** Three things made a wall a lottery, all removed:
+  - **The remembered face was erased by the ground.** It was cleared the moment the crosshair touched ground, so a WALL deck lost its wall as soon as the player glanced down - which is most of the time while positioning. It is now kept, and forgotten only when the player is further than a third of the aim-assist reach from it.
+  - **The face test was too strict.** A surface counted as a face only within about 55 degrees of vertical, so a wall met at an angle - or a steep bank that should clearly be buildable - fell through to a floor plan. The test is `FaceVerticalDot = 0.72`, about 44 degrees from vertical: walls, cliff faces and steep banks are faces; dunes, floors and gentle slopes are not.
+  - **A stated WALL plan is measured against the remembered face, not the crosshair** (`StandingAimPoint`), so once the player has said WALL they can look anywhere at all and the plan still belongs to that wall.
+
+#### Validation
+
+- Parse, fields, type scope and qualified-type checks clean on all three modified files.
+- `DeckPlaneMode` is a namespace sibling of `PlacementOptions` in `VoxelEngine.Building`, referenced by its bare name from `BuildSystem` - the exact mistake that cost a compile last round, checked explicitly by the type-scope report.
+- Not run in Unity.
 
 ### [17.47.5-dev] Aims That Stay Where a Click Can Land
 

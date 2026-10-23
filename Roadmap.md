@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.5-dev`
-**Roadmap Version:** `17.47.5-dev`
+**Current Version:** `17.48.0-dev`
+**Roadmap Version:** `17.48.0-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.48.0-dev - A Wall You State Instead of Catch
+- DECK PLANE joins the plot dial: AUTO reads the aim, WALL always fills the last face seen, so a wall is reached deliberately
+- The remembered face survives ground hits and keeps a stated WALL plan on its own wall; the face test loosened to about forty-four degrees from vertical
+
 ### 17.47.5-dev - Aims That Stay Where a Click Can Land
 - A deck that has seen a face keeps its ghost on that face's plane when the crosshair leaves every surface, instead of the aim assist throwing it at distant ground
 - Elsewhere the ghost falls back to the last buildable aim within reach, so looking up no longer makes a placeable block read as invalid
@@ -43,10 +47,6 @@
 ### 17.47.2-dev - Wall Planes and an Outline That Fits
 - A deck aimed at a face names its plane outright - up the wall along gravity, along the wall as normal cross gravity - because a frame borrowed from a wall keeps the wall's normal as its up
 - The hammer outline writes exactly its twenty-four vertices, so marking a piece no longer throws
-
-### 17.47.1-dev - A Deck That Builds Walls
-- An aim on a face is measured from the crosshair rather than the snapped pose at the foot of the wall, the deck's second axis follows whichever way the aim travels, and a face deck takes its neighbouring cell on the axis the aim skipped
-- A plan that stands up is never re-seated onto the floor
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -162,6 +162,7 @@
 - An explosion has an opinion about CONSTRUCTION. Tiered hammer pieces and grid hulls take blast damage with a distance falloff, and a blast is never refused by a piece's mining tier - a charge is not a pickaxe (17.46.0-dev).
 - A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A run or a deck counts its cells in the BLOCK'S OWN PITCH, and fills out to where the crosshair points: one machine further on is one cell longer. Counted in lattice metres a large machine saturated the cap the instant the player moved the aim, which read as "span goes to maximum distance" (17.45.0-dev, corrected 17.46.0-dev). Foundations, whose pitch is the lattice, are unchanged.
+- What the player wants is STATED where it can be, and DETECTED only as a convenience. A deck's plane is the worked example: AUTO guesses from the aim, WALL is the player's own answer and never consults a guess (17.48.0-dev).
 - An empty aim is common and must not break a gesture: aiming up a wall puts the crosshair over the wall's top edge. The aim assist therefore never hunts distant ground for a deck - it projects onto the remembered face - and elsewhere the ghost keeps the last buildable aim within reach rather than being thrown at a surface out of range (17.47.5-dev).
 - A deck's plane is decided ONCE, at the press, and held for the gesture; the drag is then measured by intersecting the view ray with that plane. Deciding it per frame from the surface under the crosshair made a wall plan collapse into a floor plan the moment the aim slid onto an edge or off the wall (17.47.4-dev).
 - A deck's plane is NAMED by whoever knows it, never inferred from the placement frame. A frame taken from a wall has the wall's normal as its up, so frame-local Y there is distance from the wall, not height - reading a vertical plan out of it produces a floor every time (17.47.2-dev).

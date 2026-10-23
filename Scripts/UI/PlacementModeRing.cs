@@ -33,6 +33,7 @@ namespace VoxelEngine.UI
             Pattern = 1,   // SINGLE / SPAN / PILLAR / DECK
             Step = 2,      // 1 m / 0.5 m / FREE
             Seat = 3,      // LEVEL / FOLLOW GROUND - how a run sits on the ground
+            Plane = 4,     // AUTO / WALL - which plane a deck fills
         }
 
         private readonly RadialWheelController _wheel;
@@ -63,7 +64,8 @@ namespace VoxelEngine.UI
         }
 
         /// <summary>True while the ring is showing its own options.</summary>
-        public bool ShowingOwnOptions => Stage.Pattern == _stage || Stage.Step == _stage || Stage.Seat == _stage;
+        public bool ShowingOwnOptions => Stage.Pattern == _stage || Stage.Step == _stage
+            || Stage.Seat == _stage || Stage.Plane == _stage;
 
         /// <summary>
         /// Call once per frame from the owning wheel's Update, immediately BEFORE
@@ -98,8 +100,16 @@ namespace VoxelEngine.UI
                 case Stage.Seat:
                     _wheel.GroupLabel = "RUN SEATING";
                     _wheel.SwapHint = string.Empty;
-                    _wheel.CtrlSwapHint = "BACK TO PATTERNS";
+                    _wheel.CtrlSwapHint = "DECK PLANE";
                     _wheel.IdleTitle = "KEEP SEATING";
+                    _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
+                    break;
+
+                case Stage.Plane:
+                    _wheel.GroupLabel = "DECK PLANE";
+                    _wheel.SwapHint = string.Empty;
+                    _wheel.CtrlSwapHint = "BACK TO PATTERNS";
+                    _wheel.IdleTitle = "KEEP PLANE";
                     _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
                     break;
 
@@ -119,7 +129,8 @@ namespace VoxelEngine.UI
             {
                 Stage.Pattern => Stage.Step,
                 Stage.Step => _home ? Stage.Seat : Stage.Base,
-                Stage.Seat => Stage.Pattern,
+                Stage.Seat => Stage.Plane,
+                Stage.Plane => _home ? Stage.Pattern : Stage.Base,
                 _ => Stage.Pattern,
             };
             Tick();
@@ -191,6 +202,29 @@ namespace VoxelEngine.UI
                 return true;
             }
 
+            if (_stage == Stage.Plane)
+            {
+                // 17.48.0-dev: AUTO or WALL. WALL is how a player states "this is a wall"
+                // instead of having to catch the crosshair on the face at the instant of
+                // the press, which is what made the wall so hard to reach.
+                var current = PlacementOptions.DeckPlane;
+                for (int i = 0; i < 2; i++)
+                {
+                    var mode = PlacementOptions.DeckPlaneAt(i);
+                    options.Add(new RadialOption
+                    {
+                        Title = PlacementOptions.DeckPlaneName(mode),
+                        Description = PlacementOptions.DeckPlaneBlurb(mode),
+                        Badge = PlacementOptions.DeckPlaneBadge(mode),
+                        Icon = null,
+                        Available = true,
+                        Affordable = true,
+                        Selected = mode == current,
+                    });
+                }
+                return true;
+            }
+
             return false;
         }
 
@@ -232,6 +266,16 @@ namespace VoxelEngine.UI
                 return true;
             }
 
+            if (_stage == Stage.Plane)
+            {
+                if (index > 1) return true;
+                var mode = PlacementOptions.DeckPlaneAt(index);
+                PlacementOptions.SetDeckPlane(mode);
+                BuildFeedbackHud.Show("Deck Plane", PlacementOptions.DeckPlaneName(mode),
+                    null, UITheme.AccentGold);
+                return true;
+            }
+
             return false;
         }
 
@@ -256,7 +300,7 @@ namespace VoxelEngine.UI
 
         /// <summary>The Ctrl hint, spelled with whatever key the player actually uses.</summary>
         public static string CtrlHint()
-            => "CTRL+SCROLL  PATTERN / STEP / SEATING";
+            => "CTRL+SCROLL  PATTERN / STEP / SEATING / PLANE";
 
     }
 }
