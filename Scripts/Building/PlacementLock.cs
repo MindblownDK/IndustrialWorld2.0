@@ -183,6 +183,15 @@ namespace VoxelEngine.Building
                 _nextNudge = Time.unscaledTime + NudgeRepeatRate;
             }
 
+            // One line per press, not per repeat: the basis this step was taken in, what it
+            // did, and where the pose ended up. If a nudge ever reads as a zigzag again, this
+            // line says whether the basis moved, the step shrank, or nothing moved at all.
+            if (freshPress)
+                UnityEngine.Debug.Log(
+                    $"[nudge] key={(intent > 0 ? "+" : "")}{intent} step={amount:0.###} " +
+                    $"right={_nudgeRight} away={_nudgeAway} up={upNow} " +
+                    $"offset={offset} -> {Position}");
+
             Nudge(offset, freshPress);
             return true;
         }

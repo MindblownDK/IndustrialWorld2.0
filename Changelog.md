@@ -1,9 +1,29 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.5-dev`
+**Current Version:** `17.44.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.6-dev] Placement Diagnostics and the Pinned-Dial Trap
+
+**Type:** PATCH - one behavioural fix and two diagnostic traces. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.6-dev] Stop a tapped build dial from pinning the world shut, and trace every silent placement refusal`
+
+#### Fixed
+
+- **A tapped build dial could pin itself open and shut the world down (`RadialWheelController`, `PlacementWheel`).** Releasing the build key in under 0.2 s with nothing hovered pinned the dial. A pinned dial holds `UIState` blocked, which hides the hologram, refuses every placement and refuses every run - while a frozen hologram still answers its arrow keys, because the lock is not gated on UI state. That is a perfect imitation of "placement is broken but arrows work", and it is not a feature on a build dial: the tap meant "never mind". `AllowTapPin` defaults true so variant pickers keep the behaviour, and the build dial sets it false.
+- **A press edge can arm a run (`HandlePlacementPattern`).** Arming required observing the button HELD on a frame; a click shorter than a frame could be claimed by the pattern and never answer it. The press edge arms on its own now.
+
+#### Added
+
+- **One console line per build press, naming every gate (`BuildSystem.TraceBuildPress`).** Placement has four independent ways to go quiet - a blocking panel, an open dial, an invalid hologram and a pattern that owns the click - and from the player's seat all four look like "nothing happened". The line reports all of them together with the pattern, the lock and the grid state, and runs before every early return.
+- **One console line per nudge press (`PlacementLock.Tick`).** It prints the key, the step, the three basis vectors, the resulting offset and the new position, so a nudge that reads as a zigzag says immediately whether the basis moved, the step shrank, or the pose did not move at all.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.5-dev] Nudging: A Held Arrow Steps Sideways, Once Per Step
 

@@ -43,6 +43,9 @@ namespace VoxelEngine.UI
             _wheel.IdleTitle = "KEEP PATTERN";
             _wheel.IdleDescription = "Release in the centre to leave the pattern as it is";
             _wheel.IdleTitleColor = UITheme.AccentCyan;
+            // A tap here means "leave the pattern alone": it must close, never pin, or the
+            // world stays blocked with no hologram and no obvious reason why.
+            _wheel.AllowTapPin = false;
             _ring = new PlacementModeRing(_wheel, "BUILD PATTERN", home: true);
         }
 

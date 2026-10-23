@@ -68,6 +68,10 @@ namespace VoxelEngine.UI
 
         public bool IsOpen { get; private set; }
         public bool IsPinned { get; private set; }
+
+        /// <summary>True when a quick tap should pin the dial open instead of closing it.
+        /// A pinned dial blocks the world, so the build dial answers false.</summary>
+        public bool AllowTapPin = true;
         public int Hovered { get; private set; } = -1;
 
         /// <summary>
@@ -127,7 +131,13 @@ namespace VoxelEngine.UI
             if (!held && _wasHeld && IsOpen && !IsPinned)
             {
                 if (Hovered >= 0) Close(true);
-                else if (Time.unscaledTime - _pressTime < TapSeconds) Pin();
+                // 17.44.6-dev: a quick tap used to PIN an open dial, and a pinned dial keeps
+                // UIState blocked - no ghost, no placement, no pattern - until the player
+                // clicks the world or flicks the wheel again. On a build dial that is a trap,
+                // not a feature: the tap that meant "never mind" left the world unbuildable.
+                // Dials that still want a pin (variant pickers with several choices to scan)
+                // keep it through AllowTapPin.
+                else if (AllowTapPin && Time.unscaledTime - _pressTime < TapSeconds) Pin();
                 else Close(false);
             }
             _wasHeld = held;

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.5-dev`
-**Roadmap Version:** `17.44.5-dev`
+**Current Version:** `17.44.6-dev`
+**Roadmap Version:** `17.44.6-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.44.6-dev - Placement Diagnostics and the Pinned-Dial Trap
+- A tapped build dial no longer pins: a pinned dial blocks the world (no hologram, no placement, no run) while a frozen hologram still answers arrows, which imitates a broken builder exactly
+- A press edge arms a pattern on its own, and every build press and nudge press now leaves one console line naming the gates or the basis it used
+
 ### 17.44.5-dev - Nudging: A Held Arrow Steps Sideways, Once Per Step
 - The nudge basis is captured once per lock and rebuilt only on a real view turn (>20 degrees) or after 4 m of travel, so a held arrow no longer drifts into a zigzag
 - The hold-repeat is measured on which arrow is held rather than on the resulting direction vector, which is what let camera jitter count as a fresh press every frame; the nudge tick sounds once per press
@@ -41,11 +45,6 @@
 - A run's preview bodies are tied to the held item (the pool used to keep whatever block was spanned first), the hologram stands at the run's tip while dragging, and every preview cell reports its own validity
 - SPAN follows the dominant drag axis across all three frame axes, so a vertical drag finally produces a vertical run; PILLAR still forces a column
 - Nudges are measured from the camera's right projected onto the ground (stable when looking down at a machine), one arrow axis per press, and the assist card's flicker bridge no longer refreshes its own clock
-
-### 17.44.2-dev - Placement Feel Fixes: Run Pitch, Line-Up Reach, Heading Agreement
-- Run pitch is measured with the prefab projection helper rather than `Collider.bounds` (empty on a prefab asset), so SPAN / PILLAR / DECK finally space wide machines by their own footprint
-- Ground placement joins the neighbouring structure's lattice, and the neighbour search reaches 6 m (12 m with Ctrl) with or without the `G` lattice; interior-lattice machines now take part in alignment at all
-- An untouched heading always agrees with the frame and a freeze captures the pose on screen, so no odd-angle ghost appears beside a square row; nudge repeat drops to a walking pace and the assist card cannot outlive its hologram
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -147,6 +146,8 @@
 - A HUD may never refresh the timestamp its own grace period is measured against: that is how the assist card latched on with an empty hand, and why the fix had to be structural rather than another guard (17.44.3-dev).
 - A click claim must be exactly as wide as the path that answers it: `PatternOwnsClick` suppresses all other placement, so it may never be true in a state the pattern refuses to act in - frozen hologram, or an open wheel (17.44.4-dev).
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
+- A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
+- A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
 

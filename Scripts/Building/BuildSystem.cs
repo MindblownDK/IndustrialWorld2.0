@@ -232,6 +232,13 @@ namespace VoxelEngine.Building
 
         private void Update()
         {
+            // 17.44.6-dev: one console line per BUILD PRESS, naming every gate that can
+            // refuse a click. Placement has four independent ways to go quiet - a blocking
+            // panel, an open dial, a hologram that is not valid, and a pattern that owns
+            // the click - and from the player's seat "nothing happened" is identical in all
+            // four. This runs before every early return so it can never miss.
+            if (GameSettings.WasPressed(InputAction.Build)) TraceBuildPress();
+
             // Serialized refs can go stale when a player rig is duplicated, a
             // scene is re-wired or a prefab is re-imported. Recover them the
             // same way the interaction tool and the grid builder do, or the
@@ -1896,11 +1903,15 @@ namespace VoxelEngine.Building
 
             if (!_patternActive)
             {
-                if (!(held && !_buildWasHeld && GhostValid))
+                // 17.44.6-dev: a press EDGE arms even when the level check cannot see it
+                // (a click shorter than a frame, or an input backend that reports the press
+                // and the release together). Without this, a quick click in a pattern mode
+                // could be claimed by the pattern and never answer it.
+                bool pressed = GameSettings.WasPressed(InputAction.Build);
+                bool pressedEdge = held && !_buildWasHeld;
+                if (!((pressedEdge || pressed) && GhostValid))
                 {
-                    // A press this frame that cannot arm is worth one line: without it the
-                    // player sees a green hologram and a click that does nothing.
-                    if (held && !_buildWasHeld && !GhostValid)
+                    if ((pressedEdge || pressed) && !GhostValid)
                         UnityEngine.Debug.Log($"[placement] run did not arm: '{block.displayName}' " +
                             "is not on a valid cell");
                     return;
@@ -2009,6 +2020,30 @@ namespace VoxelEngine.Building
                 bool cellValid = IsPlacementValid(cells[i].position, block, cells[i].rotation, out _);
                 ApplyGhostMaterialIfChangedTo(ghost, cellValid ? _ghostMaterialValid : _ghostMaterialInvalid);
             }
+        }
+
+        /// <summary>
+        /// Reports, in one line, why a build press might do nothing. Diagnostics only: it
+        /// reads state and writes to the console, and never changes a placement decision.
+        /// </summary>
+        private void TraceBuildPress()
+        {
+            string pose = "no pose";
+            if (_ghost != null)
+            {
+                bool valid = IsPlacementValid(_ghost.transform.position, _ghostItem,
+                    _ghost.transform.rotation, out var refusal);
+                pose = (valid ? "valid" : "INVALID: " + refusal) +
+                       $" at {_ghost.transform.position} (published ghost {GhostValid})";
+            }
+
+            UnityEngine.Debug.Log(
+                $"[placement] press: holding={(HoldingBlock ? _ghostItem?.name ?? "block" : "nothing")}, " +
+                $"uiBlocking={VoxelEngine.UI.UIState.IsBlocking}, " +
+                $"dialOpen={VoxelEngine.UI.RadialWheelController.AnyOpen}, " +
+                $"pattern={PlacementOptions.Pattern}, locked={PlacementLock.IsLocked}, " +
+                $"gridSnap={gridSnap}, patternOwnsClick={PatternOwnsClick}, " +
+                $"patternActive={_patternActive}, ghost={pose}");
         }
 
         /// <summary>Re-tints one preview body without touching the hologram's own material.</summary>
