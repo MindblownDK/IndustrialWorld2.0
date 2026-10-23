@@ -101,6 +101,13 @@ namespace VoxelEngine.Building.Tiered
         };
 
         private readonly RadialWheelController _wheel = new();
+
+        /// <summary>
+        /// 17.45.0-dev: the upgrade-tier dial, on its own rebindable key (U by default).
+        /// A second RadialWheelController rather than a new component, so the hammer needs no
+        /// scene change to gain a menu and the two dials can never be open at once.
+        /// </summary>
+        private readonly RadialWheelController _tierWheel = new();
         private readonly List<string> _detailScratch = new(4);
         private readonly List<bool> _detailOkScratch = new(4);
         private UIDocument _document;
@@ -154,6 +161,16 @@ namespace VoxelEngine.Building.Tiered
             _wheel.IdleDescription = "Left-click centre: upgrade mode · Right-click centre: repair mode";
             _wheel.IdleTitleColor = T.AccentGold;
             _wheel.IdleIcon = MachineShapeIcons.Upgrade;
+
+            _tierWheel.ResolveHost = () => _document != null ? _document.rootVisualElement : null;
+            _tierWheel.BuildOptions = FillTierOptions;
+            _tierWheel.ConfirmOption = ConfirmTier;
+            _tierWheel.GroupLabel = "UPGRADE TIER";
+            _tierWheel.IdleTitle = "KEEP TIER";
+            _tierWheel.IdleDescription = "Release in the centre to leave the target tier as it is";
+            _tierWheel.IdleTitleColor = T.AccentGold;
+            // A tap here means "never mind" - a pinned dial leaves the world unclickable.
+            _tierWheel.AllowTapPin = false;
         }
 
         private void Start() => ResolveDependencies();
@@ -161,6 +178,7 @@ namespace VoxelEngine.Building.Tiered
         private void OnDisable()
         {
             _wheel.Close(false);
+            _tierWheel.Close(false);
             ActiveFamily = null;
             IsUpgradeMode = false;
             IsRepairMode = false;
@@ -169,6 +187,7 @@ namespace VoxelEngine.Building.Tiered
         private void OnDestroy()
         {
             _wheel.Dispose();
+            _tierWheel.Dispose();
             if (Instance == this) Instance = null;
         }
 
@@ -205,7 +224,18 @@ namespace VoxelEngine.Building.Tiered
             _wheel.GroupLabel = GroupLabelOf(_group);
             _wheel.SwapHint = "TAB / SCROLL  ·  " + GroupLabelOf(NextGroup());
 
-            _wheel.Tick(InputAction.BuildWheel, holdingHammer);
+            // One hammer dial at a time: each one pushes a UIState block and owns the
+            // cursor, so two of them up together would fight over both.
+            _wheel.Tick(InputAction.BuildWheel, holdingHammer && !_tierWheel.IsOpen);
+
+            // The upgrade tier is a separate dial on its own key: it has to be readable and
+            // changeable whether or not a family is armed.
+            _tierWheel.Tick(InputAction.HammerTier, holdingHammer && !_wheel.IsOpen);
+
+            // The centre of the family wheel says what an upgrade click will actually do.
+            _wheel.IdleDescription = "Left-click centre: upgrade pieces to " +
+                HammerTierSelection.Name(HammerTierSelection.Selected) +
+                " · Right-click centre: repair mode";
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -270,6 +300,95 @@ namespace VoxelEngine.Building.Tiered
             }
         }
 
+        /// <summary>
+        /// The four tiers, with the SINGLE-step cost of reaching each one for the family the
+        /// hammer currently has armed - so the wheel answers "what will this cost me" before
+        /// the click does, instead of after it.
+        /// </summary>
+        private void FillTierOptions(List<RadialOption> options)
+        {
+            if (options == null) return;
+            var def = ActiveFamily.HasValue && registry != null ? registry.Get(ActiveFamily.Value) : null;
+            var current = HammerTierSelection.Selected;
+
+            for (int i = 0; i < HammerTierSelection.Offerable.Length; i++)
+            {
+                var tier = HammerTierSelection.Offerable[i];
+                _detailScratch.Clear();
+                _detailOkScratch.Clear();
+
+                var cost = def != null ? HammerTierSelection.CostToReach(def, tier) : null;
+                if (cost?.items != null)
+                {
+                    foreach (var ingredient in cost.items)
+                    {
+                        if (ingredient.item == null || ingredient.count <= 0) continue;
+                        if (_detailScratch.Count >= 4) break;
+                        int stock = inventory != null ? inventory.container.CountOf(ingredient.item) : 0;
+                        _detailScratch.Add($"{ingredient.count} x {ingredient.item.displayName}  ({stock:N0})");
+                        _detailOkScratch.Add(stock >= ingredient.count);
+                    }
+                }
+                if (_detailScratch.Count == 0)
+                {
+                    _detailScratch.Add(def != null ? "NO MATERIAL COST" : "ARM A PIECE TO SEE COST");
+                    _detailOkScratch.Add(true);
+                }
+
+                bool offered = tier > BuildTier.Wood && (def == null || def.GetPrefab(tier) != null);
+                options.Add(new RadialOption
+                {
+                    Title = HammerTierSelection.Name(tier),
+                    Description = offered
+                        ? HammerTierSelection.Blurb(tier)
+                        : "Wood is where pieces start - pick Stone or above",
+                    Icon = null,
+                    Details = _detailScratch.ToArray(),
+                    DetailsOk = _detailOkScratch.ToArray(),
+                    Available = true,
+                    Affordable = def == null || CanAffordTier(def, tier),
+                    Selected = current == tier,
+                });
+            }
+        }
+
+        private bool CanAffordTier(TieredBlockDefinition def, BuildTier tier)
+        {
+            var cost = HammerTierSelection.CostToReach(def, tier);
+            if (cost?.items == null || inventory == null) return true;
+            foreach (var ingredient in cost.items)
+            {
+                if (ingredient.item == null || ingredient.count <= 0) continue;
+                if (inventory.container.CountOf(ingredient.item) < ingredient.count) return false;
+            }
+            return true;
+        }
+
+        private bool ConfirmTier(int index)
+        {
+            var tier = HammerTierSelection.TierAt(index);
+            if (tier == BuildTier.Wood)
+            {
+                BuildFeedbackHud.Show("Wood is the base tier",
+                    "Pieces are placed at Wood. Pick Stone, Iron or Steel to upgrade to.",
+                    null, T.TextMuted);
+                AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.5f, 0.78f);
+                return true;
+            }
+
+            HammerTierSelection.Set(tier);
+            var def = ActiveFamily.HasValue && registry != null ? registry.Get(ActiveFamily.Value) : null;
+            string cost = def != null
+                ? HammerTierSelection.Describe(HammerTierSelection.CostToReach(def, tier))
+                : "the target tier's materials";
+            BuildFeedbackHud.Show("Upgrade target: " + HammerTierSelection.Name(tier),
+                $"Left-click a placed piece to take it straight to {HammerTierSelection.Name(tier)} for {cost} - the step you skipped is not charged.",
+                MachineShapeIcons.Upgrade, T.AccentGold);
+            AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.7f, 1.08f);
+            _wheel.Invalidate();
+            return true;
+        }
+
         // ══════════════════════════════════════════════════════════════════
         //  ACTIONS
         // ══════════════════════════════════════════════════════════════════
@@ -303,7 +422,10 @@ namespace VoxelEngine.Building.Tiered
             ActiveFamily = null;
             IsUpgradeMode = true;
             IsRepairMode = false;
-            BuildFeedbackHud.Show("Building Hammer", "Upgrade mode — left-click a tiered piece to raise its tier",
+            BuildFeedbackHud.Show("Building Hammer",
+                "Upgrade mode — left-click a tiered piece to take it to " +
+                HammerTierSelection.Name(HammerTierSelection.Selected) +
+                ". Change the target with " + GameSettings.GetKey(InputAction.HammerTier) + ".",
                 null, T.AccentGold);
             AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.6f, 0.94f);
         }

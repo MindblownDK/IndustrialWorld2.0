@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.15-dev`
-**Roadmap Version:** `17.44.15-dev`
-**Date:** 2026-10-22
+**Current Version:** `17.45.0-dev`
+**Roadmap Version:** `17.45.0-dev`
+**Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.45.0-dev - Lattice Nudging, Runs That Build What They Draw, Tier Target and Fuse Wheel
+- The four nudge directions are LATTICE axes chosen from the view once per press burst, so a press is a straight step on the grid and left then right cancels exactly
+- Runs, pillars and decks are judged against the site as found, not against the cells the same gesture just placed, and a floor plan is seated as one rigid move, so the plan is what gets built
+- The Building Hammer takes a piece to a NAMED tier for that tier's single material step; explosives arm from a fuse wheel on the build key and no longer count down on their hologram
+
 ### 17.44.15-dev - Nudge Directions That Re-Pin, Footprints Spanning Model and Solid
 - The four nudge directions are rigid within a burst of presses and re-pin to the camera after two thirds of a second idle, which removes both the world-grid diagonal and the left-right that stop cancelling when the player turns
 - Run and deck cells are spaced by the widest of the model and its collider extents, plus a small clearance, so a probe at a cell centre can no longer land inside the previous machine
@@ -46,9 +51,6 @@
 - Model bounds are read from the authored prefab without the `activeInHierarchy` test (false on every renderer of a prefab asset), which is why runs were spaced one metre and overlapped
 - PILLAR follows whichever moved further - the aim climbing a wall or the drag across the ground - so aiming up into the sky no longer does nothing
 - Run cells after the anchor are dropped onto the surface beneath them, so a deck on a slope sits on the ground instead of hovering
-
-### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
-- `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -149,12 +151,19 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is ONE METRE along four directions that are RIGID WITHIN A BURST and re-pin to the camera after a short idle. Freezing for the whole lock made every press diagonal once the player orbited the block; re-deriving every press made left and right stop being opposites once the player turned between them. Both were reported as the same zigzag, and the camera trace - ninety degrees of movement inside one lock - is what explains both (17.44.15-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A nudge moves along the FROZEN POSE'S OWN LATTICE AXES, chosen from the view: screen-right and screen-away each pick whichever ground axis they point most nearly along, so every press is one straight grid step and the path can never zigzag (17.45.0-dev). A frozen pose needs no lattice of its own beyond gravity, which is why the pair is derived from the pose frame and the view together and not from the camera alone.
+- Shift + arrow on a frozen hologram steps one whole cell of that block's own row (its measured pitch along the axis being moved on), which is how a machine is dropped exactly where the next one in a run would sit (17.45.0-dev).
+- A nudge is ONE LATTICE STEP along four directions that are RIGID WITHIN A BURST and re-pin only on a fresh press from a view that has really changed. Freezing for the whole lock made every press diagonal once the player orbited the block; re-deriving every press made left and right stop being opposites once the player turned between them. Both were reported as the same zigzag, and the camera trace - ninety degrees of movement inside one lock - is what explains both (17.44.15-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
 - Space run cells by the WIDER of the model and its collider set, plus a small clearance: a cell is judged by a probe at its own centre, so a collider reaching past the mesh puts the next centre inside the previous machine and the run silently builds half of what it drew (17.44.15-dev).
+- A gesture never refuses itself: every block a single run has just placed is passable to the rest of that run (`_runPlaced`), because a collider wider than its model made every second cell of a run land inside its own neighbour - "place one, the next is gone, the third is there" (17.45.0-dev). The same block is an obstacle again to the next click.
+- A DECK is a rectangle or nothing: a plan that does not fit the cell budget shrinks its longer side until it does, instead of drawing three full rows and half a fourth (17.45.0-dev).
+- A PILLAR is counted in BLOCKS, not in metres: the aim travels tens of metres for a small upward tilt, so one cell per block height of aim above the anchor is the only count that matches the gesture. Looking up at open sky publishes the aim along the view ray while a pillar run is armed, so the gesture exists at all (17.45.0-dev).
+- An explosive is never pattern-eligible: a run of ten armed charges is not a structure, and the build key belongs to its fuse wheel while one is in hand (17.45.0-dev).
+- A placement preview is not a placement: `StripGhost` disables every `Damageable`, every light and every simulation behaviour it instantiates, so a fuse never starts on a hologram (17.45.0-dev).
 - A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A pattern counts cells from the DRAG IN LATTICE METRES and spaces them by the block's footprint. Dividing the drag by the footprint demands metres of travel per cell and makes runs and pillars unusable on anything large (17.44.14-dev).
 - Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev). Read those bounds WITHOUT the `activeInHierarchy` test - it is false for every renderer of a prefab asset, and the silent fallback is a one-metre block (17.44.12-dev).
-- A level lattice must still be SEATED: a run on a slope drops each cell onto the surface beneath it after planning, or the far cells hover and the run reads as a scatter (17.44.12-dev).
+- A level lattice must still be SEATED, and a floor plan is seated as ONE RIGID MOVE: the cells drop together by the highest seat under the plan, so a deck stays square on a dune instead of becoming a ragged scatter, and the plan can only ever float, never sink into a refusal. A PILLAR is never seated - dropping a vertical stack onto the floor beneath it is what "pillar does nothing" looked like (17.45.0-dev).
 - A gesture needs an input that can express it: a vertical pattern cannot rely on the crosshair climbing, because a sky aim has no surface - it takes whichever of the aim or the planar drag the player moved further (17.44.12-dev).
 - A vertical pattern is vertical: PILLAR rises along gravity from its anchor and never borrows a neighbouring frame's up, which can be rolled (17.44.11-dev).
 - Never run a placement probe per preview cell per frame. Probe once per plan and let the pool share the result (17.44.11-dev).
@@ -1221,6 +1230,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Doorway is an empty structural opening; Door is a separate placeable family that snaps into the Doorway center socket.
    - Each Door evaluates the interacting player's side every time it opens and swings away from that player.
    - Hammer wheel uses paginated donut pages with labels inset from the ring edge.
+   - The hammer names an UPGRADE TIER on its own dial (`HammerTier`, U by default, rebindable in Settings - Keybinds), and a click takes a placed piece straight to that tier for that tier's SINGLE material step - the stopovers the player skipped are not charged *(17.45.0-dev)*.
 
 #### Improved Features — 🟡 PARTIALLY COMPLETE
 
@@ -1422,6 +1432,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 10. **Bombs & Explosives**
     - Timed bomb (place and run).
+    - Fuse chosen on the build key's wheel (`BombHud`): 1 to 30 s, plus MANUAL, which arms the charge with no countdown until it takes a hit *(17.45.0-dev)*.
     - Remote-detonated charge.
     - Demolition pack for terrain/grid mining.
 

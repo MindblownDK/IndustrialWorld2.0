@@ -174,6 +174,13 @@ namespace VoxelEngine.Building
             var prefab = block.placedPrefab;
             if (prefab == null) return false;
 
+            // 17.45.0-dev: an explosive owns the build key's wheel. It arms on placement
+            // and counts down, so a run of ten of them is not a structure - it is one
+            // click away from deleting the base. The bomb claims the dial for its FUSE
+            // list instead (see BombHud), and never lays a run.
+            if (prefab.GetComponentInChildren<VoxelEngine.Combat.ExplosiveBlock>(true) != null) return false;
+            if (prefab.GetComponentInChildren<VoxelEngine.Combat.AntimatterBomb>(true) != null) return false;
+
             // Rails are laid by the rail tool, never by hand (12.2.0).
             if (prefab.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true) != null) return false;
             if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block)) return false;

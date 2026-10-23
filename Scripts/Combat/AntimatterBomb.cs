@@ -4,7 +4,8 @@
 // a core sphere EXPANDS slowly (the doomed star swelling), then CONTRACTS fast (the
 // collapse), then a blinding WHITE GLOW at a tiny point, then a MASSIVE detonation.
 // Fuses after placement like the other bombs; can be triggered early by damage (chain).
-// Fuse honours ExplosiveBlock.NextFuse (the bomb-fuse slider).
+// The fuse is chosen per-placement on the build wheel and honours
+// ExplosiveBlock.NextFuse - including MANUAL, which arms it with no countdown (17.45.0-dev).
 
 using UnityEngine;
 
@@ -21,6 +22,8 @@ namespace VoxelEngine.Combat
         public Material explosionMaterial;   // the final blast VFX tint
 
         private bool _triggered;
+        /// <summary>Armed with no countdown: the sequence only starts on damage or a chain hit.</summary>
+        public bool manualFuse;
         private enum Phase { Idle, Expand, Contract, Glow }
         private Phase _phase = Phase.Idle;
         private float _pt;
@@ -35,7 +38,8 @@ namespace VoxelEngine.Combat
         {
             maxHealth = Mathf.Max(maxHealth, 5f);
             base.Awake();
-            if (ExplosiveBlock.NextFuse > 0f) fuse = ExplosiveBlock.NextFuse;
+            if (ExplosiveBlock.NextFuse == ExplosiveBlock.ManualFuse) { manualFuse = true; fuse = float.PositiveInfinity; }
+            else if (ExplosiveBlock.NextFuse > 0f) fuse = ExplosiveBlock.NextFuse;
         }
 
         // No misleading "Hit dmg" feedback.
@@ -45,8 +49,11 @@ namespace VoxelEngine.Combat
         {
             if (!_triggered)
             {
-                fuse -= Time.deltaTime;
-                if (fuse <= 0f) Trigger();
+                if (!manualFuse)
+                {
+                    fuse -= Time.deltaTime;
+                    if (fuse <= 0f) Trigger();
+                }
             }
             else RunSequence(Time.deltaTime);
         }

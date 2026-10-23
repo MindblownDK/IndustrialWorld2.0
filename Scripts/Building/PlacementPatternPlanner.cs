@@ -84,6 +84,18 @@ namespace VoxelEngine.Building
                 float signForward = Mathf.Sign(alongForward);
                 float signRight = Mathf.Sign(alongRight);
 
+                // 17.45.0-dev: a deck is a RECTANGLE or it is nothing. The loop used to
+                // stop the moment the cell budget ran out, so a plan that needed fifteen
+                // cells and had twelve drew three full rows and half of the fourth - which
+                // is the lopsided, scattered shape the player reported. The rectangle now
+                // shrinks its longer side until the whole plan fits, so every deck the
+                // preview draws is complete and symmetrical.
+                while ((rows + 1) * (columns + 1) > budget && (rows > 0 || columns > 0))
+                {
+                    if (rows >= columns) rows--;
+                    else columns--;
+                }
+
                 float pitchRight = pitch.x * 1.04f + 0.12f;
                 float pitchForward = pitch.z * 1.04f + 0.12f;
 
@@ -114,6 +126,10 @@ namespace VoxelEngine.Building
                 // along gravity. It used to take the frame's up, and a frame borrowed from a
                 // neighbouring machine can be rolled, so a "pillar" came out lying on the
                 // ground beside the block it started from.
+                //
+                // 17.45.0-dev: the caller now measures this block's height along GRAVITY for
+                // a pillar (BuildSystem.HandlePlacementPattern), so pitch.y is the height of
+                // the block even when the frame it was aimed in was borrowed from a wall.
                 axis = VoxelEngine.Cosmos.GravityProvider.GetUp(anchorPosition);
                 if (axis.sqrMagnitude < 0.0001f) axis = Vector3.up;
                 axis.Normalize();
@@ -150,54 +166,63 @@ namespace VoxelEngine.Building
                 }
             }
 
+            // The block's own measured size along this axis, before the spacing shim:
+            // a pillar counts in whole block heights, so it needs the honest number.
+            float rawPitch = pitchAlong;
+
             // How far the aim has moved ALONG the chosen axis. A drag across the run's
             // own axis contributes nothing, which is what keeps the run dead straight.
             // 17.44.15-dev: a probe at a cell's own centre must not land inside its
-            // neighbour, so cells are laid a few centimetres clear of touching. Two machines
-            // sized exactly to their neighbour were being refused on every second cell.
-            pitchAlong = pitchAlong * 1.04f + 0.12f;
+            // neighbour, so cells are laid a few centimetres clear of touching.
+            pitchAlong = rawPitch * 1.04f + 0.12f;
 
             float distance = Vector3.Dot(delta, axis);
 
-            // 17.44.9-dev: a pillar could never be dragged at all. The aim rides the ground,
-            // so its travel along the vertical is zero by construction, the count came out
-            // zero every time and PILLAR did nothing whatever the player did. When the
-            // vertical part of the drag does not dominate, the planar drag drives the stack:
-            // drag away from you to build up, back toward you to build down. The cells are
-            // still spaced by the block's height, so a stack never interpenetrates.
+            int cap = Mathf.Min(PlacementOptions.MaxRun, budget - 1);
+            int count;
+
             if (pattern == PlacementPattern.Pillar)
             {
-                // 17.44.12-dev: ANY drag grows the stack. Aiming up into the sky gives the
-                // crosshair no surface, so the aim never climbs and the vertical count stayed
-                // zero - "pillar does nothing when I aim upwards". The stack now follows
-                // whichever of the two the player moved further: the aim climbing, or the
-                // drag across the ground. Push away to build up, pull back to build down,
-                // or look up a wall and let the aim rise.
-                float planar = Mathf.Sqrt(local.x * local.x + local.z * local.z);
-                Vector3 planarReference = frame.valid ? frame.forward : Vector3.forward;
-                float signedPlanar = Vector3.Dot(delta, planarReference) >= 0f ? planar : -planar;
-                distance = Mathf.Abs(distance) >= planar ? distance : signedPlanar;
+                // ── 17.45.0-dev: A PILLAR IS COUNTED IN BLOCKS, NOT IN METRES ──────────
+                // A stack is built by LOOKING up a wall or up the sky, and the aim then
+                // travels tens of metres for a small tilt. Counting that in lattice metres
+                // turned a glance upward into a fifteen-metre tower, and counting it in
+                // footprints - the previous rule - made the same glance do nothing at all
+                // because a drag across the ground is one block per 5 metres of walking.
+                // So: one cell per BLOCK HEIGHT of aim above the anchor. Look up by one
+                // machine and the stack grows by one machine, which is what the gesture
+                // has always meant.
+                int look = Mathf.RoundToInt(distance / Mathf.Max(0.01f, rawPitch));
+                if (look != 0)
+                {
+                    count = Mathf.Clamp(look, -cap, cap);
+                }
+                else
+                {
+                    // Nothing vertical in the aim: the planar drag drives the stack, one
+                    // lattice metre per cell. Push away to build up, pull back to build down.
+                    float planar = Mathf.Sqrt(local.x * local.x + local.z * local.z);
+                    Vector3 planarReference = frame.valid ? frame.forward : Vector3.forward;
+                    float signedPlanar = Vector3.Dot(delta, planarReference) >= 0f ? planar : -planar;
+                    count = Mathf.Clamp(Mathf.RoundToInt(signedPlanar / step), -cap, cap);
+                    if (count == 0 && Mathf.Abs(signedPlanar / step) > 0.2f)
+                        count = signedPlanar > 0f ? 1 : -1;
+                }
             }
-
-            // ── 17.44.14-dev: count in METRES, space by the pitch ──────────────────
-            // The count used to be the drag divided by the block's own footprint, and this
-            // machine measures 4.35 m by 4.8 m by 6.02 m. A three-cell SPAN therefore needed
-            // THIRTEEN METRES of crosshair travel across the ground, and a pillar needed
-            // 4.8 m of it before the second cell appeared - which is why runs were "very hard
-            // to get working" and PILLAR "did nothing". The gesture is now one lattice metre
-            // of drag per cell, and the cells themselves are still spaced by the footprint so
-            // neighbours cannot interpenetrate. Drag distance is the player's, spacing is the
-            // block's.
-            int count = Mathf.RoundToInt(distance / step);
-
-            int cap = Mathf.Min(PlacementOptions.MaxRun, budget - 1);
-            count = Mathf.Clamp(count, -cap, cap);
-            if (count == 0)
+            else
             {
-                // A short drag still reads as a run: the first cell in the dragged
-                // direction, so the preview always answers the gesture.
-                float raw = Mathf.Abs(distance / step);
-                if (raw > 0.2f) count = distance > 0f ? 1 : -1;
+                // ── 17.44.14-dev: count in METRES, space by the pitch ──────────────────
+                // A run is laid out across the ground, where the crosshair travels with the
+                // player's hand: one lattice metre of drag per cell, and the cells themselves
+                // are spaced by the footprint so neighbours cannot interpenetrate. Drag
+                // distance is the player's, spacing is the block's.
+                count = Mathf.Clamp(Mathf.RoundToInt(distance / step), -cap, cap);
+                if (count == 0)
+                {
+                    // A short drag still reads as a run: the first cell in the dragged
+                    // direction, so the preview always answers the gesture.
+                    if (Mathf.Abs(distance / step) > 0.2f) count = distance > 0f ? 1 : -1;
+                }
             }
 
             for (int i = 1; i <= Mathf.Abs(count) && cells.Count < budget; i++)

@@ -99,6 +99,16 @@ namespace VoxelEngine.Building
         private int _patternSignature = -1;
         private Vector3 _lastSnapCell = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         private bool _buildWasHeld;
+
+        // ── 17.45.0-dev: a run never refuses its own cells ─────────────────────
+        // A block's collider is not always its footprint. One machine carries a proximity
+        // volume twice its own size, so the probe at the NEXT cell's centre lands inside
+        // the block the run placed a moment ago and refuses it - which is precisely
+        // "place one, the next is gone, the third is there". The blocks a single gesture
+        // places are remembered here for the length of that gesture and are never treated
+        // as obstacles by it; everything that stood on the site before the click still is.
+        private readonly System.Collections.Generic.HashSet<PlacedBlock> _runPlaced = new();
+        private PlacedBlock _lastPlacedBlock;
         /// <summary>Set the moment the player turns the ghost by hand. A manually turned
         /// block keeps its heading; an untouched one inherits its neighbour's.</summary>
         private bool _rotationManual;
@@ -242,13 +252,6 @@ namespace VoxelEngine.Building
 
         private void Update()
         {
-            // 17.44.6-dev: one console line per BUILD PRESS, naming every gate that can
-            // refuse a click. Placement has four independent ways to go quiet - a blocking
-            // panel, an open dial, a hologram that is not valid, and a pattern that owns
-            // the click - and from the player's seat "nothing happened" is identical in all
-            // four. This runs before every early return so it can never miss.
-            if (GameSettings.WasPressed(InputAction.Build)) TraceBuildPress();
-
             // Serialized refs can go stale when a player rig is duplicated, a
             // scene is re-wired or a prefab is re-imported. Recover them the
             // same way the interaction tool and the grid builder do, or the
@@ -423,6 +426,24 @@ namespace VoxelEngine.Building
             Debug.Log("[Build] preview: " + state);
         }
 
+        /// <summary>
+        /// 17.45.0-dev: A PILLAR HAS TO BE BUILDABLE BY LOOKING UP.
+        ///
+        /// The aim is only published when the crosshair lands on a surface. Looking at open
+        /// sky publishes nothing, so the aim the run measures its drag against stays where
+        /// the last surface was - the vertical count never grew and PILLAR laid one block
+        /// however far the player pushed. While a pillar run is armed, an empty aim is
+        /// published along the view ray instead, so tilting the camera up grows the stack
+        /// and tilting it down shortens it. Nothing else changes: a pillar still rises along
+        /// gravity from its anchor, never along the camera.
+        /// </summary>
+        private void PublishSkyAimForPillar(Ray ray)
+        {
+            if (!_patternActive) return;
+            if (PlacementOptions.Pattern != PlacementPattern.Pillar) return;
+            GhostAimPosition = ray.GetPoint(Mathf.Max(4f, reach));
+        }
+
         private void UpdateGhost()
         {
             // Per-frame placement-assist flags: this frame has not resolved a frame yet,
@@ -564,6 +585,7 @@ namespace VoxelEngine.Building
                 // the pending colour, with the reason on the HUD.
                 _ghost.SetActive(true);
                 HidePrecisionLattice();
+                PublishSkyAimForPillar(ray);
                 if (TryRaycastIgnoringSelf(ray, out var farHit, AimAssistReach) && farHit.collider != null)
                 {
                     Quaternion farRotation = GravityProvider.GetSurfaceRotation(farHit.point)
@@ -1517,6 +1539,7 @@ namespace VoxelEngine.Building
 
             var pb = go.GetComponent<PlacedBlock>();
             if (pb == null) pb = go.AddComponent<PlacedBlock>();
+            _lastPlacedBlock = pb;
             pb.Item   = block;
             pb.Hp     = block.blockHealth;
             pb.onGrid = gridSnap;
@@ -1757,10 +1780,13 @@ namespace VoxelEngine.Building
 
             if (!PlacementLock.IsLocked || !PlacementLock.Matches(_ghostItem)) return;
 
-            // Nudges step one cell of the block's own row: hand the lock the same pitch a run
-            // of this block is laid at, plus the camera so the screen directions can be
-            // resolved against the axis pair.
-            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres),
+            // 17.45.0-dev: a nudge is a LATTICE step - one axis of the frozen pose, chosen by
+            // whichever axis that screen direction points at, so it can never zigzag. Shift
+            // moves a whole cell of this block's own row (its measured pitch), which is how a
+            // frozen machine is dropped exactly where the next one in a run would sit.
+            Vector3 nudgePitch = PatternPitch(_ghostItem, PlacementLock.Rotation,
+                PlacementLock.Frame.valid ? PlacementLock.Frame : GhostFrame);
+            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres), nudgePitch,
                 shootCamera != null ? shootCamera.transform : null);
 
             // The frozen pose IS the preview from here on.
@@ -2015,19 +2041,15 @@ namespace VoxelEngine.Building
                 // and a ghost can be wearing the valid material for a frame while the probe
                 // that matters refuses the cell - which read as "the run silently does not
                 // exist" while a single click, which re-checks for itself, still worked.
-                // The refusal is declared up front and always assigned: reading it from an
-                // `out var` inside a short-circuited `&&` leaves it unassigned whenever the
-                // first operand is false (CS0165).
+                // The refusal itself is not needed here: the ghost is already wearing the
+                // invalid tint and the toast has already said why, so the reason is discarded.
                 bool armable = false;
-                PlacementRefusal armRefusal = PlacementRefusal.None;
                 if (_ghost != null)
-                    armable = IsPlacementValid(GhostAimPosition, block, GhostAimRotation, out armRefusal);
+                    armable = IsPlacementValid(GhostAimPosition, block, GhostAimRotation, out _);
                 if (!((pressedEdge || pressed) && armable))
                 {
-                    if ((pressedEdge || pressed) && !armable)
-                        UnityEngine.Debug.Log($"[placement] run did not arm: '{block.displayName}' " +
-                            $"at {(_ghost != null ? _ghost.transform.position.ToString() : "no ghost")} - " +
-                            $"{armRefusal} (published ghost valid: {GhostValid})");
+                    // A press on a cell the click would refuse arms nothing; the ghost is
+                    // already red and the refusal toast already explains why.
                     return;
                 }
 
@@ -2042,19 +2064,27 @@ namespace VoxelEngine.Building
 
             float step = Mathf.Max(0.25f, PlacementOptions.StepMetres);
             int budget = Mathf.Min(PlacementOptions.MaxCells, Mathf.Max(1, AvailableCount(block)));
-            Vector3 pitch = PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame);
+
+            // 17.45.0-dev: a PILLAR rises along gravity, so its cells are spaced by this
+            // block's height measured along GRAVITY - not along the frame's up, which is a
+            // wall's up whenever the aim was on a wall. A stack of batteries was being
+            // spaced by the wrong axis and interpenetrating.
+            Vector3 pitch = PlacementOptions.Pattern == PlacementPattern.Pillar
+                ? PatternPitch(block, _patternAnchorRotation,
+                    PlacementFrame.FromUp(_patternAnchorPosition,
+                        GravityProvider.GetUp(_patternAnchorPosition), "PILLAR", false))
+                : PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame);
+
             int planned = PlacementPatternPlanner.Build(
                 PlacementOptions.Pattern, _patternAnchorFrame,
                 _patternAnchorPosition, _patternAnchorRotation,
                 GhostAimPosition, step, pitch, budget, _plannedCells);
             PatternPreviewCount = planned;
 
-            // 17.44.12-dev: a run laid on OPEN GROUND is seated cell by cell. The lattice is
-            // level (a tilted one built staircases), but level and floating are different
-            // things: on a slope the far cells of a deck hovered or sank by metres, which is
-            // what read as a scatter of blocks with large offsets. Each cell is dropped onto
-            // the ground under it and keeps its level lattice position across the ground.
-            if (!_patternAnchorFrame.fromStructure) SeatRunOnGround(_plannedCells, block);
+            // 17.45.0-dev: a plan on OPEN GROUND is seated as ONE rigid move (see
+            // SeatPlanOnGround), so a deck stays square on a dune and a pillar is never
+            // pushed back down onto the ground it was built to rise from.
+            if (!_patternAnchorFrame.fromStructure) SeatPlanOnGround(_plannedCells, block);
 
             ShowPatternPreview(_plannedCells, block);
 
@@ -2165,76 +2195,58 @@ namespace VoxelEngine.Building
         }
 
         /// <summary>
-        /// Reports, in one line, why a build press might do nothing. Diagnostics only: it
-        /// reads state and writes to the console, and never changes a placement decision.
+        /// Seats a whole floor plan on the surface under it as ONE rigid move, leaving cell 0
+        /// (the anchor, already seated by the aim) untouched.
+        ///
+        /// 17.45.0-dev: this used to drop every cell onto the ground under its OWN centre.
+        /// Two things were wrong with that. A PILLAR was seated too, so a vertical stack of
+        /// six cells was pushed down onto the floor beneath it and collapsed into one block
+        /// - "no blocks can be placed upwards". And a DECK was seated cell by cell, so on a
+        /// dune every slab found a different height and the rectangle came out as a ragged,
+        /// lopsided scatter instead of a deck. A floor plan is rigid: the whole plan moves
+        /// by the single highest seat under it, so a deck stays flat, square and level, and
+        /// the cells keep the exact spacing the planner gave them.
+        ///
+        /// A plan with nothing under it at all is left exactly where the aim put it.
         /// </summary>
-        private void TraceBuildPress()
-        {
-            string pose = "no pose";
-            if (_ghost != null)
-            {
-                bool valid = IsPlacementValid(_ghost.transform.position, _ghostItem,
-                    _ghost.transform.rotation, out var refusal);
-                pose = (valid ? "valid" : "INVALID: " + refusal) +
-                       $" at {_ghost.transform.position} (published ghost {GhostValid})";
-            }
-
-            string pitch = "n/a";
-            if (_ghostItem != null && _ghost != null)
-            {
-                Vector3 p = PatternPitch(_ghostItem, _ghost.transform.rotation,
-                    GhostFrame.valid ? GhostFrame : PlacementFrame.FromUp(_ghost.transform.position,
-                        GravityProvider.GetUp(_ghost.transform.position), "GROUND", false));
-                pitch = $"({p.x:0.##}, {p.y:0.##}, {p.z:0.##})";
-            }
-
-            UnityEngine.Debug.Log(
-                $"[placement] press: holding={(HoldingBlock ? _ghostItem?.name ?? "block" : "nothing")}, " +
-                $"pitch={pitch}, " +
-                $"uiBlocking={VoxelEngine.UI.UIState.IsBlocking}, " +
-                $"dialOpen={VoxelEngine.UI.RadialWheelController.AnyOpen}, " +
-                $"pattern={PlacementOptions.Pattern}, " +
-                $"eligible={PlacementOptions.IsPatternEligible(_ghostItem)}, " +
-                $"locked={PlacementLock.IsLocked}, " +
-                $"gridSnap={gridSnap}, patternOwnsClick={PatternOwnsClick}, " +
-                $"patternActive={_patternActive}, ghost={pose}");
-        }
-
-        /// <summary>
-        /// Drops every cell of a run onto the surface beneath it, leaving cell 0 (the anchor,
-        /// already seated by the aim) untouched. A cell with nothing under it within reach is
-        /// left where it is, so the preview still shows the plan rather than hiding it.
-        /// </summary>
-        private void SeatRunOnGround(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
+        private void SeatPlanOnGround(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
         {
             if (cells == null || block == null || cells.Count <= 1) return;
 
-            bool pivotAnchored = GetStaticPlacementPrefabProfile(block).anchorAtPivot;
+            // A pillar is a vertical stack along gravity, never a floor plan.
+            if (PlacementOptions.Pattern == PlacementPattern.Pillar) return;
+
+            var profile = GetStaticPlacementPrefabProfile(block);
+            bool pivotAnchored = profile != null && profile.anchorAtPivot;
             float clearance = StaticPlacementSurfaceOffset(block, pivotAnchored);
 
+            Vector3 up = GravityProvider.GetUp(_patternAnchorPosition);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+
+            // The deepest ground drop of any cell decides the whole plan, so the cell over
+            // the highest ground is the one that ends up resting on it and no cell sinks.
+            float lift = float.NegativeInfinity;
+            int found = 0;
             for (int i = 1; i < cells.Count; i++)
             {
-                var cell = cells[i];
-                Vector3 up = GravityProvider.GetUp(cell.position);
-                if (up.sqrMagnitude < 0.0001f) continue;
-                up.Normalize();
-
-                var probe = new Ray(cell.position + up * 4f, -up);
-                if (!TryRaycastIgnoringSelf(probe, out var ground, 8f)) continue;
+                var probe = new Ray(cells[i].position + up * 4f, -up);
+                if (!TryRaycastIgnoringSelf(probe, out var ground, 12f)) continue;
 
                 Vector3 normal = ground.normal.sqrMagnitude > 0.0001f ? ground.normal.normalized : up;
                 Vector3 seated = ground.point + normal * clearance;
-                if (Mathf.Abs(Vector3.Dot(seated - cell.position, up)) > 8f) continue;
+                float delta = Vector3.Dot(seated - cells[i].position, up);
+                if (delta < -4f || delta > 4f) continue;   // a cliff, not a seat
+                if (delta > lift) lift = delta;
+                found++;
+            }
+            if (found == 0 || float.IsNegativeInfinity(lift) || Mathf.Abs(lift) < 0.001f) return;
 
-                // A seated cell has to be a cell the click can actually build: dropping eight
-                // cells onto a slope and then refusing two of them is what "the deck skips
-                // blocks" looked like. A seat that does not validate is discarded and the
-                // level planning position kept.
-                _surfaceAttachmentHost = null;
-                _deckSnapHost = null;
-                if (!IsPlacementValid(seated, block, cell.rotation, out _)) continue;
-
-                cell.position = seated;
+            // One offset, along the plan's own up: the rectangle never deforms.
+            for (int i = 1; i < cells.Count; i++)
+            {
+                var cell = cells[i];
+                cell.position += up * lift;
                 cells[i] = cell;
             }
         }
@@ -2283,9 +2295,12 @@ namespace VoxelEngine.Building
             int placed = 0;
             var firstRefusal = PlacementRefusal.NoRoom;
             bool hasRefusal = false;
+
+            // 17.45.0-dev: cells placed by THIS gesture are never obstacles to it (see
+            // _runPlaced), so a run is judged only against the site as the player found it.
+            _runPlaced.Clear();
             for (int i = 0; i < _plannedCells.Count && placed < budget; i++)
             {
-                // Per-cell snap context belongs to THAT cell, never to the anchor's.
                 _surfaceAttachmentHost = null;
                 _deckSnapHost = null;
                 if (!IsPlacementValid(_plannedCells[i].position, block, _plannedCells[i].rotation, out var cellRefusal))
@@ -2296,31 +2311,33 @@ namespace VoxelEngine.Building
                     if (!hasRefusal) { firstRefusal = cellRefusal; hasRefusal = true; }
                     continue;
                 }
-                if (CommitPlacement(block, _plannedCells[i].position, _plannedCells[i].rotation,
+                _lastPlacedBlock = null;
+                if (!CommitPlacement(block, _plannedCells[i].position, _plannedCells[i].rotation,
                         default, hasHitContext: false, playFeedback: false))
-                    placed++;
+                    continue;
+                placed++;
+                // Every cell this gesture has just built is passable to the rest of it.
+                if (_lastPlacedBlock != null) _runPlaced.Add(_lastPlacedBlock);
             }
 
-            if (placed == 0)
+            try
             {
-                ShowPlacementRefusal(block, hasRefusal ? firstRefusal : PlacementRefusal.NoRoom, force: true);
-                PlacementFeedback.Refused(_patternAnchorPosition);
-                UnityEngine.Debug.Log($"[placement] run refused: {block.displayName}, " +
-                    $"{_plannedCells.Count} cells planned, reason {firstRefusal}, " +
-                    $"anchor {_patternAnchorPosition}, step {PlacementOptions.StepMetres:0.##}");
-                return 0;
-            }
+                if (placed == 0)
+                {
+                    ShowPlacementRefusal(block, hasRefusal ? firstRefusal : PlacementRefusal.NoRoom, force: true);
+                    PlacementFeedback.Refused(_patternAnchorPosition);
+                    return 0;
+                }
 
-            ConsumePlaced(block, placed);
-            VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, placed);
-            UnityEngine.Debug.Log($"[placement] run built {placed} of {_plannedCells.Count} " +
-                $"first={(_plannedCells.Count > 0 ? _plannedCells[0].position.ToString() : "none")} " +
-                $"last={(_plannedCells.Count > 0 ? _plannedCells[_plannedCells.Count - 1].position.ToString() : "none")} " +
-                $"cells ({PlacementOptions.Pattern}) at pitch " +
-                $"({PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).x:0.##}, " +
-                $"{PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).y:0.##}, " +
-                $"{PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).z:0.##})");
-            return placed;
+                ConsumePlaced(block, placed);
+                VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, placed);
+                return placed;
+            }
+            finally
+            {
+                _runPlaced.Clear();
+                _lastPlacedBlock = null;
+            }
         }
 
         /// <summary>How many copies of this block the player can actually lay right now.</summary>
@@ -4677,6 +4694,12 @@ namespace VoxelEngine.Building
             if (tiered != null && IsSupportingDeckContact(tiered, deckSnapHost, allowAdjacentCoplanarDecks))
                 return true;
             var placed = collider.GetComponentInParent<PlacedBlock>();
+            // 17.45.0-dev: a block this gesture placed must never refuse the rest of the
+            // gesture. Cells are spaced by the measured footprint, but a collider that
+            // reaches past its model put the next cell's centre inside its neighbour and
+            // every second cell of a run was skipped. Own-run blocks are passable; the
+            // same block seen from a later click is an obstacle again.
+            if (placed != null && _runPlaced.Count > 0 && _runPlaced.Contains(placed)) return true;
             // A mounted utility piece intentionally touches only the face it was
             // snapped to. The support-plane pose guarantees it sits outside that
             // host; all other structures and conduits remain collision blockers.
@@ -4988,6 +5011,21 @@ namespace VoxelEngine.Building
                 {
                     mb.enabled = false;
                 }
+            }
+
+            // 17.45.0-dev: A PREVIEW IS NOT A PLACEMENT. Combat behaviours were never
+            // silenced here, so an explosive's own fuse started on the hologram the instant
+            // a bomb was held - and five seconds later the ghost detonated in mid-air, took
+            // the crater with it and left the player placing bombs into the hole. Anything
+            // damageable, anything with a fuse and any light it switched on is switched off
+            // for the preview; the real bomb is only ever armed by CommitPlacement.
+            foreach (var damageable in root.GetComponentsInChildren<VoxelEngine.Combat.Damageable>(true))
+            {
+                if (damageable != null) damageable.enabled = false;
+            }
+            foreach (var lightSource in root.GetComponentsInChildren<Light>(true))
+            {
+                if (lightSource != null) lightSource.enabled = false;
             }
 
             ApplyGhostMaterial(root, mat);

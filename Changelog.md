@@ -1,9 +1,41 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.15-dev`
+**Current Version:** `17.45.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.45.0-dev] Lattice Nudging, Runs That Build What They Draw, a Named Upgrade Tier and a Fuse Wheel
+
+**Type:** MINOR - two new player-facing systems (the hammer's upgrade-tier dial and the explosive fuse wheel) plus fixes across the placement layer. No save schema change, no chunk format change, no removed system.
+
+**GitHub title:** `[17.45.0-dev] Lattice-axis nudging, runs that build what they draw, a named hammer upgrade tier and a bomb fuse wheel`
+
+#### Added
+
+- **The Building Hammer names an upgrade tier (`HammerTierSelection`, `BuildSystemV2.TryUpgradeTo`, `HammerBuildWheel`).** A placed piece used to be raised one tier per click: Wood to Steel was three clicks and three full payments, Stone then Iron then Steel. The player now opens a tier dial on `HammerTier` (U by default, rebindable in Settings - Keybinds - a separate dial inside the existing hammer wheel, so no scene or prefab change) and every click takes a piece straight to the selected tier. The cost is a SINGLE material step: reaching Steel pays the Steel materials, never the two stopovers as well, and the wheel shows that cost for whichever family the hammer currently has armed. The selection persists in PlayerPrefs and the family wheel's centre now reads "upgrade pieces to IRON" instead of a generic line.
+- **Explosive fuses are chosen on the build wheel (`BombHud`).** The permanently visible fuse slider is gone. Holding an explosive and holding the build key opens a fuse dial - 1, 2, 3, 5, 10, 20 and 30 seconds plus MANUAL - and a compact readout pill shows the current fuse without opening anything. MANUAL arms the charge with no countdown at all: it sits live with a slow amber pulse until something hits it (`ExplosiveBlock.manualFuse`, `AntimatterBomb.manualFuse`), which is the demolition charge the old slider could not express. Countdown numbers over placed bombs read MAN over a manual charge.
+- **Shift + arrow on a frozen hologram now steps one whole cell of the block's own row** (its measured pitch along the axis being moved on), so a frozen machine can be dropped exactly where the next one in a run would sit instead of one metre away from it.
+
+#### Fixed
+
+- **Bombs armed and detonated in their own hologram (`BuildSystem.StripGhost`).** The preview is an instantiated copy of the real prefab, and `StripGhost` silenced simulation and logistics behaviours but never combat ones. `ExplosiveBlock.Awake` therefore started the fuse on the ghost the moment a bomb was held, and five seconds later the hologram detonated in mid-air - carving the crater, killing the placement and leaving the player placing bombs into a hole they did not ask for. Every `Damageable` and every light is now disabled on a preview, and the real fuse only ever starts in `CommitPlacement`.
+- **A run refused its own cells (`BuildSystem.CommitRun`, `IsPlacementProbeColliderAllowed`).** This is the reported "span places one, the next is gone, the third is there". Cells are spaced by the measured footprint, but a machine's collider can reach past its own model, so the probe at the next cell's centre landed inside the block the same gesture had just placed and refused it - and the run built every other cell. Blocks placed by the current gesture are now remembered in `_runPlaced` and are passable to the rest of that gesture only; anything that stood on the site before the click still refuses exactly as it did.
+- **A PILLAR could not go up (`BuildSystem.SeatPlanOnGround`).** Every cell of every run was dropped onto the ground under its own centre, including a vertical stack - so a six-cell pillar was pushed back down onto the floor beneath it and collapsed into one block. Seating now skips a pillar entirely.
+- **A DECK came out scattered and lopsided.** The same per-cell drop seated each slab at whatever height the dune gave it, so a rectangle became a ragged scatter. A floor plan is now seated as ONE rigid move by the highest seat under it: the deck stays flat, square and level, and because the plan can only ever be lifted it can never be seated into a refusal either. A deck that does not fit the cell budget also shrinks its longer side until it fits, instead of drawing three full rows and half a fourth.
+- **PILLAR did nothing when the player looked up (`PlacementPatternPlanner.Build`, `BuildSystem.PublishSkyAimForPillar`).** With the crosshair on open sky no surface is resolved, the aim is never published, and the run measured a drag against a stale point - so the stack stayed one cell high whatever the player did. A pillar run now publishes the aim along the view ray, and counts its cells in BLOCK HEIGHTS: one look-up of a machine adds one machine. Counting a vertical stack in lattice metres turned a glance upward into a fifteen-metre tower; counting it in footprints made the same glance do nothing.
+- **A pillar spaced its cells along the wrong axis.** The height came from the frame's own up, which is a wall's up whenever the aim is on a wall. A pillar now measures the block's height along gravity (the axis it actually stacks on).
+- **The nudge zigzag (`PlacementLock`).** Every earlier version moved the frozen block along directions derived from the camera - exact arithmetic on axes that are not the axes the world is built on. Screen-right and screen-away are only perpendicular in world space if the player happens to look straight down a grid line, so the path between them read as a zigzag and right-N-then-left-N did not come back to the same point. The four directions are now the frozen pose's OWN LATTICE AXES, chosen once from the view (whichever ground axis each screen direction points most nearly along, sign included) and re-picked only on a fresh press from a view that has turned more than 40 degrees. Every press is a straight grid step, always reversible, and every step lands on a cell a neighbour could stand on.
+- **A frozen hologram was spaced, not stepped, by Shift.** Shift multiplied the lattice step by five regardless of the block; it now uses the block's own pitch along the axis being moved.
+
+#### Removed
+
+- **The placement trace spam.** The per-press `[placement] press:` line, the arm, refusal and run-completion lines and the per-press `[nudge]` line are gone. They were written to diagnose the faults fixed above and there is no reason for them to run in a shipping build. The one-shot preview state trace (`[Build] preview:`) and the missing-prefab warning stay: those fire on a real failure, not on every click.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all twelve parse clean.
+- Not run in Unity. The eight behaviours below need eyes on them in play, because every one is a feel judgement rather than a number: SPAN laying a full unbroken run of batteries, PILLAR rising as the player looks up, DECK coming out as a square, the nudge stepping straight along the grid and cancelling exactly, Shift + arrow landing on a neighbouring cell, the U tier dial taking a Wood wall to Steel for the Steel step alone, the bomb fuse wheel, and a held bomb no longer detonating its own hologram.
 
 ### [17.44.15-dev] Nudge Directions That Re-Pin When You Look Away, and Cells Spaced by the Widest of Model and Solid
 

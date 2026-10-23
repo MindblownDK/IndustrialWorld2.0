@@ -10,11 +10,11 @@
 // ║  Lock (V) takes the pose out of the crosshair's hands: the       ║
 // ║  ghost stays exactly where it was, the mouse is free to walk     ║
 // ║  around the machine and look at it from the far side, and the    ║
-// ║  arrow keys nudge it one lattice step along the view            ║
-// ║  (Shift + arrow = five steps, Ctrl + arrow = lift / drop on the  ║
-// ║  surface normal). The next build click confirms exactly what is  ║
-// ║  on screen, and the lock survives the click so a second copy     ║
-// ║  can be stamped down without re-aiming.                          ║
+// ║  arrow keys nudge it ONE LATTICE STEP at a time (Shift = one     ║
+// ║  whole cell of the block's own row, Ctrl + up/down = lift and    ║
+// ║  drop 5 cm). The next build click confirms exactly what is on    ║
+// ║  screen, and the lock survives the click so a second copy can    ║
+// ║  be stamped down without re-aiming.                              ║
 // ║                                                                  ║
 // ║  Nothing here places anything: it holds a pose, and the builder  ║
 // ║  asks for it before it asks the crosshair.                       ║
@@ -31,16 +31,17 @@ namespace VoxelEngine.Building
     {
         // A held arrow key repeats, but at a walking pace: the first version repeated
         // every seventh of a second, which walked a frozen hologram a dozen cells a second
-        // and read as the block flying away. Shift never repeats at all - five cells is a
-        // deliberate move, not a rate.
+        // and read as the block flying away.
         private const float NudgeRepeatDelay = 0.32f;
         private const float NudgeRepeatRate = 0.14f;
         private const float NudgeFineStep = 0.05f;
 
-        // How long the arrow keys must be idle before the four directions re-pin to the
-        // camera. Long enough that a burst of presses is one rigid basis, short enough that
-        // looking at the block from somewhere else hands the arrow keys back to the screen.
-        private const float NudgeRepinIdle = 0.6f;
+        /// <summary>
+        /// How far the camera may turn before the four nudge directions are re-picked from
+        /// the new view. Below this the pair is rigid, so a burst of presses is one straight
+        /// line on the lattice and any number of steps is exactly reversible.
+        /// </summary>
+        private const float NudgeRepinTurn = 40f;
 
         public static bool IsLocked { get; private set; }
         public static Vector3 Position { get; private set; }
@@ -52,18 +53,30 @@ namespace VoxelEngine.Building
         private static float _nextNudge;
 
         // ── The nudge basis ────────────────────────────────────────────────────
-        // Screen axes, captured ONCE per lock and rebuilt only when the player really
-        // turns their view. Rebuilding them every frame sounds more accurate and is the
-        // opposite: the basis is derived from a gravity up that moves with the ghost and a
-        // camera that is never perfectly still, so it drifts a fraction of a degree per
-        // step. Hold an arrow and those fractions add up in one direction - the block
-        // walks away in a slow zigzag instead of stepping sideways.
+        // 17.45.0-dev: THE FOUR DIRECTIONS ARE LATTICE AXES.
+        //
+        // Every earlier version moved the frozen block along a direction derived from the
+        // camera, which is exact arithmetic on axes that are NOT the axes the world is built
+        // on. Press right and the block moved screen-right; press up and it moved
+        // screen-away; those two vectors are not perpendicular in world space unless the
+        // player happens to be looking straight down a grid line, so the path between them
+        // reads as a zigzag - and pressing right N times then left N times did not come
+        // back to where it started, because the pair had been re-derived in between.
+        //
+        // The pair is now chosen once per view from the frozen pose's own two ground axes:
+        // whichever of them points most nearly at screen-right IS "right", whichever points
+        // most nearly away IS "away". Both are real lattice axes, so every press is a whole
+        // number of cells along one axis, the path is a straight line on the grid, and the
+        // second press cancels the first exactly. The pair is re-picked only when the player
+        // has actually walked around the block and is looking at it from a new side.
         private static bool _nudgeBasisValid;
         private static Vector3 _nudgeRight = Vector3.right;
         private static Vector3 _nudgeAway = Vector3.forward;
-        private static Vector3 _nudgeUp = Vector3.up;
-        private static float _nudgeLastPress = -999f;
-        private static Vector3 _nudgeBasisAt;
+        // Which of the pose frame's two ground axes each arrow direction landed on, so
+        // Shift can step by that block's own extent along the very axis it is moving on.
+        private static bool _nudgeRightUsesRightAxis = true;
+        private static bool _nudgeAwayUsesRightAxis = true;
+        private static Vector3 _nudgeBasisCamera = Vector3.forward;
 
         /// <summary>Which arrow is being held: 0 none, +/-1 left-right, +/-2 back-away, +/-3 down-up.</summary>
         private static int _nudgeIntent;
@@ -82,9 +95,8 @@ namespace VoxelEngine.Building
             _nextNudge = 0f;
             _nudgeIntent = 0;
             _nudgeBasisValid = false;
-            _nudgeLastPress = -999f;
             VoxelEngine.UI.BuildFeedbackHud.Show("Hologram locked",
-                "It stays put while you walk around it. Arrow keys nudge, Shift + arrow moves five, Ctrl + up or down lifts.",
+                "It stays put while you walk around it. Arrow keys step one cell along the lattice, Shift + arrow steps a whole machine, Ctrl + up or down lifts.",
                 null, VoxelEngine.UI.UITheme.AccentGold);
             VoxelEngine.FX.AudioManager.PlayUI(VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.UiClick), 0.5f, 0.88f);
         }
@@ -122,22 +134,21 @@ namespace VoxelEngine.Building
 
         /// <summary>
         /// Reads the arrow keys and applies them to the frozen pose. Safe to call every
-        /// frame; does nothing unless a lock is held. Returns true when the pose moved,
-        /// so the caller can refresh the ghost. <paramref name="view"/> is the camera:
-        /// nudges are measured in SCREEN axes projected onto the ground, so left is always
-        /// left of the screen and up is always away from the player, whatever the camera is
-        /// doing - looking level, looking down on the machine, or anything between.
+        /// frame; does nothing unless a lock is held. Returns true when the pose moved, so
+        /// the caller can refresh the ghost.
         /// </summary>
-        public static bool Tick(BlockItem held, float step, Transform view)
+        /// <param name="step">The lattice step in metres (the same one placement quantises to).</param>
+        /// <param name="pitch">The block's own measured footprint, per frame axis - what Shift steps by.</param>
+        /// <param name="view">The camera, used only to decide WHICH lattice axis each arrow means.</param>
+        public static bool Tick(BlockItem held, float step, Vector3 pitch, Transform view)
         {
             if (!IsLocked) return false;
             if (held == null || held != Item) { Unlock(); return false; }
 
-            // 17.44.11-dev: ONE METRE. The step used to be the block's own footprint, which
-            // for this battery measured 4.9 m, 5.6 m and once 24.5 m - so a press threw it
-            // across the field instead of stepping it, and the arrows looked like they moved
-            // it along one long line. A nudge is a metre: exactly reversible, always.
             if (step <= 0.0001f) step = 1f;
+            if (pitch.x <= 0.0001f) pitch.x = step;
+            if (pitch.y <= 0.0001f) pitch.y = step;
+            if (pitch.z <= 0.0001f) pitch.z = step;
 
             Vector2 axis = ReadArrowAxis();
             if (axis.sqrMagnitude < 0.01f)
@@ -148,75 +159,58 @@ namespace VoxelEngine.Building
 
             bool ctrl = VoxelEngine.GridSystem.GridInput.Ctrl;
             bool shift = VoxelEngine.GridSystem.GridInput.Shift;
+
             Vector3 upNow = GravityProvider.GetUp(Position);
             if (upNow.sqrMagnitude < 0.0001f) upNow = Vector3.up;
             upNow.Normalize();
 
             int intent;
             Vector3 direction;
-            float stepAlong = step;
+            float amount;
+
             if (ctrl)
             {
-                // 17.44.7-dev: Ctrl means LIFT and DROP, nothing else. A horizontal arrow
-                // with Ctrl held is not a fine sideways nudge - it does nothing at all.
+                // Ctrl means LIFT and DROP, nothing else. A horizontal arrow with Ctrl held
+                // is not a fine sideways nudge - it does nothing at all.
                 if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y)) return false;
-
                 intent = axis.y > 0f ? 3 : -3;
                 direction = upNow * Mathf.Sign(axis.y);
+                amount = NudgeFineStep;
             }
             else
             {
-                // ── 17.44.14-dev: FROZEN FOR THE WHOLE LOCK ────────────────────────
-                // Derived once, on the first horizontal press of the lock, and never again
-                // until the player re-locks. Every previous version re-derived some part of
-                // this per press - the camera, the gravity up, or both - and the trace showed
-                // exactly what that does: identical single-metre steps along axes that jumped
-                // by up to ninety degrees between presses. A step left then right then came
-                // back somewhere else, which is the zigzag. Four fixed directions per lock
-                // make it arithmetically impossible: press left N times and right N times and
-                // the block is where it started, always.
-                // ── 17.44.15-dev: FROZEN DURING A BURST, RE-PINNED WHEN YOU LOOK AWAY ──
-                // Two builds failed here for opposite reasons. Frozen for the whole lock, the
-                // block moved on a world grid while the player orbited it, so every press was
-                // diagonal on screen and the path read as a zigzag. Re-derived on every press,
-                // left and right were no longer opposites once the player turned between them,
-                // so the block wandered instead of cancelling out.
-                //
-                // The trace settled it: the frozen basis never moved, but the camera walked
-                // ninety degrees between presses. So the basis is now rigid for a burst of
-                // presses and re-pins to the camera once the player has stopped pressing and
-                // looked at it from somewhere else. Within a burst every step is exactly one
-                // metre and exactly reversible; between bursts the arrows follow the screen.
-                if (Time.unscaledTime - _nudgeLastPress > NudgeRepinIdle) _nudgeBasisValid = false;
-                _nudgeLastPress = Time.unscaledTime;
-                if (!_nudgeBasisValid) RefreshNudgeBasis(view, upNow);
+                // A FRESH PRESS is the only moment the pair may be re-picked. Mid-burst it
+                // cannot be allowed at all: a camera that drifts while an arrow is held would
+                // hand the same key a new axis halfway through the line, which is the zigzag
+                // this whole rewrite exists to remove.
+                int rawKey = Mathf.Abs(axis.x) >= Mathf.Abs(axis.y)
+                    ? (axis.x > 0f ? 1 : -1)
+                    : (axis.y > 0f ? 2 : -2);
+                bool freshKey = rawKey != _nudgeIntent;
+                if (!_nudgeBasisValid || (freshKey && CameraTurnedAway(view)))
+                    RepinNudgeBasis(view, upNow);
 
-                // ── 17.44.11-dev: LEVEL SCREEN AXES, ONE METRE AT A TIME ────────────
-                // Left is left of the screen, up is away from the player, and both lie flat
-                // on the gravity plane - so a battery can always be walked sideways, never
-                // only along its own length. The basis is PINNED for the life of the lock,
-                // so the same key keeps moving the same way, and because every step is a
-                // whole metre along a fixed axis, pressing right N times and left N times
-                // returns the block exactly where it started.
+                // The basis axis already points at screen-right (or screen-away), so the
+                // ARROW's own sign is the only thing that decides which way the block goes.
                 if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y))
                 {
                     intent = axis.x > 0f ? 1 : -1;
                     direction = _nudgeRight * Mathf.Sign(axis.x);
+                    amount = shift ? (_nudgeRightUsesRightAxis ? pitch.x : pitch.z) : step;
                 }
                 else
                 {
                     intent = axis.y > 0f ? 2 : -2;
                     direction = _nudgeAway * Mathf.Sign(axis.y);
+                    amount = shift ? (_nudgeAwayUsesRightAxis ? pitch.x : pitch.z) : step;
                 }
+                if (amount <= 0.0001f) amount = step;
             }
 
-            float amount = ctrl ? NudgeFineStep : (shift ? stepAlong * 5f : stepAlong);
             Vector3 offset = direction * amount;
 
-            // 17.44.5-dev: repeat is measured on the ARROW, never on the resulting vector.
-            // Comparing directions meant a single drifting basis or a gravity up that
-            // changed with the ghost counted as a brand-new press every frame - so a held
-            // key nudged sixty times a second and crawled the block away.
+            // Repeat is measured on the ARROW, never on the resulting vector, so a basis that
+            // moves for any reason cannot turn a held key into sixty nudges a second.
             bool freshPress = intent != _nudgeIntent;
             _nudgeIntent = intent;
             if (freshPress)
@@ -225,23 +219,10 @@ namespace VoxelEngine.Building
             }
             else
             {
-                // Shift and Ctrl move once per press: five cells and 0.05 m are decisions.
+                // Shift and Ctrl move once per press: a whole cell and 5 cm are decisions.
                 if (shift || ctrl) return false;
                 if (Time.unscaledTime < _nextNudge) return false;
                 _nextNudge = Time.unscaledTime + NudgeRepeatRate;
-            }
-
-            // One line per press, not per repeat: the basis this step was taken in, what it
-            // did, and where the pose ended up. If a nudge ever reads as a zigzag again, this
-            // line says whether the basis moved, the step shrank, or nothing moved at all.
-            if (freshPress)
-            {
-                Vector3 liveRight = view != null ? view.right : Vector3.zero;
-                UnityEngine.Debug.Log($"[nudge] key={(intent > 0 ? "+" : "")}{intent} " +
-                    $"step={amount:0.###} " +
-                    $"axis={(intent == 1 || intent == -1 ? _nudgeRight : intent == 3 || intent == -3 ? upNow : _nudgeAway)} " +
-                    $"frozenRight={_nudgeRight} frozenUp={_nudgeUp} liveCamRight={liveRight} liveUp={upNow} " +
-                    $"-> {Position + offset}");
             }
 
             Nudge(offset, freshPress);
@@ -249,37 +230,91 @@ namespace VoxelEngine.Building
         }
 
         /// <summary>
-        /// Derives the nudge basis from the camera AS IT IS NOW.
+        /// Picks the two lattice axes the arrow keys will move along.
         ///
-        /// 17.44.13-dev: the basis used to be captured once when the hologram was frozen and
-        /// then held. That is stable and it is wrong: the player freezes a block, walks
-        /// around it, and from the new angle "left" no longer means left of the screen - it
-        /// means left from where they stood when they pressed V, so every horizontal press
-        /// drags the block diagonally across their view. That is the zigzag, and no amount of
-        /// arithmetic fixing could remove it because the arithmetic was already exact.
+        /// The pose's own frame supplies a perpendicular pair of ground axes (from a
+        /// neighbouring foundation, a deck edge, or local gravity when the block sits in the
+        /// open). Screen-right and screen-away are then matched to whichever axis they point
+        /// most nearly along, sign included - so the arrows still follow the view, but they
+        /// only ever move the block along axes the world is built on.
         ///
-        /// Re-deriving per press is safe now that a step is exactly one metre: pressing right
-        /// N times and left N times returns the block to the same place as long as the view
-        /// has not changed, and follows the view when it has.
+        /// The caller decides WHEN that is allowed: once on the first press after a lock, and
+        /// afterwards only on a fresh press from a view that has really changed (see
+        /// <see cref="CameraTurnedAway"/>).
         /// </summary>
-        private static void RefreshNudgeBasis(Transform view, Vector3 up)
+        private static void RepinNudgeBasis(Transform view, Vector3 up)
         {
-            // The camera's RIGHT, flattened onto the ground, never its forward: a forward
-            // projection collapses toward zero whenever the player looks down at a machine.
-            Vector3 right = view != null ? Vector3.ProjectOnPlane(view.right, up) : Vector3.zero;
-            if (right.sqrMagnitude < 0.04f && view != null)
-                right = Vector3.ProjectOnPlane(view.up, up);
-            if (right.sqrMagnitude < 0.0001f)
-                right = PlacementFrame.FromUp(Position, up, "LOCK", false).right;
-            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
-            _nudgeRight = right.normalized;
-            _nudgeUp = up;
+            var frame = Frame.valid ? Frame : PlacementFrame.FromUp(Position, up, "LOCK", false);
+            Vector3 axisA = Vector3.ProjectOnPlane(frame.right, up).normalized;
+            if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.ProjectOnPlane(Vector3.forward, up).normalized;
+            if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.ProjectOnPlane(Vector3.up, up).normalized;
+            if (axisA.sqrMagnitude < 0.0001f) axisA = Vector3.forward;
 
-            Vector3 away = Vector3.Cross(_nudgeRight, up);
-            if (away.sqrMagnitude < 0.0001f) away = Vector3.Cross(_nudgeRight, Vector3.up);
-            if (away.sqrMagnitude < 0.0001f) away = Vector3.forward;
-            _nudgeAway = away.normalized;
+            // Axis B must be SQUARE to axis A, not merely close: a pair that is twenty
+            // degrees off would move the block sideways as well as forward, which is the
+            // diagonal the player reports as a zigzag, and pressing one arrow then the other
+            // would not close the rectangle. Orthogonalise, then re-derive if that collapses.
+            Vector3 axisB = Vector3.ProjectOnPlane(frame.forward, up);
+            if (axisB.sqrMagnitude < 0.0001f) axisB = Vector3.ProjectOnPlane(Vector3.right, up);
+            float skew = Vector3.Dot(axisA, axisB);
+            if (Mathf.Abs(skew) > 0.001f) axisB -= axisA * skew;
+            if (axisB.sqrMagnitude < 0.0001f) axisB = Vector3.Cross(up, axisA);
+            axisB.Normalize();
+
+            Vector3 camRight = view != null ? Vector3.ProjectOnPlane(view.right, up) : Vector3.zero;
+            Vector3 camAway = view != null ? Vector3.ProjectOnPlane(view.forward, up) : Vector3.zero;
+            if (camRight.sqrMagnitude < 0.02f && view != null)
+                camRight = Vector3.ProjectOnPlane(view.up, up);   // looking straight down
+            if (camAway.sqrMagnitude < 0.02f && view != null)
+                camAway = Vector3.ProjectOnPlane(view.up, up);
+            if (camRight.sqrMagnitude < 0.0001f) camRight = axisA;
+            if (camAway.sqrMagnitude < 0.0001f) camAway = axisB;
+            camRight.Normalize();
+            camAway.Normalize();
+
+            _nudgeRight = PickLatticeAxis(camRight, axisA, axisB, 1f);
+            _nudgeAway = PickLatticeAxis(camAway, axisA, axisB, -1f);
+
+            // Screen-right and screen-away must be two DIFFERENT axes. Standing with the
+            // camera square down an axis, both requests can land on it; the away request
+            // then takes the other axis instead of duplicating the first.
+            if (Mathf.Abs(Vector3.Dot(_nudgeRight, _nudgeAway)) > 0.5f)
+            {
+                Vector3 other = Mathf.Abs(Vector3.Dot(_nudgeRight, axisA)) > 0.5f ? axisB : axisA;
+                float sign = Vector3.Dot(other, camAway);
+                _nudgeAway = other * (sign < 0f ? -1f : 1f);
+            }
+
+            _nudgeRightUsesRightAxis = Mathf.Abs(Vector3.Dot(_nudgeRight, axisA)) > 0.5f;
+            _nudgeAwayUsesRightAxis = Mathf.Abs(Vector3.Dot(_nudgeAway, axisA)) > 0.5f;
+            _nudgeBasisCamera = view != null ? view.forward : Vector3.forward;
             _nudgeBasisValid = true;
+        }
+
+        /// <summary>True when the player has walked far enough around the block that the
+        /// arrows should re-aim: a different side of the machine is a different view.</summary>
+        private static bool CameraTurnedAway(Transform view)
+        {
+            if (view == null || !_nudgeBasisValid) return false;
+            return Vector3.Angle(_nudgeBasisCamera, view.forward) >= NudgeRepinTurn;
+        }
+
+        /// <summary>
+        /// The lattice axis (either of the two, in either direction) that points most nearly
+        /// along <paramref name="screen"/> - with <paramref name="fallbackSign"/> deciding the
+        /// rare exactly-sideways tie.
+        /// </summary>
+        private static Vector3 PickLatticeAxis(Vector3 screen, Vector3 axisA, Vector3 axisB, float fallbackSign)
+        {
+            float dotA = Vector3.Dot(screen, axisA);
+            float dotB = Vector3.Dot(screen, axisB);
+            float best = Mathf.Max(Mathf.Abs(dotA), Mathf.Abs(dotB));
+            if (best < 0.0001f)
+                return (fallbackSign >= 0f ? axisB : axisA).normalized;
+
+            return Mathf.Abs(dotA) >= Mathf.Abs(dotB)
+                ? axisA * (dotA < 0f ? -1f : 1f)
+                : axisB * (dotB < 0f ? -1f : 1f);
         }
 
         private static Vector2 ReadArrowAxis()

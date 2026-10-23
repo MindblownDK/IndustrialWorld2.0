@@ -36,7 +36,8 @@ namespace VoxelEngine.Settings
         PushToTalk,     // hold to speak on proximity voice (14.20.0-dev)
         Dampeners,      // personal inertia dampeners; Ctrl+key locks a relative target (14.62.0-dev)
         WindLines,      // surface wind-line visuals; read WITH the Ctrl modifier - Ctrl+B by default (17.20.0-dev)
-        BuildLock       // freeze the placement hologram in the world, then nudge it (17.44.0-dev)
+        BuildLock,      // freeze the placement hologram in the world, then nudge it (17.44.0-dev)
+        HammerTier      // the Building Hammer's upgrade-tier wheel (17.45.0-dev)
     }
 
     /// <summary>How the microphone decides it is your turn to speak.
@@ -86,7 +87,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 27;   // v27: BuildLock (V) - freeze the placement hologram and nudge it
+        private const int    CURRENT_VERSION = 28;   // v28: HammerTier (U) - the upgrade-tier wheel
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -443,6 +444,10 @@ namespace VoxelEngine.Settings
             // 17.44.0-dev: V is the last free letter beside the build cluster. B, G,
             // R, T and H are all spoken for, so freeze-the-hologram takes V.
             InputAction.BuildLock       => "V",
+            // 17.45.0-dev: U, as asked for. Warp Drive also sits on U, and deliberately so:
+            // one is a hammer wheel on foot and the other is a cockpit key, so the two never
+            // share a context. Either can be rebound in Settings - Keybinds.
+            InputAction.HammerTier      => "U",
             _ => "None"
         };
 
@@ -531,6 +536,7 @@ namespace VoxelEngine.Settings
 
             // v27: BuildLock is new; the generic pass above already gave an unset
             // profile its default V, so only a deliberately rebound key is preserved.
+            // v28: the hammer's upgrade-tier wheel is new; the generic pass above gives it U.
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);

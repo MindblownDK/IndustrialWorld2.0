@@ -2192,12 +2192,36 @@ namespace VoxelEngine.Player
                 }
 
                 // Left-clicking the wheel centre explicitly arms upgrade mode.
+                // 17.45.0-dev: the click takes the piece to the TIER THE PLAYER SELECTED on
+                // the upgrade wheel (U), not one step up, and says why when it cannot.
                 // Preserve the previous direct-upgrade fallback if the wheel is absent.
-                if ((wheel == null || wheel.IsUpgradeMode)
-                    && BuildSystemV2.Instance != null && BuildSystemV2.Instance.TryUpgrade(tiered))
+                if (wheel == null || wheel.IsUpgradeMode)
                 {
-                    _feedback?.Trigger(hit.point, hit.normal, new Color(0.95f, 0.85f, 0.20f));
-                    ConsumeDurability(stack);
+                    var wanted = VoxelEngine.Building.Tiered.HammerTierSelection.Selected;
+                    var build = BuildSystemV2.Instance;
+                    if (build != null && build.TryUpgradeTo(tiered, wanted))
+                    {
+                        _feedback?.Trigger(hit.point, hit.normal, new Color(0.95f, 0.85f, 0.20f));
+                        ConsumeDurability(stack);
+                        _nextHit = Time.time + 1f / Mathf.Max(0.1f, ((ToolItem)stack.item).fireRate);
+                    }
+                    else if (tiered.tier >= wanted)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Already " +
+                            VoxelEngine.Building.Tiered.HammerTierSelection.Name(tiered.tier),
+                            "Pick a higher tier with " + VoxelEngine.Settings.GameSettings.GetKey(
+                                VoxelEngine.Settings.InputAction.HammerTier) + ".",
+                            null, new Color(0.85f, 0.85f, 0.90f));
+                    }
+                    else
+                    {
+                        var def = tiered.definition;
+                        var cost = VoxelEngine.Building.Tiered.HammerTierSelection.CostToReach(def, wanted);
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Cannot upgrade to " +
+                            VoxelEngine.Building.Tiered.HammerTierSelection.Name(wanted),
+                            "Needs " + VoxelEngine.Building.Tiered.HammerTierSelection.Describe(cost) + ".",
+                            null, new Color(0.95f, 0.35f, 0.30f));
+                    }
                     _nextHit = Time.time + 1f / Mathf.Max(0.1f, ((ToolItem)stack.item).fireRate);
                 }
                 return;

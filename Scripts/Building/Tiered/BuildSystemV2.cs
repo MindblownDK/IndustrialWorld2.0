@@ -1282,13 +1282,34 @@ namespace VoxelEngine.Building.Tiered
             return have;
         }
 
+        /// <summary>Raises a piece by exactly one tier. Kept for every existing caller that
+        /// means "one step"; the hammer itself now names a destination.</summary>
         public bool TryUpgrade(PlacedTieredBlock target)
         {
-            if (target == null || target.definition == null) return false;
-            if (target.tier == BuildTier.Steel) return false;
+            if (target == null) return false;
+            return TryUpgradeTo(target, TieredBlockDefinition.NextTier(target.tier));
+        }
 
-            BuildTier next = TieredBlockDefinition.NextTier(target.tier);
-            var cost = target.definition.GetUpgradeCost(target.tier);
+        /// <summary>
+        /// 17.45.0-dev: takes a piece straight to the tier the player selected on the hammer's
+        /// tier wheel, charging the SINGLE material step that makes that tier.
+        ///
+        /// It used to be one tier per click, so a Wood wall taken to Steel cost three clicks
+        /// and three full payments - Stone, then Iron, then Steel - which is the cumulative
+        /// price of wandering there. A player who names Steel has skipped the stopovers, and
+        /// is charged the Steel step alone.
+        ///
+        /// Destination at or below the piece's own tier does nothing: the hammer upgrades,
+        /// it never downgrades, and a piece is never charged for standing still.
+        /// </summary>
+        public bool TryUpgradeTo(PlacedTieredBlock target, BuildTier destination)
+        {
+            if (target == null || target.definition == null) return false;
+            if (destination <= target.tier) return false;
+            if (destination > BuildTier.Steel) destination = BuildTier.Steel;
+            if (target.definition.GetPrefab(destination) == null) return false;
+
+            var cost = HammerTierSelection.CostToReach(target.definition, destination);
             var sizedPillar = target.GetComponent<AdjustablePillar>();
             int costMultiplier = sizedPillar != null
                 ? Mathf.Max(1, Mathf.CeilToInt(sizedPillar.currentHeight / ConstructionStorey))
@@ -1324,11 +1345,11 @@ namespace VoxelEngine.Building.Tiered
             float oldPillarHeight = oldPillar != null ? oldPillar.currentHeight : ConstructionStorey;
             Destroy(target.gameObject);
 
-            var go = Instantiate(def.GetPrefab(next), pos, rot);
-            go.name = $"{def.displayName} ({next})";
+            var go = Instantiate(def.GetPrefab(destination), pos, rot);
+            go.name = $"{def.displayName} ({destination})";
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
-            pb.Initialize(def, next);
+            pb.Initialize(def, destination);
             pb.ownerId = oldOwnerId;
             var newLoad = go.GetComponent<StructuralLoadState>();
             if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan, oldAnchor);
@@ -1356,7 +1377,7 @@ namespace VoxelEngine.Building.Tiered
             // upgraded from wood to steel.
             TagStationPiece(go, def);
             // Multiplayer: the authority point for upgrades (14.4.0).
-            VoxelEngine.Networking.BuildingSync.AnnounceUpgraded(def.family, pos, next);
+            VoxelEngine.Networking.BuildingSync.AnnounceUpgraded(def.family, pos, destination);
             return true;
         }
 
