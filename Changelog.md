@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.4-dev`
+**Current Version:** `17.47.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.47.5-dev] Aims That Stay Where a Click Can Land
+
+**Type:** PATCH - the aim assist stops throwing the ghost at distant ground.
+
+**GitHub title:** `[17.47.5-dev] Keep a deck on its face and a single block on the last buildable aim instead of hunting distant ground`
+
+#### Fixed
+
+- **AIMING UP ABOVE A WALL BROKE EVERYTHING, AND THE SCREENSHOT SAID SO.** When nothing is within build reach the aim assist hunts for DISTANT ground - up to two hundred and twenty metres - stands the ghost on it in the pending colour, and shows "Too far to build: aimed at ground 54 m away". Aiming up a wall is precisely an empty aim, because the crosshair passes over the wall's top edge. So the whole gesture was hijacked by the assist: the ghost was thrown tens of metres away and **the aim was never published at all**, which is why a deck could neither climb the wall nor widen beside it, and why a single block read as "invalid" while the player stood on perfectly good ground.
+  - **A deck that has seen a face stays on that face (`TryFacePlaneAim`).** The last face the crosshair actually landed on is remembered, and whenever the aim assist runs with a DECK selected, the ghost is placed where the view ray meets that face's plane instead of on distant ground - valid, in reach, and still climbing the wall however empty the rest of the view is. The frame label reads WALL, so the pattern card stops saying GROUND.
+  - **The last buildable aim beats distant ground.** Elsewhere, a ghost whose aim leaves every surface first falls back to the last pose a click could have landed on, provided it is still within reach, in the pending colour with the walk-closer hint. Looking up at the sky no longer moves the block you were about to place.
+- **The remembered face and aim are cleared properly**: a fresh surface resets the face, and a last aim more than one reach from the camera is ignored, so the ghost can never stick at a spot the player has walked away from.
+
+#### Validation
+
+- Parse, fields, type scope and qualified-type checks clean on both modified files.
+- The 54 m figure in the screenshot came from `ShowAimHint`, which is only reachable from the aim-assist branch - that branch set the ghost's transform but never `GhostAimPosition`, which is the mechanical explanation for both symptoms in the report.
+- Not run in Unity.
 
 ### [17.47.4-dev] A Window Plan's Plane Is Decided When the Run Is Armed
 

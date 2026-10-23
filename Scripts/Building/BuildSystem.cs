@@ -106,6 +106,20 @@ namespace VoxelEngine.Building
         // whole gesture.
         private bool _patternStanding;
         private Vector3 _patternPlaneNormal = Vector3.up;
+
+        // 17.47.5-dev: the last face the crosshair actually landed on, kept for the frames
+        // where the crosshair leaves every surface - which is every frame spent aiming up
+        // above a wall. See the aim-assist branch in UpdateGhost.
+        private bool _hasLastFace;
+        private Vector3 _lastFacePoint;
+        private Vector3 _lastFaceNormal = Vector3.up;
+
+        // The last pose the crosshair produced that was actually buildable - used when the
+        // aim leaves every surface inside reach, so the ghost stays where a click can land
+        // instead of being thrown onto ground tens of metres away (17.47.5-dev).
+        private bool _hasLastAim;
+        private Vector3 _lastAimPoint;
+        private Quaternion _lastAimRotation = Quaternion.identity;
         private int _patternSignature = -1;
         private Vector3 _lastSnapCell = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         private bool _buildWasHeld;
@@ -614,6 +628,62 @@ namespace VoxelEngine.Building
                 _ghost.SetActive(true);
                 HidePrecisionLattice();
                 PublishSkyAimForPillar(ray);
+
+                // ── 17.47.5-dev: A DECK ON A FACE NEVER LEAVES THE FACE. ─────────────
+                // Everything below hunts for DISTANT GROUND so an empty aim still shows
+                // something. Aiming up a wall is an empty aim - the crosshair goes over the
+                // wall's top edge - so the ghost was thrown onto ground tens of metres away,
+                // the aim was never published, and the run could neither grow upwards nor
+                // widen sideways. A deck whose last surface was a face now stays on that
+                // face's plane, where the crosshair meets it, however empty the rest of the
+                // view is.
+                if (block != null && PlacementOptions.Pattern == PlacementPattern.Deck
+                    && _hasLastFace && TryFacePlaneAim(ray, out Vector3 facePoint))
+                {
+                    Vector3 faceUp = GravityProvider.GetUp(facePoint);
+                    if (faceUp.sqrMagnitude < 0.0001f) faceUp = Vector3.up;
+                    faceUp.Normalize();
+                    Vector3 faceNormal = _lastFaceNormal.sqrMagnitude > 0.0001f
+                        ? _lastFaceNormal.normalized : faceUp;
+
+                    Quaternion faceRotation = Quaternion.LookRotation(faceNormal, faceUp)
+                        * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                    _ghost.transform.SetPositionAndRotation(facePoint, faceRotation);
+
+                    GhostAimPosition = facePoint;
+                    GhostSurfacePoint = facePoint;
+                    GhostSurfaceNormal = faceNormal;
+                    GhostSurfaceIsVertical = true;
+                    GhostFrame = PlacementFrame.FromUp(facePoint, faceNormal, "WALL", true);
+                    GhostFrameLabel = "WALL";
+
+                    ApplyGhostMaterialIfChanged(
+                        IsPlacementValid(facePoint, block, faceRotation, out _)
+                            ? _ghostMaterialValid
+                            : _ghostMaterialInvalid);
+                    return;
+                }
+
+                // ── 17.47.5-dev: THE LAST BUILDABLE AIM BEATS DISTANT GROUND. ────────
+                // Glancing up from a spot the player can build on used to fling the ghost onto
+                // the first surface within two hundred metres, so a single block read as
+                // "invalid" while the player was standing on perfectly good ground. The ghost
+                // stays at the last pose a click could have landed on, in the pending colour.
+                var aimCamera = shootCamera != null ? shootCamera : Camera.main;
+                bool lastAimNearby = _hasLastAim && aimCamera != null
+                    && Vector3.Distance(_lastAimPoint, aimCamera.transform.position) <= reach;
+                if (lastAimNearby)
+                {
+                    _ghost.transform.SetPositionAndRotation(_lastAimPoint, _lastAimRotation);
+                    GhostAimPosition = _lastAimPoint;
+                    GhostAimRotation = _lastAimRotation;
+                    GhostSurfaceNormal = Vector3.up;
+                    GhostSurfaceIsVertical = false;
+                    ApplyGhostMaterialIfChanged(_ghostMaterialPending);
+                    ShowAimHint(block, -1f);
+                    return;
+                }
+
                 if (TryRaycastIgnoringSelf(ray, out var farHit, AimAssistReach) && farHit.collider != null)
                 {
                     Quaternion farRotation = GravityProvider.GetSurfaceRotation(farHit.point)
@@ -718,6 +788,12 @@ namespace VoxelEngine.Building
             {
                 Vector3 localUp = GravityProvider.GetUp(hit.point);
                 GhostSurfaceIsVertical = Mathf.Abs(Vector3.Dot(GhostSurfaceNormal, localUp.normalized)) < 0.55f;
+                _hasLastFace = GhostSurfaceIsVertical;
+                if (_hasLastFace)
+                {
+                    _lastFacePoint = hit.point;
+                    _lastFaceNormal = GhostSurfaceNormal;
+                }
             }
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
@@ -732,6 +808,7 @@ namespace VoxelEngine.Building
             bool valid = IsPlacementValid(pos, block, rot, out var refusal);
             ApplyGhostMaterialIfChanged(valid ? _ghostMaterialValid : _ghostMaterialInvalid);
             if (!valid) ShowPlacementRefusal(block, refusal, force: false);
+            else { _hasLastAim = true; _lastAimPoint = pos; _lastAimRotation = rot; }
         }
 
         private void UpdateQuarryPreview()
@@ -2352,6 +2429,21 @@ namespace VoxelEngine.Building
         /// ray with the plane through the anchor, so a drag up a wall keeps building the wall
         /// even when the crosshair has slid off the wall's edge, onto a ledge, or into the sky.
         /// </summary>
+        /// <summary>
+        /// Where the view ray meets the plane of the last face the crosshair was on. Used to
+        /// keep a deck on that face when the crosshair has left every surface.
+        /// </summary>
+        private bool TryFacePlaneAim(Ray ray, out Vector3 point)
+        {
+            point = default;
+            if (!_hasLastFace) return false;
+            var plane = new UnityEngine.Plane(_lastFaceNormal, _lastFacePoint);
+            if (!plane.Raycast(ray, out float enter)) return false;
+            if (enter <= 0f || enter > AimAssistReach) return false;
+            point = ray.GetPoint(enter);
+            return true;
+        }
+
         private Vector3 StandingAimPoint()
         {
             var camera = shootCamera != null ? shootCamera : Camera.main;
