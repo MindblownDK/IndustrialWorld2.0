@@ -193,6 +193,17 @@ namespace VoxelEngine.Building
         /// target and the run would collapse to one cell every other frame. This is the
         /// aim, and only the aim.
         /// </summary>
+        /// <summary>
+        /// The point the crosshair actually landed on this frame, before any snapping.
+        /// A wall aim snaps the ghost to the FOOT of the wall, so the snapped pose carries no
+        /// height at all; a plan that fills a vertical face has to measure from this instead.
+        /// </summary>
+        public static Vector3 GhostSurfacePoint { get; private set; }
+        /// <summary>The surface normal under the crosshair this frame.</summary>
+        public static Vector3 GhostSurfaceNormal { get; private set; } = Vector3.up;
+        /// <summary>True when the aimed surface is a face rather than the ground.</summary>
+        public static bool GhostSurfaceIsVertical { get; private set; }
+
         public static Vector3 GhostAimPosition { get; private set; }
         public static Quaternion GhostAimRotation { get; private set; } = Quaternion.identity;
         public static Vector3 GhostUp { get; private set; } = Vector3.up;
@@ -452,6 +463,10 @@ namespace VoxelEngine.Building
             // and no heading has been inherited yet.
             _frameResolvedThisFrame = false;
             GhostAligned = false;
+            // A frame with no surface under the crosshair must not keep last frame's answer:
+            // a stale "this is a wall face" would measure a deck against a wall the player
+            // has already looked away from (17.47.1-dev).
+            GhostSurfaceIsVertical = false;
 
             if (inventory == null)
             {
@@ -684,6 +699,15 @@ namespace VoxelEngine.Building
             var ghostBelt = _ghost.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (ghostBelt != null)
                 ghostBelt.SetBuildShape(ResolveConveyorBuildShape(ghostBelt, hit));
+
+            // The raw aim, published before anything snaps it: a deck filling a wall face
+            // needs the height of the crosshair, which every snap below discards.
+            GhostSurfacePoint = hit.point;
+            GhostSurfaceNormal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : Vector3.up;
+            {
+                Vector3 localUp = GravityProvider.GetUp(hit.point);
+                GhostSurfaceIsVertical = Mathf.Abs(Vector3.Dot(GhostSurfaceNormal, localUp.normalized)) < 0.55f;
+            }
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             ShowStaticSurfaceLattice();
@@ -2077,16 +2101,31 @@ namespace VoxelEngine.Building
                         GravityProvider.GetUp(_patternAnchorPosition), "PILLAR", false))
                 : PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame);
 
+            // ── 17.47.1-dev: A DECK AIMED AT A FACE FILLS THAT FACE. ────────────────
+            // Every snap below the crosshair turns a wall aim into a pose at the FOOT of the
+            // wall, so measured against the snapped pose a deck dragged up a wall never gains
+            // a single row and a wall could not be made. The plan is measured against the
+            // point actually under the crosshair while the aim is on a face; a ground aim
+            // keeps the snapped pose, so floors behave exactly as they did.
+            _patternAim = PlacementOptions.Pattern == PlacementPattern.Deck && GhostSurfaceIsVertical
+                ? GhostSurfacePoint
+                : GhostAimPosition;
+
             int planned = PlacementPatternPlanner.Build(
                 PlacementOptions.Pattern, _patternAnchorFrame,
                 _patternAnchorPosition, _patternAnchorRotation,
-                GhostAimPosition, step, pitch, budget, _plannedCells);
+                _patternAim, step, pitch, budget, _plannedCells, GhostSurfaceIsVertical);
             PatternPreviewCount = planned;
 
             // 17.45.0-dev: a plan on OPEN GROUND is seated as ONE rigid move (see
             // SeatPlanOnGround), so a deck stays square on a dune and a pillar is never
             // pushed back down onto the ground it was built to rise from.
-            if (!_patternAnchorFrame.fromStructure) SeatPlanOnGround(_plannedCells, block);
+            //
+            // 17.47.1-dev: a plan that STANDS UP is never seated. A deck dragged up a face
+            // is a wall, and dropping its cells onto the ground under them would fold it
+            // flat on the floor - exactly the shape the player could not make.
+            if (!_patternAnchorFrame.fromStructure && !PlanStandsUp())
+                SeatPlanOnGround(_plannedCells, block);
 
             ShowPatternPreview(_plannedCells, block);
 
@@ -2211,6 +2250,24 @@ namespace VoxelEngine.Building
         ///
         /// A plan with nothing under it at all is left exactly where the aim put it.
         /// </summary>
+        /// <summary>
+        /// True when the current plan is a VERTICAL plane - a deck dragged up a face rather
+        /// than across the ground. Such a plan is never re-seated onto the floor.
+        /// </summary>
+        /// <summary>The aim this frame's plan was measured against.</summary>
+        private Vector3 _patternAim;
+
+        private bool PlanStandsUp()
+        {
+            if (PlacementOptions.Pattern != PlacementPattern.Deck) return false;
+            Vector3 up = GravityProvider.GetUp(_patternAnchorPosition);
+            if (up.sqrMagnitude < 0.0001f) return false;
+            Vector3 delta = _patternAim - _patternAnchorPosition;
+            float vertical = Mathf.Abs(Vector3.Dot(delta, up.normalized));
+            Vector3 planar = Vector3.ProjectOnPlane(delta, up.normalized);
+            return vertical > planar.magnitude;
+        }
+
         private void SeatPlanOnGround(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
         {
             if (cells == null || block == null || cells.Count <= 1) return;

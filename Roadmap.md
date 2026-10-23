@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.0-dev`
-**Roadmap Version:** `17.47.0-dev`
+**Current Version:** `17.47.1-dev`
+**Roadmap Version:** `17.47.1-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.47.1-dev - A Deck That Builds Walls
+- An aim on a face is measured from the crosshair rather than the snapped pose at the foot of the wall, the deck's second axis follows whichever way the aim travels, and a face deck takes its neighbouring cell on the axis the aim skipped
+- A plan that stands up is never re-seated onto the floor
+
 ### 17.47.0-dev - Decks Keep Both Sides, the Hammer Marks Instead of Promising
 - A deck's rectangle shrinks in proportion, so a square aim stays square; a row appears at a third of the block's pitch, cells are emitted by rings, and the preview pool covers a full plan
 - Naming an upgrade tier clears the armed family, and no piece hologram is raised outside the family face
@@ -47,14 +51,6 @@
 - The four nudge directions are LATTICE axes chosen from the view once per press burst, so a press is a straight step on the grid and left then right cancels exactly
 - Runs, pillars and decks are judged against the site as found, not against the cells the same gesture just placed, and a floor plan is seated as one rigid move, so the plan is what gets built
 - The Building Hammer takes a piece to a NAMED tier for that tier's single material step; explosives arm from a fuse wheel on the build key and no longer count down on their hologram
-
-### 17.44.15-dev - Nudge Directions That Re-Pin, Footprints Spanning Model and Solid
-- The four nudge directions are rigid within a burst of presses and re-pin to the camera after two thirds of a second idle, which removes both the world-grid diagonal and the left-right that stop cancelling when the player turns
-- Run and deck cells are spaced by the widest of the model and its collider extents, plus a small clearance, so a probe at a cell centre can no longer land inside the previous machine
-
-### 17.44.13-dev - Nudges Follow the View, Runs Report Their Pitch
-- The nudge basis is derived from the camera on every press, so "left" is left of the screen from wherever the player is now standing rather than where they stood when they froze the block
-- The build-press and run-completion lines now print the measured pitch and the planned-versus-built cell counts, so spacing faults are read rather than inferred
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -170,6 +166,7 @@
 - An explosion has an opinion about CONSTRUCTION. Tiered hammer pieces and grid hulls take blast damage with a distance falloff, and a blast is never refused by a piece's mining tier - a charge is not a pickaxe (17.46.0-dev).
 - A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A run or a deck counts its cells in the BLOCK'S OWN PITCH, and fills out to where the crosshair points: one machine further on is one cell longer. Counted in lattice metres a large machine saturated the cap the instant the player moved the aim, which read as "span goes to maximum distance" (17.45.0-dev, corrected 17.46.0-dev). Foundations, whose pitch is the lattice, are unchanged.
+- A deck fills a PLANE, and the plane may stand up. On a vertical face the plan is measured from the point under the crosshair - every snap drops a wall aim to the foot of the wall - and takes its neighbour on the axis the aim did not travel, so a wall is a band rather than a stripe. Such a plan is never re-seated onto the floor (17.47.1-dev).
 - A plan that does not fit its cell budget shrinks in PROPORTION, never by subtracting from the longer side: an equal-sided aim has no "longer" side, and picking one to shorten first turns every diagonal deck into a single row (17.47.0-dev). A deck emits its cells by rings too, so a draw that stops early is a centred patch rather than the anchor's own row.
 - A vertical pattern uses a different count from a horizontal one: a PILLAR is counted in BLOCK HEIGHTS of aim above its anchor, everything else in the pitch across the ground, and never both in metres.
 - Seating is a PLAYER CHOICE, not a code path: LEVEL moves the whole plan together so a deck stays square, FOLLOW GROUND drops every cell onto its own patch of surface for foundations and rail beds on a slope. Both were applied at different times before the dial existed (17.46.0-dev).

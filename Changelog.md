@@ -1,9 +1,29 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.0-dev`
+**Current Version:** `17.47.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.47.1-dev] A Deck That Can Stand Up and Build a Wall
+
+**Type:** PATCH - a deck fills a vertical face as well as the ground. No new system, no save or API change beyond one optional argument on the planner.
+
+**GitHub title:** `[17.47.1-dev] A deck aimed at a wall fills the wall instead of the floor`
+
+#### Fixed
+
+- **A DECK could not build a wall (`BuildSystem.HandlePlacementPattern`, `PlacementPatternPlanner.Build`).** Two things stood in the way, and both had to go:
+  - **The aim never had any height.** Every snap turns an aim at a wall into a pose at the FOOT of that wall - the deck snap routes through the floor below it - so measured against the snapped pose, dragging the crosshair up a wall moved nothing and the plan could only ever be one cell. While the aim is on a face, the plan is now measured against the point actually under the crosshair (`GhostSurfacePoint`); a ground aim keeps the snapped pose, so floors are untouched.
+  - **The plan only ever read the ground plane.** The deck's second axis was always the frame's forward and its up was never read at all, so a drag that climbed a face put its whole offset into a component nothing looked at. The second axis is now whichever of forward and up the aim actually travels along.
+  - **And a stripe is not a wall.** An aim straight up a face travels along one of the face's two axes and gives the other nothing, which is a one-block-wide column. On a vertical face the axis the aim did not travel along now takes its neighbour (`fillFace`), so a drag up a wall lays a wall two blocks across and dragging along the wall widens it. A ground aim is not affected.
+- **A standing plan is never dropped onto the floor (`BuildSystem.PlanStandsUp`).** Seating exists so a floor plan stays level on a dune; applied to a wall it would fold the plan flat on the ground - the exact shape that could not be built.
+
+#### Validation
+
+- Parsed every modified file with a C# grammar; both parse clean, field sweep clean.
+- The planner's deck arithmetic re-checked headlessly for this round: a straight 2.5 m drag up a wall with sixteen blocks is 2 x 2, the same drag with only two blocks is 1 x 2, and a square ground drag is still 2 x 2.
+- Not run in Unity. Feel checks: aim at a wall, arm a deck, drag up - a wall appears two blocks wide and grows as you drag; drag along the wall - it widens; aim at the ground and drag - floors are exactly as they were.
 
 ### [17.47.0-dev] Decks That Keep Both Sides, and a Hammer That Marks Instead of Promising
 

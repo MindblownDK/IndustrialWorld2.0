@@ -57,7 +57,7 @@ namespace VoxelEngine.Building
         public static int Build(PlacementPattern pattern, in PlacementFrame frame,
                                 Vector3 anchorPosition, Quaternion anchorRotation,
                                 Vector3 targetPosition, float step, Vector3 pitch, int cellBudget,
-                                List<PlacementCell> cells)
+                                List<PlacementCell> cells, bool fillFace = false)
         {
             if (cells == null) return 0;
             cells.Clear();
@@ -96,15 +96,39 @@ namespace VoxelEngine.Building
                 // and the far aim saturated one axis while the other stayed at zero - which
                 // is a LINE, not an area, and is exactly what "deck places upwards and
                 // sideways, not an area" looked like on screen.
+                // ── 17.47.1-dev: A DECK IS A PLANE, AND THE PLANE CAN STAND UP. ────────
+                // The second axis was always the frame's FORWARD, and the frame's up was
+                // never read at all. A deck dragged up a wall therefore put its whole offset
+                // into a component nothing looked at, and the plan came out one cell - which
+                // is why a deck could not make a wall. The second axis is now whichever of
+                // forward and up the aim actually travels along, so a drag across the ground
+                // lays a floor and a drag up a face lays a wall, with the same pattern.
                 float deckPitchRight = Mathf.Max(step, pitch.x);
-                float deckPitchForward = Mathf.Max(step, pitch.z);
+                bool deckVertical = Mathf.Abs(local.y) > Mathf.Abs(local.z);
+                float deckPitchSecond = deckVertical ? Mathf.Max(step, pitch.y) : Mathf.Max(step, pitch.z);
                 int sideCap = PlacementOptions.MaxDeckSide - 1;
                 int alongRight = DeckCount(local.x, deckPitchRight, sideCap);
-                int alongForward = DeckCount(local.z, deckPitchForward, sideCap);
+                int alongForward = DeckCount(deckVertical ? local.y : local.z, deckPitchSecond, sideCap);
+
+                // 17.47.1-dev: A DECK ON A FACE IS A WALL, AND A WALL IS A BAND.
+                // An aim that runs straight up a face travels along ONE of the face's two
+                // axes and gives the other nothing, which is a stripe one block wide - the
+                // shape the player could not call a wall. On a vertical face the axis the aim
+                // did not travel along still takes its neighbour, so the same drag that makes
+                // a floor run makes a wall two blocks across, and dragging along the wall
+                // widens it. A ground aim is untouched by this.
+                if (fillFace && budget >= 4 && (alongRight == 0) != (alongForward == 0))
+                {
+                    if (alongRight == 0) alongRight = 1;
+                    else alongForward = 1;
+                }
+
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
 
                 Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
-                Vector3 axisForward = frame.valid ? frame.forward : Vector3.forward;
+                Vector3 axisForward = deckVertical
+                    ? (frame.valid ? frame.up : Vector3.up)
+                    : (frame.valid ? frame.forward : Vector3.forward);
                 int rows = Mathf.Abs(alongForward);
                 int columns = Mathf.Abs(alongRight);
                 float signForward = Mathf.Sign(alongForward);
@@ -137,7 +161,7 @@ namespace VoxelEngine.Building
                 }
 
                 float pitchRight = pitch.x * 1.04f + 0.12f;
-                float pitchForward = pitch.z * 1.04f + 0.12f;
+                float pitchForward = deckPitchSecond * 1.04f + 0.12f;
 
                 // 17.46.1-dev: cells are emitted by RINGS - everything one step from the
                 // anchor, then everything two steps - instead of row by row. Anything that
