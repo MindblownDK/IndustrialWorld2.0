@@ -248,37 +248,47 @@ namespace VoxelEngine.GridSystem.UI
                 heldName = directName;
             }
 
-            // 17.44.2-dev: the published hologram has the final word. A builder can be a
-            // frame behind a hotbar scroll, and a card describing a block that is no longer
-            // in the player's hand is worse than no card at all - so if the static builder
-            // still claims a block while the hologram it published is already gone, the card
-            // goes with the hologram. No grace period: an empty hand means an empty corner.
-            bool hologramGone = staticBlock && VoxelEngine.Building.BuildSystem.HeldBlockItem == null;
+            // ── 17.44.3-dev: THE CARD IS THE HOLOGRAM, AND NOTHING ELSE ──────────────
+            // Three releases of guards all failed for the same reason, and it was not the
+            // guard: the "bridge a one-frame flicker" clause below refreshed its own
+            // timestamp on every frame it kept the card up, so the 0.75 s window slid
+            // forward forever and the card latched on with an empty hand. There is no grace
+            // period any more. A static block's card is shown while the builder is
+            // publishing a hologram for it and hidden the frame that stops, and the flicker
+            // bridge may only ever extend a card that a builder is still claiming.
+            bool claiming = gridBlock || staticBlock;
+            bool hologramHeld = VoxelEngine.Building.BuildSystem.HeldBlockItem != null;
+            bool show = !VoxelEngine.UI.UIState.IsBlocking
+                        && claiming
+                        && (gridBlock || hologramHeld)
+                        && !string.IsNullOrEmpty(heldName);
 
-            bool show = !string.IsNullOrEmpty(heldName)
-                        && !VoxelEngine.UI.UIState.IsBlocking
-                        && !hologramGone;
-
-            // Bridge one-frame resolution flickers rather than blinking the card - but only
-            // for a real flicker, never to keep a torn-down hologram on screen.
-            if (!show && _lastName != null && heldName == null && !hologramGone
-                && !VoxelEngine.UI.UIState.IsBlocking
-                && Time.unscaledTime - _lastShownAt < 0.75f)
+            // Bridge a genuine one-frame handover (a hotbar swap resolves the inventory and
+            // the builder in the same frame, in either order). It may never refresh the
+            // clock it is measured against - that is precisely how the card used to latch on.
+            bool bridged = false;
+            if (!show && claiming && !VoxelEngine.UI.UIState.IsBlocking && _lastName != null
+                && Time.unscaledTime - _lastShownAt < 0.25f)
             {
                 heldName = _lastName;
                 show = true;
+                bridged = true;
             }
+
+            if (show && !bridged) _lastShownAt = Time.unscaledTime;
 
             _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (!show)
             {
                 if (_visible) _visible = false;
+                _lastName = null;
                 return;
             }
 
             _lastName = heldName;
-            _lastShownAt = Time.unscaledTime;
             _visible = true;
+
+
 
             var block = VoxelEngine.Building.BuildSystem.HeldBlockItem;
             Quaternion rotation = VoxelEngine.Building.BuildSystem.GhostRotation;

@@ -90,10 +90,12 @@ namespace VoxelEngine.Building
         /// <summary>
         /// Reads the arrow keys and applies them to the frozen pose. Safe to call every
         /// frame; does nothing unless a lock is held. Returns true when the pose moved,
-        /// so the caller can refresh the ghost. <paramref name="viewForward"/> is the
-        /// camera's forward: nudges are screen-relative, so left is always left.
+        /// so the caller can refresh the ghost. <paramref name="view"/> is the camera:
+        /// nudges are measured in SCREEN axes projected onto the ground, so left is always
+        /// left of the screen and up is always away from the player, whatever the camera is
+        /// doing - looking level, looking down on the machine, or anything between.
         /// </summary>
-        public static bool Tick(BlockItem held, float step, Vector3 viewForward)
+        public static bool Tick(BlockItem held, float step, Transform view)
         {
             if (!IsLocked) return false;
             if (held == null || held != Item) { Unlock(); return false; }
@@ -112,21 +114,31 @@ namespace VoxelEngine.Building
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
 
-            // Nudge along what the PLAYER is looking at, never along a world-derived
-            // tangent. The old basis was rebuilt at the ghost's own position on every
-            // step, so on a curved planet each step rotated the basis slightly: a held
-            // arrow key walked the hologram away in a curve, and the axes did not agree
-            // with the screen. The view forward, flattened onto the local gravity plane,
-            // is the only reference a player can aim with.
-            Vector3 forward = Vector3.ProjectOnPlane(viewForward, up);
-            if (forward.sqrMagnitude < 0.0001f)
-                forward = PlacementFrame.FromUp(Position, up, "LOCK", false).forward;
-            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
-            forward.Normalize();
+            // ── 17.44.3-dev: SCREEN AXES, NOT A TANGENT ──────────────────────────
+            // Two earlier versions both failed here. Flattening the camera's FORWARD is
+            // unstable the moment the player looks down at a machine - a builder's normal
+            // view - because that projection shrinks to nearly nothing and its direction
+            // stops meaning anything, which is how left/right could move a block "up".
+            // The camera's RIGHT vector projected onto the ground plane never degenerates
+            // while the player is looking at the ground, so that is the reference: right is
+            // screen right, and away is the ground direction that reads as screen up.
+            Vector3 right;
+            if (view != null)
+            {
+                right = Vector3.ProjectOnPlane(view.right, up);
+                if (right.sqrMagnitude < 0.04f)
+                    right = Vector3.ProjectOnPlane(view.up, up);
+            }
+            else right = Vector3.ProjectOnPlane(Vector3.right, up);
 
-            Vector3 right = Vector3.Cross(up, forward);
+            if (right.sqrMagnitude < 0.0001f)
+                right = PlacementFrame.FromUp(Position, up, "LOCK", false).right;
             if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
             right.Normalize();
+
+            Vector3 away = Vector3.Cross(right, up);
+            if (away.sqrMagnitude < 0.0001f) away = Vector3.forward;
+            away.Normalize();
 
             Vector3 direction;
             if (ctrl)
@@ -135,8 +147,11 @@ namespace VoxelEngine.Building
             }
             else
             {
-                direction = right * Mathf.Sign(axis.x) + forward * Mathf.Sign(axis.y);
-                if (direction.sqrMagnitude > 1f) direction.Normalize();
+                // One axis per press. Pressing two arrows at once used to blend them into a
+                // diagonal that the repeat logic then measured against - which is the rest
+                // of the "zigzag" report. The stronger axis wins.
+                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y)) direction = right * Mathf.Sign(axis.x);
+                else direction = away * Mathf.Sign(axis.y);
             }
 
             float amount = ctrl ? NudgeFineStep : (shift ? step * 5f : step);

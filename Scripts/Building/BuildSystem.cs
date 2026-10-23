@@ -88,6 +88,7 @@ namespace VoxelEngine.Building
         // ── Placement patterns, lock and juice (17.44.0-dev) ──────────
         private readonly System.Collections.Generic.List<PlacementCell> _plannedCells = new(PlacementOptions.MaxCells);
         private readonly System.Collections.Generic.List<GameObject> _patternGhosts = new(12);
+        private BlockItem _patternGhostItem;
         private bool _patternActive;
         private Vector3 _patternAnchorPosition;
         private Quaternion _patternAnchorRotation = Quaternion.identity;
@@ -1707,10 +1708,11 @@ namespace VoxelEngine.Building
 
             if (!PlacementLock.IsLocked || !PlacementLock.Matches(_ghostItem)) return;
 
-            // Nudges are screen-relative: hand the lock the camera's forward so left is
-            // left of the screen and up is away from the player.
-            Vector3 viewForward = shootCamera != null ? shootCamera.transform.forward : Vector3.forward;
-            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres), viewForward);
+            // Nudges are screen-relative: hand the lock the camera itself so it can derive
+            // screen right on the ground plane instead of guessing from a forward vector
+            // that collapses to nothing whenever the player looks down at the machine.
+            PlacementLock.Tick(_ghostItem, Mathf.Max(0.25f, PlacementOptions.StepMetres),
+                shootCamera != null ? shootCamera.transform : null);
 
             // The frozen pose IS the preview from here on.
             _ghost.SetActive(true);
@@ -1902,6 +1904,18 @@ namespace VoxelEngine.Building
             PatternPreviewCount = planned;
             ShowPatternPreview(_plannedCells, block);
 
+            // 17.44.3-dev: while a run is armed the hologram IS the tip of it. The player
+            // drags with the ghost, and a run that leaves the ghost hovering at the
+            // crosshair while separate previews appear behind it reads as a ghost that
+            // "does not make it" to where the block lands - especially with a machine whose
+            // model is much bigger than one lattice cell.
+            if (planned > 0)
+            {
+                var tip = _plannedCells[planned - 1];
+                _ghost.SetActive(true);
+                _ghost.transform.SetPositionAndRotation(tip.position, tip.rotation);
+            }
+
             if (held) return;
 
             // Released: build the plan, anchor first.
@@ -1915,15 +1929,31 @@ namespace VoxelEngine.Building
         {
             if (cells == null || block == null || block.placedPrefab == null) return;
 
+            // ── 17.44.3-dev: THE POOL BELONGS TO ONE ITEM ─────────────────────────
+            // The preview bodies used to be created once and reused forever, so a run of
+            // batteries was drawn with whatever block the player had spanned before - the
+            // previews showed the last block, the commit built the right one. The pool is
+            // now tied to the item it was built from and is thrown away when that changes.
+            if (_patternGhostItem != block)
+            {
+                for (int i = 0; i < _patternGhosts.Count; i++)
+                    if (_patternGhosts[i] != null) Destroy(_patternGhosts[i]);
+                _patternGhosts.Clear();
+                _patternGhostItem = block;
+                _patternSignature = -1;
+            }
+
+            // The LAST cell of a run is drawn by the hologram itself (see
+            // HandlePlacementPattern), so the pool only ever carries the cells behind it.
             int wanted = Mathf.Clamp(cells.Count - 1, 0, MaxPatternPreviews);
             int signature = wanted * 92821;
-            for (int i = 1; i <= wanted; i++)
+            for (int i = 0; i < wanted; i++)
                 signature = signature * 31 + Mathf.RoundToInt(
                     cells[i].position.x * 10f + cells[i].position.y * 97f + cells[i].position.z * 769f);
             if (signature == _patternSignature) return;
             _patternSignature = signature;
 
-            while (_patternGhosts.Count < wanted)
+            while (_patternGhosts.Count < Mathf.Min(wanted, MaxPatternPreviews))
             {
                 GameObject preview;
                 try
@@ -1949,7 +1979,27 @@ namespace VoxelEngine.Building
                 bool used = i < wanted;
                 if (ghost.activeSelf != used) ghost.SetActive(used);
                 if (!used) continue;
-                ghost.transform.SetPositionAndRotation(cells[i + 1].position, cells[i + 1].rotation);
+                ghost.transform.SetPositionAndRotation(cells[i].position, cells[i].rotation);
+
+                // The run tells the truth before the click does: a cell the commit would
+                // refuse reads red here rather than placing nine of ten and looking broken.
+                _surfaceAttachmentHost = null;
+                _deckSnapHost = null;
+                bool cellValid = IsPlacementValid(cells[i].position, block, cells[i].rotation, out _);
+                ApplyGhostMaterialIfChangedTo(ghost, cellValid ? _ghostMaterialValid : _ghostMaterialInvalid);
+            }
+        }
+
+        /// <summary>Re-tints one preview body without touching the hologram's own material.</summary>
+        private void ApplyGhostMaterialIfChangedTo(GameObject body, Material material)
+        {
+            if (body == null || material == null) return;
+            var renderers = body.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer == null || renderer.sharedMaterial == material) continue;
+                renderer.sharedMaterial = material;
             }
         }
 

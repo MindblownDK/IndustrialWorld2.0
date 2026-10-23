@@ -107,11 +107,33 @@ namespace VoxelEngine.Building
             }
             else
             {
-                bool alongRight = Mathf.Abs(local.x) >= Mathf.Abs(local.z);
-                axis = frame.valid
-                    ? (alongRight ? frame.right : frame.forward)
-                    : (alongRight ? Vector3.right : Vector3.forward);
-                pitchAlong = alongRight ? pitch.x : pitch.z;
+                // 17.44.3-dev: SPAN follows the drag in ANY of the frame's three axes - a
+                // wall laid along a face, a row across the ground, or a column built up a
+                // slope. It used to consider only right and forward, so a vertical drag
+                // could not produce a vertical run at all; PILLAR remains the way to force
+                // a column when the drag is ambiguous.
+                float ax = Mathf.Abs(local.x);
+                float ay = Mathf.Abs(local.y);
+                float az = Mathf.Abs(local.z);
+                Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
+                Vector3 axisUp = frame.valid ? frame.up : Vector3.up;
+                Vector3 axisForward = frame.valid ? frame.forward : Vector3.forward;
+
+                if (ay > ax && ay >= az)
+                {
+                    axis = axisUp;
+                    pitchAlong = pitch.y;
+                }
+                else if (ax >= az)
+                {
+                    axis = axisRight;
+                    pitchAlong = pitch.x;
+                }
+                else
+                {
+                    axis = axisForward;
+                    pitchAlong = pitch.z;
+                }
             }
 
             // How far the aim has moved ALONG the chosen axis. A drag across the run's

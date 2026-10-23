@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.2-dev`
-**Roadmap Version:** `17.44.2-dev`
+**Current Version:** `17.44.3-dev`
+**Roadmap Version:** `17.44.3-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.3-dev - Placement Feel Fixes: Run Previews, Screen-Axis Nudge, Vertical SPAN
+- A run's preview bodies are tied to the held item (the pool used to keep whatever block was spanned first), the hologram stands at the run's tip while dragging, and every preview cell reports its own validity
+- SPAN follows the dominant drag axis across all three frame axes, so a vertical drag finally produces a vertical run; PILLAR still forces a column
+- Nudges are measured from the camera's right projected onto the ground (stable when looking down at a machine), one arrow axis per press, and the assist card's flicker bridge no longer refreshes its own clock
+
 ### 17.44.2-dev - Placement Feel Fixes: Run Pitch, Line-Up Reach, Heading Agreement
 - Run pitch is measured with the prefab projection helper rather than `Collider.bounds` (empty on a prefab asset), so SPAN / PILLAR / DECK finally space wide machines by their own footprint
 - Ground placement joins the neighbouring structure's lattice, and the neighbour search reaches 6 m (12 m with Ctrl) with or without the `G` lattice; interior-lattice machines now take part in alignment at all
@@ -43,9 +48,6 @@
 - Build patterns SPAN / PILLAR / DECK (with a lattice step of 1 m, 0.5 m or FREE) live on the second face of the build wheel behind Ctrl + scroll, and static blocks now have a build wheel at all
 - Static placement resolves the aimed structure's frame, inherits an identical neighbour's heading, and Ctrl lines the heading up on that structure's cardinals; `BuildLock` (V) freezes the hologram for arrow-key nudging
 - The top-right card is a live placement instrument (projected body, three lit rotation rings, compass, pattern/lattice/lock chips, adaptive key rows) with synthesised snap clink, planting thud and dust
-
-### 17.43.5-dev - GridWindowSetup Asset Helper Fix
-- Restored canonical `GridBlockItem`, `RecipeDefinition`, `RecipeRegistry`, and `Shader.Find` helper methods in `GridWindowSetup.cs` so the editor setup script compiles cleanly
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -141,7 +143,9 @@
 - A run's footprint is measured with the prefab projection helper, never with `Collider.bounds`: a prefab asset is not in the physics world, so those bounds read empty and the footprint silently collapses to the lattice (17.44.2-dev).
 - Line-up reaches six metres around the ghost and twelve while Ctrl is held, applies to ground placement by taking the neighbour's lattice across the ground while keeping the surface-flush height, and covers interior-lattice machines whose own lattice still owns the position (17.44.2-dev).
 - An untouched heading always agrees with the frame it is landing in; only a heading the player turned by hand is exempt, and a freeze captures the transform that is on screen rather than the published statics from the frame before (17.44.2-dev). Line-up is a YAW and never a tilt: the block keeps its own vertical, and a neighbour lends its up only when it stands square to the surface (17.44.2-dev).
-- Nudging a frozen hologram walks: plain arrows repeat at 0.14 s after a 0.32 s delay, Shift and Ctrl nudge exactly once per press (17.44.2-dev).
+- Nudging a frozen hologram walks: plain arrows repeat at 0.14 s after a 0.32 s delay, Shift and Ctrl nudge exactly once per press (17.44.2-dev). The basis is screen right projected onto the ground plane, one arrow axis per press, because flattening the camera's forward degenerates the moment a player looks down at a machine (17.44.3-dev).
+- A run's preview pool belongs to one item and is destroyed when the held block changes, the hologram itself stands at the run's tip while dragging, and each preview cell is tinted by its own validity (17.44.3-dev).
+- A HUD may never refresh the timestamp its own grace period is measured against: that is how the assist card latched on with an empty hand, and why the fix had to be structural rather than another guard (17.44.3-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
 

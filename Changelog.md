@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.2-dev`
+**Current Version:** `17.44.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.3-dev] Placement Feel Fixes: Preview Runs That Match the Block, Screen-Axis Nudging, Drag-Following SPAN, and a Card That Cannot Latch
+
+**Type:** PATCH - corrections to the 17.44.0-dev placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.3-dev] Fix run previews showing the previous block, ghost tip while spanning, screen-axis nudging, vertical SPAN, and the latched assist card`
+
+#### Fixed
+
+- **A run previewed the block you spanned BEFORE (`BuildSystem.ShowPatternPreview`).** The preview bodies were a pool created once and reused forever, so after laying a run of small blocks, a run of machines drew those small blocks - the previews showed one item and the commit built another. The pool is now tied to the item it was built from and is destroyed when the held block changes.
+- **The hologram is the tip of the run (`HandlePlacementPattern`).** While a run is armed, the hologram itself is moved to the last planned cell and the pooled bodies carry the cells behind it. Previously the hologram stayed under the crosshair while previews appeared somewhere else, which read as a ghost that "does not make it" to where the block lands - worst of all for a machine whose model is much larger than one lattice cell.
+- **Every preview cell reports its own validity (`ShowPatternPreview`).** A run over ground that cannot take a block now shows red cells before the click instead of placing nine of ten and looking broken.
+- **SPAN follows the drag on any axis (`PlacementPatternPlanner.Build`).** SPAN could only pick between the frame's right and forward axes, so a vertical drag could never produce a vertical run - "span up and down" simply did not exist. All three frame axes now compete and the dominant one wins; PILLAR still forces a column when the drag is ambiguous.
+- **Nudging is measured in screen axes (`PlacementLock.Tick`).** Flattening the camera's FORWARD onto the ground is unstable exactly when a builder looks down at a machine: that projection shrinks toward zero and its direction stops meaning anything, which is how left and right could move a block up. The basis is now the camera's RIGHT projected onto the ground plane - never degenerate while the player looks at the ground - with away derived from it, and only one arrow axis is honoured per press, so two arrows can no longer blend into a diagonal the repeat logic then chases.
+- **The assist card cannot latch on (`BlockRotationHud.Tick`).** The "bridge a one-frame flicker" clause refreshed the timestamp it was measured against on every frame it kept the card up, so the 0.75 s window slid forward forever: an empty hand left the card on screen for good. The card is now shown while a builder is claiming a block and publishing a hologram for it and hidden the frame that stops; the bridge may only extend a card a builder is still claiming, it never refreshes its own clock, and its window is a quarter of a second.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run, and no other game's terminology appears in code or notes.
 
 ### [17.44.2-dev] Placement Feel Fixes: Run Pitch by Projection, Line-Up at Reach, Heading Agreement, and a Card That Cannot Linger
 
