@@ -96,6 +96,16 @@ namespace VoxelEngine.Building
         // The frame the run was started in. The aim can leave the wall mid-drag, and a run
         // that re-resolved its axes halfway through would bend under the player's hand.
         private PlacementFrame _patternAnchorFrame;
+
+        // ── 17.47.4-dev: A PLAN'S PLANE IS DECIDED ONCE, WHEN THE RUN IS ARMED. ──────
+        // It used to be re-decided every frame from whatever the crosshair happened to be
+        // touching, and it depended on that surface being a face: the instant the aim slid
+        // off the wall - onto its top edge, a ledge, the floor at its foot, or nothing at
+        // all - the plan silently became a floor plan again. The plane is now read at the
+        // press, where the player is unmistakably looking at the wall, and held for the
+        // whole gesture.
+        private bool _patternStanding;
+        private Vector3 _patternPlaneNormal = Vector3.up;
         private int _patternSignature = -1;
         private Vector3 _lastSnapCell = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         private bool _buildWasHeld;
@@ -467,6 +477,7 @@ namespace VoxelEngine.Building
             // a stale "this is a wall face" would measure a deck against a wall the player
             // has already looked away from (17.47.1-dev).
             GhostSurfaceIsVertical = false;
+            GhostSurfaceNormal = Vector3.zero;
 
             if (inventory == null)
             {
@@ -2083,6 +2094,7 @@ namespace VoxelEngine.Building
                 _patternAnchorPosition = GhostAimPosition;
                 _patternAnchorRotation = GhostAimRotation;
                 _patternAnchorFrame = GhostFrame;
+                ResolvePatternPlane();
                 _patternSignature = -1;
                 PlacementFeedback.Snap(GhostPosition, 1);
                 return;
@@ -2107,8 +2119,9 @@ namespace VoxelEngine.Building
             // a single row and a wall could not be made. The plan is measured against the
             // point actually under the crosshair while the aim is on a face; a ground aim
             // keeps the snapped pose, so floors behave exactly as they did.
-            bool faceDeck = PlacementOptions.Pattern == PlacementPattern.Deck && GhostSurfaceIsVertical;
-            _patternAim = faceDeck ? GhostSurfacePoint : GhostAimPosition;
+            bool faceDeck = PlacementOptions.Pattern == PlacementPattern.Deck && _patternStanding;
+            PatternStandsUp = faceDeck;
+            _patternAim = faceDeck ? StandingAimPoint() : GhostAimPosition;
 
             // ── 17.47.2-dev: A WALL PLANE IS STATED, NOT GUESSED FROM THE FRAME. ────────
             // A frame borrowed from a wall carries the wall's NORMAL as its up, so anything
@@ -2123,7 +2136,9 @@ namespace VoxelEngine.Building
                 if (faceUp.sqrMagnitude < 0.0001f) faceUp = Vector3.up;
                 faceUp.Normalize();
 
-                Vector3 faceNormal = GhostSurfaceNormal.sqrMagnitude > 0.0001f ? GhostSurfaceNormal.normalized : faceUp;
+                Vector3 faceNormal = _patternPlaneNormal.sqrMagnitude > 0.0001f
+                    ? _patternPlaneNormal.normalized
+                    : faceUp;
                 Vector3 along = Vector3.Cross(faceNormal, faceUp);
                 if (along.sqrMagnitude < 0.0001f)
                     along = Vector3.Cross((GhostFrame.valid ? GhostFrame.right : Vector3.right), faceUp);
@@ -2291,16 +2306,67 @@ namespace VoxelEngine.Building
         /// <summary>The aim this frame's plan was measured against.</summary>
         private Vector3 _patternAim;
 
-        private bool PlanStandsUp()
+        /// <summary>
+        /// True while an armed DECK is filling a FACE rather than the ground. Published so the
+        /// prompt pill can say WALL: a gesture that silently falls back to a floor plan looks
+        /// exactly like a broken feature, and one word removes the guessing.
+        /// </summary>
+        public static bool PatternStandsUp { get; private set; }
+
+        /// <summary>
+        /// Decides whether this gesture fills a FACE or the ground, and records the face's
+        /// normal. Two independent signals, because one of them can be missed: the surface
+        /// under the crosshair right now, and the frame the ghost took its pose from.
+        /// </summary>
+        private void ResolvePatternPlane()
         {
-            if (PlacementOptions.Pattern != PlacementPattern.Deck) return false;
+            _patternStanding = false;
+            _patternPlaneNormal = Vector3.up;
+
             Vector3 up = GravityProvider.GetUp(_patternAnchorPosition);
-            if (up.sqrMagnitude < 0.0001f) return false;
-            Vector3 delta = _patternAim - _patternAnchorPosition;
-            float vertical = Mathf.Abs(Vector3.Dot(delta, up.normalized));
-            Vector3 planar = Vector3.ProjectOnPlane(delta, up.normalized);
-            return vertical > planar.magnitude;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+
+            // Signal one: the crosshair is on a face right now.
+            Vector3 normal = GhostSurfaceNormal.sqrMagnitude > 0.0001f ? GhostSurfaceNormal : Vector3.zero;
+            if (normal != Vector3.zero && Mathf.Abs(Vector3.Dot(normal.normalized, up)) < 0.55f)
+            {
+                _patternStanding = true;
+                _patternPlaneNormal = normal.normalized;
+            }
+
+            // Signal two: the ghost's frame came from a structure whose own up is horizontal
+            // - which is what a frame taken from a wall looks like.
+            if (!_patternStanding && _patternAnchorFrame.fromStructure
+                && Mathf.Abs(Vector3.Dot(_patternAnchorFrame.up, up)) < 0.55f)
+            {
+                _patternStanding = true;
+                _patternPlaneNormal = _patternAnchorFrame.up.normalized;
+            }
+
+            if (!_patternStanding) _patternPlaneNormal = Vector3.up;
         }
+
+        /// <summary>
+        /// Where the crosshair meets the plan's own plane. Measured by intersecting the view
+        /// ray with the plane through the anchor, so a drag up a wall keeps building the wall
+        /// even when the crosshair has slid off the wall's edge, onto a ledge, or into the sky.
+        /// </summary>
+        private Vector3 StandingAimPoint()
+        {
+            var camera = shootCamera != null ? shootCamera : Camera.main;
+            if (camera == null) return GhostAimPosition;
+
+            var ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            var plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
+            float limit = Mathf.Max(12f, reach) * 3f;
+            if (plane.Raycast(ray, out float enter) && enter > 0f && enter < limit)
+                return ray.GetPoint(enter);
+            return ray.GetPoint(Mathf.Max(4f, reach));
+        }
+
+        private bool PlanStandsUp()
+            => PlacementOptions.Pattern == PlacementPattern.Deck && _patternStanding;
 
         private void SeatPlanOnGround(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
         {
@@ -2403,6 +2469,9 @@ namespace VoxelEngine.Building
         private void CancelPattern()
         {
             _patternActive = false;
+            _patternStanding = false;
+            _patternPlaneNormal = Vector3.up;
+            PatternStandsUp = false;
             _patternSignature = -1;
             PatternPreviewCount = 0;
             for (int i = 0; i < _patternGhosts.Count; i++)

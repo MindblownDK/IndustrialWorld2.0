@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.3-dev`
+**Current Version:** `17.47.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.47.4-dev] A Window Plan's Plane Is Decided When the Run Is Armed
+
+**Type:** PATCH - a deck aimed at a wall keeps filling that wall.
+
+**GitHub title:** `[17.47.4-dev] Lock a deck's plane at the press and measure the drag by the view ray, so a wall keeps filling`
+
+#### Fixed
+
+- **A DECK still only filled flat ground (`BuildSystem.ResolvePatternPlane`, `StandingAimPoint`).** The plane was being re-decided EVERY FRAME from whatever the crosshair happened to be touching, and it depended on that surface being a face. Aiming up a wall the crosshair eventually slides onto the wall's top edge, a ledge, the floor at its foot, or past its edge into nothing - and on that frame the plan silently became a floor plan again, mid-gesture. Three changes:
+  - **The plane is decided once, at the press**, where the player is unmistakably looking at the wall, and held for the whole gesture. Two independent signals decide it: the surface under the crosshair at that instant, and the ghost's own frame when it came from a structure whose up is horizontal - which is exactly what a borrowed wall frame looks like.
+  - **The drag is measured by intersecting the view ray with the plan's own plane**, not by the snapped pose under the crosshair. A drag up a wall therefore keeps counting rows whether the crosshair is on the wall, on its edge, on a ledge, or in the sky. The snapped pose still decides the first cell, so a wall's blocks sit exactly where a single click would have put them.
+  - **The stale surface normal is cleared** on a frame with no hit, so a press made while looking at the sky cannot inherit "this is a face" from the last frame that saw one.
+- **The prompt pill now says WALL (`BuildSystem.PatternStandsUp`, `PlacementModeRing.PromptTail`).** While an armed deck is filling a face the pill reads PATTERN · STEP · SEATING · WALL. A gesture that fell back to a floor plan used to be indistinguishable from a broken feature; one word removes the guessing.
+
+#### Validation
+
+- Parse, fields, type scope and qualified-type checks all clean on both modified files.
+- Not run in Unity. The point of the pill change is that the next report can be exact: no WALL on the pill means the plane was not detected; WALL on the pill and still nothing means the refusal is at commit, not in the plan.
 
 ### [17.47.3-dev] A Type Where the Compiler Looks for It
 

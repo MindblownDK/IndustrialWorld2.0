@@ -246,8 +246,12 @@ namespace VoxelEngine.UI
             if (PlacementOptions.Pattern == PlacementPattern.Single) return pattern;
             // 17.45.3-dev: the seating is part of the gesture's state now, so it belongs on
             // the pill with the pattern and the step rather than hidden one wheel face away.
-            return pattern + " · " + PlacementOptions.StepName(PlacementOptions.Step)
+            string tail = pattern + " · " + PlacementOptions.StepName(PlacementOptions.Step)
                 + " · " + PlacementOptions.SeatName(PlacementOptions.Seat);
+            // 17.47.4-dev: a deck that has locked onto a face says so, so a gesture that fell
+            // back to a floor plan can be seen rather than guessed at.
+            if (VoxelEngine.Building.BuildSystem.PatternStandsUp) tail += " · WALL";
+            return tail;
         }
 
         /// <summary>The Ctrl hint, spelled with whatever key the player actually uses.</summary>
