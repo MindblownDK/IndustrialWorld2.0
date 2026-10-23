@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.11-dev`
-**Roadmap Version:** `17.44.11-dev`
+**Current Version:** `17.44.13-dev`
+**Roadmap Version:** `17.44.13-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,15 @@
 
 ## 0. Recently Done
 
+### 17.44.13-dev - Nudges Follow the View, Runs Report Their Pitch
+- The nudge basis is derived from the camera on every press, so "left" is left of the screen from wherever the player is now standing rather than where they stood when they froze the block
+- The build-press and run-completion lines now print the measured pitch and the planned-versus-built cell counts, so spacing faults are read rather than inferred
+
+### 17.44.12-dev - Prefab-Asset Footprints, PILLAR From Any Drag, Seated Runs
+- Model bounds are read from the authored prefab without the `activeInHierarchy` test (false on every renderer of a prefab asset), which is why runs were spaced one metre and overlapped
+- PILLAR follows whichever moved further - the aim climbing a wall or the drag across the ground - so aiming up into the sky no longer does nothing
+- Run cells after the anchor are dropped onto the surface beneath them, so a deck on a slope sits on the ground instead of hovering
+
 ### 17.44.11-dev - One-Metre Nudging, Model Footprints, Vertical PILLAR, Cheaper Runs
 - A nudge is exactly one metre along level screen axes, so sideways works on every block and any step is reversible by pressing the opposite arrow
 - Run pitch comes from the prefab's renderer bounds (cached), PILLAR rises along gravity, and the ghost no longer re-orients itself over open ground
@@ -37,16 +46,6 @@
 ### 17.44.10-dev - Level Lattices, Nudging by the Block's Own Row
 - The lattice takes its up from gravity on anything floor-like, so a run on a dune is level instead of climbing with the sand; only a wall or a ceiling keeps its own up
 - A nudge commits to a perpendicular pair of the frozen pose's lattice axes and steps by that axis's pitch, so a nudged block lands exactly where the next one in its row would have
-
-### 17.44.9-dev - Working PILLAR and DECK, Longer Build Reach, Pinned Nudge Basis
-- PILLAR grows from the planar drag when the aim cannot climb (a ground aim has zero vertical travel, so the count was always zero) and DECK counts per lattice step, so the two are no longer the same gesture as SPAN
-- A held block raycasts to the build reach instead of the interaction reach, so machines can be placed from the distance the build system already allowed
-- The nudge basis is pinned for the life of the lock (re-derived only past sixty degrees), because a twenty-degree rebuild threshold re-mapped left onto a new world axis every few presses
-
-### 17.44.8-dev - Screen-Relative Nudging and the Run Following the Crosshair
-- Arrows step along the cached screen basis again (the lattice-axis commit walked the block forwards/backwards when standing edge-on); the steadiness comes from caching the basis, not from snapping it
-- The planner reads a separately published `GhostAimPosition` instead of the hologram transform, which had been reading the run's own tip back as the aim and collapsing every drag to one cell
-- A build press with a multi-pattern selected while the hologram is frozen now says why it cannot lay a run, and the press trace reports pattern eligibility
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -150,8 +149,10 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is ONE METRE along level screen axes: left is left, up is away, both flat on the gravity plane. The basis is pinned for the life of the lock, and because every step is a whole metre on a fixed axis, N presses one way and N the other return the block exactly where it started. Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
-- Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev).
+- A nudge is ONE METRE along level screen axes: left is left of the screen NOW, up is away from the player NOW, both flat on the gravity plane. The basis is derived from the camera on every press - pinning it made horizontal presses drag the block diagonally across the view once the player walked around the frozen block (17.44.13-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev). Read those bounds WITHOUT the `activeInHierarchy` test - it is false for every renderer of a prefab asset, and the silent fallback is a one-metre block (17.44.12-dev).
+- A level lattice must still be SEATED: a run on a slope drops each cell onto the surface beneath it after planning, or the far cells hover and the run reads as a scatter (17.44.12-dev).
+- A gesture needs an input that can express it: a vertical pattern cannot rely on the crosshair climbing, because a sky aim has no surface - it takes whichever of the aim or the planar drag the player moved further (17.44.12-dev).
 - A vertical pattern is vertical: PILLAR rises along gravity from its anchor and never borrows a neighbouring frame's up, which can be rolled (17.44.11-dev).
 - Never run a placement probe per preview cell per frame. Probe once per plan and let the pool share the result (17.44.11-dev).
 - A lattice is LEVEL. Its up is gravity whenever the surface is floor-like; the hit normal only decides how a block is seated, and only a wall or a ceiling keeps its own up. A tilted lattice builds a staircase and calls it a straight line (17.44.10-dev).

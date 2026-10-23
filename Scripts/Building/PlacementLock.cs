@@ -159,7 +159,7 @@ namespace VoxelEngine.Building
             }
             else
             {
-                EnsureNudgeBasis(view, upNow, Position);
+                RefreshNudgeBasis(view, upNow);
 
                 // ── 17.44.11-dev: LEVEL SCREEN AXES, ONE METRE AT A TIME ────────────
                 // Left is left of the screen, up is away from the player, and both lie flat
@@ -214,44 +214,35 @@ namespace VoxelEngine.Building
         }
 
         /// <summary>
-        /// Locks the screen basis for nudging. It is rebuilt only when the player has turned
-        /// their view by more than about 20 degrees, or when the frozen pose has travelled
-        /// far enough that the local surface is a different place.
+        /// Derives the nudge basis from the camera AS IT IS NOW.
+        ///
+        /// 17.44.13-dev: the basis used to be captured once when the hologram was frozen and
+        /// then held. That is stable and it is wrong: the player freezes a block, walks
+        /// around it, and from the new angle "left" no longer means left of the screen - it
+        /// means left from where they stood when they pressed V, so every horizontal press
+        /// drags the block diagonally across their view. That is the zigzag, and no amount of
+        /// arithmetic fixing could remove it because the arithmetic was already exact.
+        ///
+        /// Re-deriving per press is safe now that a step is exactly one metre: pressing right
+        /// N times and left N times returns the block to the same place as long as the view
+        /// has not changed, and follows the view when it has.
         /// </summary>
-        private static void EnsureNudgeBasis(Transform view, Vector3 up, Vector3 position)
+        private static void RefreshNudgeBasis(Transform view, Vector3 up)
         {
-            // 17.44.9-dev: PINNED for the life of the lock. The basis used to be rebuilt
-            // whenever the view turned about twenty degrees or the pose had travelled four
-            // metres - and since the pose travels a metre per press, a held arrow rebuilt it
-            // every handful of steps. Each rebuild could re-map left onto a different world
-            // direction, which is exactly the zigzag: the steps were individually clean and
-            // collectively crooked. Turn the camera as much as you like now; the axes stay
-            // where the freeze put them. Only a genuine walk-around (past sixty degrees)
-            // re-derives them, and re-locking always starts clean.
-            bool stale = !_nudgeBasisValid;
-
-            Vector3 candidate = view != null ? Vector3.ProjectOnPlane(view.right, up) : Vector3.zero;
-            if (!stale && candidate.sqrMagnitude > 0.04f
-                && Vector3.Dot(candidate.normalized, _nudgeRight) < 0.5f)
-                stale = true;   // more than sixty degrees round: sideways means something else
-
-            if (!stale) return;
-
             // The camera's RIGHT, flattened onto the ground, never its forward: a forward
             // projection collapses toward zero whenever the player looks down at a machine.
-            Vector3 right = candidate;
+            Vector3 right = view != null ? Vector3.ProjectOnPlane(view.right, up) : Vector3.zero;
             if (right.sqrMagnitude < 0.04f && view != null)
                 right = Vector3.ProjectOnPlane(view.up, up);
             if (right.sqrMagnitude < 0.0001f)
-                right = PlacementFrame.FromUp(position, up, "LOCK", false).right;
+                right = PlacementFrame.FromUp(Position, up, "LOCK", false).right;
             if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
-
             _nudgeRight = right.normalized;
+
             Vector3 away = Vector3.Cross(_nudgeRight, up);
             if (away.sqrMagnitude < 0.0001f) away = Vector3.Cross(_nudgeRight, Vector3.up);
+            if (away.sqrMagnitude < 0.0001f) away = Vector3.forward;
             _nudgeAway = away.normalized;
-            _nudgeUp = up;
-            _nudgeBasisAt = position;
             _nudgeBasisValid = true;
         }
 

@@ -1,9 +1,45 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.11-dev`
+**Current Version:** `17.44.13-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.13-dev] Nudging Follows the View, and the Traces Report the Numbers
+
+**Type:** PATCH - one behavioural correction plus diagnostics for the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.13-dev] Make frozen-hologram nudges follow the camera and report the measured run pitch`
+
+#### Fixed
+
+- **A nudge always goes where the player is looking NOW (`PlacementLock.RefreshNudgeBasis`).** The basis was captured once when the hologram was frozen and then held, which is stable and wrong: freeze a block, walk around it, and "left" no longer means left of the screen - it means left from where the player stood when they pressed the lock key, so every horizontal press drags the block diagonally across the new view. The documented trace made this unambiguous: the axis was constant and every step exactly one metre, so the arithmetic was already exact and the axis was simply stale. The basis is now derived from the camera on each press: left is left of the screen, up is away from the player. With a fixed one-metre step, pressing right N times and left N times still returns the block to the same place while the view is unchanged, and follows the view when it changes.
+- **Aiming up into the sky still cannot grow a stack, and the trace now proves what PILLAR is reading.** A sky aim gives the crosshair no surface, so no anchor and no drag exists to measure; the stack grows from whichever of the aim or the planar drag moved further, which needs a surface under the crosshair for at least one of them.
+
+#### Added
+
+- **The build-press line reports the measured run pitch**, the same number the planner spaces cells with, so spacing can be read instead of inferred from a screenshot.
+- **A completed run logs what it planned and what it built** together with the pitch it used, which distinguishes a planning fault from a cell being refused.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
+
+### [17.44.12-dev] Footprints From a Prefab Asset, a PILLAR That Answers Any Drag, and Runs Seated on the Ground
+
+**Type:** PATCH - three corrections in the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.12-dev] Fix measured footprints on prefab assets, make PILLAR answer any drag, and seat runs on slopes`
+
+#### Fixed
+
+- **Runs were spaced one metre apart and overlapped (`BuildSystem.TryGetPrefabModelBounds`).** 17.44.11-dev measured a prefab's model with `TryGetRendererBoundsInRoot`, which skips any renderer whose `gameObject.activeInHierarchy` is false - and on a PREFAB ASSET that is every renderer, because a prefab asset is not in a scene. The bounds came back empty, the footprint fell back to a one-metre cube, and every run of machines was stepped one metre: the previews overlapped, one cell of each pair was refused by the probe, and the run built half of what it drew. The measurement now reads authored renderer bounds directly and ignores activation, which is what a prefab asset requires.
+- **PILLAR answers any drag (`PlacementPatternPlanner.Build`).** Aiming up into the sky gives the crosshair no surface, so the aim never climbs and the vertical count stayed at zero - "pillar does nothing when I aim upwards". The stack now follows whichever of the two the player moved further: the aim climbing a wall, or the drag across the ground. Push away to build up, pull back to build down, look up a wall and let the aim rise.
+- **A run laid on a slope is seated cell by cell (`BuildSystem.SeatRunOnGround`).** The lattice is level, which is what stops a run building a staircase - but level and floating are different things, and on a dune the far cells of a deck hovered or sank by metres, reading as a scatter of blocks with large offsets. Every cell after the anchor is now dropped onto the surface beneath it, keeping its level lattice position across the ground. A cell with nothing under it within reach is left where it is, so the preview still shows the whole plan.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.11-dev] One-Metre Nudging, Footprints From the Model, a Vertical PILLAR, and the Frame Cost of Previewing a Run
 

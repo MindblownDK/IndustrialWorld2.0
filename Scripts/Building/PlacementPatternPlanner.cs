@@ -159,12 +159,16 @@ namespace VoxelEngine.Building
             // still spaced by the block's height, so a stack never interpenetrates.
             if (pattern == PlacementPattern.Pillar)
             {
+                // 17.44.12-dev: ANY drag grows the stack. Aiming up into the sky gives the
+                // crosshair no surface, so the aim never climbs and the vertical count stayed
+                // zero - "pillar does nothing when I aim upwards". The stack now follows
+                // whichever of the two the player moved further: the aim climbing, or the
+                // drag across the ground. Push away to build up, pull back to build down,
+                // or look up a wall and let the aim rise.
                 float planar = Mathf.Sqrt(local.x * local.x + local.z * local.z);
-                if (Mathf.Abs(distance) <= planar * 0.5f)
-                {
-                    Vector3 planarReference = frame.valid ? frame.forward : Vector3.forward;
-                    distance = Vector3.Dot(delta, planarReference) >= 0f ? planar : -planar;
-                }
+                Vector3 planarReference = frame.valid ? frame.forward : Vector3.forward;
+                float signedPlanar = Vector3.Dot(delta, planarReference) >= 0f ? planar : -planar;
+                distance = Mathf.Abs(distance) >= planar ? distance : signedPlanar;
             }
 
             int count = Mathf.RoundToInt(distance / pitchAlong);

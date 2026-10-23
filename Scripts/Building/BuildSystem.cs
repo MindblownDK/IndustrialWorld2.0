@@ -1916,7 +1916,7 @@ namespace VoxelEngine.Building
             if (!_footprintCache.TryGetValue(block, out Vector3 size))
             {
                 size = Vector3.zero;
-                if (TryGetRendererBoundsInRoot(block.placedPrefab.transform, out Bounds visible))
+                if (TryGetPrefabModelBounds(block.placedPrefab, out Bounds visible))
                     size = visible.size;
                 if (size.sqrMagnitude < 0.0001f)
                 {
@@ -2027,6 +2027,14 @@ namespace VoxelEngine.Building
                 _patternAnchorPosition, _patternAnchorRotation,
                 GhostAimPosition, step, pitch, budget, _plannedCells);
             PatternPreviewCount = planned;
+
+            // 17.44.12-dev: a run laid on OPEN GROUND is seated cell by cell. The lattice is
+            // level (a tilted one built staircases), but level and floating are different
+            // things: on a slope the far cells of a deck hovered or sank by metres, which is
+            // what read as a scatter of blocks with large offsets. Each cell is dropped onto
+            // the ground under it and keeps its level lattice position across the ground.
+            if (!_patternAnchorFrame.fromStructure) SeatRunOnGround(_plannedCells, block);
+
             ShowPatternPreview(_plannedCells, block);
 
             // 17.44.3-dev: while a run is armed the hologram IS the tip of it. The player
@@ -2150,8 +2158,18 @@ namespace VoxelEngine.Building
                        $" at {_ghost.transform.position} (published ghost {GhostValid})";
             }
 
+            string pitch = "n/a";
+            if (_ghostItem != null && _ghost != null)
+            {
+                Vector3 p = PatternPitch(_ghostItem, _ghost.transform.rotation,
+                    GhostFrame.valid ? GhostFrame : PlacementFrame.FromUp(_ghost.transform.position,
+                        GravityProvider.GetUp(_ghost.transform.position), "GROUND", false));
+                pitch = $"({p.x:0.##}, {p.y:0.##}, {p.z:0.##})";
+            }
+
             UnityEngine.Debug.Log(
                 $"[placement] press: holding={(HoldingBlock ? _ghostItem?.name ?? "block" : "nothing")}, " +
+                $"pitch={pitch}, " +
                 $"uiBlocking={VoxelEngine.UI.UIState.IsBlocking}, " +
                 $"dialOpen={VoxelEngine.UI.RadialWheelController.AnyOpen}, " +
                 $"pattern={PlacementOptions.Pattern}, " +
@@ -2159,6 +2177,36 @@ namespace VoxelEngine.Building
                 $"locked={PlacementLock.IsLocked}, " +
                 $"gridSnap={gridSnap}, patternOwnsClick={PatternOwnsClick}, " +
                 $"patternActive={_patternActive}, ghost={pose}");
+        }
+
+        /// <summary>
+        /// Drops every cell of a run onto the surface beneath it, leaving cell 0 (the anchor,
+        /// already seated by the aim) untouched. A cell with nothing under it within reach is
+        /// left where it is, so the preview still shows the plan rather than hiding it.
+        /// </summary>
+        private void SeatRunOnGround(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
+        {
+            if (cells == null || block == null || cells.Count <= 1) return;
+
+            bool pivotAnchored = GetStaticPlacementPrefabProfile(block).anchorAtPivot;
+            float clearance = StaticPlacementSurfaceOffset(block, pivotAnchored);
+
+            for (int i = 1; i < cells.Count; i++)
+            {
+                var cell = cells[i];
+                Vector3 up = GravityProvider.GetUp(cell.position);
+                if (up.sqrMagnitude < 0.0001f) continue;
+                up.Normalize();
+
+                var probe = new Ray(cell.position + up * 4f, -up);
+                if (!TryRaycastIgnoringSelf(probe, out var ground, 8f)) continue;
+
+                Vector3 normal = ground.normal.sqrMagnitude > 0.0001f ? ground.normal.normalized : up;
+                Vector3 seated = ground.point + normal * clearance;
+                if (Mathf.Abs(Vector3.Dot(seated - cell.position, up)) > 8f) continue;
+                cell.position = seated;
+                cells[i] = cell;
+            }
         }
 
         /// <summary>Re-tints one preview body without touching the hologram's own material.</summary>
@@ -2235,6 +2283,11 @@ namespace VoxelEngine.Building
 
             ConsumePlaced(block, placed);
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, placed);
+            UnityEngine.Debug.Log($"[placement] run built {placed} of {_plannedCells.Count} " +
+                $"cells ({PlacementOptions.Pattern}) at pitch " +
+                $"({PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).x:0.##}, " +
+                $"{PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).y:0.##}, " +
+                $"{PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).z:0.##})");
             return placed;
         }
 
@@ -4763,6 +4816,49 @@ namespace VoxelEngine.Building
         }
 
         // ---------- Ghost material helpers ----------
+        /// <summary>
+        /// The visible model's bounds in the prefab root's own space.
+        ///
+        /// 17.44.12-dev: this cannot use <see cref="TryGetRendererBoundsInRoot"/>, which skips
+        /// any renderer whose <c>gameObject.activeInHierarchy</c> is false - and on a PREFAB
+        /// ASSET that is every renderer, because a prefab asset is not in a scene. The bounds
+        /// came back empty, the footprint silently fell back to a one-metre cube, and every
+        /// run of machines was spaced one metre apart and overlapping. Activation is none of
+        /// our business here: an authored prefab's model is its model whether or not the
+        /// asset is instantiated.
+        /// </summary>
+        private static bool TryGetPrefabModelBounds(GameObject prefab, out Bounds bounds)
+        {
+            bounds = default;
+            if (prefab == null) return false;
+
+            Transform root = prefab.transform;
+            var renderers = prefab.GetComponentsInChildren<Renderer>(true);
+            bool any = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer == null || !renderer.enabled) continue;
+
+                Bounds local = renderer.localBounds;
+                if (local.size.sqrMagnitude < 1e-8f) continue;   // a renderer with no geometry
+
+                Vector3 center = local.center;
+                Vector3 extents = local.extents;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 point = center + new Vector3(
+                        (corner & 1) == 0 ? -extents.x : extents.x,
+                        (corner & 2) == 0 ? -extents.y : extents.y,
+                        (corner & 4) == 0 ? -extents.z : extents.z);
+                    Vector3 rootPoint = root.InverseTransformPoint(renderer.transform.TransformPoint(point));
+                    if (!any) { bounds = new Bounds(rootPoint, Vector3.zero); any = true; }
+                    else bounds.Encapsulate(rootPoint);
+                }
+            }
+            return any;
+        }
+
         private static bool TryGetRendererBoundsInRoot(Transform root, out Bounds bounds)
         {
             bounds = default;
