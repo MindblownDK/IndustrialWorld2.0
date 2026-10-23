@@ -159,7 +159,16 @@ namespace VoxelEngine.Building
             }
             else
             {
-                RefreshNudgeBasis(view, upNow);
+                // ── 17.44.14-dev: FROZEN FOR THE WHOLE LOCK ────────────────────────
+                // Derived once, on the first horizontal press of the lock, and never again
+                // until the player re-locks. Every previous version re-derived some part of
+                // this per press - the camera, the gravity up, or both - and the trace showed
+                // exactly what that does: identical single-metre steps along axes that jumped
+                // by up to ninety degrees between presses. A step left then right then came
+                // back somewhere else, which is the zigzag. Four fixed directions per lock
+                // make it arithmetically impossible: press left N times and right N times and
+                // the block is where it started, always.
+                if (!_nudgeBasisValid) RefreshNudgeBasis(view, upNow);
 
                 // ── 17.44.11-dev: LEVEL SCREEN AXES, ONE METRE AT A TIME ────────────
                 // Left is left of the screen, up is away from the player, and both lie flat
@@ -205,9 +214,14 @@ namespace VoxelEngine.Building
             // did, and where the pose ended up. If a nudge ever reads as a zigzag again, this
             // line says whether the basis moved, the step shrank, or nothing moved at all.
             if (freshPress)
+            {
+                Vector3 liveRight = view != null ? view.right : Vector3.zero;
                 UnityEngine.Debug.Log($"[nudge] key={(intent > 0 ? "+" : "")}{intent} " +
-                    $"step={amount:0.###} axis={(intent == 1 || intent == -1 ? _nudgeRight : intent == 3 || intent == -3 ? upNow : _nudgeAway)} " +
+                    $"step={amount:0.###} " +
+                    $"axis={(intent == 1 || intent == -1 ? _nudgeRight : intent == 3 || intent == -3 ? upNow : _nudgeAway)} " +
+                    $"frozenRight={_nudgeRight} frozenUp={_nudgeUp} liveCamRight={liveRight} liveUp={upNow} " +
                     $"-> {Position + offset}");
+            }
 
             Nudge(offset, freshPress);
             return true;
@@ -238,6 +252,7 @@ namespace VoxelEngine.Building
                 right = PlacementFrame.FromUp(Position, up, "LOCK", false).right;
             if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
             _nudgeRight = right.normalized;
+            _nudgeUp = up;
 
             Vector3 away = Vector3.Cross(_nudgeRight, up);
             if (away.sqrMagnitude < 0.0001f) away = Vector3.Cross(_nudgeRight, Vector3.up);

@@ -1,9 +1,30 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.13-dev`
+**Current Version:** `17.44.14-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.14-dev] Runs Counted in Metres, Nudge Directions Frozen for the Lock, and Seats That Must Be Buildable
+
+**Type:** PATCH - three corrections and two richer traces in the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.14-dev] Count runs per metre of drag, freeze the nudge directions for the lock, and validate seated cells`
+
+#### Fixed
+
+- **A run counts one cell per metre of drag, not one per footprint (`PlacementPatternPlanner.Build`).** The count divided the drag by the block's own pitch, and this machine measures 4.35 m by 4.8 m by 6.02 m - so a three-cell SPAN needed thirteen metres of crosshair travel across the ground and PILLAR needed 4.8 m before its second cell existed. That is why runs and pillars read as "very hard to get working" and "we cannot go up" while DECK, which already counted per metre, responded. Drag distance is the player's and is now measured in lattice metres; the cells themselves are still spaced by the footprint, so neighbours cannot interpenetrate.
+- **The four nudge directions are frozen for the life of a lock (`PlacementLock`).** Every previous version re-derived part of the basis per press - the camera, the gravity up, or both - and the trace showed what that produces: identical one-metre steps along axes that jumped by up to ninety degrees between presses, so left then right landed somewhere new. That is the zigzag, and the arithmetic was never at fault, which is why no amount of stepping or tolerance work could remove it. The pair is derived once from the camera on the first horizontal press after a lock and held until the player re-locks, so a key always moves the block the same way and any number of steps is exactly reversible.
+- **A seated cell must be buildable (`BuildSystem.SeatRunOnGround`).** Runs on open ground drop each cell onto the surface beneath it; a seat that fails the placement probe is now discarded and the level planning position kept, instead of the plan drawing cells the click then refuses - which is what "it skips blocks" looked like.
+
+#### Added
+
+- **The nudge line reports the frozen basis beside the live camera and live gravity**, so a future report says directly whether the view or the gravity is moving under the player instead of it having to be inferred.
+- **The run line reports the first and last cell positions as well as the count**, so spacing can be measured from the log.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.13-dev] Nudging Follows the View, and the Traces Report the Numbers
 

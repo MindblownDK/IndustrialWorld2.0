@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.13-dev`
-**Roadmap Version:** `17.44.13-dev`
+**Current Version:** `17.44.14-dev`
+**Roadmap Version:** `17.44.14-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.14-dev - Runs Per Metre, Frozen Nudge Directions, Buildable Seats
+- A pattern counts one cell per metre of drag and still spaces cells by the block's footprint, so a run is reachable with a normal gesture instead of thirteen metres of crosshair travel
+- The four nudge directions are derived once per lock and never re-derived, which removes the zigzag by construction rather than by tolerance
+- A seated run cell that fails the placement probe is discarded, so the preview stops drawing cells the commit refuses
+
 ### 17.44.13-dev - Nudges Follow the View, Runs Report Their Pitch
 - The nudge basis is derived from the camera on every press, so "left" is left of the screen from wherever the player is now standing rather than where they stood when they froze the block
 - The build-press and run-completion lines now print the measured pitch and the planned-versus-built cell counts, so spacing faults are read rather than inferred
@@ -42,10 +47,6 @@
 - A nudge is exactly one metre along level screen axes, so sideways works on every block and any step is reversible by pressing the opposite arrow
 - Run pitch comes from the prefab's renderer bounds (cached), PILLAR rises along gravity, and the ghost no longer re-orients itself over open ground
 - Preview cells are probed once per plan instead of once per cell per frame, which was costing roughly forty frames a second while dragging
-
-### 17.44.10-dev - Level Lattices, Nudging by the Block's Own Row
-- The lattice takes its up from gravity on anything floor-like, so a run on a dune is level instead of climbing with the sand; only a wall or a ceiling keeps its own up
-- A nudge commits to a perpendicular pair of the frozen pose's lattice axes and steps by that axis's pitch, so a nudged block lands exactly where the next one in its row would have
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -149,7 +150,8 @@
 - A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 - A build press always leaves one line naming every gate that could have refused it, and a nudge press one line naming the basis it used. Four independent gates can make placement look broken, and "nothing happened" is not a bug report (17.44.6-dev).
 - A dial that can pin must be one whose pin serves the player. A pinned dial blocks the world, so the build dial closes on a tap instead (17.44.6-dev).
-- A nudge is ONE METRE along level screen axes: left is left of the screen NOW, up is away from the player NOW, both flat on the gravity plane. The basis is derived from the camera on every press - pinning it made horizontal presses drag the block diagonally across the view once the player walked around the frozen block (17.44.13-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A nudge is ONE METRE along four directions derived ONCE per lock from the camera and then frozen for the life of that lock. Never re-derive any part of the basis per press - camera, gravity up, or axis pair: the trace proved that identical one-metre steps then run along axes that jump by up to ninety degrees, which is the zigzag, and no amount of stepping or tolerance work can fix an axis that moves (17.44.14-dev). Never scale a nudge by a prefab measurement - the measurement is a footprint, not a step (17.44.11-dev). Ctrl is lift and drop only; a horizontal arrow with Ctrl held does nothing (17.44.7-dev).
+- A pattern counts cells from the DRAG IN LATTICE METRES and spaces them by the block's footprint. Dividing the drag by the footprint demands metres of travel per cell and makes runs and pillars unusable on anything large (17.44.14-dev).
 - Measure a prefab's footprint from its RENDERER bounds, never from its collider set: a collider set is not a footprint, and one machine reported 4.9 m, 5.6 m and 24.5 m on three axes of the same prefab (17.44.11-dev). Read those bounds WITHOUT the `activeInHierarchy` test - it is false for every renderer of a prefab asset, and the silent fallback is a one-metre block (17.44.12-dev).
 - A level lattice must still be SEATED: a run on a slope drops each cell onto the surface beneath it after planning, or the far cells hover and the run reads as a scatter (17.44.12-dev).
 - A gesture needs an input that can express it: a vertical pattern cannot rely on the crosshair climbing, because a sky aim has no surface - it takes whichever of the aim or the planar drag the player moved further (17.44.12-dev).

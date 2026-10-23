@@ -171,7 +171,16 @@ namespace VoxelEngine.Building
                 distance = Mathf.Abs(distance) >= planar ? distance : signedPlanar;
             }
 
-            int count = Mathf.RoundToInt(distance / pitchAlong);
+            // ── 17.44.14-dev: count in METRES, space by the pitch ──────────────────
+            // The count used to be the drag divided by the block's own footprint, and this
+            // machine measures 4.35 m by 4.8 m by 6.02 m. A three-cell SPAN therefore needed
+            // THIRTEEN METRES of crosshair travel across the ground, and a pillar needed
+            // 4.8 m of it before the second cell appeared - which is why runs were "very hard
+            // to get working" and PILLAR "did nothing". The gesture is now one lattice metre
+            // of drag per cell, and the cells themselves are still spaced by the footprint so
+            // neighbours cannot interpenetrate. Drag distance is the player's, spacing is the
+            // block's.
+            int count = Mathf.RoundToInt(distance / step);
 
             int cap = Mathf.Min(PlacementOptions.MaxRun, budget - 1);
             count = Mathf.Clamp(count, -cap, cap);
@@ -179,8 +188,8 @@ namespace VoxelEngine.Building
             {
                 // A short drag still reads as a run: the first cell in the dragged
                 // direction, so the preview always answers the gesture.
-                float raw = Mathf.Abs(distance / pitchAlong);
-                if (raw > 0.25f) count = distance > 0f ? 1 : -1;
+                float raw = Mathf.Abs(distance / step);
+                if (raw > 0.2f) count = distance > 0f ? 1 : -1;
             }
 
             for (int i = 1; i <= Mathf.Abs(count) && cells.Count < budget; i++)

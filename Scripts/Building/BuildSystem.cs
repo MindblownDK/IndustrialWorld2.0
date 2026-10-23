@@ -2204,6 +2204,15 @@ namespace VoxelEngine.Building
                 Vector3 normal = ground.normal.sqrMagnitude > 0.0001f ? ground.normal.normalized : up;
                 Vector3 seated = ground.point + normal * clearance;
                 if (Mathf.Abs(Vector3.Dot(seated - cell.position, up)) > 8f) continue;
+
+                // A seated cell has to be a cell the click can actually build: dropping eight
+                // cells onto a slope and then refusing two of them is what "the deck skips
+                // blocks" looked like. A seat that does not validate is discarded and the
+                // level planning position kept.
+                _surfaceAttachmentHost = null;
+                _deckSnapHost = null;
+                if (!IsPlacementValid(seated, block, cell.rotation, out _)) continue;
+
                 cell.position = seated;
                 cells[i] = cell;
             }
@@ -2284,6 +2293,8 @@ namespace VoxelEngine.Building
             ConsumePlaced(block, placed);
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, placed);
             UnityEngine.Debug.Log($"[placement] run built {placed} of {_plannedCells.Count} " +
+                $"first={(_plannedCells.Count > 0 ? _plannedCells[0].position.ToString() : "none")} " +
+                $"last={(_plannedCells.Count > 0 ? _plannedCells[_plannedCells.Count - 1].position.ToString() : "none")} " +
                 $"cells ({PlacementOptions.Pattern}) at pitch " +
                 $"({PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).x:0.##}, " +
                 $"{PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame).y:0.##}, " +
