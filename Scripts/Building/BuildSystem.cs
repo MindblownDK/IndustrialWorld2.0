@@ -186,9 +186,22 @@ namespace VoxelEngine.Building
         /// True while a pattern owns the build click. The interaction tool reads this and
         /// stands aside, so one press never places a block AND starts a run.
         /// </summary>
+        /// <summary>
+        /// True while a BUILD PATTERN is going to answer the build click. PlayerInteractionTool
+        /// stands aside on this flag, so it must be exactly as wide as the pattern path:
+        ///
+        /// 17.44.4-dev - it used to include the locked case. A frozen hologram cannot arm a
+        /// run (the lock owns the pose), so with a pattern selected and a block frozen the
+        /// click was claimed by the pattern and then refused by it, and nothing happened at
+        /// all: no single block, no run, and a perfectly green hologram. The lock is now
+        /// excluded here, which hands the click back to <see cref="TryPlace"/>'s own frozen
+        /// branch - the one that needs no crosshair at all.
+        /// </summary>
         public static bool PatternOwnsClick =>
             HoldingBlock && PlacementOptions.IsMultiPlace
-            && PlacementOptions.IsPatternEligible(HeldBlockItem);
+            && PlacementOptions.IsPatternEligible(HeldBlockItem)
+            && !PlacementLock.IsLocked
+            && !VoxelEngine.UI.RadialWheelController.AnyOpen;
 
         private void Awake()
         {
@@ -1883,7 +1896,15 @@ namespace VoxelEngine.Building
 
             if (!_patternActive)
             {
-                if (!(held && !_buildWasHeld && GhostValid)) return;
+                if (!(held && !_buildWasHeld && GhostValid))
+                {
+                    // A press this frame that cannot arm is worth one line: without it the
+                    // player sees a green hologram and a click that does nothing.
+                    if (held && !_buildWasHeld && !GhostValid)
+                        UnityEngine.Debug.Log($"[placement] run did not arm: '{block.displayName}' " +
+                            "is not on a valid cell");
+                    return;
+                }
 
                 _patternActive = true;
                 _patternAnchorPosition = GhostPosition;
@@ -2032,13 +2053,21 @@ namespace VoxelEngine.Building
             }
 
             int placed = 0;
+            var firstRefusal = PlacementRefusal.NoRoom;
+            bool hasRefusal = false;
             for (int i = 0; i < _plannedCells.Count && placed < budget; i++)
             {
                 // Per-cell snap context belongs to THAT cell, never to the anchor's.
                 _surfaceAttachmentHost = null;
                 _deckSnapHost = null;
-                if (!IsPlacementValid(_plannedCells[i].position, block, _plannedCells[i].rotation, out _))
+                if (!IsPlacementValid(_plannedCells[i].position, block, _plannedCells[i].rotation, out var cellRefusal))
+                {
+                    // 17.44.4-dev: a run that places nothing used to report "No room" no
+                    // matter why - the one message that is never actionable. The first
+                    // real refusal is carried out instead.
+                    if (!hasRefusal) { firstRefusal = cellRefusal; hasRefusal = true; }
                     continue;
+                }
                 if (CommitPlacement(block, _plannedCells[i].position, _plannedCells[i].rotation,
                         default, hasHitContext: false, playFeedback: false))
                     placed++;
@@ -2046,8 +2075,11 @@ namespace VoxelEngine.Building
 
             if (placed == 0)
             {
-                ShowPlacementRefusal(block, PlacementRefusal.NoRoom, force: true);
+                ShowPlacementRefusal(block, hasRefusal ? firstRefusal : PlacementRefusal.NoRoom, force: true);
                 PlacementFeedback.Refused(_patternAnchorPosition);
+                UnityEngine.Debug.Log($"[placement] run refused: {block.displayName}, " +
+                    $"{_plannedCells.Count} cells planned, reason {firstRefusal}, " +
+                    $"anchor {_patternAnchorPosition}, step {PlacementOptions.StepMetres:0.##}");
                 return 0;
             }
 

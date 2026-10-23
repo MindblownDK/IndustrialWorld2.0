@@ -1,9 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.3-dev`
+**Current Version:** `17.44.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.4-dev] Fix the Dead Build Click While a Pattern Is Selected and the Hologram Is Frozen
+
+**Type:** PATCH - one behavioural fix plus diagnostics for the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.4-dev] Fix build clicks being swallowed by a build pattern while the hologram is frozen`
+
+#### Fixed
+
+- **A frozen hologram could not be placed at all while a build pattern was selected (`BuildSystem.PatternOwnsClick`).** `PlayerInteractionTool` stands aside whenever a pattern claims the build click, and the pattern path refuses to arm a run while the hologram is frozen - the lock owns the pose, so a run has nothing to drag. With SPAN, PILLAR or DECK selected and a hologram frozen with `V`, the click was therefore claimed by the pattern and then refused by it: no single block, no run, and a perfectly green hologram. The lock is excluded from the claim, so the click reaches `TryPlace`'s own frozen branch - the one that needs no crosshair at all - and the pattern hands the click back whenever a wheel is open as well.
+- **A refused run reports the real reason (`CommitRun`).** A run that placed nothing always said "No room", which is never the actionable answer. The first actual per-cell refusal is carried out to the toast, and one console line names the block, the planned cell count, the reason and the anchor, so a future report is one line of log rather than a description.
+- **A press that cannot arm a run is no longer silent.** A build press with the hologram on an invalid cell now leaves one `[placement]` console line instead of a click that appears to do nothing.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run.
 
 ### [17.44.3-dev] Placement Feel Fixes: Preview Runs That Match the Block, Screen-Axis Nudging, Drag-Following SPAN, and a Card That Cannot Latch
 

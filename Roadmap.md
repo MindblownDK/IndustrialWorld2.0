@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.3-dev`
-**Roadmap Version:** `17.44.3-dev`
+**Current Version:** `17.44.4-dev`
+**Roadmap Version:** `17.44.4-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.44.4-dev - Placement Feel Fix: The Frozen Hologram Was Unplaceable
+- `PatternOwnsClick` no longer claims the build click while the hologram is frozen: the pattern cannot arm a run in that state, so the click was claimed and then refused - no block, no run, and a green hologram
+- A run that places nothing reports the first real per-cell refusal instead of "No room", and a press that cannot arm a run leaves one `[placement]` console line
+
 ### 17.44.3-dev - Placement Feel Fixes: Run Previews, Screen-Axis Nudge, Vertical SPAN
 - A run's preview bodies are tied to the held item (the pool used to keep whatever block was spanned first), the hologram stands at the run's tip while dragging, and every preview cell reports its own validity
 - SPAN follows the dominant drag axis across all three frame axes, so a vertical drag finally produces a vertical run; PILLAR still forces a column
@@ -43,11 +47,6 @@
 - Frozen-hologram nudges are measured along the camera's forward, so a held arrow key walks the block that way instead of curving off in a zigzag; Ctrl + arrow still lifts on the surface normal
 - SPAN / PILLAR / DECK pitch by each prefab's own projected footprint (never tighter than the lattice) instead of by the lattice alone, so a run of wide machines stops overlapping itself
 - Ctrl lines up against the nearest placed block or deck within 8 m of the ghost with or without the `G` lattice, the assist card is owned by the hologram so an empty hand puts it away, and the card's body turns with the block's yaw
-
-### 17.44.0-dev - Placement Feel: Build Patterns, Alignment, Freeze and Nudge
-- Build patterns SPAN / PILLAR / DECK (with a lattice step of 1 m, 0.5 m or FREE) live on the second face of the build wheel behind Ctrl + scroll, and static blocks now have a build wheel at all
-- Static placement resolves the aimed structure's frame, inherits an identical neighbour's heading, and Ctrl lines the heading up on that structure's cardinals; `BuildLock` (V) freezes the hologram for arrow-key nudging
-- The top-right card is a live placement instrument (projected body, three lit rotation rings, compass, pattern/lattice/lock chips, adaptive key rows) with synthesised snap clink, planting thud and dust
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -146,6 +145,8 @@
 - Nudging a frozen hologram walks: plain arrows repeat at 0.14 s after a 0.32 s delay, Shift and Ctrl nudge exactly once per press (17.44.2-dev). The basis is screen right projected onto the ground plane, one arrow axis per press, because flattening the camera's forward degenerates the moment a player looks down at a machine (17.44.3-dev).
 - A run's preview pool belongs to one item and is destroyed when the held block changes, the hologram itself stands at the run's tip while dragging, and each preview cell is tinted by its own validity (17.44.3-dev).
 - A HUD may never refresh the timestamp its own grace period is measured against: that is how the assist card latched on with an empty hand, and why the fix had to be structural rather than another guard (17.44.3-dev).
+- A click claim must be exactly as wide as the path that answers it: `PatternOwnsClick` suppresses all other placement, so it may never be true in a state the pattern refuses to act in - frozen hologram, or an open wheel (17.44.4-dev).
+- A refusal is never reported as a generic one. The first real per-cell reason travels with the toast, and a press that cannot arm a run leaves one console line (17.44.4-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
 
