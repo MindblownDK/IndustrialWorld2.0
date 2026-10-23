@@ -29,8 +29,12 @@ namespace VoxelEngine.Building
     /// <summary>The frozen hologram: one pose, one item, nudged by hand.</summary>
     public static class PlacementLock
     {
-        private const float NudgeRepeatDelay = 0.28f;
-        private const float NudgeRepeatRate = 0.07f;
+        // A held arrow key repeats, but at a walking pace: the first version repeated
+        // every seventh of a second, which walked a frozen hologram a dozen cells a second
+        // and read as the block flying away. Shift never repeats at all - five cells is a
+        // deliberate move, not a rate.
+        private const float NudgeRepeatDelay = 0.32f;
+        private const float NudgeRepeatRate = 0.14f;
         private const float NudgeFineStep = 0.05f;
 
         public static bool IsLocked { get; private set; }
@@ -138,12 +142,20 @@ namespace VoxelEngine.Building
             float amount = ctrl ? NudgeFineStep : (shift ? step * 5f : step);
             Vector3 offset = direction * amount;
 
-            // A held arrow key repeats, a tap moves once.
+            // A tap moves once, a held plain arrow repeats at a walking pace, and a Shift
+            // nudge is one deliberate five-cell move with no repeat at all.
             bool freshPress = direction != _lastNudgeDirection;
             _lastNudgeDirection = direction;
-            if (freshPress) _nextNudge = Time.unscaledTime + NudgeRepeatDelay;
-            if (!freshPress && Time.unscaledTime < _nextNudge) return false;
-            if (!freshPress) _nextNudge = Time.unscaledTime + NudgeRepeatRate;
+            if (freshPress)
+            {
+                _nextNudge = Time.unscaledTime + NudgeRepeatDelay;
+            }
+            else
+            {
+                if (shift || ctrl) return false;
+                if (Time.unscaledTime < _nextNudge) return false;
+                _nextNudge = Time.unscaledTime + NudgeRepeatRate;
+            }
 
             Nudge(offset);
             return true;

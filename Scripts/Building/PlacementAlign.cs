@@ -159,9 +159,16 @@ namespace VoxelEngine.Building
         private static PlacementFrame FromTransform(Transform host, string label, Vector3 surfaceUp)
         {
             Vector3 up = host.up;
-            // A machine authored with a slight tilt must not tilt the whole lattice; when
-            // its up disagrees with gravity the surface still decides which way is up.
-            if (surfaceUp.sqrMagnitude > 0.5f && Vector3.Dot(up, surfaceUp) < 0.55f) up = surfaceUp;
+            // 17.44.2-dev: the surface decides which way is up, and it decides it strictly.
+            // A neighbour built on a slope carries that slope in its own up, and accepting it
+            // (the old rule allowed 56 degrees of disagreement) tilted everything lined up
+            // against it. Only a structure that genuinely stands upright on this surface
+            // lends its up; anything else lends its heading and nothing more.
+            if (surfaceUp.sqrMagnitude > 0.5f)
+            {
+                Vector3 flat = surfaceUp.normalized;
+                if (Vector3.Dot(up, flat) < 0.985f) up = flat;
+            }
             if (up.sqrMagnitude < 0.0001f) up = surfaceUp;
 
             Vector3 forward = Vector3.ProjectOnPlane(host.forward, up);
@@ -207,12 +214,21 @@ namespace VoxelEngine.Building
         public static Quaternion AlignRotation(Quaternion rotation, in PlacementFrame frame)
         {
             if (!frame.valid) return rotation;
+
+            // The block's OWN vertical, kept as-is: line up is a yaw, never a tilt. The
+            // rotation used to be rebuilt around the FRAME's up, so lining a block up beside
+            // a machine that was itself built on a slope produced a block standing at that
+            // slope's angle - the "why is my ghost at 45 degrees" pose.
             Vector3 up = rotation * Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = frame.up;
+
+            // A piece that is not standing roughly square to the frame has been pitched or
+            // rolled on purpose. Leave it exactly as the player left it.
             if (Vector3.Dot(up, frame.up) < 0.985f) return rotation;
 
-            Vector3 forward = frame.NearestCardinal(rotation * Vector3.forward);
+            Vector3 forward = frame.NearestCardinal(Vector3.ProjectOnPlane(rotation * Vector3.forward, up));
             if (forward.sqrMagnitude < 0.0001f) return rotation;
-            return Quaternion.LookRotation(forward, frame.up);
+            return Quaternion.LookRotation(forward, up);
         }
 
         /// <summary>

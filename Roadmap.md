@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.1-dev`
-**Roadmap Version:** `17.44.1-dev`
+**Current Version:** `17.44.2-dev`
+**Roadmap Version:** `17.44.2-dev`
 **Date:** 2026-10-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.44.2-dev - Placement Feel Fixes: Run Pitch, Line-Up Reach, Heading Agreement
+- Run pitch is measured with the prefab projection helper rather than `Collider.bounds` (empty on a prefab asset), so SPAN / PILLAR / DECK finally space wide machines by their own footprint
+- Ground placement joins the neighbouring structure's lattice, and the neighbour search reaches 6 m (12 m with Ctrl) with or without the `G` lattice; interior-lattice machines now take part in alignment at all
+- An untouched heading always agrees with the frame and a freeze captures the pose on screen, so no odd-angle ghost appears beside a square row; nudge repeat drops to a walking pace and the assist card cannot outlive its hologram
+
 ### 17.44.1-dev - Placement Feel Fixes: Screen-Relative Nudge, Footprint Pitch, Alignment Range
 - Frozen-hologram nudges are measured along the camera's forward, so a held arrow key walks the block that way instead of curving off in a zigzag; Ctrl + arrow still lifts on the surface normal
 - SPAN / PILLAR / DECK pitch by each prefab's own projected footprint (never tighter than the lattice) instead of by the lattice alone, so a run of wide machines stops overlapping itself
@@ -41,11 +46,6 @@
 
 ### 17.43.5-dev - GridWindowSetup Asset Helper Fix
 - Restored canonical `GridBlockItem`, `RecipeDefinition`, `RecipeRegistry`, and `Shader.Find` helper methods in `GridWindowSetup.cs` so the editor setup script compiles cleanly
-
-### 17.43.4-dev - Clean Single-Pane Sloped Windows & Watertight Octagon Cockpits
-- Sloped Grid Window variants (`Slope`, `InvertedSlope`, `HalfSlope`, `LongSlope`, `LongSlopeTwoCell`) now generate clean single-pane window sheets without extra side cheek walls or box rails
-- Reinforced Cockpit front, quarter, and side windows seal flush into the mitered 45-degree glacis, FOPS pillars, and roof with zero gaps
-- Wraparound Cockpit bottom floor frame, observation glass, waist rail, and canopy visor follow the exact 45-degree chamfered octagon with zero square corners sticking out
 
 ### 17.43.2-dev - GridCockpit EffectiveCellSize Fix
 - `GridCockpit.ApplyShellDurability()` uses `EffectiveCellSize` from `GridBlock` when syncing `2x2x2` collider bounds
@@ -137,7 +137,11 @@
 - A frozen hologram (`BuildLock`, V by default) owns its pose: it commits where it stands and needs nothing under the crosshair. Nudging is one lattice step, Shift + arrow is five, Ctrl + arrow is 0.05 m along the surface normal - and nudges are measured along the camera's forward flattened onto the gravity plane, never along a tangent rebuilt at the ghost's own position, because on a round planet that basis rotates step by step and walks the block away in a curve (17.44.1-dev).
 - A run's pitch is the block's own projected footprint, never tighter than the lattice, plus 2 cm of air: the lattice says where a cell starts, the footprint says how much room the block standing on it needs (17.44.1-dev).
 - Line-up resolves the aimed structure first, then the nearest placed block or deck within 8 m of the ghost, and works with the optional `G` lattice off: `G` means "quantise always", Ctrl means "quantise onto the thing I am lining up with" (17.44.1-dev).
-- The assist card belongs to the hologram, not to whatever inventory happens to hold a block: an empty hand puts it away, and its body is drawn against a fixed gravity basis so a yaw turn is visible (17.44.1-dev).
+- The assist card belongs to the hologram, not to whatever inventory happens to hold a block: an empty hand puts it away the same frame, and its body is drawn in the placement frame so a yaw turn is visible (17.44.1-dev, tightened 17.44.2-dev).
+- A run's footprint is measured with the prefab projection helper, never with `Collider.bounds`: a prefab asset is not in the physics world, so those bounds read empty and the footprint silently collapses to the lattice (17.44.2-dev).
+- Line-up reaches six metres around the ghost and twelve while Ctrl is held, applies to ground placement by taking the neighbour's lattice across the ground while keeping the surface-flush height, and covers interior-lattice machines whose own lattice still owns the position (17.44.2-dev).
+- An untouched heading always agrees with the frame it is landing in; only a heading the player turned by hand is exempt, and a freeze captures the transform that is on screen rather than the published statics from the frame before (17.44.2-dev). Line-up is a YAW and never a tilt: the block keeps its own vertical, and a neighbour lends its up only when it stands square to the surface (17.44.2-dev).
+- Nudging a frozen hologram walks: plain arrows repeat at 0.14 s after a 0.32 s delay, Shift and Ctrl nudge exactly once per press (17.44.2-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
 

@@ -1,9 +1,30 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.1-dev`
+**Current Version:** `17.44.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.2-dev] Placement Feel Fixes: Run Pitch by Projection, Line-Up at Reach, Heading Agreement, and a Card That Cannot Linger
+
+**Type:** PATCH - corrections to the 17.44.0-dev placement layer. No new systems, no new input actions, no save schema change; the pattern set, the keybinds and the prefab set are unchanged.
+
+**GitHub title:** `[17.44.2-dev] Fix run spacing, Ctrl line-up range, frozen heading, nudge pace and assist-card lifetime`
+
+#### Fixed
+
+- **Run pitch was measuring an empty box and falling back to the lattice (`BuildSystem.PatternPitch` -> `FrameExtent`).** 17.44.1-dev measured a prefab's footprint from `Collider.bounds`. A prefab asset is not part of the physics world, so those bounds come back empty: the footprint collapsed to the lattice step, and a run of 2.4 m machines was still laid 1 m apart. The pitch now goes through the same prefab projection helper the snap code has always used (`TryGetPrefabColliderProjectionRange`: authored box/mesh geometry transformed by the prefab's own scale), measured along the frame's right, up and forward, cached per block and rotation so a drag costs three projections once. SPAN, PILLAR and DECK space their cells by the block they are laying.
+- **Line-up reaches the structures you are actually building beside (`BuildSystem.ComputePlacementPosition`, `FindStaticPlacementAnchor`).** Two separate limits kept Ctrl honest-looking and useless: surface-flush placement on raw ground returned before any neighbour lattice was consulted, and the neighbour search only reached two metres. A block laid on grass beside a row of machines therefore kept the world tangent's offsets, and line-up only appeared to work when the crosshair was already on a block. Ground placement now keeps its surface-flush height but takes the neighbour's lattice across the ground, the search reaches six metres (twelve while Ctrl is held), and the whole path works with the optional `G` lattice off.
+- **Interior-lattice machines join the alignment pass (`BuildSystem.RefineStaticPose`).** Batteries, furnaces and crafting stations carry an interior lattice, and every one of them was excluded from the refinement pass outright - so Ctrl did nothing at all for them and their heading never had to agree with the row they were built beside. Their own lattice still owns the position; the frame now owns the heading.
+- **An untouched heading always agrees with the frame (`RefineStaticPose`).** Heading alignment used to require Ctrl. A ghost that kept the world tangent's heading while standing on another structure's lattice is what produced a machine sitting at an odd angle beside a square row of them, and a frozen hologram is where that finally became obvious. A heading the player turned by hand is still left exactly as it is.
+- **Line-up is a yaw, never a tilt (`PlacementAlign.AlignRotation`, `FromTransform`).** Alignment rebuilt the rotation around the FRAME's up, and a structure keeps its own up when it was built on a slope - so lining a block up beside a machine standing on uneven ground produced a block standing at that slope's angle, which is the odd-angled pose a frozen hologram made impossible to ignore. Alignment now keeps the block's own vertical and snaps only the heading, and a structure only lends its up when it genuinely stands square to the surface (0.985, where the old tolerance was 0.55).
+- **Freezing captures the pose that is on screen (`HandlePlacementLock`).** The lock took its pose from the published statics, which are one frame behind the ghost transform; it now takes the transform itself, so a hologram can never freeze onto a pose it has already left.
+- **Nudging walks, it does not run (`PlacementLock`).** The hold-repeat fired every 0.07 s, so a held arrow key moved a frozen hologram a dozen cells a second and read as the block flying away. Plain arrows now repeat at a walking pace (0.14 s after a 0.32 s delay), and Shift and Ctrl nudges move exactly once per press - five cells and 0.05 m are deliberate moves, not rates.
+- **The assist card cannot outlive its hologram (`BlockRotationHud.Tick`).** The card now hides the instant the published hologram is gone instead of bridging a stale frame, so a hotbar scroll puts it away with the ghost.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run, and no other game's terminology appears in code or notes.
 
 ### [17.44.1-dev] Placement Feel Fixes: Screen-Relative Nudge, Footprint Pitch, Alignment at a Distance, and a Card That Follows
 

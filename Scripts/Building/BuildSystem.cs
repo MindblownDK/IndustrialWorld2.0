@@ -117,9 +117,6 @@ namespace VoxelEngine.Building
             // 17.19.0-dev: the prefab carries PlacementPivotAnchor - the root
             // pivot IS the block position, no bounds-derived lift or recentering.
             public bool anchorAtPivot;
-            // 17.44.1-dev: the prefab's own axis-aligned half extents in root space.
-            // A run of these blocks has to step over the block, not over the lattice.
-            public Vector3 localHalfExtents;
         }
 
         private struct StaticSurfaceLatticePose
@@ -1538,8 +1535,13 @@ namespace VoxelEngine.Building
             if (block == null || hit.collider == null) return;
             var profile = GetStaticPlacementPrefabProfile(block);
             if (profile == null) return;
+            // 17.44.2-dev: interior-lattice machines (batteries, furnaces, stations) were
+            // excluded from the whole refinement pass, so Ctrl did nothing at all for them
+            // and their heading never agreed with the row they were built beside. Their own
+            // lattice still owns the POSITION; the frame now owns only the heading.
+            bool ownLattice = profile.usesInteriorLattice;
             if (profile.usesDedicatedSnap || profile.isThinConduit || profile.isSurfaceAttachment
-                || profile.isPortalPiece || profile.usesInteriorLattice || profile.anchorAtPivot)
+                || profile.isPortalPiece || profile.anchorAtPivot)
                 return;
             if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block)) return;
 
@@ -1560,7 +1562,7 @@ namespace VoxelEngine.Building
             // has to work with the optional grid switched off. G still means "quantise,
             // always"; Ctrl means "quantise onto the thing I am lining up with".
             bool aimedLattice = HasStaticPlacementLatticeHost(hit.collider);
-            if ((gridSnap && aimedLattice) || (GridInput.Ctrl && frame.fromStructure))
+            if (!ownLattice && ((gridSnap && aimedLattice) || (GridInput.Ctrl && frame.fromStructure)))
             {
                 float step = PlacementOptions.StepMetres;
                 if (step > 0f)
@@ -1582,7 +1584,12 @@ namespace VoxelEngine.Building
             // heading snaps onto the aimed structure's cardinals. This still applies after
             // a manual turn - a deliberately pitched or rolled block is left alone by
             // AlignRotation itself, so only the heading is ever touched.
-            if (GridInput.Ctrl)
+            // 17.44.2-dev: an UNTOUCHED heading now always agrees with the frame, not only
+            // while Ctrl is held. A ghost that kept the world tangent's heading while
+            // standing on another structure's lattice is what produced a machine sitting at
+            // an odd angle beside a square row of them - and, once frozen, a pose the player
+            // could not explain. A heading the player turned by hand is still left alone.
+            if (GridInput.Ctrl || !_rotationManual)
             {
                 Quaternion aligned = PlacementAlign.AlignRotation(rot, frame);
                 if (aligned != rot) { rot = aligned; GhostAligned = true; }
@@ -1687,7 +1694,11 @@ namespace VoxelEngine.Building
             if (GameSettings.WasPressed(InputAction.BuildLock))
             {
                 if (PlacementLock.Matches(_ghostItem)) PlacementLock.Unlock();
-                else if (GhostValid) PlacementLock.Lock(_ghostItem, GhostPosition, GhostRotation);
+                // Capture the transform the player is looking at RIGHT NOW. The published
+                // statics are one frame behind, and freezing onto a pose the ghost has
+                // already left is how a frozen hologram could appear to jump or turn.
+                else if (GhostValid) PlacementLock.Lock(_ghostItem,
+                    _ghost.transform.position, _ghost.transform.rotation);
                 else
                     VoxelEngine.UI.BuildFeedbackHud.Show("Nothing to freeze",
                         "The hologram has to be on a valid cell before it can be locked.",
@@ -1776,103 +1787,73 @@ namespace VoxelEngine.Building
         /// <summary>
         /// 17.44.1-dev: how far apart a run's cells sit. The lattice says where a cell
         /// STARTS; it says nothing about how much room the block standing on it needs. A
-        /// 2.4 m machine stepped 1 m overlaps its neighbour by 1.4 m, which is what made
-        /// a run of foundations or machinery read as one clump of ghosts. The pitch is the
-        /// block's own projected footprint, never tighter than the lattice.
+        /// 2.4 m machine stepped 1 m overlaps its neighbour by 1.4 m, which is what made a
+        /// run of foundations or machinery read as one clump of ghosts.
+        ///
+        /// The measurement goes through the same prefab projection helper the snap code
+        /// uses. Measuring a prefab with <c>Collider.bounds</c> looks equivalent and is not:
+        /// a prefab asset is not in the physics world, so those bounds come back empty and
+        /// the footprint silently collapses to the lattice. That is exactly how a fix for
+        /// this could pass review and change nothing on screen.
         /// </summary>
         private Vector3 PatternPitch(BlockItem block, Quaternion rotation, in PlacementFrame frame)
         {
             float lattice = Mathf.Max(0.25f, PlacementOptions.StepMetres);
+            Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
+            Vector3 axisUp = frame.valid ? frame.up : Vector3.up;
+            Vector3 axisForward = frame.valid ? frame.forward : Vector3.forward;
+
+            if (block != null && block == _pitchBlock && rotation == _pitchRotation
+                && Mathf.Approximately(lattice, _pitchLattice)
+                && axisRight == _pitchAxisRight && axisForward == _pitchAxisForward)
+                return _pitchValue;
+
             var pitch = new Vector3(lattice, lattice, lattice);
-            Vector3 half = Vector3.zero;
             if (block != null && block.placedPrefab != null)
             {
                 var profile = GetStaticPlacementPrefabProfile(block);
-                if (profile != null) half = profile.localHalfExtents;
+                if (profile != null)
+                {
+                    pitch.x = Mathf.Clamp(FrameExtent(block, profile, rotation, axisRight), lattice, MaxPatternPitch);
+                    pitch.y = Mathf.Clamp(FrameExtent(block, profile, rotation, axisUp), lattice, MaxPatternPitch);
+                    pitch.z = Mathf.Clamp(FrameExtent(block, profile, rotation, axisForward), lattice, MaxPatternPitch);
+                }
             }
 
-            if (half.sqrMagnitude > 0.0001f)
-            {
-                Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
-                Vector3 axisUp = frame.valid ? frame.up : Vector3.up;
-                Vector3 axisForward = frame.valid ? frame.forward : Vector3.forward;
-                // Clamped both ways: never tighter than the lattice, and never so wide that
-                // one stray authored collider turns a run into a scatter of lone blocks.
-                pitch.x = Mathf.Clamp(ProjectedExtent(half, rotation, axisRight), pitch.x, MaxPatternPitch);
-                pitch.y = Mathf.Clamp(ProjectedExtent(half, rotation, axisUp), pitch.y, MaxPatternPitch);
-                pitch.z = Mathf.Clamp(ProjectedExtent(half, rotation, axisForward), pitch.z, MaxPatternPitch);
-            }
+            // 2 cm of air: flushed cells touch, never interpenetrate.
+            var value = pitch + Vector3.one * PatternGap;
 
-            // 2 cm of air: flushed blocks must touch, never interpenetrate.
-            return pitch + Vector3.one * PatternGap;
+            _pitchBlock = block;
+            _pitchRotation = rotation;
+            _pitchLattice = lattice;
+            _pitchAxisRight = axisRight;
+            _pitchAxisForward = axisForward;
+            _pitchValue = value;
+            return value;
         }
+
+        private BlockItem _pitchBlock;
+        private Quaternion _pitchRotation;
+        private float _pitchLattice = -1f;
+        private Vector3 _pitchAxisRight = Vector3.right;
+        private Vector3 _pitchAxisForward = Vector3.forward;
+        private Vector3 _pitchValue = Vector3.one;
 
         private const float PatternGap = 0.02f;
 
         /// <summary>The widest a run cell is ever pitched, whatever a prefab claims.</summary>
         private const float MaxPatternPitch = 12f;
 
-        /// <summary>
-        /// Extent of a rotated box along one world axis - the AABB of the block, so a
-        /// deliberately turned block takes the room it actually needs.
-        /// </summary>
-        private static float ProjectedExtent(Vector3 half, Quaternion rotation, Vector3 axis)
+        /// <summary>The block's own extent along one frame axis, in metres.</summary>
+        private static float FrameExtent(BlockItem block, StaticPlacementPrefabProfile profile,
+            Quaternion rotation, Vector3 axis)
         {
-            Vector3 x = rotation * Vector3.right;
-            Vector3 y = rotation * Vector3.up;
-            Vector3 z = rotation * Vector3.forward;
-            return 2f * (Mathf.Abs(Vector3.Dot(axis, x)) * half.x
-                       + Mathf.Abs(Vector3.Dot(axis, y)) * half.y
-                       + Mathf.Abs(Vector3.Dot(axis, z)) * half.z);
-        }
-
-        /// <summary>
-        /// The prefab's own axis-aligned half extents in root space. Each collider's world
-        /// AABB converted into the prefab root, so a child collider authored at an angle is
-        /// measured conservatively; renderers are the fallback for a prefab with no body.
-        /// </summary>
-        private static Vector3 PrefabLocalHalfExtents(GameObject prefab, Collider[] colliders)
-        {
-            if (prefab == null) return Vector3.one * 0.5f;
-            Transform root = prefab.transform;
-
-            var bounds = new Bounds();
-            bool any = false;
-
-            if (colliders != null)
-            {
-                for (int i = 0; i < colliders.Length; i++)
-                {
-                    var collider = colliders[i];
-                    if (collider == null || !collider.enabled || collider.isTrigger) continue;
-                    any = EncapsulateInRootSpace(root, collider.bounds, ref bounds, any);
-                }
-            }
-
-            if (!any)
-            {
-                var renderers = prefab.GetComponentsInChildren<Renderer>(true);
-                for (int i = 0; i < renderers.Length; i++)
-                {
-                    var renderer = renderers[i];
-                    if (renderer == null) continue;
-                    any = EncapsulateInRootSpace(root, renderer.bounds, ref bounds, any);
-                }
-            }
-
-            return any ? bounds.extents : Vector3.one * 0.5f;
-        }
-
-        private static bool EncapsulateInRootSpace(Transform root, Bounds worldBounds,
-            ref Bounds bounds, bool any)
-        {
-            Vector3 centre = root.InverseTransformPoint(worldBounds.center);
-            Vector3 extents = root.InverseTransformVector(worldBounds.extents);
-            extents = new Vector3(Mathf.Abs(extents.x), Mathf.Abs(extents.y), Mathf.Abs(extents.z));
-            var local = new Bounds(centre, extents * 2f);
-            if (!any) bounds = local;
-            else bounds.Encapsulate(local);
-            return true;
+            if (block == null || block.placedPrefab == null || profile == null) return 0f;
+            if (!TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders,
+                    rotation, axis, out float min, out float max))
+                return 0f;
+            float extent = max - min;
+            return float.IsNaN(extent) || float.IsInfinity(extent) ? 0f : extent;
         }
 
         /// <summary>
@@ -3145,9 +3126,7 @@ namespace VoxelEngine.Building
                 portalHalfExtents = isPortalPiece ? PortalPieceHalfExtents(prefab) : Vector3.zero,
                 usesDedicatedSnap = usesDedicatedSnap,
                 anchorAtPivot = prefab != null
-                    && prefab.GetComponentInChildren<VoxelEngine.Building.PlacementPivotAnchor>(true) != null,
-                localHalfExtents = PrefabLocalHalfExtents(prefab,
-                    prefab != null ? prefab.GetComponentsInChildren<Collider>(true) : null)
+                    && prefab.GetComponentInChildren<VoxelEngine.Building.PlacementPivotAnchor>(true) != null
             };
             _staticPlacementProfiles[held] = profile;
             return profile;
@@ -3848,7 +3827,25 @@ namespace VoxelEngine.Building
             // being buried to its middle). The lattice still governs decks, tiered
             // pieces and placements against existing static blocks.
             if (!HasStaticPlacementLatticeHost(hit.collider))
-                return ComputeSurfaceFlushPlacement(hit, block, pivotAnchored);
+            {
+                Vector3 flush = ComputeSurfaceFlushPlacement(hit, block, pivotAnchored);
+
+                // 17.44.2-dev: ground placement lines up with the structure it is being
+                // built next to. Surface-flush seating used to be the END of the story for
+                // raw terrain, so a block laid on grass 4 m from a row of machines kept the
+                // world tangent's heading and offsets while the row had its own - which is
+                // why lining up only ever worked when the crosshair was already on a block.
+                // The flush seat still decides the HEIGHT; the neighbour's lattice decides
+                // where the block sits across the ground.
+                if (TryGetNearbyPlacedBlockSnap(hit, flush, gridSize, out var lined)
+                    && (gridSnap || GridInput.Ctrl))
+                {
+                    Vector3 up = GravityProvider.GetUp(lined);
+                    float height = Vector3.Dot(flush, up);
+                    return lined + up * (height - Vector3.Dot(lined, up));
+                }
+                return flush;
+            }
 
             // Free placement = hit point pushed along surface normal by half block size.
             Vector3 free = pivotAnchored
@@ -4034,7 +4031,10 @@ namespace VoxelEngine.Building
                 hit.point, ref best, ref bestDistance);
             if (best != null) return best;
 
-            float searchRadius = Mathf.Max(spacing * 1.75f, 2f);
+            // 17.44.2-dev: a structure two cells away is still "the one I am lining up
+            // with". Two metres only found a neighbour the crosshair was already touching,
+            // which made line-up look like it needed the player to be on top of the wall.
+            float searchRadius = Mathf.Max(spacing * 1.75f, GridInput.Ctrl ? 12f : 6f);
             int count = Physics.OverlapSphereNonAlloc(hit.point, searchRadius, s_staticAnchorProbe,
                 ~0, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)

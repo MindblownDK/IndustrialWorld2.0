@@ -248,10 +248,20 @@ namespace VoxelEngine.GridSystem.UI
                 heldName = directName;
             }
 
-            bool show = !string.IsNullOrEmpty(heldName) && !VoxelEngine.UI.UIState.IsBlocking;
+            // 17.44.2-dev: the published hologram has the final word. A builder can be a
+            // frame behind a hotbar scroll, and a card describing a block that is no longer
+            // in the player's hand is worse than no card at all - so if the static builder
+            // still claims a block while the hologram it published is already gone, the card
+            // goes with the hologram. No grace period: an empty hand means an empty corner.
+            bool hologramGone = staticBlock && VoxelEngine.Building.BuildSystem.HeldBlockItem == null;
 
-            // Bridge one-frame resolution flickers rather than blinking the card.
-            if (!show && _lastName != null && heldName == null
+            bool show = !string.IsNullOrEmpty(heldName)
+                        && !VoxelEngine.UI.UIState.IsBlocking
+                        && !hologramGone;
+
+            // Bridge one-frame resolution flickers rather than blinking the card - but only
+            // for a real flicker, never to keep a torn-down hologram on screen.
+            if (!show && _lastName != null && heldName == null && !hologramGone
                 && !VoxelEngine.UI.UIState.IsBlocking
                 && Time.unscaledTime - _lastShownAt < 0.75f)
             {
