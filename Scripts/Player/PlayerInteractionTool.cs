@@ -204,7 +204,16 @@ namespace VoxelEngine.Player
             if (_mechanicalBelt != null) _mechanicalBelt.Tick(inventory, shootCamera);
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-            bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, reach);
+            // 17.44.9-dev: a placeable block is aimed with the BUILD reach, not the
+            // interaction reach. The interaction reach is sized for reaching a machine's
+            // panel; placing a machine three metres further away is normal, and the click
+            // used to be refused because this ray - the one that hands the hit to
+            // BuildSystem - stopped short of it.
+            float rayLength = reach;
+            if (inventory != null && !inventory.ActiveStack.IsEmpty
+                && inventory.ActiveStack.item is BlockItem)
+                rayLength = Mathf.Max(reach, VoxelEngine.Building.BuildSystem.BuildReach);
+            bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, rayLength);
 
             // ── ROAD PAVER — owns its per-frame tick ahead of every button early-out below,
             //    because between the two clicks NOTHING is held and the plan still has to redraw

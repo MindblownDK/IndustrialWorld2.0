@@ -1,9 +1,26 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.44.8-dev`
+**Current Version:** `17.44.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.44.9-dev] Working PILLAR and DECK, a Longer Build Reach, and a Nudge Basis That Stays Put
+
+**Type:** PATCH - three corrections in the placement layer. No new systems, no new input actions, no save schema change.
+
+**GitHub title:** `[17.44.9-dev] Fix PILLAR and DECK gestures, extend the build reach, and pin the nudge basis`
+
+#### Fixed
+
+- **PILLAR could never build anything (`PlacementPatternPlanner.Build`).** The aim rides the ground, so the drag's travel along the vertical is zero by construction - the count came out zero on every frame and PILLAR did nothing at all, whatever the player did. When the vertical part of the drag does not dominate, the planar drag now drives the stack: drag away from you to build up, back toward you to build down. Cells are still spaced by the block's own height, so a stack never interpenetrates.
+- **DECK behaved exactly like SPAN (`PlacementPatternPlanner.Build`).** A deck counted its rows and columns on the block's footprint, so a four-by-four deck of 2.4 m machines needed ten metres of drag; every drag came out as one row, and DECK and SPAN were the same gesture. A deck is now COUNTED per lattice step and SPACED per footprint, so each metre of drag adds a row or column while the machines still land adjacent rather than overlapping.
+- **The nudge basis was rebuilt mid-sequence (`PlacementLock.EnsureNudgeBasis`).** The reported trace showed the basis being re-derived every handful of presses - `right` went from (-0.36, -0.89, -0.28) to (0.01, 0.06, 1.00) to (-0.34, -0.81, 0.48) while the frozen pose had moved less than two metres - because a rebuild was triggered by any view turn past twenty degrees and by four metres of travel. Each rebuild re-mapped left onto a different world direction: the individual steps were clean and the sequence was crooked. The basis is now pinned for the life of the lock and only re-derived on a genuine walk-around (past sixty degrees); re-locking always starts clean.
+- **A placeable block is aimed with the build reach (`PlayerInteractionTool`).** The interaction ray - the one that hands the hit to `BuildSystem.TryPlace` - stopped at the interaction range, so a machine could not be placed from the distance the build system itself allows. A held block now raycasts to `BuildSystem.BuildReach`.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all files parse clean. No item, prefab, recipe, research node or Setup step was added or changed, so `Tools > Voxel Engine > Voxel Engine Setup` does not need to run. The press and nudge traces from 17.44.6-dev are unchanged and were used to locate all three faults.
 
 ### [17.44.8-dev] Screen-Relative Nudging and a Run That Follows the Crosshair Again
 

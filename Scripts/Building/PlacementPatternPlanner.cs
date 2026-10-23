@@ -68,8 +68,12 @@ namespace VoxelEngine.Building
 
             if (pattern == PlacementPattern.Deck)
             {
-                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / pitch.x), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
-                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / pitch.z), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                // 17.44.9-dev: a deck is COUNTED per lattice step and SPACED per footprint.
+                // Counting on the footprint made the gesture unusable on anything wide: a
+                // four-by-four deck of 2.4 m machines would have needed ten metres of drag,
+                // so every drag came out as a single row and DECK looked exactly like SPAN.
+                int alongRight = Mathf.Clamp(Mathf.RoundToInt(local.x / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
+                int alongForward = Mathf.Clamp(Mathf.RoundToInt(local.z / step), -(PlacementOptions.MaxDeckSide - 1), PlacementOptions.MaxDeckSide - 1);
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
 
                 Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
@@ -139,6 +143,23 @@ namespace VoxelEngine.Building
             // How far the aim has moved ALONG the chosen axis. A drag across the run's
             // own axis contributes nothing, which is what keeps the run dead straight.
             float distance = Vector3.Dot(delta, axis);
+
+            // 17.44.9-dev: a pillar could never be dragged at all. The aim rides the ground,
+            // so its travel along the vertical is zero by construction, the count came out
+            // zero every time and PILLAR did nothing whatever the player did. When the
+            // vertical part of the drag does not dominate, the planar drag drives the stack:
+            // drag away from you to build up, back toward you to build down. The cells are
+            // still spaced by the block's height, so a stack never interpenetrates.
+            if (pattern == PlacementPattern.Pillar)
+            {
+                float planar = Mathf.Sqrt(local.x * local.x + local.z * local.z);
+                if (Mathf.Abs(distance) <= planar * 0.5f)
+                {
+                    Vector3 planarReference = frame.valid ? frame.forward : Vector3.forward;
+                    distance = Vector3.Dot(delta, planarReference) >= 0f ? planar : -planar;
+                }
+            }
+
             int count = Mathf.RoundToInt(distance / pitchAlong);
 
             int cap = Mathf.Min(PlacementOptions.MaxRun, budget - 1);

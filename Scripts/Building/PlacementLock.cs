@@ -231,12 +231,20 @@ namespace VoxelEngine.Building
         /// </summary>
         private static void EnsureNudgeBasis(Transform view, Vector3 up, Vector3 position)
         {
-            bool stale = !_nudgeBasisValid || (position - _nudgeBasisAt).sqrMagnitude > 16f;
+            // 17.44.9-dev: PINNED for the life of the lock. The basis used to be rebuilt
+            // whenever the view turned about twenty degrees or the pose had travelled four
+            // metres - and since the pose travels a metre per press, a held arrow rebuilt it
+            // every handful of steps. Each rebuild could re-map left onto a different world
+            // direction, which is exactly the zigzag: the steps were individually clean and
+            // collectively crooked. Turn the camera as much as you like now; the axes stay
+            // where the freeze put them. Only a genuine walk-around (past sixty degrees)
+            // re-derives them, and re-locking always starts clean.
+            bool stale = !_nudgeBasisValid;
 
             Vector3 candidate = view != null ? Vector3.ProjectOnPlane(view.right, up) : Vector3.zero;
             if (!stale && candidate.sqrMagnitude > 0.04f
-                && Vector3.Dot(candidate.normalized, _nudgeRight) < 0.94f)
-                stale = true;   // the view has turned: sideways means something else now
+                && Vector3.Dot(candidate.normalized, _nudgeRight) < 0.5f)
+                stale = true;   // more than sixty degrees round: sideways means something else
 
             if (!stale) return;
 
