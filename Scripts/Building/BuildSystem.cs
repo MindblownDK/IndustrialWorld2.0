@@ -2107,14 +2107,48 @@ namespace VoxelEngine.Building
             // a single row and a wall could not be made. The plan is measured against the
             // point actually under the crosshair while the aim is on a face; a ground aim
             // keeps the snapped pose, so floors behave exactly as they did.
-            _patternAim = PlacementOptions.Pattern == PlacementPattern.Deck && GhostSurfaceIsVertical
-                ? GhostSurfacePoint
-                : GhostAimPosition;
+            bool faceDeck = PlacementOptions.Pattern == PlacementPattern.Deck && GhostSurfaceIsVertical;
+            _patternAim = faceDeck ? GhostSurfacePoint : GhostAimPosition;
+
+            // ── 17.47.2-dev: A WALL PLANE IS STATED, NOT GUESSED FROM THE FRAME. ────────
+            // A frame borrowed from a wall carries the wall's NORMAL as its up, so anything
+            // read out of it in frame-local Y is distance AWAY from the wall - not height.
+            // The plan's two axes are therefore named here: up the wall (gravity) and along
+            // the wall (normal cross gravity). Without this, a deck dragged up a wall still
+            // measured its drag along the wrong axis and only ever filled flat ground.
+            var plane = default(PlacementPatternPlanner.DeckPlane);
+            if (faceDeck)
+            {
+                Vector3 faceUp = GravityProvider.GetUp(_patternAnchorPosition);
+                if (faceUp.sqrMagnitude < 0.0001f) faceUp = Vector3.up;
+                faceUp.Normalize();
+
+                Vector3 faceNormal = GhostSurfaceNormal.sqrMagnitude > 0.0001f ? GhostSurfaceNormal.normalized : faceUp;
+                Vector3 along = Vector3.Cross(faceNormal, faceUp);
+                if (along.sqrMagnitude < 0.0001f)
+                    along = Vector3.Cross((GhostFrame.valid ? GhostFrame.right : Vector3.right), faceUp);
+                if (along.sqrMagnitude < 0.0001f) along = Vector3.forward;
+                along.Normalize();
+
+                // Pitch measured against GRAVITY, not against the wall's own up, so the
+                // vertical extent of the block is the vertical step of the wall.
+                var gravityFrame = PlacementFrame.FromUp(_patternAnchorPosition, faceUp, "FACE", true);
+                Vector3 facePitch = PatternPitch(block, _patternAnchorRotation, gravityFrame);
+
+                plane = new PlacementPatternPlanner.DeckPlane
+                {
+                    valid = true,
+                    axisA = along,
+                    axisB = faceUp,
+                    pitchA = Mathf.Max(step, Mathf.Max(facePitch.x, facePitch.z)),
+                    pitchB = Mathf.Max(step, facePitch.y),
+                };
+            }
 
             int planned = PlacementPatternPlanner.Build(
                 PlacementOptions.Pattern, _patternAnchorFrame,
                 _patternAnchorPosition, _patternAnchorRotation,
-                _patternAim, step, pitch, budget, _plannedCells, GhostSurfaceIsVertical);
+                _patternAim, step, pitch, budget, _plannedCells, plane);
             PatternPreviewCount = planned;
 
             // 17.45.0-dev: a plan on OPEN GROUND is seated as ONE rigid move (see

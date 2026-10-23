@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.47.1-dev`
+**Current Version:** `17.47.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.47.2-dev] An Outline That Stays Inside Its Buffer, and a Wall Plane Stated Outright
+
+**Type:** PATCH - one runtime exception and the remaining half of the wall-deck fix.
+
+**GitHub title:** `[17.47.2-dev] Keep the hammer outline inside its vertex buffer and name the wall plane instead of reading it from the frame`
+
+#### Fixed
+
+- **`IndexOutOfRangeException` in `AimedPieceHighlight.WriteBox`.** The buffer holds twenty-four vertices - twelve edges of a box, two endpoints each - and the first version also copied the eight corners into the same buffer before starting the edges at index eight, so the last four edges ran twelve vertices past the end. The corners live in their own array now and the edges start at zero: exactly twenty-four writes into a twenty-four-vertex buffer.
+- **A DECK still filled only flat ground (`BuildSystem.HandlePlacementPattern`, `PlacementPatternPlanner.DeckPlane`).** The last round taught the planner to look up and down, but it was still reading that up-and-down out of the placement FRAME - and a frame borrowed from a wall carries the wall's NORMAL as its up. Frame-local Y on a wall is therefore the distance AWAY from the wall, not height; the entire vertical drag of the gesture landed in the component the plan ignored, and a deck aimed at a wall still laid a floor. The plan's two axes are now stated by the caller whenever the aim is on a face: **up the wall along gravity**, and **along the wall** as the normal crossed with gravity. Their pitches are measured against gravity as well, so the vertical step of a wall is the block's height rather than its depth. When the aim is not on a face no plane is supplied and the frame decides exactly as before, so floors are untouched.
+
+#### Validation
+
+- Both files and the outline parse clean; field sweep clean.
+- The outline's write count checked by arithmetic: three axes x four edges x two endpoints = twenty-four, into a twenty-four-vertex buffer.
+- The wall plane walked through by hand: aiming at a face 2.5 m above the anchor with a block whose height is 4.65 m gives one row up and, through the face rule, one column along - a two-by-two wall patch rather than a flat plan.
+- Not run in Unity. Feel checks: aim at a wall, arm a deck, drag up - a wall appears in the wall's plane with no exception in the console; aim at the ground and drag - floors are exactly as they were.
 
 ### [17.47.1-dev] A Deck That Can Stand Up and Build a Wall
 

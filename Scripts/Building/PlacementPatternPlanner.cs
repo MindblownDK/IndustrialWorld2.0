@@ -29,6 +29,24 @@ namespace VoxelEngine.Building
         public Quaternion rotation;
     }
 
+    /// <summary>
+    /// The two axes a DECK fills, stated by the caller instead of guessed from the frame.
+    ///
+    /// A frame borrowed from a wall has the wall's NORMAL as its up, so a frame-local Y is the
+    /// distance away from that wall and not height at all. Reading a vertical plan out of such
+    /// a frame is why a deck could not build a wall - the whole vertical drag landed in the
+    /// component the planner ignored. When this is valid the planner uses exactly these two
+    /// axes and their pitches; when it is not, the frame decides, as it always did.
+    /// </summary>
+    public struct DeckPlane
+    {
+        public bool valid;
+        public Vector3 axisA;
+        public Vector3 axisB;
+        public float pitchA;
+        public float pitchB;
+    }
+
     /// <summary>Builds the cell list for the current pattern. Allocation-free once warm.</summary>
     public static class PlacementPatternPlanner
     {
@@ -57,7 +75,7 @@ namespace VoxelEngine.Building
         public static int Build(PlacementPattern pattern, in PlacementFrame frame,
                                 Vector3 anchorPosition, Quaternion anchorRotation,
                                 Vector3 targetPosition, float step, Vector3 pitch, int cellBudget,
-                                List<PlacementCell> cells, bool fillFace = false)
+                                List<PlacementCell> cells, DeckPlane plane = default)
         {
             if (cells == null) return 0;
             cells.Clear();
@@ -103,12 +121,34 @@ namespace VoxelEngine.Building
                 // is why a deck could not make a wall. The second axis is now whichever of
                 // forward and up the aim actually travels along, so a drag across the ground
                 // lays a floor and a drag up a face lays a wall, with the same pattern.
-                float deckPitchRight = Mathf.Max(step, pitch.x);
+                // Which two axes the rectangle fills. A caller that knows the plane - a deck
+                // aimed at a face, where the plane is "up the wall and along it" - states it;
+                // otherwise the frame's own right and forward/up decide, as before.
                 bool deckVertical = Mathf.Abs(local.y) > Mathf.Abs(local.z);
-                float deckPitchSecond = deckVertical ? Mathf.Max(step, pitch.y) : Mathf.Max(step, pitch.z);
+                Vector3 axisRight;
+                Vector3 axisForward;
+                float deckPitchRight;
+                float deckPitchSecond;
+                if (plane.valid)
+                {
+                    axisRight = plane.axisA.sqrMagnitude > 0.0001f ? plane.axisA.normalized : Vector3.right;
+                    axisForward = plane.axisB.sqrMagnitude > 0.0001f ? plane.axisB.normalized : Vector3.up;
+                    deckPitchRight = Mathf.Max(step, plane.pitchA);
+                    deckPitchSecond = Mathf.Max(step, plane.pitchB);
+                }
+                else
+                {
+                    axisRight = frame.valid ? frame.right : Vector3.right;
+                    axisForward = deckVertical
+                        ? (frame.valid ? frame.up : Vector3.up)
+                        : (frame.valid ? frame.forward : Vector3.forward);
+                    deckPitchRight = Mathf.Max(step, pitch.x);
+                    deckPitchSecond = deckVertical ? Mathf.Max(step, pitch.y) : Mathf.Max(step, pitch.z);
+                }
+
                 int sideCap = PlacementOptions.MaxDeckSide - 1;
-                int alongRight = DeckCount(local.x, deckPitchRight, sideCap);
-                int alongForward = DeckCount(deckVertical ? local.y : local.z, deckPitchSecond, sideCap);
+                int alongRight = DeckCount(Vector3.Dot(delta, axisRight), deckPitchRight, sideCap);
+                int alongForward = DeckCount(Vector3.Dot(delta, axisForward), deckPitchSecond, sideCap);
 
                 // 17.47.1-dev: A DECK ON A FACE IS A WALL, AND A WALL IS A BAND.
                 // An aim that runs straight up a face travels along ONE of the face's two
@@ -117,18 +157,13 @@ namespace VoxelEngine.Building
                 // did not travel along still takes its neighbour, so the same drag that makes
                 // a floor run makes a wall two blocks across, and dragging along the wall
                 // widens it. A ground aim is untouched by this.
-                if (fillFace && budget >= 4 && (alongRight == 0) != (alongForward == 0))
+                if (plane.valid && budget >= 4 && (alongRight == 0) != (alongForward == 0))
                 {
                     if (alongRight == 0) alongRight = 1;
                     else alongForward = 1;
                 }
 
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
-
-                Vector3 axisRight = frame.valid ? frame.right : Vector3.right;
-                Vector3 axisForward = deckVertical
-                    ? (frame.valid ? frame.up : Vector3.up)
-                    : (frame.valid ? frame.forward : Vector3.forward);
                 int rows = Mathf.Abs(alongForward);
                 int columns = Mathf.Abs(alongRight);
                 float signForward = Mathf.Sign(alongForward);

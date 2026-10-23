@@ -277,12 +277,14 @@ namespace VoxelEngine.Building.Tiered
                     ((corner & 1) != 0 ? e.x : -e.x),
                     ((corner & 2) != 0 ? e.y : -e.y),
                     ((corner & 4) != 0 ? e.z : -e.z)) - c;
-                _verts[corner] = _corners[corner];
             }
 
             // An edge joins two corners differing in exactly one bit. Line topology needs the
-            // endpoints as separate vertices, so each edge is written as its own pair.
-            int v = 8;
+            // endpoints as separate vertices, so each edge is written as its own pair: twelve
+            // edges, twenty-four vertices, and the buffer is exactly that long. (The first
+            // version also copied the eight corners into the same buffer and started the
+            // edges at index eight, which ran twelve vertices past the end. 17.47.2-dev.)
+            int v = 0;
             for (int bit = 0; bit < 3; bit++)
             {
                 int mask = 1 << bit;
