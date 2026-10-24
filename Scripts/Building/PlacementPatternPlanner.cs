@@ -197,7 +197,12 @@ namespace VoxelEngine.Building
                     else columns--;
                 }
 
-                float pitchRight = pitch.x * 1.04f + 0.12f;
+                // 17.49.1-dev: cells are SPACED by the same measure they are COUNTED by. A
+                // stated plane counts a drag in the block's extent along that plane's own
+                // side-to-side axis, so spacing the columns by the frame's x pitch instead put
+                // them metres apart - a wall that widened on paper and landed nowhere near the
+                // crosshair, which reads as "side to side does not work".
+                float pitchRight = (plane.valid ? deckPitchRight : pitch.x) * 1.04f + 0.12f;
                 float pitchForward = deckPitchSecond * 1.04f + 0.12f;
 
                 // 17.46.1-dev: cells are emitted by RINGS - everything one step from the

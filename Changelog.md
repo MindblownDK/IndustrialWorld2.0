@@ -1,9 +1,35 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.49.0-dev`
+**Current Version:** `17.49.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.49.1-dev] A Wall Grows Sideways, Not Just Up
+
+**Type:** PATCH - bug fix inside the new WALL pattern. No save, API or keybind change.
+
+**GitHub title:** `[17.49.1-dev] Measure a wall along its own two axes so it widens sideways instead of only rising`
+
+#### Fixed
+
+- **A wall could not be dragged side to side - only front to back and up.** Two separate measures were wrong, and both only showed on a block that is not a cube:
+  - **The sideways step was the block's DEPTH.** The wall's lateral pitch was read out of a gravity frame whose right and forward axes are world east and world north, and then took the LARGER of the two. A panel one metre wide and four metres deep therefore pitched the wall's width at four metres: dragging up still added a row per metre while dragging sideways needed four metres per column, which on screen is a wall that only rises. Each axis is now measured along itself - side to side along the wall's own horizontal axis, up along gravity, and the depth is measured but never used as a step.
+  - **Columns were counted by one measure and spaced by another.** The count used the plane's own pitch while the spacing used the frame's x pitch, and on a wall aim that frame is borrowed from a face, where its right axis is VERTICAL - so the spacing came out as the block's HEIGHT. A battery wall counted two columns and then put them five metres apart, off the lattice and nowhere near the crosshair. Cells on a stated plane are now spaced by the same number they are counted by.
+- **The wall no longer pivots while it grows.** Its three axes were re-read from the camera every frame, so yawing to widen the sheet rotated the whole wall about its anchor. They are now decided once, at the press, and held for the gesture (`WallAxesNow` returns the locked axes while a wall is armed and the live camera's while the player is still aiming).
+- **The first wall of a session no longer lands across the map.** Before a press there is no anchor, and the wall's aim plane was built through `_patternAnchorPosition` at its default - the world origin. It now stands on the last aim a click could have landed on, or on the reach distance ahead of the camera.
+- **A wall's ghost faces the player, not a remembered face.** The empty-aim path posed the hologram from the last face normal the crosshair had touched, which could be sideways to a wall pattern. A wall now poses from its own axes.
+
+#### Changed
+
+- **A wall is measured in a gravity frame, and its anchor frame is one too.** The ghost's frame can be borrowed from a surface, whose up is the surface normal; on a wall that is horizontal, and every pitch read out of it was an extent along the wrong axis. Side to side is now the camera's RIGHT, so the wall widens in the direction the crosshair travels.
+- **The spacing fix covers a DECK dragged up a face as well**, since that is a stated plane too. A deck on open ground, SPAN and PILLAR are untouched: with no stated plane the spacing still comes from the frame's x pitch, exactly as before.
+
+#### Validation
+
+- Parse, field, type-scope and qualified-type checks clean on the two modified files.
+- The whole gesture walked through headlessly against the real planner arithmetic, press at five metres with a 1.7 m eye, then an 18 degree yaw and a 14 degree lift: a one-metre cube is 3 wide by 4 tall both before and after (it was never broken); a panel one wide by four deep was 2 wide by 4 tall before and is 3 wide by 4 tall now; a battery counted 2 wide before and after but its columns landed 4.98 m apart before and 2.22 m apart now, matching the 2.02 m they are counted by.
+- Not run in Unity.
 
 ### [17.49.0-dev] WALL Is a Pattern, Not a Guess
 

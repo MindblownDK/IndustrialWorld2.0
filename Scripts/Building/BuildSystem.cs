@@ -114,6 +114,14 @@ namespace VoxelEngine.Building
         private bool _patternStanding;
         private Vector3 _patternPlaneNormal = Vector3.up;
 
+        // 17.49.1-dev: a wall's three axes, decided ONCE at the press and held for the whole
+        // gesture. Read from the camera every frame instead, the sheet pivoted about its
+        // anchor as the player yawed to widen it, so the wall turned while it grew.
+        private Vector3 _wallAlong = Vector3.right;
+        private Vector3 _wallUp = Vector3.up;
+        private Vector3 _wallNormal = Vector3.forward;
+        private bool _hasWallAxes;
+
         // 17.47.5-dev: the last face the crosshair actually landed on, kept for the frames
         // where the crosshair leaves every surface - which is every frame spent aiming up
         // above a wall. See the aim-assist branch in UpdateGhost.
@@ -657,6 +665,16 @@ namespace VoxelEngine.Building
                     faceUp.Normalize();
                     Vector3 faceNormal = _lastFaceNormal.sqrMagnitude > 0.0001f
                         ? _lastFaceNormal.normalized : faceUp;
+
+                    // 17.49.1-dev: a wall pattern faces the PLAYER, not whichever face the
+                    // crosshair last happened to touch, so its ghost is posed from the wall's
+                    // own axes and a stale face normal cannot turn it sideways.
+                    if (PlacementOptions.Pattern == PlacementPattern.Wall
+                        && WallAxesNow(facePoint, out _, out Vector3 aimUp, out Vector3 aimNormal))
+                    {
+                        faceUp = aimUp;
+                        faceNormal = aimNormal;
+                    }
 
                     Quaternion faceRotation = Quaternion.LookRotation(faceNormal, faceUp)
                         * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
@@ -2194,14 +2212,17 @@ namespace VoxelEngine.Building
                 // A wall's blocks STAND against its plane. The ghost's own pose can be a
                 // surface rotation from the ground it was snapped onto, which would lay a
                 // wall's cells flat against the wall; the plane knows better (17.49.0-dev).
-                if (PlacementOptions.Pattern == PlacementPattern.Wall
-                    && _patternPlaneNormal.sqrMagnitude > 0.0001f)
+                if (PlacementOptions.Pattern == PlacementPattern.Wall && _hasWallAxes)
                 {
-                    Vector3 wallUp = GravityProvider.GetUp(_patternAnchorPosition);
-                    if (wallUp.sqrMagnitude < 0.0001f) wallUp = Vector3.up;
-                    wallUp.Normalize();
-                    _patternAnchorRotation = Quaternion.LookRotation(_patternPlaneNormal, wallUp)
+                    Vector3 pressUp = _wallUp;
+                    Vector3 pressNormal = _wallNormal;
+                    _patternAnchorRotation = Quaternion.LookRotation(pressNormal, pressUp)
                         * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+
+                    // The ghost's frame can be one borrowed from a surface, whose up is the
+                    // surface normal - horizontal on a wall. A wall is measured in gravity.
+                    _patternAnchorFrame = PlacementFrame.FromUp(
+                        _patternAnchorPosition, pressUp, "WALL", false);
                 }
                 _patternSignature = -1;
                 PlacementFeedback.Snap(GhostPosition, 1);
@@ -2215,11 +2236,26 @@ namespace VoxelEngine.Building
             // block's height measured along GRAVITY - not along the frame's up, which is a
             // wall's up whenever the aim was on a wall. A stack of batteries was being
             // spaced by the wrong axis and interpenetrating.
-            Vector3 pitch = PlacementOptions.Pattern == PlacementPattern.Pillar
-                ? PatternPitch(block, _patternAnchorRotation,
+            //
+            // 17.49.1-dev: a wall is pitched along ITS axes - side to side, up, and into the
+            // wall - so the planner spaces its columns by the same measure it counts them by.
+            Vector3 pitch;
+            if (PlacementOptions.Pattern == PlacementPattern.Pillar)
+            {
+                pitch = PatternPitch(block, _patternAnchorRotation,
                     PlacementFrame.FromUp(_patternAnchorPosition,
-                        GravityProvider.GetUp(_patternAnchorPosition), "PILLAR", false))
-                : PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame);
+                        GravityProvider.GetUp(_patternAnchorPosition), "PILLAR", false));
+            }
+            else if (PlacementOptions.Pattern == PlacementPattern.Wall
+                     && WallAxesNow(_patternAnchorPosition,
+                         out Vector3 pitchAlong, out Vector3 pitchUp, out Vector3 pitchNormal))
+            {
+                pitch = WallPitch(block, _patternAnchorRotation, pitchAlong, pitchUp, pitchNormal);
+            }
+            else
+            {
+                pitch = PatternPitch(block, _patternAnchorRotation, _patternAnchorFrame);
+            }
 
             // ── 17.47.1-dev: A DECK AIMED AT A FACE FILLS THAT FACE. ────────────────
             // Every snap below the crosshair turns a wall aim into a pose at the FOOT of the
@@ -2245,26 +2281,53 @@ namespace VoxelEngine.Building
                 if (faceUp.sqrMagnitude < 0.0001f) faceUp = Vector3.up;
                 faceUp.Normalize();
 
-                Vector3 faceNormal = _patternPlaneNormal.sqrMagnitude > 0.0001f
-                    ? _patternPlaneNormal.normalized
-                    : faceUp;
-                Vector3 along = Vector3.Cross(faceNormal, faceUp);
-                if (along.sqrMagnitude < 0.0001f)
-                    along = Vector3.Cross((GhostFrame.valid ? GhostFrame.right : Vector3.right), faceUp);
-                if (along.sqrMagnitude < 0.0001f) along = Vector3.forward;
-                along.Normalize();
+                Vector3 faceNormal;
+                Vector3 along;
+                Vector3 facePitch;
 
-                // Pitch measured against GRAVITY, not against the wall's own up, so the
-                // vertical extent of the block is the vertical step of the wall.
-                var gravityFrame = PlacementFrame.FromUp(_patternAnchorPosition, faceUp, "FACE", true);
-                Vector3 facePitch = PatternPitch(block, _patternAnchorRotation, gravityFrame);
+                if (PlacementOptions.Pattern == PlacementPattern.Wall
+                    && WallAxesNow(_patternAnchorPosition,
+                        out Vector3 planeAlong, out Vector3 planeUp, out Vector3 planeNormal))
+                {
+                    // ── 17.49.1-dev: A WALL IS MEASURED ALONG ITS OWN TWO AXES. ────────
+                    // The lateral step used to be the LARGER of the block's extents along
+                    // world east and world north, whichever way the wall happened to face.
+                    // A block deeper than it is wide therefore pitched the wall's WIDTH by
+                    // its depth: dragging up still added a row per metre while dragging
+                    // sideways needed several metres per column, which reads on screen as
+                    // "a wall only goes front to back and up". Each axis now carries the
+                    // block's own extent along that axis, and side to side is the camera's
+                    // right, so the wall widens in the direction the crosshair travels.
+                    along = planeAlong;
+                    faceUp = planeUp;
+                    faceNormal = planeNormal;
+                    facePitch = WallPitch(block, _patternAnchorRotation, along, faceUp, faceNormal);
+                }
+                else
+                {
+                    faceNormal = _patternPlaneNormal.sqrMagnitude > 0.0001f
+                        ? _patternPlaneNormal.normalized
+                        : faceUp;
+                    along = Vector3.Cross(faceNormal, faceUp);
+                    if (along.sqrMagnitude < 0.0001f)
+                        along = Vector3.Cross((GhostFrame.valid ? GhostFrame.right : Vector3.right), faceUp);
+                    if (along.sqrMagnitude < 0.0001f) along = Vector3.forward;
+                    along.Normalize();
+
+                    // Pitch measured against GRAVITY, not against the wall's own up, so the
+                    // vertical extent of the block is the vertical step of the wall.
+                    var gravityFrame = PlacementFrame.FromUp(_patternAnchorPosition, faceUp, "FACE", true);
+                    facePitch = PatternPitch(block, _patternAnchorRotation, gravityFrame);
+                }
 
                 plane = new DeckPlane
                 {
                     valid = true,
                     axisA = along,
                     axisB = faceUp,
-                    pitchA = Mathf.Max(step, Mathf.Max(facePitch.x, facePitch.z)),
+                    pitchA = Mathf.Max(step, PlacementOptions.Pattern == PlacementPattern.Wall
+                        ? facePitch.x
+                        : Mathf.Max(facePitch.x, facePitch.z)),
                     pitchB = Mathf.Max(step, facePitch.y),
                 };
             }
@@ -2427,6 +2490,78 @@ namespace VoxelEngine.Building
         /// normal. Two independent signals, because one of them can be missed: the surface
         /// under the crosshair right now, and the frame the ghost took its pose from.
         /// </summary>
+        /// <summary>
+        /// The three axes of a WALL plan, taken from the camera and gravity and from nothing
+        /// else: <c>along</c> is side to side (the camera's own right), <c>up</c> is gravity,
+        /// <c>normal</c> is the heading the wall faces. Every part of a wall - its plane, its
+        /// pitch, its cell rotation and its aim - is built from these, so no surface normal,
+        /// remembered face or borrowed frame can decide which way a wall runs (17.49.1-dev).
+        /// </summary>
+        private bool TryWallAxes(Vector3 at, out Vector3 along, out Vector3 up, out Vector3 normal)
+        {
+            along = Vector3.right;
+            up = Vector3.up;
+            normal = Vector3.forward;
+
+            Vector3 gravity = GravityProvider.GetUp(at);
+            if (gravity.sqrMagnitude < 0.0001f) gravity = Vector3.up;
+            gravity.Normalize();
+
+            var camera = shootCamera != null ? shootCamera : Camera.main;
+            Vector3 look = camera != null ? camera.transform.forward : Vector3.forward;
+
+            Vector3 heading = Vector3.ProjectOnPlane(look, gravity);
+            if (heading.sqrMagnitude < 0.0001f) heading = Vector3.ProjectOnPlane(Vector3.forward, gravity);
+            if (heading.sqrMagnitude < 0.0001f) heading = Vector3.ProjectOnPlane(Vector3.right, gravity);
+            if (heading.sqrMagnitude < 0.0001f) return false;
+            heading.Normalize();
+
+            // Cross(up, heading) is the camera's RIGHT, so dragging the crosshair to the
+            // right is what widens the wall - the direction the gesture reads as.
+            Vector3 side = Vector3.Cross(gravity, heading);
+            if (side.sqrMagnitude < 0.0001f) return false;
+            side.Normalize();
+
+            along = side;
+            up = gravity;
+            normal = heading;
+            return true;
+        }
+
+        /// <summary>
+        /// The wall's axes for the gesture in progress: the ones locked at the press while a
+        /// wall is being dragged, and the live camera's while the player is still aiming.
+        /// </summary>
+        private bool WallAxesNow(Vector3 at, out Vector3 along, out Vector3 up, out Vector3 normal)
+        {
+            if (_patternActive && _hasWallAxes)
+            {
+                along = _wallAlong;
+                up = _wallUp;
+                normal = _wallNormal;
+                return true;
+            }
+            return TryWallAxes(at, out along, out up, out normal);
+        }
+
+        /// <summary>
+        /// How far a wall steps on each of its OWN axes: x = side to side, y = up, z = into
+        /// the wall. Measured along the axes themselves rather than read out of a frame, so a
+        /// block longer front-to-back than it is wide no longer pitches the wall's WIDTH by
+        /// its depth - which is what made a wall grow only upwards and never sideways.
+        /// </summary>
+        private Vector3 WallPitch(BlockItem block, Quaternion rotation,
+            Vector3 along, Vector3 up, Vector3 normal)
+        {
+            float lattice = Mathf.Max(0.25f, PlacementOptions.StepMetres);
+            var profile = GetStaticPlacementPrefabProfile(block);
+            return new Vector3(
+                Mathf.Clamp(FrameExtent(block, profile, rotation, along), lattice, MaxPatternPitch),
+                Mathf.Clamp(FrameExtent(block, profile, rotation, up), lattice, MaxPatternPitch),
+                Mathf.Clamp(FrameExtent(block, profile, rotation, normal), lattice, MaxPatternPitch))
+                + Vector3.one * PatternGap;
+        }
+
         private void ResolvePatternPlane()
         {
             _patternStanding = false;
@@ -2441,17 +2576,16 @@ namespace VoxelEngine.Building
             // horizontal heading, its up is gravity. Nothing is detected and nothing depends on
             // what the crosshair is touching, which is why selecting WALL now works from any
             // position instead of only when a face happened to land under the aim.
-            if (PlacementOptions.Pattern == PlacementPattern.Wall)
+            if (PlacementOptions.Pattern == PlacementPattern.Wall
+                && TryWallAxes(_patternAnchorPosition,
+                    out Vector3 wallAlong, out Vector3 wallUp, out Vector3 wallHeading))
             {
-                var wallCamera = shootCamera != null ? shootCamera : Camera.main;
-                Vector3 heading = wallCamera != null
-                    ? Vector3.ProjectOnPlane(wallCamera.transform.forward, up)
-                    : Vector3.ProjectOnPlane(Vector3.forward, up);
-                if (heading.sqrMagnitude < 0.0001f) heading = Vector3.ProjectOnPlane(Vector3.forward, up);
-                if (heading.sqrMagnitude < 0.0001f) heading = Vector3.right;
-
+                _wallAlong = wallAlong;
+                _wallUp = wallUp;
+                _wallNormal = wallHeading;
+                _hasWallAxes = true;
                 _patternStanding = true;
-                _patternPlaneNormal = heading.normalized;
+                _patternPlaneNormal = wallHeading;
                 return;
             }
 
@@ -2624,7 +2758,22 @@ namespace VoxelEngine.Building
             point = default;
             if (PlacementOptions.Pattern == PlacementPattern.Wall)
             {
-                var plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
+                // While a wall is being dragged the plane is the one it was anchored on.
+                // Before the first press there is no anchor, so the plane stands on the last
+                // aim a click could have landed on - never on the world origin, which used to
+                // fling the very first wall of a session across the map (17.49.1-dev).
+                var camera = shootCamera != null ? shootCamera : Camera.main;
+                Vector3 on = _patternActive
+                    ? _patternAnchorPosition
+                    : (_hasLastAim && camera != null
+                        && Vector3.Distance(_lastAimPoint, camera.transform.position) <= reach
+                            ? _lastAimPoint
+                            : (camera != null
+                                ? camera.transform.position + camera.transform.forward * reach
+                                : Vector3.zero));
+
+                if (!WallAxesNow(on, out _, out _, out Vector3 aimNormal)) return false;
+                var plane = new UnityEngine.Plane(aimNormal, on);
                 if (!plane.Raycast(ray, out float enter)) return false;
                 if (enter <= 0f || enter > AimAssistReach) return false;
                 point = ray.GetPoint(enter);
@@ -2665,12 +2814,19 @@ namespace VoxelEngine.Building
 
             var ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             var plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
-            // A stated WALL plan is measured against the remembered face plane, because the
-            // player may be looking anywhere at all while the plan still belongs to that wall.
-            if (PlacementOptions.Pattern == PlacementPattern.Wall)
-                plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
+
+            // A wall plan is measured against ITS OWN plane through the anchor: the camera's
+            // heading, standing on the spot the press landed on. The crosshair can be on the
+            // ground, on the wall or in the sky and the drag still reads side to side and up.
+            if (PlacementOptions.Pattern == PlacementPattern.Wall
+                && WallAxesNow(_patternAnchorPosition, out _, out _, out Vector3 aimNormal))
+            {
+                plane = new UnityEngine.Plane(aimNormal, _patternAnchorPosition);
+            }
             else if (PlacementOptions.Pattern == PlacementPattern.Deck && _hasLastFace)
+            {
                 plane = new UnityEngine.Plane(_patternPlaneNormal, _lastFacePoint);
+            }
             float limit = Mathf.Max(12f, reach) * 3f;
             if (plane.Raycast(ray, out float enter) && enter > 0f && enter < limit)
                 return ray.GetPoint(enter);
@@ -2784,6 +2940,7 @@ namespace VoxelEngine.Building
             _patternActive = false;
             _patternStanding = false;
             _patternPlaneNormal = Vector3.up;
+            _hasWallAxes = false;
             PatternStandsUp = false;
             _patternSignature = -1;
             PatternPreviewCount = 0;

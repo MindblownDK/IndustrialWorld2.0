@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.49.0-dev`
-**Roadmap Version:** `17.49.0-dev`
+**Current Version:** `17.49.1-dev`
+**Roadmap Version:** `17.49.1-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 17.49.1-dev - A Wall Grows Sideways
+- Each of a wall's axes is measured along itself, cells are spaced by the number they are counted by, and the axes are locked at the press so the sheet does not pivot while it grows
+
 ### 17.49.0-dev - WALL Is a Pattern
 - WALL is the fifth pattern on the plot dial, a vertical sheet drawn from the camera heading, with its own icon and standing cell rotation; the auto/wall toggle and its dial face are removed
 - Deck and wall caps rise to eight a side and forty-eight cells a commit
@@ -44,10 +47,6 @@
 ### 17.47.5-dev - Aims That Stay Where a Click Can Land
 - A deck that has seen a face keeps its ghost on that face's plane when the crosshair leaves every surface, instead of the aim assist throwing it at distant ground
 - Elsewhere the ghost falls back to the last buildable aim within reach, so looking up no longer makes a placeable block read as invalid
-
-### 17.47.4-dev - A Deck's Plane Is Decided at the Press
-- A deck's plane is read once when the run is armed, from the surface under the crosshair and from the ghost's own frame, and held for the gesture
-- The drag is measured by the view ray against that plane, so sliding off the wall's edge no longer turns the plan back into a floor plan; the pill says WALL while it stands up
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -164,6 +163,8 @@
 - A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A run or a deck counts its cells in the BLOCK'S OWN PITCH, and fills out to where the crosshair points: one machine further on is one cell longer. Counted in lattice metres a large machine saturated the cap the instant the player moved the aim, which read as "span goes to maximum distance" (17.45.0-dev, corrected 17.46.0-dev). Foundations, whose pitch is the lattice, are unchanged.
 - A plane is read from BUILT GEOMETRY before it is read from terrain: the piece under the crosshair, then the nearest piece in reach, then the remembered face, then the surface itself. Terrain is the last answer, never the first, because terrain's answer is always "floor" (17.48.1-dev).
+- A PITCH IS PER AXIS. Any measure taken as "the larger of two frame axes" is a measure of the frame, not of the gesture: a wall one metre wide and four metres deep was pitched four metres sideways, so it could only rise (17.49.1-dev).
+- Counting and spacing a run must use the SAME number, or the plan is right on paper and lands nowhere near the crosshair (17.49.1-dev).
 - A behaviour that needs a toggle to be reachable is a MISSING PATTERN. WALL is a pattern beside SINGLE, SPAN, PILLAR and DECK, decided by arithmetic from the camera heading, not a mode that makes DECK act like something else (17.49.0-dev).
 - What the player wants is STATED where it can be, and DETECTED only as a convenience. A deck's plane is the worked example: AUTO guesses from the aim, WALL is the player's own answer and never consults a guess (17.48.0-dev).
 - An empty aim is common and must not break a gesture: aiming up a wall puts the crosshair over the wall's top edge. The aim assist therefore never hunts distant ground for a deck - it projects onto the remembered face - and elsewhere the ghost keeps the last buildable aim within reach rather than being thrown at a surface out of range (17.47.5-dev).
