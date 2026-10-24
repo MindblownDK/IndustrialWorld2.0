@@ -84,10 +84,13 @@ namespace VoxelEngine.Building
         public const int MaxRun = 10;
 
         /// <summary>Hard cap on a DECK edge; a 4 x 4 deck is sixteen cells including the anchor.</summary>
-        public const int MaxDeckSide = 4;
+        // 17.48.1-dev: a wall is bigger than a floor. Four per side capped a deck at 4 x 4
+        // and a wall at about five wide by two tall, which is a window, not a wall. Eight per
+        // side is what a person builds in one gesture.
+        public const int MaxDeckSide = 8;
 
         /// <summary>Hard cap on any single commit, whatever the mode asks for.</summary>
-        public const int MaxCells = 16;
+        public const int MaxCells = 32;
 
         private const string K_PATTERN = "ve.placePattern";
         private const string K_STEP = "ve.placeStep";

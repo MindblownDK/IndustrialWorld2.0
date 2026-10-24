@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.48.0-dev`
+**Current Version:** `17.48.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.48.1-dev] A Wall Big Enough to Be One, Reached From Any Side
+
+**Type:** PATCH - larger deck caps, and the wall plane read from the piece being aimed at.
+
+**GitHub title:** `[17.48.1-dev] Raise the deck caps to eight a side and take the wall plane from the piece under the crosshair`
+
+#### Fixed
+
+- **A deck could not be bigger than about five by two (`PlacementOptions.MaxDeckSide`).** The edge cap was four cells, so a deck topped out at four by four and the wall that came out of it was a window. Eight a side now, and the per-commit budget is thirty-two cells instead of sixteen, with the preview pool following the budget rather than a separate constant.
+- **A wall only worked from one side (`BuildSystem.TryAimedPiecePlane`).** The plane came from the SURFACE under the crosshair, so whether a wall happened depended on standing where a vertical face landed under the aim - "I have to stand on the side of the block". A built piece answers the question outright: the face you are looking at is the one pointing at the camera, it is vertical by construction because gravity defines up, and the answer is snapped to the piece's own axes so a wall built piece by piece keeps one heading. Any approach angle gives the same wall.
+- **Walking round to extend a wall turned it into a floor (`TryNearestPiecePlane`).** Aiming at the ground beside a wall fell through to a floor plan, level with the piece - exactly the reported shape. A stated WALL plan now reads its plane from the nearest built piece within reach when the crosshair is not on one, so as long as a wall is there the plan stands on it, from any side.
+
+#### Validation
+
+- Parse, fields, type scope and qualified-type checks clean on both modified files.
+- Plane sources now fall back in a definite order at the press: the aimed piece, then the nearest built piece, then the remembered face, then the surface under the crosshair. Each step is a positive answer, so no branch can silently decide "floor" while a wall is in reach.
+- Not run in Unity.
 
 ### [17.48.0-dev] A Wall You State Instead of a Wall You Have to Catch
 

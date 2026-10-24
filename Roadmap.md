@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.48.0-dev`
-**Roadmap Version:** `17.48.0-dev`
+**Current Version:** `17.48.1-dev`
+**Roadmap Version:** `17.48.1-dev`
 **Date:** 2026-10-23
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 17.48.1-dev - A Wall Big Enough, From Any Side
+- Deck edges cap at eight a side and a commit at thirty-two cells, so a wall is not a window
+- A wall's plane is read from the piece under the crosshair, then from the nearest built piece, so extending a wall works from any approach and no branch can quietly decide "floor" while a wall is in reach
+
 ### 17.48.0-dev - A Wall You State Instead of Catch
 - DECK PLANE joins the plot dial: AUTO reads the aim, WALL always fills the last face seen, so a wall is reached deliberately
 - The remembered face survives ground hits and keeps a stated WALL plan on its own wall; the face test loosened to about forty-four degrees from vertical
@@ -43,10 +47,6 @@
 
 ### 17.47.3-dev - A Type Where the Compiler Looks for It
 - `DeckPlane` is called by the name the namespace gives it rather than as a nested type of the planner, and the doubled upgrade cost is read at runtime so no branch is unreachable
-
-### 17.47.2-dev - Wall Planes and an Outline That Fits
-- A deck aimed at a face names its plane outright - up the wall along gravity, along the wall as normal cross gravity - because a frame borrowed from a wall keeps the wall's normal as its up
-- The hammer outline writes exactly its twenty-four vertices, so marking a piece no longer throws
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -162,6 +162,7 @@
 - An explosion has an opinion about CONSTRUCTION. Tiered hammer pieces and grid hulls take blast damage with a distance falloff, and a blast is never refused by a piece's mining tier - a charge is not a pickaxe (17.46.0-dev).
 - A local declared inside a nested block must never re-use the name of an enclosing method parameter or an earlier local in the same block (CS0136). A C# grammar parses both versions identically, so every patched file gets a name-collision sweep as well as a parse check, and a hit is a build failure (17.44.15-dev).
 - A run or a deck counts its cells in the BLOCK'S OWN PITCH, and fills out to where the crosshair points: one machine further on is one cell longer. Counted in lattice metres a large machine saturated the cap the instant the player moved the aim, which read as "span goes to maximum distance" (17.45.0-dev, corrected 17.46.0-dev). Foundations, whose pitch is the lattice, are unchanged.
+- A plane is read from BUILT GEOMETRY before it is read from terrain: the piece under the crosshair, then the nearest piece in reach, then the remembered face, then the surface itself. Terrain is the last answer, never the first, because terrain's answer is always "floor" (17.48.1-dev).
 - What the player wants is STATED where it can be, and DETECTED only as a convenience. A deck's plane is the worked example: AUTO guesses from the aim, WALL is the player's own answer and never consults a guess (17.48.0-dev).
 - An empty aim is common and must not break a gesture: aiming up a wall puts the crosshair over the wall's top edge. The aim assist therefore never hunts distant ground for a deck - it projects onto the remembered face - and elsewhere the ghost keeps the last buildable aim within reach rather than being thrown at a surface out of range (17.47.5-dev).
 - A deck's plane is decided ONCE, at the press, and held for the gesture; the drag is then measured by intersecting the view ray with that plane. Deciding it per frame from the surface under the crosshair made a wall plan collapse into a floor plan the moment the aim slid onto an edge or off the wall (17.47.4-dev).

@@ -235,6 +235,9 @@ namespace VoxelEngine.Building
         /// <summary>True when the aimed surface is a face rather than the ground.</summary>
         public static bool GhostSurfaceIsVertical { get; private set; }
 
+        /// <summary>The collider the crosshair landed on this frame, before any snapping.</summary>
+        public static Collider GhostSurfaceCollider { get; private set; }
+
         public static Vector3 GhostAimPosition { get; private set; }
         public static Quaternion GhostAimRotation { get; private set; } = Quaternion.identity;
         public static Vector3 GhostUp { get; private set; } = Vector3.up;
@@ -499,6 +502,7 @@ namespace VoxelEngine.Building
             // has already looked away from (17.47.1-dev).
             GhostSurfaceIsVertical = false;
             GhostSurfaceNormal = Vector3.zero;
+            GhostSurfaceCollider = null;
 
             if (inventory == null)
             {
@@ -792,6 +796,7 @@ namespace VoxelEngine.Building
             // The raw aim, published before anything snaps it: a deck filling a wall face
             // needs the height of the crosshair, which every snap below discards.
             GhostSurfacePoint = hit.point;
+            GhostSurfaceCollider = hit.collider;
             GhostSurfaceNormal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : Vector3.up;
             {
                 Vector3 localUp = GravityProvider.GetUp(hit.point);
@@ -2417,7 +2422,33 @@ namespace VoxelEngine.Building
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
 
-            // Signal one: the crosshair is on a face right now.
+            // ── Signal one: the crosshair is on a BUILT piece. ──────────────────────
+            // ── 17.48.1-dev: THE WALL IS THE PIECE YOU ARE POINTING AT, NOT WHERE YOU STAND. ──
+            // The plane used to come from the surface under the crosshair, so it only worked
+            // from the angle that happened to put a vertical face under the aim - "I have to
+            // stand on the side of the block". A placed piece answers the question outright:
+            // the face you are looking at is the one facing the camera, and it is vertical by
+            // construction because gravity says which way is up. Any approach angle now gives
+            // the same wall.
+            if (TryAimedPiecePlane(out Vector3 pieceNormal))
+            {
+                _patternStanding = true;
+                _patternPlaneNormal = pieceNormal;
+                return;
+            }
+
+            // ── 17.48.1-dev: WALL MEANS "BUILD ON THE WALL THAT IS ALREADY HERE". ────────
+            // Aiming at the ground beside a wall used to fall through to a floor plan, which
+            // is why walking round to extend one turned it back into a floor level with the
+            // block. A stated WALL plan now takes its plane from the nearest built piece
+            // within reach, so as long as there is a wall here the plan stands on it.
+            if (PlacementOptions.DeckPlane == DeckPlaneMode.Wall && TryNearestPiecePlane(out Vector3 nearNormal))
+            {
+                _patternStanding = true;
+                _patternPlaneNormal = nearNormal;
+                return;
+            }
+
             // 17.48.0-dev: WALL on the dial means the player has stated the answer. The deck
             // fills the last face the crosshair saw - which may be seconds old and completely
             // out of view now - and no detection is consulted at all.
@@ -2449,11 +2480,105 @@ namespace VoxelEngine.Building
             if (!_patternStanding) _patternPlaneNormal = Vector3.up;
         }
 
+        private static readonly Collider[] s_piecePlaneProbe = new Collider[64];
+
         /// <summary>
-        /// Where the crosshair meets the plan's own plane. Measured by intersecting the view
-        /// ray with the plane through the anchor, so a drag up a wall keeps building the wall
-        /// even when the crosshair has slid off the wall's edge, onto a ledge, or into the sky.
+        /// The face of the nearest built piece around the anchor, facing the player. The last
+        /// resort for a stated WALL plan, so aiming at the ground beside a wall still builds
+        /// the wall rather than a floor level with it.
         /// </summary>
+        private bool TryNearestPiecePlane(out Vector3 normal)
+        {
+            normal = Vector3.up;
+            var camera = shootCamera != null ? shootCamera : Camera.main;
+            if (camera == null) return false;
+
+            var origin = _patternActive ? _patternAnchorPosition : GhostAimPosition;
+            float radius = Mathf.Max(8f, reach);
+            int count = Physics.OverlapSphereNonAlloc(origin, radius, s_piecePlaneProbe,
+                ~0, QueryTriggerInteraction.Ignore);
+
+            Transform bestHost = null;
+            float bestDistance = float.MaxValue;
+            for (int i = 0; i < count && i < s_piecePlaneProbe.Length; i++)
+            {
+                var collider = s_piecePlaneProbe[i];
+                if (collider == null) continue;
+
+                var piece = collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                var block = piece == null ? collider.GetComponentInParent<PlacedBlock>() : null;
+                var host = piece != null ? piece.transform : block != null ? block.transform : null;
+                if (host == null) continue;
+
+                float distance = (host.position - origin).sqrMagnitude;
+                if (distance < bestDistance) { bestDistance = distance; bestHost = host; }
+            }
+            if (bestHost == null) return false;
+
+            return TryFaceNormalToward(bestHost, camera.transform.position, out normal);
+        }
+
+        /// <summary>The horizontal face of <paramref name="host"/> that looks at
+        /// <paramref name="eyePoint"/>, snapped to the host's own axes when close to square.</summary>
+        private static bool TryFaceNormalToward(Transform host, Vector3 eyePoint, out Vector3 normal)
+        {
+            normal = Vector3.up;
+            if (host == null) return false;
+
+            Vector3 up = GravityProvider.GetUp(host.position);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+
+            Vector3 towardEye = Vector3.ProjectOnPlane(eyePoint - host.position, up);
+            if (towardEye.sqrMagnitude < 0.0001f) return false;
+            towardEye.Normalize();
+
+            Vector3 pieceRight = Vector3.ProjectOnPlane(host.right, up);
+            Vector3 pieceForward = Vector3.ProjectOnPlane(host.forward, up);
+            Vector3 best = towardEye;
+            float bestDot = 0.55f;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 axis = i switch
+                {
+                    0 => pieceRight,
+                    1 => -pieceRight,
+                    2 => pieceForward,
+                    _ => -pieceForward,
+                };
+                if (axis.sqrMagnitude < 0.0001f) continue;
+                axis.Normalize();
+                float dot = Vector3.Dot(towardEye, axis);
+                if (dot > bestDot) { bestDot = dot; best = axis; }
+            }
+
+            normal = best;
+            return true;
+        }
+
+        /// <summary>
+        /// The plane of the piece under the crosshair, as its face towards the player. Returns
+        /// false when the aim is on terrain, or on nothing at all.
+        /// </summary>
+        private bool TryAimedPiecePlane(out Vector3 normal)
+        {
+            normal = Vector3.up;
+            var collider = GhostSurfaceCollider;
+            if (collider == null) return false;
+
+            // Only something BUILT has a face worth inheriting - terrain already answers with
+            // its own normal, and a ghost must never define a plane.
+            var piece = collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+            var block = piece == null ? collider.GetComponentInParent<PlacedBlock>() : null;
+            var host = piece != null ? piece.transform : block != null ? block.transform : null;
+            if (host == null) return false;
+
+            var camera = shootCamera != null ? shootCamera : Camera.main;
+            if (camera == null) return false;
+
+            return TryFaceNormalToward(host, camera.transform.position, out normal);
+        }
+
         /// <summary>
         /// Where the view ray meets the plane of the last face the crosshair was on. Used to
         /// keep a deck on that face when the crosshair has left every surface.
@@ -2478,6 +2603,11 @@ namespace VoxelEngine.Building
             return true;
         }
 
+        /// <summary>
+        /// Where the crosshair meets the plan's own plane. Measured by intersecting the view
+        /// ray with the plane through the anchor, so a drag up a wall keeps building the wall
+        /// even when the crosshair has slid off the wall's edge, onto a ledge, or into the sky.
+        /// </summary>
         private Vector3 StandingAimPoint()
         {
             var camera = shootCamera != null ? shootCamera : Camera.main;
