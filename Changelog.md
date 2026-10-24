@@ -1,9 +1,47 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.49.1-dev`
+**Current Version:** `17.50.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.50.0-dev] A Deck Is Flat, a Wall Can Turn
+
+**Type:** MINOR - static placement planes are stated by pattern instead of inferred, a wall's run can turn mid-gesture, and the placement assist card becomes an instrument for the block in hand. Save-compatible: no chunk format, save schema, keybind or content change.
+
+**GitHub title:** `[17.50.0-dev] State every static placement plane outright: flat decks, walls that turn with the player, and an assist card that draws the block itself`
+
+#### Fixed
+
+- **DECK and WALL did the same thing, and a deck could no longer be laid flat.** That was not one bug but a stack of guesses, each added to make the previous one reachable: `ResolvePatternPlane` stood a DECK up whenever the press landed on any built piece (`TryAimedPiecePlane`), or any built piece was within reach (`TryNearestPiecePlane`), or the crosshair had touched a vertical face at any earlier point (`_hasLastFace`, remembered across ground hits and only forgotten by distance). In a built-up area - which is where decks are built - at least one of those was almost always true, so the deck filled a face. The planner guessed the same way a second time, choosing its second axis as whichever of the frame's forward and up the aim had travelled further along. All of it is gone. **A pattern now states its plane the way it states its name:** DECK is side + depth in the gravity plane at the anchor's height, WALL is one horizontal run + gravity up, and no surface, remembered face or neighbouring piece is consulted. The planner's fallback applies the same rule by pattern instead of inferring one from the drag.
+- **A deck only grew sideways.** Its aim was the snapped ghost pose, so the moment the crosshair left a surface - past a platform edge, a shoreline, or simply lifted - the forward half of the drag stopped existing. A deck is now measured where the view ray meets the flat plane through its anchor (`FlatAimPoint`), so forward and back grow exactly as left and right do, on a plane that is flat by construction and can never measure height into a deck.
+- **A wall was frozen to the plane it started on.** Start a wall at the front of a block and it could only ever run side + up; walk to the side of the block mid-drag and it still ran side + up, because its axes were locked at the press to stop the sheet pivoting while it grew. The anchor and the two candidate horizontal axes are still resolved once at the press (anchor frame first, then the anchor block's heading, then the gravity tangent - both flattened onto the gravity plane and squared, so a frame borrowed from a vertical surface can no longer lend a deck a vertical axis), but **which candidate is the wall's run is a live choice**: it is whichever sheet the camera faces, and it turns when the view has come around the anchor by roughly fifty-five degrees, with a dead band around the diagonal so it cannot flicker, a snap click, and a new plane label on the assist card. Starting at the front, stepping to the side, and dragging on now runs the same wall in depth - no release, no restart.
+- **A wall quietly re-posed its blocks.** Its cells were rotated to face the camera heading taken at the press, overwriting a heading the player had just set by hand. Cells now keep the ghost's rotation exactly as aimed; the player turns the block, the pattern only multiplies it.
+
+#### Added
+
+- **The plan states itself while it is being laid (`BuildSystem.PatternPlaneLabel`, `PatternPlanSize`).** The assist card reads a deck as its two sides and the word FLAT, a wall as its two sides and SIDE + UP or DEPTH + UP, measured from the planned cells themselves so the card can never disagree with the preview. Before the press the same line teaches the gesture for the selected pattern. The prompt pill states the plane too: DECK - FLAT, WALL - VERTICAL.
+- **The assist card draws the block, not a cube (`BuildSystem.GhostBlockSize`, `PlacementBodyElement`).** The wireframe body carries the held block's measured proportions (normalised to its longest side, floored so a thin panel stays visible), a three-quarter front arrow leaves the body along local +Z, and a gold pip marks the top face - so a yaw reads as the long side turning, and a pitch or roll reads against a marked up. A new line under the heading states the rotation steps in plain degrees: YAW, PITCH and ROLL at ninety degrees a step.
+- **Ctrl lines up on open ground as well as against a structure.** Ctrl already quantised and yaw-aligned the ghost onto an aimed or nearby structure's frame, but its quantise required that structure frame, so on open ground it lined up with nothing. It now quantises onto the resolved frame either way: a structure supplies the component layer when one is aimed at or beside the ghost, and the local gravity tangent with its stable world heading supplies the global layer when there is none - so distant Ctrl placements still meet square. A Ctrl quantise marks the ghost aligned, and the surface lattice turns green while lined up (cyan on the plain lattice, red on a refusal), so alignment has a physical guide on the ground and not only a word on the card.
+
+#### Changed
+
+- **What is dragged is what is built.** The planner no longer hands a one-axis drag a free neighbouring column or row to make a stripe read as a wall. A wall dragged straight up is an honest one-wide column; a deck dragged forward only is a flat strip in depth. Rectangle counting, proportional shrinking to the cell budget, ring emission and per-axis pitch are untouched.
+- **The hologram breathes.** Ghost materials carry a guarded emission channel pulsed slowly in sync across the ghost and every run preview, tinted from colours kept beside the materials rather than read back out of a shader. Alpha never moves, so validity reads identically all cycle long; a shader without the property keeps the previous flat ghost. Wheel rotations (pitch and roll) click like the rotate key always did.
+- **The wheel says what the planes are.** Pattern blurbs state DECK as flat (side + depth, never up a wall) and WALL as run + up with the move-around turn. The build wheel with Ctrl + scroll through pattern, lattice step and run seating, the frozen hologram with lattice-axis nudging, the snap/thud/dust feedback and soft clearance were audited against the placement-feel brief and are unchanged: they already match it. The locked-hologram legend no longer claims Shift steps "five" - it steps a whole block, as it has since 17.45.0-dev.
+
+#### Removed
+
+- **Every plane-detection path in static pattern placement:** the remembered last face (`_hasLastFace` and friends), the empty-aim branch that kept a ghost glued to that face, `TryAimedPiecePlane`, `TryNearestPiecePlane`, `TryFaceNormalToward`, `TryPatternPlaneAim`, `TryFacePlaneAim`, and the camera-locked wall axes (`TryWallAxes` / `WallAxesNow`). The aimed surface being vertical is still published for the HUD; no pattern reads it. SPAN, PILLAR and SINGLE keep their existing aim, pitch and commit paths, and hammer and grid placement are untouched by this round.
+
+#### Validation
+
+- Parsed every modified C# file with a C# grammar; all five parse clean with no error nodes.
+- Field sweep by syntax tree on every modified file against the previous Dev head: every new field is declared, no removed field is still referenced anywhere, and no used-but-undeclared name was introduced.
+- Every new or changed call read against its target signature: `TryPlanAxes` / `PlacementFrame.FromUp`, `PlanPitch` / `FrameExtent`, `DeckPlane` into `PlacementPatternPlanner.Build`, `Plane.Raycast` aim points, `PlacementBodyElement.SetPose` (single caller), and the guarded material writes in `MakeGhostMaterial`.
+- Headless walk of the deck/wall planning arithmetic: a side-plus-forward deck drag with a two-metre block fills 12 cells with zero height spread; a forward-only deck drag lays its strip in depth; an up-only deck drag stays at the anchor (a deck cannot stand); a side wall drag builds a 16-cell vertical sheet and a depth wall drag a 15-cell sheet in the perpendicular plane; an up-only wall drag is exactly one column wide. The wall-turn scoring holds its run at the diagonal from both sides and turns at roughly fifty-five degrees of view travel in either direction.
+- No item, prefab, recipe, research node or Setup step was added or changed.
+- Not run in Unity.
 
 ### [17.49.1-dev] A Wall Grows Sideways, Not Just Up
 

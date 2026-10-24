@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.49.1-dev`
-**Roadmap Version:** `17.49.1-dev`
-**Date:** 2026-10-23
+**Current Version:** `17.50.0-dev`
+**Roadmap Version:** `17.50.0-dev`
+**Date:** 2026-10-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.50.0-dev - A Deck Is Flat, a Wall Can Turn
+- Static patterns state their planes outright: DECK is side + depth in the gravity plane, WALL is one horizontal run + up; face detection no longer decides either
+- A wall's run turns from side to depth mid-gesture as the player moves around the anchor, and a deck is measured on its flat plane so it grows forward and back past surface edges
+- The assist card draws the held block's own proportions with a front arrow and marked top, states rotation in degrees and the armed plan's size and plane; Ctrl quantises onto the global gravity frame on open ground
+
 ### 17.49.1-dev - A Wall Grows Sideways
 - Each of a wall's axes is measured along itself, cells are spaced by the number they are counted by, and the axes are locked at the press so the sheet does not pivot while it grows
 
@@ -43,10 +48,6 @@
 ### 17.48.0-dev - A Wall You State Instead of Catch
 - DECK PLANE joins the plot dial: AUTO reads the aim, WALL always fills the last face seen, so a wall is reached deliberately
 - The remembered face survives ground hits and keeps a stated WALL plan on its own wall; the face test loosened to about forty-four degrees from vertical
-
-### 17.47.5-dev - Aims That Stay Where a Click Can Land
-- A deck that has seen a face keeps its ghost on that face's plane when the crosshair leaves every surface, instead of the aim assist throwing it at distant ground
-- Elsewhere the ghost falls back to the last buildable aim within reach, so looking up no longer makes a placeable block read as invalid
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

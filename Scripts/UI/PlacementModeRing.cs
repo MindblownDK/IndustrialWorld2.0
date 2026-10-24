@@ -247,6 +247,10 @@ namespace VoxelEngine.UI
         public static string PromptTail()
         {
             string pattern = PlacementOptions.PatternName(PlacementOptions.Pattern);
+            // 17.50.0-dev: the plane is part of the pattern's name, so it is part of the
+            // pill too. A player should never have to wonder whether DECK means flat.
+            if (PlacementOptions.Pattern == PlacementPattern.Deck) pattern += " · FLAT";
+            if (PlacementOptions.Pattern == PlacementPattern.Wall) pattern += " · VERTICAL";
             if (PlacementOptions.Pattern == PlacementPattern.Single) return pattern;
             // 17.45.3-dev: the seating is part of the gesture's state now, so it belongs on
             // the pill with the pattern and the step rather than hidden one wheel face away.

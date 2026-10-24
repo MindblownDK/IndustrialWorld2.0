@@ -30,13 +30,11 @@ namespace VoxelEngine.Building
     }
 
     /// <summary>
-    /// The two axes a DECK fills, stated by the caller instead of guessed from the frame.
-    ///
-    /// A frame borrowed from a wall has the wall's NORMAL as its up, so a frame-local Y is the
-    /// distance away from that wall and not height at all. Reading a vertical plan out of such
-    /// a frame is why a deck could not build a wall - the whole vertical drag landed in the
-    /// component the planner ignored. When this is valid the planner uses exactly these two
-    /// axes and their pitches; when it is not, the frame decides, as it always did.
+    /// The two axes a DECK or a WALL fills, stated by the caller. Since 17.50.0-dev the
+    /// pattern states its plane outright - DECK arrives as side + depth in the gravity
+    /// plane, WALL as one horizontal run + up - and nothing in the planner re-decides it
+    /// from whatever the crosshair happens to be touching. When this is invalid the
+    /// planner falls back to the same stated rule by pattern, never to a guess.
     /// </summary>
     public struct DeckPlane
     {
@@ -103,28 +101,17 @@ namespace VoxelEngine.Building
 
             if (pattern == PlacementPattern.Deck || pattern == PlacementPattern.Wall)
             {
-                // 17.44.11-dev: a deck is counted per lattice step and spaced by the LARGER of
-                // the step and the block, so the gesture is always "one metre of drag adds a
-                // row or a column" while neighbouring cells stay apart. Counting on the
-                // footprint made a four-by-four deck need ten metres of drag; spacing on the
-                // footprint alone made a deck of wide machines sprawl across fifteen.
-                // 17.45.2-dev: a deck is counted in the block's OWN pitch on both axes, so
-                // pointing at a spot fills the rectangle out to that spot. Counted in lattice
-                // metres, a machine four metres across needed four metres of aim per column
-                // and the far aim saturated one axis while the other stayed at zero - which
-                // is a LINE, not an area, and is exactly what "deck places upwards and
-                // sideways, not an area" looked like on screen.
-                // ── 17.47.1-dev: A DECK IS A PLANE, AND THE PLANE CAN STAND UP. ────────
-                // The second axis was always the frame's FORWARD, and the frame's up was
-                // never read at all. A deck dragged up a wall therefore put its whole offset
-                // into a component nothing looked at, and the plan came out one cell - which
-                // is why a deck could not make a wall. The second axis is now whichever of
-                // forward and up the aim actually travels along, so a drag across the ground
-                // lays a floor and a drag up a face lays a wall, with the same pattern.
-                // Which two axes the rectangle fills. A caller that knows the plane - a deck
-                // aimed at a face, where the plane is "up the wall and along it" - states it;
-                // otherwise the frame's own right and forward/up decide, as before.
-                bool deckVertical = Mathf.Abs(local.y) > Mathf.Abs(local.z);
+                // ── 17.50.0-dev: THE CALLER STATES THE PLANE. NOTHING GUESSES. ─────────
+                // This branch spent six releases trying to infer a plane from the frame:
+                // the second axis was whichever of forward and up the aim travelled along,
+                // so a DECK could be a floor or a wall depending on the drag, and then a
+                // vertical drag was handed a free neighbouring column so the stripe would
+                // read as a wall. Every round fixed one reading and broke the other -
+                // which is how deck and wall ended up doing the same thing. The plane is
+                // part of the pattern's name now: DECK is side + depth, WALL is run + up,
+                // the caller states both axes and their pitches, and the fallback (no
+                // stated plane) applies the same rule from the frame instead of a guess.
+                // What the player drags is what is built: no free column, no free row.
                 Vector3 axisRight;
                 Vector3 axisForward;
                 float deckPitchRight;
@@ -136,34 +123,24 @@ namespace VoxelEngine.Building
                     deckPitchRight = Mathf.Max(step, plane.pitchA);
                     deckPitchSecond = Mathf.Max(step, plane.pitchB);
                 }
+                else if (pattern == PlacementPattern.Wall)
+                {
+                    axisRight = frame.valid ? frame.right : Vector3.right;
+                    axisForward = frame.valid ? frame.up : Vector3.up;
+                    deckPitchRight = Mathf.Max(step, pitch.x);
+                    deckPitchSecond = Mathf.Max(step, pitch.y);
+                }
                 else
                 {
                     axisRight = frame.valid ? frame.right : Vector3.right;
-                    axisForward = deckVertical
-                        ? (frame.valid ? frame.up : Vector3.up)
-                        : (frame.valid ? frame.forward : Vector3.forward);
+                    axisForward = frame.valid ? frame.forward : Vector3.forward;
                     deckPitchRight = Mathf.Max(step, pitch.x);
-                    deckPitchSecond = deckVertical ? Mathf.Max(step, pitch.y) : Mathf.Max(step, pitch.z);
+                    deckPitchSecond = Mathf.Max(step, pitch.z);
                 }
 
                 int sideCap = PlacementOptions.MaxDeckSide - 1;
                 int alongRight = DeckCount(Vector3.Dot(delta, axisRight), deckPitchRight, sideCap);
                 int alongForward = DeckCount(Vector3.Dot(delta, axisForward), deckPitchSecond, sideCap);
-
-                // 17.47.1-dev: A DECK ON A FACE IS A WALL, AND A WALL IS A BAND.
-                // An aim that runs straight up a face travels along ONE of the face's two
-                // axes and gives the other nothing, which is a stripe one block wide - the
-                // shape the player could not call a wall. On a vertical face the axis the aim
-                // did not travel along still takes its neighbour, so the same drag that makes
-                // a floor run makes a wall two blocks across, and dragging along the wall
-                // widens it. A ground aim is untouched by this.
-                bool wallPattern = pattern == PlacementPattern.Wall;
-                if ((plane.valid || wallPattern) && budget >= 4
-                    && (alongRight == 0) != (alongForward == 0))
-                {
-                    if (alongRight == 0) alongRight = 1;
-                    else alongForward = 1;
-                }
 
                 if (alongRight == 0 && alongForward == 0) return cells.Count;
                 int rows = Mathf.Abs(alongForward);

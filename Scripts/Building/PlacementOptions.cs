@@ -14,7 +14,8 @@
 // ║    SINGLE  one block per click, exactly as the game always did   ║
 // ║    SPAN    drag a straight run across the aimed face             ║
 // ║    PILLAR  drag a stack straight up or down that face            ║
-// ║    DECK    drag a rectangle across the face, anchor corner first  ║
+// ║    DECK    drag a FLAT rectangle: side + depth                   ║
+// ║    WALL    drag a VERTICAL sheet: horizontal run + up            ║
 // ║                                                                  ║
 // ║  Nothing here touches the world. It is a selection plus the      ║
 // ║  eligibility rule that decides which items may use it, so the    ║
@@ -139,8 +140,8 @@ namespace VoxelEngine.Building
         {
             PlacementPattern.Span => "Drag a straight run across the face. Up to ten cells.",
             PlacementPattern.Pillar => "Drag a stack up or down the face. Up to ten cells.",
-            PlacementPattern.Deck => "Drag a rectangle across the ground. Up to eight by eight.",
-            PlacementPattern.Wall => "Drag a vertical sheet on the face you are looking at. Up to eight by eight.",
+            PlacementPattern.Deck => "Drag a flat rectangle: side + depth, never up a wall. Up to eight by eight.",
+            PlacementPattern.Wall => "Drag a vertical sheet: run + up. Move around the anchor to turn the run from side to depth. Up to eight by eight.",
             _ => "One block per click. The classic.",
         };
 

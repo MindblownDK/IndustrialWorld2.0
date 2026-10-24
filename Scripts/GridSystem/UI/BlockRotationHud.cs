@@ -47,6 +47,7 @@ namespace VoxelEngine.GridSystem.UI
         private static Label _headingLabel, _headingValue;
         private static VisualElement _chipRow;
         private static Label _patternChip, _latticeChip, _lockChip;
+        private static Label _rotationLabel;
         private static VisualElement _legend;
         private static Label _legendPrimary, _legendSecondary;
         private static Label _runLabel;
@@ -60,7 +61,9 @@ namespace VoxelEngine.GridSystem.UI
         private static bool _lastValid, _lastAligned;
         private static string _lastLegendPrimary, _lastLegendSecondary;
         private static string _lastPatternText, _lastLatticeText, _lastLockText, _lastHeadingText;
-        private static int _lastRunCount = -1;
+        private static string _lastRotationText, _lastRunText;
+        private static Vector3 _lastBlockSize = Vector3.one;
+        private static bool _lastRunVisible;
 
         // Field round holdovers (kept from the original card: a one-frame resolution
         // flicker while mining must not blink the card off and on).
@@ -75,8 +78,14 @@ namespace VoxelEngine.GridSystem.UI
             if (_box != null) _box.RemoveFromHierarchy();
 
             // A remount builds a FRESH box; reset the visibility state so the rebuilt box
-            // is shown by the next tick (the stale-state bug class from 9.16.0).
+            // is shown by the next tick (the stale-state bug class from 9.16.0). The
+            // 17.50.0-dev read-outs reset with it, or a rebuilt label could sit empty
+            // behind a remembered "already showing this text".
             _visible = false;
+            _lastRotationText = null;
+            _lastRunText = null;
+            _lastRunVisible = false;
+            _lastBlockSize = new Vector3(float.NaN, float.NaN, float.NaN);
 
             _box = new VisualElement { name = "BlockRotationHud" };
             _box.style.position = Position.Absolute;
@@ -140,6 +149,16 @@ namespace VoxelEngine.GridSystem.UI
             headingRow.Add(_headingValue);
 
             _box.Add(headingRow);
+
+            // The rotation steps in plain degrees. The rings show WHICH axis is stepped;
+            // this line says how far, so "one more R" is arithmetic, not a guess.
+            _rotationLabel = new Label(string.Empty);
+            _rotationLabel.style.fontSize = 9;
+            _rotationLabel.style.letterSpacing = 0.8f;
+            _rotationLabel.style.color = new StyleColor(T.TextSecondary);
+            _rotationLabel.style.marginBottom = 8;
+            _rotationLabel.pickingMode = PickingMode.Ignore;
+            _box.Add(_rotationLabel);
 
             // ── Chips: the three things that change a click ───────────
             _chipRow = new VisualElement();
@@ -306,19 +325,31 @@ namespace VoxelEngine.GridSystem.UI
             var cardFrame = VoxelEngine.Building.BuildSystem.GhostFrame;
             Vector3 frameForward = cardFrame.valid ? cardFrame.forward : Vector3.zero;
             Vector3 stepVector = new(steps.x * 90f, steps.y * 90f, steps.z * 90f);
+            Vector3 blockSize = staticBlock
+                ? VoxelEngine.Building.BuildSystem.GhostBlockSize
+                : Vector3.one;
             if (_lastRotation != rotation || _lastUp != up || _lastSteps != stepVector
-                || _lastFrameForward != frameForward
+                || _lastFrameForward != frameForward || _lastBlockSize != blockSize
                 || _lastValid != valid || _lastAligned != aligned)
             {
                 _lastRotation = rotation;
                 _lastUp = up;
                 _lastFrameForward = frameForward;
                 _lastSteps = stepVector;
+                _lastBlockSize = blockSize;
                 _lastValid = valid;
                 _lastAligned = aligned;
 
-                _body.SetPose(rotation, up, frameForward, steps, valid, aligned);
+                _body.SetPose(rotation, up, frameForward, steps, valid, aligned, blockSize);
                 _body.MarkDirtyRepaint();
+            }
+
+            string rotationText = "YAW " + (steps.y * 90) + "° · PITCH " + (steps.x * 90)
+                                + "° · ROLL " + (steps.z * 90) + "°";
+            if (_lastRotationText != rotationText)
+            {
+                _lastRotationText = rotationText;
+                _rotationLabel.text = rotationText;
             }
 
             // ── Compass read-out ─────────────────────────────────────
@@ -365,26 +396,47 @@ namespace VoxelEngine.GridSystem.UI
             }
 
             // ── Run read-out ─────────────────────────────────────────
-            if (runCells != _lastRunCount)
+            // 17.50.0-dev: the run line states the PLAN, not just a count: a deck reads
+            // its two sides and the word FLAT, a wall reads its sides and which way the
+            // run currently goes - so when a wall turns mid-drag the card says so in
+            // the same frame the previews move. Before the press it teaches the drag.
+            string runText = null;
+            var planSize = VoxelEngine.Building.BuildSystem.PatternPlanSize;
+            string planeLabel = VoxelEngine.Building.BuildSystem.PatternPlaneLabel;
+            if (staticBlock && runCells > 1
+                && (pattern == PlacementPattern.Deck || pattern == PlacementPattern.Wall)
+                && planSize.x > 0 && planSize.y > 0)
             {
-                _lastRunCount = runCells;
-                if (runCells > 1)
+                runText = patternText + "  " + planSize.x + " × " + planSize.y
+                        + "  ·  " + planeLabel + "  ·  " + runCells + " CELLS";
+            }
+            else if (runCells > 1)
+            {
+                runText = "LAYING  " + runCells + " CELLS";
+            }
+            else if (staticBlock && pattern != PlacementPattern.Single)
+            {
+                runText = pattern switch
                 {
-                    _runLabel.style.display = DisplayStyle.Flex;
-                    _runLabel.text = "LAYING  " + runCells + " CELLS";
-                }
-                else if (pattern != PlacementPattern.Single)
-                {
-                    _runLabel.style.display = DisplayStyle.Flex;
-                    _runLabel.text = "DRAG TO LAY A RUN";
-                }
-                else
-                {
-                    _runLabel.style.display = DisplayStyle.None;
-                }
+                    PlacementPattern.Deck => "PRESS + DRAG · SIDE + DEPTH (FLAT)",
+                    PlacementPattern.Wall => "PRESS + DRAG · RUN + UP · MOVE AROUND TO TURN THE RUN",
+                    PlacementPattern.Pillar => "PRESS + DRAG OR LOOK UP · STACK",
+                    _ => "PRESS + DRAG · ONE STRAIGHT LINE",
+                };
+            }
+            bool runVisible = runText != null;
+            if (runVisible != _lastRunVisible)
+            {
+                _lastRunVisible = runVisible;
+                _runLabel.style.display = runVisible ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+            if (runVisible && _lastRunText != runText)
+            {
+                _lastRunText = runText;
+                _runLabel.text = runText;
             }
 
-            // ── Adaptive legend ──────────────────────────────────────
+            // Adaptive legend (keys), resolved below.
             string turnKey = GameSettings.GetKey(InputAction.BuildRotate);
             string lockKey = GameSettings.GetKey(InputAction.BuildLock);
             string wheelKey = GameSettings.GetKey(InputAction.BuildWheel);
@@ -394,7 +446,7 @@ namespace VoxelEngine.GridSystem.UI
             string primary, secondary;
             if (locked)
             {
-                primary = "ARROWS  nudge one step  ·  SHIFT+ARROWS  five";
+                primary = "ARROWS  nudge one step  ·  SHIFT+ARROWS  whole block";
                 secondary = "CTRL+UP/DOWN  lift / drop  ·  " + lockKey + "  release lock";
             }
             else if (runCells > 1)
@@ -479,6 +531,7 @@ namespace VoxelEngine.GridSystem.UI
         private Vector3 _steps;
         private bool _valid = true;
         private bool _aligned;
+        private Vector3 _size = Vector3.one;
 
         public PlacementBodyElement()
         {
@@ -487,7 +540,7 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         public void SetPose(Quaternion rotation, Vector3 up, Vector3 referenceForward,
-            Vector3Int steps, bool valid, bool aligned)
+            Vector3Int steps, bool valid, bool aligned, Vector3 blockSize)
         {
             _rotation = rotation;
             _up = up.sqrMagnitude > 0.0001f ? up.normalized : Vector3.up;
@@ -495,6 +548,7 @@ namespace VoxelEngine.GridSystem.UI
             _steps = new Vector3(steps.x, steps.y, steps.z);
             _valid = valid;
             _aligned = aligned;
+            _size = blockSize;
         }
 
         public void SetValid(bool valid)
@@ -636,14 +690,23 @@ namespace VoxelEngine.GridSystem.UI
 
         private void DrawBody(Painter2D painter, Vector2 centre, float scale, Quaternion rotation)
         {
+            // 17.50.0-dev: the body carries the BLOCK's proportions, not a cube's. A wide,
+            // shallow machine and a tall, narrow one were indistinguishable on the old
+            // card, so a 90-degree yaw changed nothing the eye could read. Proportions are
+            // normalised to the longest side and floored, so a thin panel stays visible.
             const float half = 0.46f;
+            float longest = Mathf.Max(_size.x, Mathf.Max(_size.y, _size.z));
+            if (longest <= 0.0001f) longest = 1f;
+            float hx = half * Mathf.Clamp(_size.x / longest, 0.16f, 1f);
+            float hy = half * Mathf.Clamp(_size.y / longest, 0.16f, 1f);
+            float hz = half * Mathf.Clamp(_size.z / longest, 0.16f, 1f);
             // Local corners of the block, before the hologram's rotation is applied.
             Vector3[] corners =
             {
-                new(-half, -half, -half), new(half, -half, -half),
-                new(half, half, -half),   new(-half, half, -half),
-                new(-half, -half, half),  new(half, -half, half),
-                new(half, half, half),    new(-half, half, half),
+                new(-hx, -hy, -hz), new(hx, -hy, -hz),
+                new(hx, hy, -hz),   new(-hx, hy, -hz),
+                new(-hx, -hy, hz),  new(hx, -hy, hz),
+                new(hx, hy, hz),    new(-hx, hy, hz),
             };
 
             Vector2[] screen = new Vector2[8];
@@ -690,7 +753,32 @@ namespace VoxelEngine.GridSystem.UI
             // ports and doors are referenced from.
             painter.fillColor = _aligned ? new Color(0.25f, 0.86f, 0.47f, 0.95f) : new Color(0.85f, 0.92f, 1f, 0.85f);
             painter.BeginPath();
-            painter.Arc(centre + Project(rotation * new Vector3(0f, 0f, half)) * (scale * 1.30f), 2.6f,
+            painter.Arc(centre + Project(rotation * new Vector3(0f, 0f, hz)) * (scale * 1.30f), 2.6f,
+                Angle.Degrees(0f), Angle.Degrees(360f));
+            painter.ClosePath();
+            painter.Fill(FillRule.NonZero);
+
+            // 17.50.0-dev: front is an ARROW, top is a gold pip. A filled face alone could
+            // be read as shading; an arrow leaving the body along local +Z cannot, and a
+            // marked top is what makes a pitch or a roll readable at a glance.
+            Vector2 frontBase = centre + Project(rotation * new Vector3(0f, 0f, hz)) * (scale * 1.30f);
+            Vector2 frontTip = centre + Project(rotation * new Vector3(0f, 0f, hz + 0.34f)) * (scale * 1.30f);
+            Vector2 frontDir = frontTip - frontBase;
+            Vector2 frontSide = new Vector2(-frontDir.y, frontDir.x) * 0.28f;
+            Vector2 frontBack = frontTip - frontDir * 0.38f;
+            painter.strokeColor = new Color(0.45f, 0.95f, 0.75f, 0.95f);
+            painter.lineWidth = 1.8f;
+            painter.BeginPath();
+            painter.MoveTo(frontBase);
+            painter.LineTo(frontTip);
+            painter.MoveTo(frontBack + frontSide);
+            painter.LineTo(frontTip);
+            painter.LineTo(frontBack - frontSide);
+            painter.Stroke();
+
+            painter.fillColor = new Color(0.95f, 0.78f, 0.30f, 0.95f);
+            painter.BeginPath();
+            painter.Arc(centre + Project(rotation * new Vector3(0f, hy, 0f)) * (scale * 1.30f), 2.2f,
                 Angle.Degrees(0f), Angle.Degrees(360f));
             painter.ClosePath();
             painter.Fill(FillRule.NonZero);
