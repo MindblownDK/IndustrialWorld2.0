@@ -33,6 +33,13 @@ namespace VoxelEngine.Building
         Span = 1,
         Pillar = 2,
         Deck = 3,
+        /// <summary>
+        /// 17.49.0-dev: a vertical sheet on the face the player is looking at. A DECK that
+        /// had to guess whether it was a floor or a wall was a guess the player could lose;
+        /// WALL states it, sits beside the other four patterns where a player looks for it,
+        /// and never consults the surface under the crosshair at all.
+        /// </summary>
+        Wall = 4,
     }
 
     /// <summary>The step the placement lattice quantises to while placing.</summary>
@@ -41,21 +48,6 @@ namespace VoxelEngine.Building
         Metre = 0,
         Half = 1,
         Free = 2,
-    }
-
-    /// <summary>
-    /// Which plane a DECK fills.
-    ///
-    /// 17.48.0-dev: AUTO is what shipped and it is a guess - it reads the surface under the
-    /// crosshair at the moment of the press, so whether a wall happens or a floor happens
-    /// depends on landing the crosshair exactly on the face. WALL removes the guess: the deck
-    /// fills the last face the crosshair saw, whatever it is looking at now, so a wall is
-    /// something the player states rather than something they have to catch.
-    /// </summary>
-    public enum DeckPlaneMode
-    {
-        Auto = 0,
-        Wall = 1,
     }
 
     /// <summary>
@@ -90,12 +82,14 @@ namespace VoxelEngine.Building
         public const int MaxDeckSide = 8;
 
         /// <summary>Hard cap on any single commit, whatever the mode asks for.</summary>
-        public const int MaxCells = 32;
+        // 17.49.0-dev: forty-eight, so a full-width wall (eight wide by five tall) fits in one
+        // gesture. The preview pool follows this number, so this is also the ceiling on how
+        // many holograms a drag can cost.
+        public const int MaxCells = 48;
 
         private const string K_PATTERN = "ve.placePattern";
         private const string K_STEP = "ve.placeStep";
         private const string K_SEAT = "ve.placeSeat";
-        private const string K_PLANE = "ve.placeDeckPlane";
 
         /// <summary>Raised whenever the pattern, the step or the eligibility changes.</summary>
         public static event System.Action Changed;
@@ -104,7 +98,6 @@ namespace VoxelEngine.Building
         private static PlacementPattern _pattern = PlacementPattern.Single;
         private static PlacementStep _step = PlacementStep.Metre;
         private static PlacementSeat _seat = PlacementSeat.Level;
-        private static DeckPlaneMode _plane = DeckPlaneMode.Auto;
 
         public static PlacementPattern Pattern
         {
@@ -114,12 +107,6 @@ namespace VoxelEngine.Building
         public static PlacementStep Step
         {
             get { EnsureLoaded(); return _step; }
-        }
-
-        /// <summary>Which plane a deck fills: decided from the aim, or stated as a wall.</summary>
-        public static DeckPlaneMode DeckPlane
-        {
-            get { EnsureLoaded(); return _plane; }
         }
 
         /// <summary>Level keeps a plan flat; Follow Ground drapes it over the surface.</summary>
@@ -144,6 +131,7 @@ namespace VoxelEngine.Building
             PlacementPattern.Span => "SPAN",
             PlacementPattern.Pillar => "PILLAR",
             PlacementPattern.Deck => "DECK",
+            PlacementPattern.Wall => "WALL",
             _ => "SINGLE",
         };
 
@@ -151,7 +139,8 @@ namespace VoxelEngine.Building
         {
             PlacementPattern.Span => "Drag a straight run across the face. Up to ten cells.",
             PlacementPattern.Pillar => "Drag a stack up or down the face. Up to ten cells.",
-            PlacementPattern.Deck => "Drag a rectangle across the face. Up to four by four.",
+            PlacementPattern.Deck => "Drag a rectangle across the ground. Up to eight by eight.",
+            PlacementPattern.Wall => "Drag a vertical sheet on the face you are looking at. Up to eight by eight.",
             _ => "One block per click. The classic.",
         };
 
@@ -185,34 +174,6 @@ namespace VoxelEngine.Building
         public static string SeatBadge(PlacementSeat seat)
             => seat == PlacementSeat.FollowGround ? "GROUND" : "LEVEL";
 
-        public static string DeckPlaneName(DeckPlaneMode mode) => mode switch
-        {
-            DeckPlaneMode.Wall => "WALL",
-            _ => "AUTO",
-        };
-
-        public static string DeckPlaneBlurb(DeckPlaneMode mode) => mode switch
-        {
-            DeckPlaneMode.Wall => "A deck always fills the last face you looked at - a wall, every time",
-            _ => "A deck fills whatever the crosshair is on: a face becomes a wall, the ground a floor",
-        };
-
-        public static string DeckPlaneBadge(DeckPlaneMode mode)
-            => mode == DeckPlaneMode.Wall ? "WALL" : "AUTO";
-
-        public static DeckPlaneMode DeckPlaneAt(int index)
-            => index == 1 ? DeckPlaneMode.Wall : DeckPlaneMode.Auto;
-
-        public static void SetDeckPlane(DeckPlaneMode mode)
-        {
-            EnsureLoaded();
-            if (_plane == mode) return;
-            _plane = mode;
-            PlayerPrefs.SetInt(K_PLANE, (int)_plane);
-            PlayerPrefs.Save();
-            Changed?.Invoke();
-        }
-
         public static PlacementSeat SeatAt(int index)
             => index == 1 ? PlacementSeat.FollowGround : PlacementSeat.Level;
 
@@ -222,6 +183,7 @@ namespace VoxelEngine.Building
                 1 => PlacementPattern.Span,
                 2 => PlacementPattern.Pillar,
                 3 => PlacementPattern.Deck,
+                4 => PlacementPattern.Wall,
                 _ => PlacementPattern.Single,
             };
 
@@ -264,7 +226,7 @@ namespace VoxelEngine.Building
         }
 
         /// <summary>Steps the pattern forward through the ring, wrapping to SINGLE.</summary>
-        public static PlacementPattern CycledPattern() => PatternAt(((int)Pattern + 1) % 4);
+        public static PlacementPattern CycledPattern() => PatternAt(((int)Pattern + 1) % 5);
 
         public static PlacementStep CycledStep() => StepAt(((int)Step + 1) % 3);
 
@@ -308,11 +270,9 @@ namespace VoxelEngine.Building
             int pattern = PlayerPrefs.GetInt(K_PATTERN, 0);
             int step = PlayerPrefs.GetInt(K_STEP, 0);
             int seat = PlayerPrefs.GetInt(K_SEAT, 0);
-            int plane = PlayerPrefs.GetInt(K_PLANE, 0);
-            _pattern = (PlacementPattern)Mathf.Clamp(pattern, 0, 3);
+            _pattern = (PlacementPattern)Mathf.Clamp(pattern, 0, 4);
             _step = (PlacementStep)Mathf.Clamp(step, 0, 2);
             _seat = (PlacementSeat)Mathf.Clamp(seat, 0, 1);
-            _plane = (DeckPlaneMode)Mathf.Clamp(plane, 0, 1);
         }
     }
 }

@@ -648,9 +648,9 @@ namespace VoxelEngine.Building
                 // widen sideways. A deck whose last surface was a face now stays on that
                 // face's plane, where the crosshair meets it, however empty the rest of the
                 // view is.
-                if (block != null && PlacementOptions.Pattern == PlacementPattern.Deck
-                    && (_hasLastFace || PlacementOptions.DeckPlane == DeckPlaneMode.Wall)
-                    && TryFacePlaneAim(ray, out Vector3 facePoint))
+                if (block != null && (PlacementOptions.Pattern == PlacementPattern.Deck
+                        || PlacementOptions.Pattern == PlacementPattern.Wall)
+                    && TryPatternPlaneAim(ray, out Vector3 facePoint))
                 {
                     Vector3 faceUp = GravityProvider.GetUp(facePoint);
                     if (faceUp.sqrMagnitude < 0.0001f) faceUp = Vector3.up;
@@ -2190,6 +2190,19 @@ namespace VoxelEngine.Building
                 _patternAnchorRotation = GhostAimRotation;
                 _patternAnchorFrame = GhostFrame;
                 ResolvePatternPlane();
+
+                // A wall's blocks STAND against its plane. The ghost's own pose can be a
+                // surface rotation from the ground it was snapped onto, which would lay a
+                // wall's cells flat against the wall; the plane knows better (17.49.0-dev).
+                if (PlacementOptions.Pattern == PlacementPattern.Wall
+                    && _patternPlaneNormal.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 wallUp = GravityProvider.GetUp(_patternAnchorPosition);
+                    if (wallUp.sqrMagnitude < 0.0001f) wallUp = Vector3.up;
+                    wallUp.Normalize();
+                    _patternAnchorRotation = Quaternion.LookRotation(_patternPlaneNormal, wallUp)
+                        * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                }
                 _patternSignature = -1;
                 PlacementFeedback.Snap(GhostPosition, 1);
                 return;
@@ -2214,7 +2227,8 @@ namespace VoxelEngine.Building
             // a single row and a wall could not be made. The plan is measured against the
             // point actually under the crosshair while the aim is on a face; a ground aim
             // keeps the snapped pose, so floors behave exactly as they did.
-            bool faceDeck = PlacementOptions.Pattern == PlacementPattern.Deck && _patternStanding;
+            bool faceDeck = PlacementOptions.Pattern == PlacementPattern.Wall
+                || (PlacementOptions.Pattern == PlacementPattern.Deck && _patternStanding);
             PatternStandsUp = faceDeck;
             _patternAim = faceDeck ? StandingAimPoint() : GhostAimPosition;
 
@@ -2422,6 +2436,25 @@ namespace VoxelEngine.Building
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
 
+            // ── 17.49.0-dev: THE WALL PATTERN ANSWERS ALL OF THIS BY ITSELF. ─────────
+            // A wall is a vertical sheet facing the player: its normal is the camera's
+            // horizontal heading, its up is gravity. Nothing is detected and nothing depends on
+            // what the crosshair is touching, which is why selecting WALL now works from any
+            // position instead of only when a face happened to land under the aim.
+            if (PlacementOptions.Pattern == PlacementPattern.Wall)
+            {
+                var wallCamera = shootCamera != null ? shootCamera : Camera.main;
+                Vector3 heading = wallCamera != null
+                    ? Vector3.ProjectOnPlane(wallCamera.transform.forward, up)
+                    : Vector3.ProjectOnPlane(Vector3.forward, up);
+                if (heading.sqrMagnitude < 0.0001f) heading = Vector3.ProjectOnPlane(Vector3.forward, up);
+                if (heading.sqrMagnitude < 0.0001f) heading = Vector3.right;
+
+                _patternStanding = true;
+                _patternPlaneNormal = heading.normalized;
+                return;
+            }
+
             // ── Signal one: the crosshair is on a BUILT piece. ──────────────────────
             // ── 17.48.1-dev: THE WALL IS THE PIECE YOU ARE POINTING AT, NOT WHERE YOU STAND. ──
             // The plane used to come from the surface under the crosshair, so it only worked
@@ -2442,7 +2475,8 @@ namespace VoxelEngine.Building
             // is why walking round to extend one turned it back into a floor level with the
             // block. A stated WALL plan now takes its plane from the nearest built piece
             // within reach, so as long as there is a wall here the plan stands on it.
-            if (PlacementOptions.DeckPlane == DeckPlaneMode.Wall && TryNearestPiecePlane(out Vector3 nearNormal))
+            if (PlacementOptions.Pattern == PlacementPattern.Deck
+                && TryNearestPiecePlane(out Vector3 nearNormal))
             {
                 _patternStanding = true;
                 _patternPlaneNormal = nearNormal;
@@ -2452,7 +2486,7 @@ namespace VoxelEngine.Building
             // 17.48.0-dev: WALL on the dial means the player has stated the answer. The deck
             // fills the last face the crosshair saw - which may be seconds old and completely
             // out of view now - and no detection is consulted at all.
-            if (PlacementOptions.DeckPlane == DeckPlaneMode.Wall && _hasLastFace)
+            if (PlacementOptions.Pattern == PlacementPattern.Deck && _hasLastFace)
             {
                 _patternStanding = true;
                 _patternPlaneNormal = _lastFaceNormal.sqrMagnitude > 0.0001f
@@ -2583,6 +2617,22 @@ namespace VoxelEngine.Building
         /// Where the view ray meets the plane of the last face the crosshair was on. Used to
         /// keep a deck on that face when the crosshair has left every surface.
         /// </summary>
+        /// <summary>Where the view ray meets the plan's own plane - the wall's own plane for a
+        /// WALL pattern, the remembered face for a DECK.</summary>
+        private bool TryPatternPlaneAim(Ray ray, out Vector3 point)
+        {
+            point = default;
+            if (PlacementOptions.Pattern == PlacementPattern.Wall)
+            {
+                var plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
+                if (!plane.Raycast(ray, out float enter)) return false;
+                if (enter <= 0f || enter > AimAssistReach) return false;
+                point = ray.GetPoint(enter);
+                return true;
+            }
+            return TryFacePlaneAim(ray, out point);
+        }
+
         private bool TryFacePlaneAim(Ray ray, out Vector3 point)
         {
             point = default;
@@ -2617,7 +2667,9 @@ namespace VoxelEngine.Building
             var plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
             // A stated WALL plan is measured against the remembered face plane, because the
             // player may be looking anywhere at all while the plan still belongs to that wall.
-            if (PlacementOptions.DeckPlane == DeckPlaneMode.Wall && _hasLastFace)
+            if (PlacementOptions.Pattern == PlacementPattern.Wall)
+                plane = new UnityEngine.Plane(_patternPlaneNormal, _patternAnchorPosition);
+            else if (PlacementOptions.Pattern == PlacementPattern.Deck && _hasLastFace)
                 plane = new UnityEngine.Plane(_patternPlaneNormal, _lastFacePoint);
             float limit = Mathf.Max(12f, reach) * 3f;
             if (plane.Raycast(ray, out float enter) && enter > 0f && enter < limit)
@@ -2626,7 +2678,8 @@ namespace VoxelEngine.Building
         }
 
         private bool PlanStandsUp()
-            => PlacementOptions.Pattern == PlacementPattern.Deck && _patternStanding;
+            => PlacementOptions.Pattern == PlacementPattern.Wall
+               || (PlacementOptions.Pattern == PlacementPattern.Deck && _patternStanding);
 
         private void SeatPlanOnGround(System.Collections.Generic.List<PlacementCell> cells, BlockItem block)
         {

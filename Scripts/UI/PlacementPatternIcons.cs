@@ -3,7 +3,7 @@
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║          PLACEMENT PATTERN ICONS — drawn, not imported           ║
 // ║                                                                  ║
-// ║  Four patterns and three steps, drawn as isometric solids through ║
+// ║  Five patterns and three steps, drawn as isometric solids through ║
 // ║  the shared line-art rasteriser. A run of three cells reads as a  ║
 // ║  run at wheel size; a single cell reads as a single cell. That is ║
 // ║  the entire requirement, and it needs no art.                     ║
@@ -44,6 +44,14 @@ namespace VoxelEngine.UI
                     for (int x = 0; x < 3; x++)
                         for (int z = 0; z < 2; z++)
                             b.IsoBox(x * (Cell + Gap), 0f, z * (Cell + Gap), Cell, Cell, Cell);
+                    break;
+
+                // Cells rise on Y and advance on X, so a wall reads as a SHEET standing up
+                // rather than as another floor patch (17.49.0-dev).
+                case PlacementPattern.Wall:
+                    for (int x = 0; x < 3; x++)
+                        for (int y = 0; y < 2; y++)
+                            b.IsoBox(x * (Cell + Gap), y * (Cell + Gap), 0f, Cell, Cell, Cell);
                     break;
 
                 default:

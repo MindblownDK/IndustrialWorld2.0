@@ -1,9 +1,33 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.48.1-dev`
+**Current Version:** `17.49.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.49.0-dev] WALL Is a Pattern, Not a Guess
+
+**Type:** MINOR - a fifth placement pattern that replaces the deck-plane toggle added last round.
+
+**GitHub title:** `[17.49.0-dev] Make WALL a pattern of its own, drawn from the camera heading, and drop the auto/wall toggle`
+
+#### Added
+
+- **WALL joins SINGLE, SPAN, PILLAR and DECK on the pattern face of the plot dial (`PlacementPattern.Wall`, index 4).** It fills a VERTICAL sheet on the face the player is looking at, up to eight by eight, and it shares the deck's rectangle logic, its ring emission and its proportional shrink. Its plane is the camera's horizontal heading with gravity as up, so it is decided by arithmetic and never by detection: nothing about it depends on what the crosshair happens to be touching, which is why selecting WALL works from any position. Its blocks are rotated to STAND against that plane rather than inherit a ground-surface pose, and it carries its own wheel icon (cells rising on Y, so it reads as a sheet rather than a floor patch).
+
+#### Removed
+
+- **The AUTO / WALL deck-plane toggle, and its fourth face on the dial.** A toggle that existed only to make one pattern behave like another was the wrong shape: the player asked where a wall lives, and the answer is beside the other patterns. `DeckPlaneMode`, its PlayerPrefs key, its three dial handlers and the "WALL" suffix on the prompt pill are all gone. A DECK is a floor plan again, with the aiming improvements from 17.47.x and 17.48.1-dev kept underneath it.
+
+#### Changed
+
+- **Deck and wall caps: eight cells a side, forty-eight cells a commit.** Four a side was a window; thirty-two was not quite a wall. The preview pool follows the budget.
+
+#### Validation
+
+- Parse, fields, type scope and qualified-type checks clean on all six modified files, and a tree-wide sweep confirms no reference to the removed `DeckPlaneMode` survives anywhere.
+- The wall arithmetic walked through headlessly: a one-metre wall dragged three metres up is 2 wide by 4 tall, a seven by eight drag is 7 by 6 (42 cells, inside the 48 budget), and a battery wall still steps by the battery.
+- Not run in Unity.
 
 ### [17.48.1-dev] A Wall Big Enough to Be One, Reached From Any Side
 

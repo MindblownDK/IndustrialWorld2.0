@@ -101,7 +101,7 @@ namespace VoxelEngine.Building
                 ? frame.ToLocal(targetPosition) - frame.ToLocal(anchorPosition)
                 : delta;
 
-            if (pattern == PlacementPattern.Deck)
+            if (pattern == PlacementPattern.Deck || pattern == PlacementPattern.Wall)
             {
                 // 17.44.11-dev: a deck is counted per lattice step and spaced by the LARGER of
                 // the step and the block, so the gesture is always "one metre of drag adds a
@@ -157,7 +157,9 @@ namespace VoxelEngine.Building
                 // did not travel along still takes its neighbour, so the same drag that makes
                 // a floor run makes a wall two blocks across, and dragging along the wall
                 // widens it. A ground aim is untouched by this.
-                if (plane.valid && budget >= 4 && (alongRight == 0) != (alongForward == 0))
+                bool wallPattern = pattern == PlacementPattern.Wall;
+                if ((plane.valid || wallPattern) && budget >= 4
+                    && (alongRight == 0) != (alongForward == 0))
                 {
                     if (alongRight == 0) alongRight = 1;
                     else alongForward = 1;
