@@ -3,11 +3,10 @@
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║        PLACEMENT RING — the second face of the build wheel       ║
 // ║                                                                  ║
-// ║  Hold the build wheel, then Ctrl + scroll and the wheel turns    ║
-// ║  over: the item's own variants step aside and the PLACEMENT ring  ║
-// ║  comes up - SINGLE, SPAN, PILLAR, DECK. Another Ctrl + scroll     ║
-// ║  and it turns again to the lattice STEP (1 m, 0.5 m, FREE). One   ║
-// ║  more and it is back to the item.                                ║
+// ║  Hold the build wheel, then Ctrl + scroll to turn from the        ║
+// ║  item's own variants to the PLACEMENT ring: SINGLE, SPAN, PILLAR, ║
+// ║  DECK and WALL. A further turn can show the lattice STEP (1 m,    ║
+// ║  0.5 m, FREE), then the ring returns to the item's own options.  ║
 // ║                                                                  ║
 // ║  It is a ring, not a menu, because placement is a MODE you carry  ║
 // ║  while you build - picking it must cost one flick, not a trip    ║
@@ -30,7 +29,7 @@ namespace VoxelEngine.UI
         public enum Stage
         {
             Base = 0,      // the owning wheel's own options
-            Pattern = 1,   // SINGLE / SPAN / PILLAR / DECK
+            Pattern = 1,   // SINGLE / SPAN / PILLAR / DECK / WALL
             Step = 2,      // 1 m / 0.5 m / FREE
             Seat = 3,      // LEVEL / FOLLOW GROUND - how a run sits on the ground
         }
@@ -38,8 +37,13 @@ namespace VoxelEngine.UI
         private readonly RadialWheelController _wheel;
         private readonly string _baseLabel;
         private readonly string _baseSwapsHint;
+        private readonly string _baseIdleTitle;
+        private readonly string _baseIdleDescription;
+        private readonly Texture2D _baseIdleIcon;
+        private readonly Color _baseIdleTitleColor;
         private readonly bool _home;
         private readonly bool _includeStep;
+        private readonly bool _patternOnly;
 
         private Stage _stage = Stage.Base;
 
@@ -50,19 +54,27 @@ namespace VoxelEngine.UI
         /// variants of their own), so the ring starts on PATTERN and never shows an
         /// empty base face.
         /// </param>
+        /// <param name="includeStep">Whether the pattern face may turn over to a lattice-step face.</param>
+        /// <param name="patternOnly">Locks a placement-only wheel to its pattern face, with no empty base face.</param>
         public PlacementModeRing(RadialWheelController wheel, string baseLabel, bool home,
-            bool includeStep = true)
+            bool includeStep = true, bool patternOnly = false)
         {
             _wheel = wheel;
             _baseLabel = baseLabel;
             _baseSwapsHint = wheel != null ? wheel.SwapHint : string.Empty;
-            _home = home;
+            _baseIdleTitle = wheel != null ? wheel.IdleTitle : string.Empty;
+            _baseIdleDescription = wheel != null ? wheel.IdleDescription : string.Empty;
+            _baseIdleIcon = wheel != null ? wheel.IdleIcon : null;
+            _baseIdleTitleColor = wheel != null ? wheel.IdleTitleColor : Color.white;
+            _home = home || patternOnly;
             _includeStep = includeStep;
+            _patternOnly = patternOnly;
             if (_wheel == null) return;
 
             _wheel.CtrlSwapGroup = Advance;
-            _wheel.CtrlSwapHint = home ? "LATTICE STEP" : "PLACEMENT MODES";
-            if (home) _stage = Stage.Pattern;
+            _wheel.CtrlSwapHint = patternOnly ? string.Empty
+                : home ? "LATTICE STEP" : "PLACEMENT MODES";
+            if (_home) _stage = Stage.Pattern;
         }
 
         /// <summary>True while the ring is showing its own options.</summary>
@@ -86,9 +98,11 @@ namespace VoxelEngine.UI
                 case Stage.Pattern:
                     _wheel.GroupLabel = "BUILD PATTERN";
                     _wheel.SwapHint = string.Empty;
-                    _wheel.CtrlSwapHint = _includeStep ? "LATTICE STEP"
+                    _wheel.CtrlSwapHint = _patternOnly ? string.Empty
+                        : _includeStep ? "LATTICE STEP"
                         : "BACK TO " + (_baseLabel ?? string.Empty);
                     _wheel.IdleTitle = "KEEP PATTERN";
+                    _wheel.IdleDescription = "Release in the centre to keep the selected build pattern";
                     _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
                     break;
 
@@ -97,6 +111,7 @@ namespace VoxelEngine.UI
                     _wheel.SwapHint = string.Empty;
                     _wheel.CtrlSwapHint = _home ? "RUN SEATING" : "BACK TO " + (_baseLabel ?? string.Empty);
                     _wheel.IdleTitle = "KEEP STEP";
+                    _wheel.IdleDescription = "Release in the centre to keep the current lattice step";
                     _wheel.IdleIcon = PlacementPatternIcons.ForStep(PlacementOptions.Step);
                     break;
 
@@ -105,6 +120,7 @@ namespace VoxelEngine.UI
                     _wheel.SwapHint = string.Empty;
                     _wheel.CtrlSwapHint = "BACK TO PATTERNS";
                     _wheel.IdleTitle = "KEEP SEATING";
+                    _wheel.IdleDescription = "Release in the centre to keep the current run seating";
                     _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
                     break;
 
@@ -113,7 +129,10 @@ namespace VoxelEngine.UI
                     _wheel.GroupLabel = _baseLabel;
                     _wheel.SwapHint = _baseSwapsHint;
                     _wheel.CtrlSwapHint = "PLACEMENT MODES";
-                    if (_home) _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
+                    _wheel.IdleTitle = _baseIdleTitle;
+                    _wheel.IdleDescription = _baseIdleDescription;
+                    _wheel.IdleIcon = _home ? PlacementPatternIcons.For(PlacementOptions.Pattern) : _baseIdleIcon;
+                    _wheel.IdleTitleColor = _baseIdleTitleColor;
                     break;
             }
         }
@@ -121,6 +140,7 @@ namespace VoxelEngine.UI
         private void Advance()
         {
             if (_wheel == null) return;
+            if (_patternOnly) return;
             _stage = _stage switch
             {
                 Stage.Pattern => _includeStep ? Stage.Step : Stage.Base,

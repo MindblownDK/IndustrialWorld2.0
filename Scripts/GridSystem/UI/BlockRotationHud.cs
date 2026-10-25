@@ -51,7 +51,11 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement _legend;
         private static Label _legendPrimary, _legendSecondary;
         private static Label _runLabel;
+        private static Label _gridPlanLabel;
         private static bool _visible;
+        private static bool _lastGridPlanVisible;
+        private static string _lastGridPlanText;
+        private static int _gridPlanTransitionToken;
 
         // ── Change detection (repaint only on real change) ────────────
         private static Quaternion _lastRotation = Quaternion.identity;
@@ -85,6 +89,9 @@ namespace VoxelEngine.GridSystem.UI
             _lastRotationText = null;
             _lastRunText = null;
             _lastRunVisible = false;
+            _lastGridPlanText = null;
+            _lastGridPlanVisible = false;
+            _gridPlanTransitionToken++;
             _lastBlockSize = new Vector3(float.NaN, float.NaN, float.NaN);
 
             _box = new VisualElement { name = "BlockRotationHud" };
@@ -181,6 +188,26 @@ namespace VoxelEngine.GridSystem.UI
             _runLabel.pickingMode = PickingMode.Ignore;
             _box.Add(_runLabel);
 
+            _gridPlanLabel = new Label(string.Empty);
+            _gridPlanLabel.style.fontSize = 9;
+            _gridPlanLabel.style.letterSpacing = 0.4f;
+            _gridPlanLabel.style.color = new StyleColor(T.TextSecondary);
+            _gridPlanLabel.style.whiteSpace = WhiteSpace.Normal;
+            _gridPlanLabel.style.marginBottom = 6;
+            _gridPlanLabel.style.opacity = 0f;
+            _gridPlanLabel.style.scale = new Scale(new Vector2(0.98f, 0.98f));
+            _gridPlanLabel.style.display = DisplayStyle.None;
+            _gridPlanLabel.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName>
+                { "opacity", "scale", "color" };
+            _gridPlanLabel.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
+            {
+                new TimeValue(0.12f, TimeUnit.Second),
+                new TimeValue(0.12f, TimeUnit.Second),
+                new TimeValue(0.10f, TimeUnit.Second)
+            };
+            _gridPlanLabel.pickingMode = PickingMode.Ignore;
+            _box.Add(_gridPlanLabel);
+
             // ── Adaptive key rows ─────────────────────────────────────
             _legend = new VisualElement();
             _legend.pickingMode = PickingMode.Ignore;
@@ -226,6 +253,56 @@ namespace VoxelEngine.GridSystem.UI
             return label;
         }
 
+        private static void SetGridPlanLabel(string text, bool visible, Color color)
+        {
+            if (_gridPlanLabel == null) return;
+            _gridPlanLabel.style.color = new StyleColor(color);
+
+            if (visible && !_lastGridPlanVisible)
+            {
+                _gridPlanTransitionToken++;
+                int token = _gridPlanTransitionToken;
+                _gridPlanLabel.style.display = DisplayStyle.Flex;
+                _gridPlanLabel.style.opacity = 0f;
+                _gridPlanLabel.style.scale = new Scale(new Vector2(0.98f, 0.98f));
+                _gridPlanLabel.schedule.Execute(() =>
+                {
+                    if (_gridPlanLabel == null || token != _gridPlanTransitionToken) return;
+                    _gridPlanLabel.style.opacity = 1f;
+                    _gridPlanLabel.style.scale = new Scale(Vector2.one);
+                }).StartingIn(1);
+            }
+            else if (!visible && _lastGridPlanVisible)
+            {
+                _gridPlanTransitionToken++;
+                int token = _gridPlanTransitionToken;
+                _gridPlanLabel.style.opacity = 0f;
+                _gridPlanLabel.style.scale = new Scale(new Vector2(0.98f, 0.98f));
+                _gridPlanLabel.schedule.Execute(() =>
+                {
+                    if (_gridPlanLabel == null || token != _gridPlanTransitionToken) return;
+                    _gridPlanLabel.style.display = DisplayStyle.None;
+                }).StartingIn(130);
+            }
+            else if (visible)
+            {
+                _gridPlanLabel.style.opacity = 1f;
+                _gridPlanLabel.style.scale = new Scale(Vector2.one);
+            }
+
+            _lastGridPlanVisible = visible;
+            if (visible && _lastGridPlanText != text)
+            {
+                _lastGridPlanText = text;
+                _gridPlanLabel.text = text ?? string.Empty;
+            }
+            else if (!visible)
+            {
+                _lastGridPlanText = null;
+                _gridPlanLabel.text = string.Empty;
+            }
+        }
+
         // ══════════════════════════════════════════════════════════════
         //  FRAME
         // ══════════════════════════════════════════════════════════════
@@ -242,6 +319,7 @@ namespace VoxelEngine.GridSystem.UI
             }
 
             bool gridBlock = GridBuilder.HoldingGridBlock;
+            GridBuilder gridBuilder = gridBlock ? GridBuilder.Instance : null;
             bool staticBlock = VoxelEngine.Building.BuildSystem.HoldingBlock;
             Vector3Int steps = gridBlock ? GridBuilder.RotationSteps
                 : VoxelEngine.Building.BuildSystem.RotationSteps;
@@ -301,6 +379,7 @@ namespace VoxelEngine.GridSystem.UI
             {
                 if (_visible) _visible = false;
                 _lastName = null;
+                SetGridPlanLabel(string.Empty, false, T.TextSecondary);
                 return;
             }
 
@@ -315,7 +394,9 @@ namespace VoxelEngine.GridSystem.UI
             bool valid = VoxelEngine.Building.BuildSystem.GhostValid;
             bool aligned = VoxelEngine.Building.BuildSystem.GhostAligned;
             string frameLabel = VoxelEngine.Building.BuildSystem.GhostFrameLabel;
-            int runCells = VoxelEngine.Building.BuildSystem.PatternPreviewCount;
+            int runCells = gridBlock
+                ? gridBuilder != null && gridBuilder.GridPatternGestureActive ? gridBuilder.GridPatternPreviewCount : 0
+                : VoxelEngine.Building.BuildSystem.PatternPreviewCount;
 
             // ── Name ──────────────────────────────────────────────────
             if (_nameLabel.text != "\u25A3 " + heldName)
@@ -375,14 +456,14 @@ namespace VoxelEngine.GridSystem.UI
             }
 
             bool gridOn = VoxelEngine.Building.BuildSystem.GridSnapActive;
-            string latticeText = PlacementOptions.StepName(PlacementOptions.Step)
-                                 + (gridOn ? string.Empty : " · OFF");
+            string latticeText = gridBlock ? "NATIVE GRID CELLS"
+                : PlacementOptions.StepName(PlacementOptions.Step) + (gridOn ? string.Empty : " · OFF");
             if (_lastLatticeText != latticeText)
             {
                 _lastLatticeText = latticeText;
                 _latticeChip.text = latticeText;
-                _latticeChip.style.color = new StyleColor(
-                    !gridOn ? T.TextMuted
+                _latticeChip.style.color = new StyleColor(gridBlock ? T.AccentCyan
+                    : !gridOn ? T.TextMuted
                     : PlacementOptions.Step == PlacementStep.Metre ? T.TextSecondary : T.AccentGold);
             }
 
@@ -396,21 +477,59 @@ namespace VoxelEngine.GridSystem.UI
             }
 
             // ── Run read-out ─────────────────────────────────────────
-            // 17.50.0-dev: the run line states the PLAN, not just a count: a deck reads
-            // its two sides and the word FLAT, a wall reads its sides and which way the
-            // run currently goes - so when a wall turns mid-drag the card says so in
-            // the same frame the previews move. Before the press it teaches the drag.
             string runText = null;
+            string gridCostText = null;
+            Color gridCostColor = T.TextSecondary;
             var planSize = VoxelEngine.Building.BuildSystem.PatternPlanSize;
             string planeLabel = VoxelEngine.Building.BuildSystem.PatternPlaneLabel;
-            if (staticBlock && runCells > 1
+            if (gridBlock && gridBuilder != null && pattern != PlacementPattern.Single)
+            {
+                if (gridBuilder.GridPatternGestureActive)
+                {
+                    Vector2Int gridSize = gridBuilder.GridPatternDimensions;
+                    string sizeText = pattern == PlacementPattern.Deck || pattern == PlacementPattern.Wall
+                        ? gridSize.x + " × " + gridSize.y
+                        : pattern == PlacementPattern.Pillar
+                            ? gridBuilder.GridPatternPreviewCount + " HIGH"
+                            : gridBuilder.GridPatternPreviewCount + " CELLS";
+                    runText = patternText + "  ·  " + sizeText + "  ·  "
+                        + gridBuilder.GridPatternClearCount + "/" + gridBuilder.GridPatternPreviewCount + " CLEAR";
+                    if (!string.IsNullOrEmpty(gridBuilder.GridPatternPlaneLabel))
+                        runText += "  ·  " + gridBuilder.GridPatternPlaneLabel;
+                    if (gridBuilder.GridPatternStockCapped) runText += "  ·  STOCK CAP";
+
+                    gridCostText = "COST " + gridBuilder.GridPatternClearCount
+                        + "  ·  " + gridBuilder.GridPatternCarriedStock + " CARRIED + "
+                        + gridBuilder.GridPatternWirelessStock + " WIRELESS";
+                    if (gridBuilder.GridPatternPreviewCount > gridBuilder.GridPatternClearCount)
+                        gridCostText += "  ·  " + (gridBuilder.GridPatternPreviewCount - gridBuilder.GridPatternClearCount) + " BLOCKED";
+                    if (gridBuilder.GridPatternStockCapped)
+                        gridCostText += "  ·  NEED " + gridBuilder.GridPatternDesiredCount;
+                    gridCostColor = gridBuilder.GridPatternClearCount > 0
+                        ? gridBuilder.GridPatternStockCapped ? T.AccentAmber : T.AccentGreen
+                        : new Color(0.95f, 0.36f, 0.28f);
+                }
+                else if (gridBuilder.GridPatternContextSupported)
+                {
+                    runText = "PRESS + DRAG  ·  " + patternText;
+                    gridCostText = "1 ITEM / CELL  ·  " + gridBuilder.GridPatternCarriedStock
+                        + " CARRIED + " + gridBuilder.GridPatternWirelessStock + " WIRELESS";
+                    gridCostColor = gridBuilder.GridPatternAvailableStock > 0 ? T.TextSecondary
+                        : new Color(0.95f, 0.36f, 0.28f);
+                }
+                else if (!string.IsNullOrEmpty(gridBuilder.GridPatternReason))
+                {
+                    runText = "SINGLE ONLY  ·  " + gridBuilder.GridPatternReason;
+                }
+            }
+            else if (staticBlock && runCells > 1
                 && (pattern == PlacementPattern.Deck || pattern == PlacementPattern.Wall)
                 && planSize.x > 0 && planSize.y > 0)
             {
                 runText = patternText + "  " + planSize.x + " × " + planSize.y
                         + "  ·  " + planeLabel + "  ·  " + runCells + " CELLS";
             }
-            else if (runCells > 1)
+            else if (staticBlock && runCells > 1)
             {
                 runText = "LAYING  " + runCells + " CELLS";
             }
@@ -435,12 +554,13 @@ namespace VoxelEngine.GridSystem.UI
                 _lastRunText = runText;
                 _runLabel.text = runText;
             }
+            SetGridPlanLabel(gridCostText, gridCostText != null, gridCostColor);
 
             // Adaptive legend (keys), resolved below.
             string turnKey = GameSettings.GetKey(InputAction.BuildRotate);
             string lockKey = GameSettings.GetKey(InputAction.BuildLock);
             string wheelKey = GameSettings.GetKey(InputAction.BuildWheel);
-
+            string buildKey = GameSettings.GetKey(InputAction.Build);
             string gridKey = GameSettings.GetKey(InputAction.BuildToggleGrid);
 
             string primary, secondary;
@@ -448,6 +568,26 @@ namespace VoxelEngine.GridSystem.UI
             {
                 primary = "ARROWS  nudge one step  ·  SHIFT+ARROWS  whole block";
                 secondary = "CTRL+UP/DOWN  lift / drop  ·  " + lockKey + "  release lock";
+            }
+            else if (gridBlock && gridBuilder != null && pattern != PlacementPattern.Single
+                && gridBuilder.GridPatternGestureActive)
+            {
+                primary = "RELEASE " + buildKey + "  place " + gridBuilder.GridPatternClearCount + " cells";
+                secondary = "PATTERN LOCKED  ·  " + wheelKey + "  opens options";
+            }
+            else if (gridBlock && pattern != PlacementPattern.Single)
+            {
+                primary = gridBuilder != null && gridBuilder.GridPatternContextSupported
+                    ? "HOLD " + buildKey + " + DRAG  ·  " + patternText
+                    : "CLICK " + buildKey + "  place one block";
+                secondary = gridBuilder != null && gridBuilder.GridPatternContextSupported
+                    ? wheelKey + "  pattern wheel  ·  CTRL+SCROLL  modes  ·  " + turnKey + "  rotate"
+                    : "SINGLE ONLY  ·  " + (gridBuilder != null ? gridBuilder.GridPatternReason : "grid builder unavailable");
+            }
+            else if (gridBlock)
+            {
+                primary = "CLICK " + buildKey + "  place one block";
+                secondary = wheelKey + "  pattern / armour options  ·  " + turnKey + "  rotate";
             }
             else if (runCells > 1)
             {

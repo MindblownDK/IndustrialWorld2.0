@@ -12,6 +12,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.Building;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
@@ -62,6 +63,9 @@ namespace VoxelEngine.UI
         private readonly RadialWheelController _wheel = new();
         private Inventory _inventory;
         private VisualElement _host;
+        private PlacementModeRing _placementRing;
+        private bool _hasRingContext;
+        private bool _ringShapeContext;
 
         private void Awake()
         {
@@ -86,15 +90,40 @@ namespace VoxelEngine.UI
         private void Update()
         {
             if (_inventory == null) _inventory = FindAnyObjectByType<Inventory>();
-            bool holding = TryGetHeldGridArmor(out _);
+            bool holding = TryGetHeldGridBlock(out var heldItem);
+            bool shapeContext = holding && heldItem.SupportsShapeVariants;
+            EnsurePlacementRing(shapeContext);
+            _placementRing?.Tick();
 
             _wheel.Tick(InputAction.BuildWheel, holding);
 
             if (holding && !_wheel.IsOpen && !UIState.IsBlocking)
-                _wheel.ShowPrompt($"[{GameSettings.GetKey(InputAction.BuildWheel)}]  ARMOUR SHAPE  ·  " +
-                                  Titles[Mathf.Clamp(System.Array.IndexOf(Variants, _current), 0, Titles.Length - 1)]);
+            {
+                string prompt = shapeContext
+                    ? $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  ARMOUR SHAPE  ·  "
+                      + Titles[Mathf.Clamp(System.Array.IndexOf(Variants, _current), 0, Titles.Length - 1)]
+                      + "  ·  CTRL+SCROLL  PATTERN"
+                    : $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  BUILD PATTERN  ·  "
+                      + PlacementOptions.PatternName(PlacementOptions.Pattern);
+                _wheel.ShowPrompt(prompt);
+            }
             else
+            {
                 _wheel.HidePrompt();
+            }
+        }
+
+        private void EnsurePlacementRing(bool shapeContext)
+        {
+            if (_hasRingContext && _ringShapeContext == shapeContext) return;
+            _hasRingContext = true;
+            _ringShapeContext = shapeContext;
+            _placementRing = new PlacementModeRing(_wheel,
+                shapeContext ? "ARMOUR SHAPE" : "GRID BLOCK",
+                home: !shapeContext,
+                includeStep: false,
+                patternOnly: !shapeContext);
+            _wheel.Invalidate();
         }
 
         private VisualElement ResolveHost()
@@ -108,6 +137,9 @@ namespace VoxelEngine.UI
 
         private void FillOptions(List<RadialOption> options)
         {
+            if (_placementRing != null && _placementRing.TryFill(options)) return;
+            if (!TryGetHeldGridBlock(out var item) || !item.SupportsShapeVariants) return;
+
             for (int i = 0; i < Variants.Length; i++)
             {
                 options.Add(new RadialOption
@@ -124,19 +156,20 @@ namespace VoxelEngine.UI
 
         private bool Confirm(int index)
         {
+            if (_placementRing != null && _placementRing.TryConfirm(index)) return true;
+            if (!TryGetHeldGridBlock(out var item) || !item.SupportsShapeVariants) return true;
             if (index < 0 || index >= Variants.Length) return true;
             _current = Variants[index];
             BuildFeedbackHud.Show("Grid Shape", Titles[index], null, UITheme.AccentCyan);
             return true;
         }
 
-        private bool TryGetHeldGridArmor(out GridBlockItem item)
+        private bool TryGetHeldGridBlock(out GridBlockItem item)
         {
             item = null;
             if (_inventory == null) return false;
             var stack = _inventory.ActiveStack;
             if (stack == null || stack.IsEmpty || !(stack.item is GridBlockItem gbi)) return false;
-            if (!gbi.SupportsShapeVariants) return false;
             item = gbi;
             return true;
         }

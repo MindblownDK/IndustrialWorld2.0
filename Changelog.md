@@ -1,9 +1,33 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.51.0-dev`
+**Current Version:** `17.52.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.52.0-dev] Five Patterns, One Native Grid
+
+**Type:** MINOR - adds press-drag-release pattern placement for ordinary one-cell grid blocks on their native grid, with a per-cell preview and release-time stock / validity checks. No save schema, item, recipe, research node or keybind change.
+
+**GitHub title:** `[17.52.0-dev] Lay native grid blocks in five cell-space patterns with a wireless-aware cost preview`
+
+#### Added
+
+- **The grid build wheel exposes the shared five patterns.** Armour keeps its shape options on the wheel's base face and turns to the pattern face with Ctrl + scroll; other grid blocks open directly on that pattern face. No lattice-step face is added. While the wheel is open, Ctrl + scroll changes the wheel and never rotates the grid ghost.
+- **`GridPlacementPatternPlanner` plans native cell coordinates.** SPAN follows the dominant grid axis (up to ten cells); PILLAR uses grid-up; DECK is local X + Z and flat; WALL is a local X or Z run plus grid-up. Decks and walls shrink as complete rectangles to the shared eight-per-side and forty-eight-cell budget. The same plan is shown and committed.
+- **A live grid-pattern preview and cost read-out.** Every planned cell gets its own valid / blocked ghost. The placement card shows the pattern, dimensions or count, clear-cell count, stock cap, and carried plus authorized wireless stock. A selected armour shape is applied to every cell in the plan.
+
+#### Changed
+
+- **Only ordinary one-cell blocks on a matching native grid use patterns.** Each cell is rechecked for occupancy, support, structural-detail clearance, LED-path reservation and world obstruction. Precision attachments, windows, cockpits, tires, doors, docking/port pieces, pipes, turbochargers, belt take-offs and LED strips keep their existing single/custom placement paths; a new root grid is still created one block at a time.
+- **Release commits only cells that can be paid for and placed.** The preview is rebuilt on release, one carried item is reserved per clear cell first, then the existing `res_build_from_network` research gate and selected/access-checked Wireless Transmitter are used for any remainder. A failed cell is skipped and its reserved item is returned; a successfully placed cell costs exactly one item.
+
+#### Validation
+
+- Parsed all modified C# files with the C# grammar; no syntax errors or missing nodes were reported. `git diff --check` is clean.
+- Headless arithmetic checks passed for positive and negative SPAN/PILLAR lines, flat DECK and vertical WALL coordinates, complete rectangle shrinking under low stock, the eight-cell side limit and the forty-eight-cell ceiling. These checks mirror the planner arithmetic; they do not execute the C# code.
+- No C# compiler or Unity runtime was available to the agent. Unity compilation and in-game acceptance remain pending.
+- No new item, prefab, recipe or research content was added. The existing Setup Step 101 already adds `GridShapeWheel`; Voxel Engine Setup is not needed for this code-only phase.
 
 ### [17.51.0-dev] A Press, a Drag, a Whole Hammer Build
 

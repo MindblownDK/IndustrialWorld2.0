@@ -14,6 +14,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Building;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
@@ -70,6 +71,50 @@ namespace VoxelEngine.GridSystem
 
         private Vector3Int _rotSteps;
 
+        private readonly List<Vector3Int> _gridPatternPlan = new(PlacementOptions.MaxCells);
+        private readonly List<Vector3Int> _gridPatternDesiredPlan = new(PlacementOptions.MaxCells);
+        private readonly HashSet<Vector3Int> _gridPatternConnected = new();
+        private readonly List<GameObject> _gridPatternGhostPool = new(PlacementOptions.MaxCells - 1);
+        private readonly Dictionary<GameObject, MeshRenderer[]> _gridPatternGhostRenderers = new();
+        private readonly bool[] _gridPatternCellValid = new bool[PlacementOptions.MaxCells];
+        private Material _gridPatternInvalidGhostMat;
+        private GridBlockItem _gridPatternGhostSourceItem;
+        private GameObject _gridPatternGhostSourceObject;
+        private string _gridPatternGhostSourceName;
+        private bool _gridPatternActive;
+        private GridEntity _gridPatternGrid;
+        private GridBlockItem _gridPatternItem;
+        private PlacementPattern _gridPatternMode;
+        private Vector3Int _gridPatternAnchor;
+        private Vector3Int _gridPatternRotationSteps;
+        private VoxelEngine.UI.GridShapeVariant _gridPatternShape;
+        private bool _gridPatternContextSupported;
+        private string _gridPatternReason;
+        private int _gridPatternPreviewCount;
+        private int _gridPatternClearCount;
+        private int _gridPatternDesiredCount;
+        private int _gridCarriedStock;
+        private int _gridWirelessStock;
+        private Vector2Int _gridPatternDimensions = Vector2Int.one;
+        private string _gridPatternPlaneLabel;
+        private bool _gridPatternStockCapped;
+        private GridBlockItem _gridStockItem;
+        private float _nextGridStockRefresh;
+
+        public static GridBuilder Instance { get; private set; }
+        public bool GridPatternGestureActive => _gridPatternActive;
+        public bool GridPatternContextSupported => _gridPatternContextSupported;
+        public string GridPatternReason => _gridPatternReason ?? string.Empty;
+        public int GridPatternPreviewCount => _gridPatternPreviewCount;
+        public int GridPatternClearCount => _gridPatternClearCount;
+        public int GridPatternDesiredCount => _gridPatternDesiredCount;
+        public int GridPatternCarriedStock => _gridCarriedStock;
+        public int GridPatternWirelessStock => _gridWirelessStock;
+        public int GridPatternAvailableStock => _gridCarriedStock + _gridWirelessStock;
+        public Vector2Int GridPatternDimensions => _gridPatternDimensions;
+        public string GridPatternPlaneLabel => _gridPatternPlaneLabel ?? string.Empty;
+        public bool GridPatternStockCapped => _gridPatternStockCapped;
+
         public static bool HoldingGridBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = "";
         public static Vector3Int RotationSteps { get; private set; }
@@ -79,6 +124,12 @@ namespace VoxelEngine.GridSystem
             return item != null && item.SupportsShapeVariants;
         }
 
+        private void OnEnable()
+        {
+            if (Instance == null || Instance == this) Instance = this;
+            PlacementOptions.Changed += OnPlacementOptionsChanged;
+        }
+
         private void Start()
         {
             if (buildCamera == null) buildCamera = Camera.main;
@@ -86,17 +137,42 @@ namespace VoxelEngine.GridSystem
             if (reach < BuildReach) reach = BuildReach;
         }
 
+        private void OnDisable()
+        {
+            PlacementOptions.Changed -= OnPlacementOptionsChanged;
+            CancelGridPattern();
+            if (Instance == this) Instance = null;
+            HoldingGridBlock = false;
+            HeldBlockName = string.Empty;
+        }
+
         private void OnDestroy()
         {
             if (_ghostPortRing != null) Destroy(_ghostPortRing.gameObject);
+            for (int i = 0; i < _gridPatternGhostPool.Count; i++)
+                if (_gridPatternGhostPool[i] != null) Destroy(_gridPatternGhostPool[i]);
+            _gridPatternGhostPool.Clear();
+            if (_gridPatternInvalidGhostMat != null) Destroy(_gridPatternInvalidGhostMat);
         }
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.WorldToolsBlocked) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing(); return; }
+            if (VoxelEngine.UI.UIState.WorldToolsBlocked)
+            {
+                CancelGridPattern();
+                HoldingGridBlock = false;
+                HideGhost();
+                HidePrecisionLattice();
+                HideGhostPortRing();
+                return;
+            }
             if (inventory == null)
             {
-                HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing();
+                CancelGridPattern();
+                HoldingGridBlock = false;
+                HideGhost();
+                HidePrecisionLattice();
+                HideGhostPortRing();
                 TraceGhost("no inventory reference (and none found on the rig)");
                 return;
             }
@@ -104,6 +180,7 @@ namespace VoxelEngine.GridSystem
             var stack = inventory.ActiveStack;
             if (stack.IsEmpty || !(stack.item is GridBlockItem gbi))
             {
+                CancelGridPattern();
                 HoldingGridBlock = false;
                 HideGhost();
                 HidePrecisionLattice();
@@ -115,9 +192,29 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
+            if (_gridPatternActive && (_gridPatternItem != gbi
+                || PlacementOptions.Pattern != _gridPatternMode
+                || _rotSteps != _gridPatternRotationSteps
+                || VoxelEngine.UI.GridShapeWheel.CurrentShape != _gridPatternShape
+                || GameSettings.IsHeld(InputAction.BuildWheel)))
+                CancelGridPattern();
+
             HoldingGridBlock = true;
             HeldBlockName = gbi.displayName;
-            HandleRotationInput();
+            RefreshGridPatternStock(gbi, force: false);
+            if (!_gridPatternActive)
+            {
+                _gridPatternContextSupported = false;
+                _gridPatternReason = PlacementOptions.Pattern == PlacementPattern.Single
+                    ? string.Empty
+                    : GridPatternItemRestrictionReason(gbi);
+                if (PlacementOptions.Pattern != PlacementPattern.Single
+                    && string.IsNullOrEmpty(_gridPatternReason))
+                    _gridPatternReason = "Aim at a matching native-size grid";
+            }
+            if (!_gridPatternActive && !GameSettings.IsHeld(InputAction.BuildWheel)
+                && !VoxelEngine.UI.RadialWheelController.AnyOpen)
+                HandleRotationInput();
 
             if (_ledStretchArmed && IsLedStripItem(gbi) && (GameSettings.WasPressed(InputAction.Mine) || GameSettings.WasPressed(InputAction.Pause)))
             {
@@ -147,10 +244,34 @@ namespace VoxelEngine.GridSystem
 
             if (!hasHit)
             {
+                if (_gridPatternActive && _gridPatternGrid != null && _gridPatternItem == gbi
+                    && PlacementOptions.Pattern == _gridPatternMode)
+                {
+                    HideLedStretchGhost();
+                    HidePrecisionLattice();
+                    HideGhostPortRing();
+                    Vector3Int targetCell = AimGridCellFromRay(_gridPatternGrid, ray, _gridPatternAnchor);
+                    Quaternion patternRotation = GridPatternRotation(_gridPatternGrid);
+                    UpdateGridPatternPlan(_gridPatternGrid, gbi, targetCell, patternRotation, forceStock: false);
+                    if (!GameSettings.IsHeld(InputAction.Build))
+                    {
+                        UpdateGridPatternPlan(_gridPatternGrid, gbi, targetCell, patternRotation, forceStock: true);
+                        CommitGridPattern();
+                    }
+                    return;
+                }
+
+                if (_gridPatternActive) CancelGridPattern();
                 HideGhost();
                 HideLedStretchGhost();
                 HidePrecisionLattice();
                 HideGhostPortRing();
+                _gridPatternContextSupported = false;
+                _gridPatternReason = PlacementOptions.Pattern == PlacementPattern.Single
+                    ? string.Empty : GridPatternItemRestrictionReason(gbi);
+                if (PlacementOptions.Pattern != PlacementPattern.Single
+                    && string.IsNullOrEmpty(_gridPatternReason))
+                    _gridPatternReason = "Aim at a matching native-size grid";
                 // Aiming past everything is normal for a moment; never finding
                 // ground while placement still works is the silent-ghost
                 // signature, so only the persistent version earns a trace.
@@ -170,6 +291,9 @@ namespace VoxelEngine.GridSystem
                 ? hit.collider.GetComponent<MechanicalBeltPlacementSurface>()
                 : null;
             bool aimingBeltTakeoff = beltPlacementSurface != null && MechanicalBeltNetwork.IsBeltTakeoffItem(gbi);
+            if (_gridPatternActive && (aimingBeltTakeoff
+                || targetGrid != null && (targetGrid != _gridPatternGrid || targetGrid.gridSize != gbi.gridSize)))
+                CancelGridPattern();
             // Reset per-frame cap flag
             s_portCapBlocked = false;
             s_portCapReason = null;
@@ -181,6 +305,11 @@ namespace VoxelEngine.GridSystem
                 && targetGrid.gridSize == GridSize.Large
                 && gbi.gridSize == GridSize.Small)
             {
+                if (PlacementOptions.Pattern != PlacementPattern.Single)
+                {
+                    _gridPatternContextSupported = false;
+                    _gridPatternReason = "Precision attachments stay single";
+                }
                 HandlePrecisionAttachment(gbi, targetGrid, hit, ray);
                 return;
             }
@@ -194,7 +323,14 @@ namespace VoxelEngine.GridSystem
             bool blockedBySizeRule = targetGrid != null
                 && targetGrid.gridSize == GridSize.Small
                 && gbi.gridSize == GridSize.Large;
-            if (blockedBySizeRule) { HideGhost(); HideGhostPortRing(); return; }
+            if (blockedBySizeRule)
+            {
+                if (PlacementOptions.Pattern != PlacementPattern.Single)
+                    _gridPatternReason = "Use a grid of the block's native size";
+                HideGhost();
+                HideGhostPortRing();
+                return;
+            }
 
             var targetedBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
             bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);
@@ -225,13 +361,20 @@ namespace VoxelEngine.GridSystem
 
                 if (attachGrid != null)
                 {
+                    if (_gridPatternActive && attachGrid != _gridPatternGrid)
+                        CancelGridPattern();
+                    bool patternTarget = PlacementOptions.Pattern != PlacementPattern.Single
+                        && CanUseGridCellPattern(gbi, attachGrid, false,
+                            placingTurbo, aimingBeltTakeoff, out _);
                     float cs = gbi.gridSize.CellSize();
                     Vector3 probe = hit.point + hit.normal * (cs * 0.5f);
                     gridPos = attachGrid.WorldToGrid(probe);
                     if (!attachGrid.CanPlace(gridPos))
                     {
-                        gridPos = attachGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
-                        if (!attachGrid.CanPlace(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
+                        Vector3Int outerCell = attachGrid.WorldToGrid(hit.point + hit.normal * cs);
+                        if (attachGrid.CanPlace(outerCell)) gridPos = outerCell;
+                        else if (!patternTarget) { HideGhost(); HideGhostPortRing(); return; }
+                        else gridPos = outerCell;
                     }
                     targetGrid = attachGrid;
                     worldPos = attachGrid.GridToWorld(gridPos);
@@ -241,11 +384,13 @@ namespace VoxelEngine.GridSystem
                         portSnapped = TryApplyMaritimePortSnap(gbi, attachGrid, targetedBlock, hit, ref gridPos, ref worldPos, ref rotation);
                     // A Grid Window's final orientation is applied below. Defer its
                     // connection test until the complete rotated footprint is known.
-                    if (!portSnapped && !IsGridWindowItem(gbi) && !attachGrid.HasNeighbor(gridPos))
+                    if (!portSnapped && !IsGridWindowItem(gbi) && !attachGrid.HasNeighbor(gridPos)
+                        && !patternTarget)
                     { HideGhost(); HideGhostPortRing(); return; }
                 }
                 else
                 {
+                    if (_gridPatternActive) CancelGridPattern();
                     float cs = gbi.gridSize.CellSize();
                     Vector3 planetCenter = GravityProvider.ActiveBody.transform.position;
                     Vector3 toPoint = hit.point - planetCenter;
@@ -276,7 +421,8 @@ namespace VoxelEngine.GridSystem
                 && !portSnapped)
             {
                 var precision = targetGrid.GetComponent<GridPrecisionAttachmentLayer>();
-                if (precision == null || !precision.CanPlaceStructuralBlock(gridPos))
+                if ((precision == null || !precision.CanPlaceStructuralBlock(gridPos))
+                    && !(_gridPatternActive && targetGrid == _gridPatternGrid))
                 {
                     HideGhost();
                     HideGhostPortRing();
@@ -299,7 +445,10 @@ namespace VoxelEngine.GridSystem
                 && !IsGridWindowItem(gbi))
             {
                 var precision = targetGrid.PrecisionAttachments;
-                if (precision != null && precision.HasStructuralVolumeConflict(gridPos))
+                bool patternCandidate = PlacementOptions.Pattern != PlacementPattern.Single
+                    && CanUseGridCellPattern(gbi, targetGrid, portSnapped, placingTurbo,
+                        aimingBeltTakeoff, out _);
+                if (precision != null && precision.HasStructuralVolumeConflict(gridPos) && !patternCandidate)
                 {
                     HideGhost();
                     HideGhostPortRing();
@@ -439,11 +588,512 @@ namespace VoxelEngine.GridSystem
             bool placementValid = !placementObstructed && !windowFootprintInvalid;
             ShowGhost(gbi, worldPos, rotation, valid: placementValid);
 
+            bool patternEligible = CanUseGridCellPattern(gbi, targetGrid, portSnapped,
+                placingTurbo, aimingBeltTakeoff, out string patternReason);
+            if (_gridPatternActive && (!patternEligible || targetGrid != _gridPatternGrid
+                || _gridPatternItem != gbi || _gridPatternMode != PlacementOptions.Pattern))
+                CancelGridPattern();
+            _gridPatternContextSupported = PlacementOptions.Pattern != PlacementPattern.Single && patternEligible;
+            _gridPatternReason = PlacementOptions.Pattern == PlacementPattern.Single || patternEligible
+                ? string.Empty : patternReason;
+
+            if (PlacementOptions.Pattern != PlacementPattern.Single && patternEligible)
+            {
+                if (_gridPatternActive)
+                {
+                    UpdateGridPatternPlan(targetGrid, gbi, gridPos, rotation, forceStock: false);
+                    if (!GameSettings.IsHeld(InputAction.Build))
+                    {
+                        UpdateGridPatternPlan(targetGrid, gbi, gridPos, rotation, forceStock: true);
+                        CommitGridPattern();
+                    }
+                    return;
+                }
+
+                if (GameSettings.WasPressed(InputAction.Build))
+                {
+                    BeginGridPattern(targetGrid, gbi, gridPos);
+                    UpdateGridPatternPlan(targetGrid, gbi, gridPos, rotation, forceStock: false);
+                    if (!GameSettings.IsHeld(InputAction.Build))
+                    {
+                        UpdateGridPatternPlan(targetGrid, gbi, gridPos, rotation, forceStock: true);
+                        CommitGridPattern();
+                    }
+                    return;
+                }
+
+                return;
+            }
+
             if (GameSettings.WasPressed(InputAction.Build) && placementValid
                 && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation, keepExactAttachmentPose))
             {
                 inventory.container.Remove(gbi, 1);
             }
+        }
+
+        private void OnPlacementOptionsChanged()
+        {
+            _nextGridStockRefresh = 0f;
+            if (_gridPatternActive && PlacementOptions.Pattern != _gridPatternMode)
+                CancelGridPattern();
+        }
+
+        private string GridPatternItemRestrictionReason(GridBlockItem item)
+        {
+            if (item == null) return "No grid block selected";
+            if (GridWheelMount.IsTireItem(item)) return "Tires snap to wheel hubs";
+            if (IsGridWindowItem(item)) return "Windows use a multi-cell footprint";
+            if (IsCockpitItem(item)) return "Cockpits use a multi-cell footprint";
+            if (IsDoorItem(item)) return "Doors use custom edge placement";
+            if (IsLedStripItem(item)) return "LED strips stretch along a custom path";
+            if (IsTurbochargerItem(item, out _)) return "Turbochargers use engine slots";
+            if (IsPipeItem(item, out _) || GetMaritimePortSnapKind(item) != MaritimePortSnapKind.None)
+                return "Ports and pipes use authored snaps";
+            if (item.blockPrefab != null
+                && item.blockPrefab.GetComponentInChildren<GridDockingPort>(true) != null)
+                return "Docking ports use a custom snap";
+            if (MechanicalBeltNetwork.IsBeltTakeoffItem(item)) return "Belt take-offs use shaft alignment";
+            return string.Empty;
+        }
+
+        private bool CanUseGridCellPattern(GridBlockItem item, GridEntity grid, bool portSnapped,
+            bool placingTurbo, bool aimingBeltTakeoff, out string reason)
+        {
+            reason = GridPatternItemRestrictionReason(item);
+            if (!string.IsNullOrEmpty(reason)) return false;
+            if (grid == null)
+            {
+                reason = "Pattern placement needs an existing grid";
+                return false;
+            }
+            if (item == null || grid.gridSize != item.gridSize)
+            {
+                reason = "Precision and cross-size placement stay single";
+                return false;
+            }
+            if (portSnapped)
+            {
+                reason = "Authored port snaps stay single";
+                return false;
+            }
+            if (placingTurbo)
+            {
+                reason = "Turbochargers use engine slots";
+                return false;
+            }
+            if (aimingBeltTakeoff)
+            {
+                reason = "Belt take-offs use shaft alignment";
+                return false;
+            }
+            return true;
+        }
+
+        private void BeginGridPattern(GridEntity grid, GridBlockItem item, Vector3Int anchor)
+        {
+            if (grid == null || item == null) return;
+            _gridPatternActive = true;
+            _gridPatternGrid = grid;
+            _gridPatternItem = item;
+            _gridPatternMode = PlacementOptions.Pattern;
+            _gridPatternAnchor = anchor;
+            _gridPatternRotationSteps = _rotSteps;
+            _gridPatternShape = VoxelEngine.UI.GridShapeWheel.CurrentShape;
+            _gridPatternContextSupported = true;
+            _gridPatternReason = string.Empty;
+        }
+
+        private Quaternion GridPatternRotation(GridEntity grid)
+        {
+            if (grid == null) return Quaternion.identity;
+            Quaternion rotation = grid.transform.rotation;
+            rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            return rotation;
+        }
+
+        private static Vector3Int AimGridCellFromRay(GridEntity grid, Ray ray, Vector3Int anchor)
+        {
+            if (grid == null) return anchor;
+            Vector3 anchorWorld = grid.GridToWorld(anchor);
+            float alongRay = Mathf.Max(0f, Vector3.Dot(anchorWorld - ray.origin, ray.direction));
+            return grid.WorldToGrid(ray.GetPoint(alongRay));
+        }
+
+        private void RefreshGridPatternStock(GridBlockItem item, bool force)
+        {
+            if (item == null || inventory == null || inventory.container == null) return;
+            if (PlacementOptions.Pattern == PlacementPattern.Single && !_gridPatternActive)
+            {
+                _gridStockItem = item;
+                _gridCarriedStock = 0;
+                _gridWirelessStock = 0;
+                return;
+            }
+            if (!force && _gridStockItem == item && Time.unscaledTime < _nextGridStockRefresh) return;
+
+            _gridStockItem = item;
+            _nextGridStockRefresh = Time.unscaledTime + 0.15f;
+            _gridCarriedStock = Mathf.Max(0, inventory.container.CountOf(item));
+            _gridWirelessStock = 0;
+
+            var research = VoxelEngine.Research.ResearchManager.Instance;
+            if (research == null || !research.IsUnlocked("res_build_from_network")
+                || string.IsNullOrEmpty(item.itemId)) return;
+
+            var rack = GetAccessibleWirelessRack();
+            if (rack != null && rack.IsOnline)
+                _gridWirelessStock = Mathf.Max(0, rack.NetworkCount(item.itemId));
+        }
+
+        private VoxelEngine.Storage.ServerRack GetAccessibleWirelessRack()
+        {
+            if (inventory == null) return null;
+            var ui = VoxelEngine.UI.GameUIController.Instance;
+            var rack = ui != null
+                ? ui.GetActiveWirelessRack()
+                : VoxelEngine.Storage.WirelessStorageAccess.TryGetRack(
+                    inventory,
+                    inventory.transform.position,
+                    VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? string.Empty);
+            return rack != null && rack.IsOnline ? rack : null;
+        }
+
+        private void UpdateGridPatternPlan(GridEntity grid, GridBlockItem item, Vector3Int target,
+            Quaternion rotation, bool forceStock)
+        {
+            if (!_gridPatternActive || grid == null || item == null
+                || grid != _gridPatternGrid || item != _gridPatternItem)
+            {
+                CancelGridPattern();
+                return;
+            }
+
+            _gridPatternContextSupported = true;
+            _gridPatternReason = string.Empty;
+            RefreshGridPatternStock(item, forceStock);
+
+            _gridPatternDesiredCount = GridPlacementPatternPlanner.Build(
+                _gridPatternMode, _gridPatternAnchor, target, PlacementOptions.MaxCells,
+                _gridPatternDesiredPlan, out _, out _);
+
+            int available = Mathf.Max(0, _gridCarriedStock + _gridWirelessStock);
+            int affordableBudget = Mathf.Clamp(available, 0, PlacementOptions.MaxCells);
+            int previewBudget = Mathf.Max(1, affordableBudget);
+            _gridPatternPreviewCount = GridPlacementPatternPlanner.Build(
+                _gridPatternMode, _gridPatternAnchor, target, previewBudget,
+                _gridPatternPlan, out _gridPatternDimensions, out _gridPatternPlaneLabel);
+            _gridPatternStockCapped = _gridPatternDesiredCount > affordableBudget;
+
+            _gridPatternConnected.Clear();
+            _gridPatternClearCount = 0;
+            System.Array.Clear(_gridPatternCellValid, 0, _gridPatternCellValid.Length);
+            for (int i = 0; i < _gridPatternPreviewCount; i++)
+            {
+                Vector3Int cell = _gridPatternPlan[i];
+                bool valid = available > 0 && IsGridPatternCellClear(item, grid, cell, rotation);
+                _gridPatternCellValid[i] = valid;
+                if (!valid) continue;
+                _gridPatternClearCount++;
+                _gridPatternConnected.Add(cell);
+            }
+
+            ShowGridPatternPreview(grid, item, rotation);
+        }
+
+        private bool IsGridPatternCellClear(GridBlockItem item, GridEntity grid,
+            Vector3Int cell, Quaternion rotation)
+        {
+            if (grid == null || !grid.CanPlace(cell) || IsCellReservedByLedStrip(grid, cell)) return false;
+
+            var precision = grid.PrecisionAttachments;
+            if (grid.gridSize == GridSize.Large && precision != null
+                && precision.HasStructuralVolumeConflict(cell)) return false;
+
+            bool supported = grid.HasNeighbor(cell);
+            if (!supported && precision != null)
+                supported = precision.CanPlaceStructuralBlock(cell);
+            if (!supported)
+            {
+                for (int i = 0; i < Neighbours6.Length; i++)
+                {
+                    if (!_gridPatternConnected.Contains(cell + Neighbours6[i])) continue;
+                    supported = true;
+                    break;
+                }
+            }
+            if (!supported) return false;
+
+            return !PlacementObstructed(item, grid, grid.GridToWorld(cell), rotation);
+        }
+
+        private bool IsGridPatternCellCommitValid(GridBlockItem item, GridEntity grid,
+            Vector3Int cell, Quaternion rotation)
+        {
+            if (grid == null || !grid.CanPlace(cell) || IsCellReservedByLedStrip(grid, cell)) return false;
+            var precision = grid.PrecisionAttachments;
+            if (grid.gridSize == GridSize.Large && precision != null
+                && precision.HasStructuralVolumeConflict(cell)) return false;
+
+            bool supported = grid.HasNeighbor(cell)
+                || precision != null && precision.CanPlaceStructuralBlock(cell);
+            return supported && !PlacementObstructed(item, grid, grid.GridToWorld(cell), rotation);
+        }
+
+        private void ShowGridPatternPreview(GridEntity grid, GridBlockItem item, Quaternion rotation)
+        {
+            if (_ghost == null || grid == null || _gridPatternPreviewCount <= 0) return;
+            EnsureGridPatternGhostPool(item, _gridPatternPreviewCount);
+            EnsureGridPatternGhostMaterials();
+
+            for (int i = 0; i < _gridPatternPreviewCount; i++)
+            {
+                GameObject preview = i == 0 ? _ghost : _gridPatternGhostPool[i - 1];
+                if (preview == null) continue;
+                preview.SetActive(true);
+                preview.transform.SetPositionAndRotation(grid.GridToWorld(_gridPatternPlan[i]), rotation);
+                ApplyGridPatternGhostMaterial(preview, _gridPatternCellValid[i]);
+            }
+            for (int i = Mathf.Max(0, _gridPatternPreviewCount - 1); i < _gridPatternGhostPool.Count; i++)
+                if (_gridPatternGhostPool[i] != null) _gridPatternGhostPool[i].SetActive(false);
+        }
+
+        private void EnsureGridPatternGhostPool(GridBlockItem item, int previewCount)
+        {
+            if (_ghost == null) return;
+            bool sourceChanged = _gridPatternGhostSourceItem != item
+                || _gridPatternGhostSourceObject != _ghost
+                || _gridPatternGhostSourceName != _ghost.name;
+            if (sourceChanged)
+            {
+                for (int i = 0; i < _gridPatternGhostPool.Count; i++)
+                    if (_gridPatternGhostPool[i] != null) Destroy(_gridPatternGhostPool[i]);
+                _gridPatternGhostPool.Clear();
+                _gridPatternGhostRenderers.Clear();
+                _gridPatternGhostSourceItem = item;
+                _gridPatternGhostSourceObject = _ghost;
+                _gridPatternGhostSourceName = _ghost.name;
+            }
+
+            int needed = Mathf.Max(0, previewCount - 1);
+            while (_gridPatternGhostPool.Count < needed)
+            {
+                bool sourceActive = _ghost.activeSelf;
+                _ghost.SetActive(false);
+                GameObject clone = Instantiate(_ghost);
+                _ghost.SetActive(sourceActive);
+                clone.name = "GridPatternGhost";
+                clone.SetActive(false);
+                PrepareGridPatternGhost(clone);
+                _gridPatternGhostPool.Add(clone);
+            }
+        }
+
+        private void PrepareGridPatternGhost(GameObject preview)
+        {
+            if (preview == null) return;
+            foreach (var collider in preview.GetComponentsInChildren<Collider>(true))
+                if (collider != null) collider.enabled = false;
+            foreach (var behaviour in preview.GetComponentsInChildren<Behaviour>(true))
+            {
+                if (behaviour == null || behaviour is GridGhostOrientation
+                    || behaviour is GridShapeVariantBlock) continue;
+                behaviour.enabled = false;
+            }
+            foreach (var text in preview.GetComponentsInChildren<TextMesh>(true))
+            {
+                if (text == null) continue;
+                var renderer = text.GetComponent<MeshRenderer>();
+                if (renderer != null && !GridGhostOrientation.IsMarker(renderer)) renderer.enabled = false;
+            }
+        }
+
+        private void EnsureGridPatternGhostMaterials()
+        {
+            BuildGhostMaterial();
+            if (_gridPatternInvalidGhostMat == null)
+            {
+                _gridPatternInvalidGhostMat = VoxelEngine.Rendering.RuntimeMaterials.MakeTranslucentLit(
+                    new Color(1f, 0.3f, 0.3f, 0.35f));
+                _gridPatternInvalidGhostMat.name = "GridBuilder_PatternInvalidGhost";
+            }
+            SetGridPatternMaterialColor(_ghostMat, ghostColor);
+            SetGridPatternMaterialColor(_gridPatternInvalidGhostMat, new Color(1f, 0.3f, 0.3f, 0.35f));
+        }
+
+        private static void SetGridPatternMaterialColor(Material material, Color color)
+        {
+            if (material == null) return;
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+            material.color = color;
+        }
+
+        private MeshRenderer[] GetGridPatternGhostRenderers(GameObject preview)
+        {
+            if (preview == null) return System.Array.Empty<MeshRenderer>();
+            if (_gridPatternGhostRenderers.TryGetValue(preview, out var cached)) return cached;
+
+            var source = preview.GetComponentsInChildren<MeshRenderer>(true);
+            var renderers = new List<MeshRenderer>(source.Length);
+            for (int i = 0; i < source.Length; i++)
+            {
+                MeshRenderer renderer = source[i];
+                if (renderer == null || GridGhostOrientation.IsMarker(renderer)
+                    || renderer.GetComponent<TextMesh>() != null) continue;
+                renderers.Add(renderer);
+            }
+
+            cached = renderers.ToArray();
+            _gridPatternGhostRenderers[preview] = cached;
+            return cached;
+        }
+
+        private void ApplyGridPatternGhostMaterial(GameObject preview, bool valid)
+        {
+            if (preview == null) return;
+            Material material = valid ? _ghostMat : _gridPatternInvalidGhostMat;
+            MeshRenderer[] renderers = GetGridPatternGhostRenderers(preview);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                MeshRenderer renderer = renderers[i];
+                if (renderer == null) continue;
+                renderer.sharedMaterial = material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+        }
+
+        private void CommitGridPattern()
+        {
+            if (!_gridPatternActive) return;
+            GridEntity grid = _gridPatternGrid;
+            GridBlockItem item = _gridPatternItem;
+            if (grid == null || item == null || PlacementOptions.Pattern != _gridPatternMode)
+            {
+                CancelGridPattern();
+                HideGhost();
+                return;
+            }
+
+            int requested = _gridPatternClearCount;
+            if (requested <= 0)
+            {
+                bool noStock = _gridCarriedStock + _gridWirelessStock <= 0;
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    noStock ? "No Blocks Available" : "Placement Blocked",
+                    noStock ? "Carry the block or connect to an authorized storage network"
+                        : "No planned cells are clear and supported",
+                    item.icon,
+                    Color.red);
+                CancelGridPattern();
+                HideGhost();
+                return;
+            }
+
+            int carriedReserved = inventory != null && inventory.container != null
+                ? inventory.container.Remove(item, requested) : 0;
+            int wirelessReserved = 0;
+            VoxelEngine.Storage.ServerRack rack = null;
+            var research = VoxelEngine.Research.ResearchManager.Instance;
+            if (carriedReserved < requested && research != null
+                && research.IsUnlocked("res_build_from_network") && !string.IsNullOrEmpty(item.itemId))
+            {
+                rack = GetAccessibleWirelessRack();
+                if (rack != null)
+                    wirelessReserved = rack.NetworkExtract(item.itemId, requested - carriedReserved);
+            }
+
+            int reserved = carriedReserved + wirelessReserved;
+            if (reserved <= 0)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    "No Blocks Available",
+                    "The carried or authorized network stock changed before release",
+                    item.icon,
+                    Color.red);
+                CancelGridPattern();
+                HideGhost();
+                return;
+            }
+
+            Quaternion rotation = GridPatternRotation(grid);
+            int placed = 0;
+            int remainingCarried = carriedReserved;
+            int remainingWireless = wirelessReserved;
+            for (int i = 0; i < _gridPatternPreviewCount; i++)
+            {
+                if (!_gridPatternCellValid[i]) continue;
+                if (remainingCarried <= 0 && remainingWireless <= 0) break;
+
+                bool fromCarried = remainingCarried > 0;
+                if (fromCarried) remainingCarried--;
+                else remainingWireless--;
+
+                Vector3Int cell = _gridPatternPlan[i];
+                bool committed = IsGridPatternCellCommitValid(item, grid, cell, rotation)
+                    && TryPlaceBlock(item, grid, cell, grid.GridToWorld(cell), rotation,
+                        keepExactAttachmentPose: false, showFeedback: false);
+                if (committed)
+                {
+                    placed++;
+                    continue;
+                }
+
+                RefundGridPatternStock(item, 1, fromCarried, rack);
+            }
+
+            if (remainingCarried > 0) RefundGridPatternStock(item, remainingCarried, true, rack);
+            if (remainingWireless > 0) RefundGridPatternStock(item, remainingWireless, false, rack);
+
+            if (placed > 0)
+                VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, placed);
+            else
+                VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked",
+                    "The cells changed before they could be committed", item.icon, Color.red);
+
+            CancelGridPattern();
+            HideGhost();
+        }
+
+        private void RefundGridPatternStock(GridBlockItem item, int count, bool fromCarried,
+            VoxelEngine.Storage.ServerRack rack)
+        {
+            if (item == null || count <= 0) return;
+            if (!fromCarried && rack != null)
+                count = rack.NetworkInsert(item, count);
+            if (count <= 0) return;
+
+            if (inventory != null && inventory.container != null)
+            {
+                var leftover = inventory.container.Insert(new ItemStack(item, count));
+                if (leftover == null || leftover.count <= 0) return;
+                DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
+                return;
+            }
+
+            DroppedItem.Spawn(new ItemStack(item, count), transform.position + Vector3.up * 0.6f, Vector3.up);
+        }
+
+        private void CancelGridPattern()
+        {
+            _gridPatternActive = false;
+            _gridPatternGrid = null;
+            _gridPatternItem = null;
+            _gridPatternPreviewCount = 0;
+            _gridPatternClearCount = 0;
+            _gridPatternDesiredCount = 0;
+            _gridPatternStockCapped = false;
+            _gridPatternDimensions = Vector2Int.one;
+            _gridPatternPlaneLabel = string.Empty;
+            _gridPatternContextSupported = false;
+            _gridPatternReason = string.Empty;
+            _gridPatternConnected.Clear();
+            HideGridPatternGhosts();
+        }
+
+        private void HideGridPatternGhosts()
+        {
+            for (int i = 0; i < _gridPatternGhostPool.Count; i++)
+                if (_gridPatternGhostPool[i] != null) _gridPatternGhostPool[i].SetActive(false);
         }
 
         // ── Wheel tire snapping (13.0.0) ──────────────────────────────────
@@ -1325,7 +1975,7 @@ namespace VoxelEngine.GridSystem
 
         // ── Remaining helpers (unchanged) ──────────────────────────
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos,
-            Quaternion rotation, bool keepExactAttachmentPose)
+            Quaternion rotation, bool keepExactAttachmentPose, bool showFeedback = true)
         {
             if (grid != null && item != null && item.gridSize == GridSize.Large && !keepExactAttachmentPose)
             {
@@ -1335,7 +1985,8 @@ namespace VoxelEngine.GridSystem
                     && HasPrecisionFootprintConflict(grid.PrecisionAttachments, gridPos, _multiCellOffsets);
                 if (detailConflict)
                 {
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Detail Volume Occupied", "Clear the pipe/detail block from the full structural footprint before placing here", item.icon, Color.red);
+                    if (showFeedback)
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Detail Volume Occupied", "Clear the pipe/detail block from the full structural footprint before placing here", item.icon, Color.red);
                     return false;
                 }
             }
@@ -1347,17 +1998,21 @@ namespace VoxelEngine.GridSystem
                 if (!grid.CanPlaceOffsets(gridPos, _multiCellOffsets)
                     || !grid.HasNeighborForOffsets(gridPos, _multiCellOffsets))
                 {
-                    string title = IsCockpitItem(item) ? "Cockpit Footprint Blocked" : "Window Footprint Blocked";
-                    VoxelEngine.UI.BuildFeedbackHud.Show(title,
-                        "The block footprint is occupied or does not touch the grid",
-                        item.icon, Color.red);
+                    if (showFeedback)
+                    {
+                        string title = IsCockpitItem(item) ? "Cockpit Footprint Blocked" : "Window Footprint Blocked";
+                        VoxelEngine.UI.BuildFeedbackHud.Show(title,
+                            "The block footprint is occupied or does not touch the grid",
+                            item.icon, Color.red);
+                    }
                     return false;
                 }
             }
 
             if (grid != null && IsCellReservedByLedStrip(grid, gridPos))
             {
-                VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "LED strip path reserves this cell", item != null ? item.icon : null, Color.red);
+                if (showFeedback)
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "LED strip path reserves this cell", item != null ? item.icon : null, Color.red);
                 return false;
             }
 
@@ -1432,11 +2087,12 @@ namespace VoxelEngine.GridSystem
                 {
                     Destroy(block.gameObject);
                     if (createdNewGrid) Destroy(grid.gameObject);
-                    VoxelEngine.UI.BuildFeedbackHud.Show(
-                        "Placement Blocked",
-                        "The selected block footprint is occupied",
-                        item != null ? item.icon : null,
-                        Color.red);
+                    if (showFeedback)
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Placement Blocked",
+                            "The selected block footprint is occupied",
+                            item != null ? item.icon : null,
+                            Color.red);
                     return false;
                 }
 
@@ -1449,7 +2105,7 @@ namespace VoxelEngine.GridSystem
                 block.transform.rotation = rotation;
             }
 
-            VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
+            if (showFeedback) VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
             if (createdNewGrid && grid.Body != null)
                 StartCoroutine(ReenableGridPhysicsNextFixed(grid));
             return true;
@@ -2181,11 +2837,11 @@ namespace VoxelEngine.GridSystem
 
         private static bool IsCockpitItem(GridBlockItem item)
             => item != null && item.blockPrefab != null
-               && item.blockPrefab.GetComponent<VoxelEngine.GridSystem.GridCockpit>() != null;
+               && item.blockPrefab.GetComponentInChildren<VoxelEngine.GridSystem.GridCockpit>(true) != null;
 
         private static bool IsGridWindowItem(GridBlockItem item)
             => item != null && item.blockPrefab != null
-               && item.blockPrefab.GetComponent<GridWindowBlock>() != null;
+               && item.blockPrefab.GetComponentInChildren<GridWindowBlock>(true) != null;
 
         /// <summary>Does this item's block have a face that has to point somewhere? Screens
         /// do; their glass is on -Z and the whole panel is unreadable from behind.</summary>
@@ -2281,6 +2937,7 @@ namespace VoxelEngine.GridSystem
         private void HideGhost()
         {
             if (_ghost != null) _ghost.SetActive(false);
+            HideGridPatternGhosts();
         }
     }
 }

@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.51.0-dev`
-**Roadmap Version:** `17.51.0-dev`
+**Current Version:** `17.52.0-dev`
+**Roadmap Version:** `17.52.0-dev`
 **Date:** 2026-10-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.52.0-dev - Five Patterns, One Native Grid
+- Ordinary one-cell grid blocks on a matching native grid use SINGLE, SPAN, PILLAR, DECK and WALL; custom, multi-cell, precision and socket families remain single-placement
+- Cell-space previews validate occupancy, support and obstruction, apply the selected armour shape per cell, and cap by carried stock plus authorized wireless stock
+- Release refreshes the plan, reserves one item per placeable cell from inventory then accessible storage, commits successful cells and returns stock for failed cells
+
 ### 17.51.0-dev - A Press, a Drag, a Whole Hammer Build
 - The hammer wheel's Ctrl + scroll ring opens the shared pattern face and returns to families; module cells keep their authored socket pitch, and unsupported family-pattern pairs remain SINGLE with a reason
 - Hammer plans use authored module cells, validate each cell's overlap and support, and cap the preview by carried plus authorized storage-network materials
@@ -46,18 +51,13 @@
 - WALL is the fifth pattern on the plot dial, a vertical sheet drawn from the camera heading, with its own icon and standing cell rotation; the auto/wall toggle and its dial face are removed
 - Deck and wall caps rise to eight a side and forty-eight cells a commit
 
-### 17.48.1-dev - A Wall Big Enough, From Any Side
-- Deck edges cap at eight a side and a commit at thirty-two cells, so a wall is not a window
-- A wall's plane is read from the piece under the crosshair, then from the nearest built piece, so extending a wall works from any approach and no branch can quietly decide "floor" while a wall is in reach
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
-- **Grid-block pattern placement (17.51.0-dev):** the Building Hammer now plans and previews module-cell runs with an exact affordability-capped release commit; grid-block cells (`GridBuilder`) remain single-placement and still need a cell-space planner and per-cell cost preview.
-- **Building Hammer runtime acceptance (17.51.0-dev):** Unity compilation and play-mode confirmation of wheel selection, no-hit dragging, module/socket joins, overlap and support refusals, carried / storage-network affordability caps, and exact preview-to-release cost and cell parity remain pending.
+- **Grid-block pattern runtime acceptance (17.52.0-dev):** Unity compilation and play-mode checks of all five patterns, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, armour shape variants, carried plus authorized wireless stock, release-time revalidation/refunds, and unchanged SINGLE paths for custom and precision families remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
 - **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
 - **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, the Automatic Tree Farm and the Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm; the Farm pages already show `FarmPlot`/`CropPlanter`/`TreeFarmPlot` beds and gain the new blocks' beds when they land. `IFarmBed` needs `Water01`/`IsDead` for the true water and dead-crop states the references show - today water is derived from `NeedsWater` and a planted bed reads as dead only while it reports `NeedsOxygen`/`NeedsWater`.
