@@ -467,7 +467,9 @@ namespace VoxelEngine.GridSystem.UI
                     : PlacementOptions.Step == PlacementStep.Metre ? T.TextSecondary : T.AccentGold);
             }
 
-            bool locked = PlacementLock.IsLocked && block != null && PlacementLock.Item == block;
+            bool gridPatternLocked = gridBuilder != null && gridBuilder.GridPatternLocked;
+            bool locked = gridPatternLocked
+                || PlacementLock.IsLocked && block != null && PlacementLock.Item == block;
             string lockText = locked ? "LOCKED" : "FREE";
             if (_lastLockText != lockText)
             {
@@ -497,6 +499,7 @@ namespace VoxelEngine.GridSystem.UI
                     if (!string.IsNullOrEmpty(gridBuilder.GridPatternPlaneLabel))
                         runText += "  ·  " + gridBuilder.GridPatternPlaneLabel;
                     if (gridBuilder.GridPatternStockCapped) runText += "  ·  STOCK CAP";
+                    if (gridBuilder.GridPatternLocked) runText += "  ·  FROZEN";
 
                     gridCostText = "COST " + gridBuilder.GridPatternClearCount
                         + "  ·  " + gridBuilder.GridPatternCarriedStock + " CARRIED + "
@@ -563,7 +566,13 @@ namespace VoxelEngine.GridSystem.UI
             string gridKey = GameSettings.GetKey(InputAction.BuildToggleGrid);
 
             string primary, secondary;
-            if (locked)
+            if (gridPatternLocked)
+            {
+                primary = "ARROWS  NUDGE PLAN  ·  ONE NATIVE CELL";
+                secondary = "CTRL+UP/DOWN  MOVE HEIGHT  ·  RIGHT CLICK  PLACE PLAN  ·  "
+                    + lockKey + "  UNFREEZE";
+            }
+            else if (locked)
             {
                 primary = "ARROWS  nudge one step  ·  SHIFT+ARROWS  whole block";
                 secondary = "CTRL+UP/DOWN  lift / drop  ·  " + lockKey + "  release lock";
@@ -571,8 +580,10 @@ namespace VoxelEngine.GridSystem.UI
             else if (gridBlock && gridBuilder != null && pattern != PlacementPattern.Single
                 && gridBuilder.GridPatternGestureActive)
             {
-                primary = "RELEASE RIGHT CLICK  ·  PLACE " + gridBuilder.GridPatternClearCount + " CELLS";
-                secondary = "PATTERN LOCKED  ·  " + wheelKey + "  opens options";
+                primary = gridBuilder.GridPatternBuildHeld
+                    ? "RELEASE RIGHT CLICK  ·  PLACE " + gridBuilder.GridPatternClearCount + " CELLS"
+                    : "RIGHT CLICK TO PLACE THE PLAN";
+                secondary = lockKey + "  FREEZE PLAN  ·  " + wheelKey + "  opens options";
             }
             else if (gridBlock && pattern != PlacementPattern.Single)
             {

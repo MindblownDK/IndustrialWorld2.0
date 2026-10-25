@@ -82,10 +82,16 @@ namespace VoxelEngine.GridSystem
         private GameObject _gridPatternGhostSourceObject;
         private string _gridPatternGhostSourceName;
         private bool _gridPatternActive;
+        private bool _gridPatternLocked;
+        private bool _gridPatternLockNeedsBuildRelease;
+        private bool _gridPatternBuildWasHeld;
+        private int _gridPatternNudgeIntent;
+        private float _nextGridPatternNudge;
         private GridEntity _gridPatternGrid;
         private GridBlockItem _gridPatternItem;
         private PlacementPattern _gridPatternMode;
         private Vector3Int _gridPatternAnchor;
+        private Vector3Int _gridPatternTarget;
         private Vector3Int _gridPatternRotationSteps;
         private VoxelEngine.UI.GridShapeVariant _gridPatternShape;
         private bool _gridPatternContextSupported;
@@ -103,6 +109,8 @@ namespace VoxelEngine.GridSystem
 
         public static GridBuilder Instance { get; private set; }
         public bool GridPatternGestureActive => _gridPatternActive;
+        public bool GridPatternBuildHeld => _gridPatternActive && GameSettings.IsHeld(InputAction.Build);
+        public bool GridPatternLocked => _gridPatternActive && _gridPatternLocked;
         public bool GridPatternContextSupported => _gridPatternContextSupported;
         public string GridPatternReason => _gridPatternReason ?? string.Empty;
         public int GridPatternPreviewCount => _gridPatternPreviewCount;
@@ -202,6 +210,13 @@ namespace VoxelEngine.GridSystem
             HoldingGridBlock = true;
             HeldBlockName = gbi.displayName;
             RefreshGridPatternStock(gbi, force: false);
+            if (_gridPatternActive && GameSettings.WasPressed(InputAction.BuildLock))
+                ToggleGridPatternLock();
+            if (_gridPatternActive && _gridPatternLocked)
+            {
+                UpdateFrozenGridPattern(gbi);
+                return;
+            }
             if (!_gridPatternActive)
             {
                 _gridPatternContextSupported = false;
@@ -250,10 +265,13 @@ namespace VoxelEngine.GridSystem
                     HideLedStretchGhost();
                     HidePrecisionLattice();
                     HideGhostPortRing();
-                    Vector3Int targetCell = AimGridCellFromRay(_gridPatternGrid, ray, _gridPatternAnchor);
+                    float aimDistance = Mathf.Max(reach,
+                        _gridPatternGrid.gridSize.CellSize() * PlacementOptions.MaxRun);
+                    Vector3Int targetCell = AimGridCellFromRay(
+                        _gridPatternGrid, ray, _gridPatternAnchor, aimDistance);
                     Quaternion patternRotation = GridPatternRotation(_gridPatternGrid);
                     UpdateGridPatternPlan(_gridPatternGrid, gbi, targetCell, patternRotation, forceStock: false);
-                    if (!GameSettings.IsHeld(InputAction.Build))
+                    if (GridPatternBuildReleased())
                     {
                         UpdateGridPatternPlan(_gridPatternGrid, gbi, targetCell, patternRotation, forceStock: true);
                         CommitGridPattern();
@@ -287,6 +305,10 @@ namespace VoxelEngine.GridSystem
             _ghostNoHitLogged = false;
 
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
+            bool gridPatternFallbackAim = _gridPatternActive && _gridPatternGrid != null
+                && _gridPatternItem == gbi && PlacementOptions.Pattern == _gridPatternMode
+                && targetGrid == null;
+            if (gridPatternFallbackAim) targetGrid = _gridPatternGrid;
             var beltPlacementSurface = hit.collider != null
                 ? hit.collider.GetComponent<MechanicalBeltPlacementSurface>()
                 : null;
@@ -357,7 +379,10 @@ namespace VoxelEngine.GridSystem
             else
             {
                 attachGrid = (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
-                    ? targetGrid : FindNearbyGrid(hit.point, gbi.gridSize);
+                    ? targetGrid
+                    : FindNearbyGrid(hit.point, gbi.gridSize,
+                        allowPatternAssist: PlacementOptions.Pattern != PlacementPattern.Single
+                            && string.IsNullOrEmpty(GridPatternItemRestrictionReason(gbi)));
 
                 if (attachGrid != null)
                 {
@@ -367,7 +392,9 @@ namespace VoxelEngine.GridSystem
                         && CanUseGridCellPattern(gbi, attachGrid, false,
                             placingTurbo, aimingBeltTakeoff, out _);
                     float cs = gbi.gridSize.CellSize();
-                    Vector3 probe = hit.point + hit.normal * (cs * 0.5f);
+                    Vector3 probe = gridPatternFallbackAim
+                        ? hit.point
+                        : hit.point + hit.normal * (cs * 0.5f);
                     gridPos = attachGrid.WorldToGrid(probe);
                     if (!attachGrid.CanPlace(gridPos))
                     {
@@ -602,7 +629,7 @@ namespace VoxelEngine.GridSystem
                 if (_gridPatternActive)
                 {
                     UpdateGridPatternPlan(targetGrid, gbi, gridPos, rotation, forceStock: false);
-                    if (!GameSettings.IsHeld(InputAction.Build))
+                    if (GridPatternBuildReleased())
                     {
                         UpdateGridPatternPlan(targetGrid, gbi, gridPos, rotation, forceStock: true);
                         CommitGridPattern();
@@ -694,14 +721,153 @@ namespace VoxelEngine.GridSystem
         {
             if (grid == null || item == null) return;
             _gridPatternActive = true;
+            _gridPatternLocked = false;
+            _gridPatternLockNeedsBuildRelease = false;
+            _gridPatternNudgeIntent = 0;
             _gridPatternGrid = grid;
             _gridPatternItem = item;
             _gridPatternMode = PlacementOptions.Pattern;
             _gridPatternAnchor = anchor;
+            _gridPatternTarget = anchor;
+            _gridPatternBuildWasHeld = GameSettings.IsHeld(InputAction.Build);
             _gridPatternRotationSteps = _rotSteps;
             _gridPatternShape = VoxelEngine.UI.GridShapeWheel.CurrentShape;
             _gridPatternContextSupported = true;
             _gridPatternReason = string.Empty;
+        }
+
+        private bool GridPatternBuildReleased()
+        {
+            bool buildHeld = GameSettings.IsHeld(InputAction.Build);
+            bool released = _gridPatternBuildWasHeld && !buildHeld;
+            _gridPatternBuildWasHeld = buildHeld;
+            return released;
+        }
+
+        private void ToggleGridPatternLock()
+        {
+            _gridPatternLocked = !_gridPatternLocked;
+            _gridPatternLockNeedsBuildRelease = _gridPatternLocked
+                && GameSettings.IsHeld(InputAction.Build);
+            _gridPatternBuildWasHeld = GameSettings.IsHeld(InputAction.Build);
+            _gridPatternNudgeIntent = 0;
+
+            if (_gridPatternLocked)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Grid Pattern Frozen",
+                    "Arrow keys nudge the whole plan one native cell. Ctrl + Up/Down moves it vertically. Right-click to place.",
+                    _gridPatternItem != null ? _gridPatternItem.icon : null,
+                    VoxelEngine.UI.UITheme.AccentGold);
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Grid Pattern Unfrozen",
+                    "Move the aim to reshape the plan, or right-click to place it.",
+                    _gridPatternItem != null ? _gridPatternItem.icon : null,
+                    VoxelEngine.UI.UITheme.AccentCyan);
+            }
+        }
+
+        private void UpdateFrozenGridPattern(GridBlockItem item)
+        {
+            if (_gridPatternGrid == null || item == null || item != _gridPatternItem)
+            {
+                CancelGridPattern();
+                HideGhost();
+                return;
+            }
+
+            HideLedStretchGhost();
+            HidePrecisionLattice();
+            HideGhostPortRing();
+            TickGridPatternNudge();
+            Quaternion rotation = GridPatternRotation(_gridPatternGrid);
+            UpdateGridPatternPlan(_gridPatternGrid, item, _gridPatternTarget, rotation, forceStock: false);
+
+            if (_gridPatternLockNeedsBuildRelease)
+            {
+                if (!GameSettings.IsHeld(InputAction.Build))
+                {
+                    _gridPatternLockNeedsBuildRelease = false;
+                    _gridPatternBuildWasHeld = false;
+                }
+                return;
+            }
+
+            if (GameSettings.WasPressed(InputAction.Build))
+            {
+                UpdateGridPatternPlan(_gridPatternGrid, item, _gridPatternTarget,
+                    rotation, forceStock: true);
+                CommitGridPattern();
+            }
+        }
+
+        private void TickGridPatternNudge()
+        {
+            if (!_gridPatternLocked || _gridPatternGrid == null) return;
+            Vector2 axis = ReadGridPatternArrowAxis();
+            if (axis.sqrMagnitude < 0.01f)
+            {
+                _gridPatternNudgeIntent = 0;
+                return;
+            }
+
+            Vector3Int offset;
+            int intent;
+            if (GridInput.Ctrl)
+            {
+                if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y)) return;
+                int sign = axis.y > 0f ? 1 : -1;
+                offset = Vector3Int.up * sign;
+                intent = sign > 0 ? 3 : -3;
+            }
+            else if (Mathf.Abs(axis.x) >= Mathf.Abs(axis.y))
+            {
+                int sign = axis.x > 0f ? 1 : -1;
+                offset = Vector3Int.right * sign;
+                intent = sign > 0 ? 1 : -1;
+            }
+            else
+            {
+                int sign = axis.y > 0f ? 1 : -1;
+                offset = Vector3Int.forward * sign;
+                intent = sign > 0 ? 2 : -2;
+            }
+
+            bool freshPress = intent != _gridPatternNudgeIntent;
+            _gridPatternNudgeIntent = intent;
+            if (freshPress)
+            {
+                _nextGridPatternNudge = Time.unscaledTime + 0.32f;
+            }
+            else
+            {
+                if (Time.unscaledTime < _nextGridPatternNudge) return;
+                _nextGridPatternNudge = Time.unscaledTime + 0.14f;
+            }
+
+            _gridPatternAnchor += offset;
+            _gridPatternTarget += offset;
+            PlacementFeedback.Snap(_gridPatternGrid.GridToWorld(_gridPatternAnchor), 1);
+        }
+
+        private static Vector2 ReadGridPatternArrowAxis()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard == null) return Vector2.zero;
+            float x = (keyboard.rightArrowKey.isPressed ? 1f : 0f)
+                - (keyboard.leftArrowKey.isPressed ? 1f : 0f);
+            float y = (keyboard.upArrowKey.isPressed ? 1f : 0f)
+                - (keyboard.downArrowKey.isPressed ? 1f : 0f);
+            return new Vector2(x, y);
+#else
+            float x = (Input.GetKey(KeyCode.RightArrow) ? 1f : 0f)
+                - (Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f);
+            float y = (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f)
+                - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f);
+            return new Vector2(x, y);
+#endif
         }
 
         private Quaternion GridPatternRotation(GridEntity grid)
@@ -712,12 +878,14 @@ namespace VoxelEngine.GridSystem
             return rotation;
         }
 
-        private static Vector3Int AimGridCellFromRay(GridEntity grid, Ray ray, Vector3Int anchor)
+        private static Vector3Int AimGridCellFromRay(GridEntity grid, Ray ray,
+            Vector3Int anchor, float aimDistance)
         {
             if (grid == null) return anchor;
             Vector3 anchorWorld = grid.GridToWorld(anchor);
-            float alongRay = Mathf.Max(0f, Vector3.Dot(anchorWorld - ray.origin, ray.direction));
-            return grid.WorldToGrid(ray.GetPoint(alongRay));
+            float anchorAlongRay = Mathf.Max(0f, Vector3.Dot(anchorWorld - ray.origin, ray.direction));
+            float targetDistance = Mathf.Max(anchorAlongRay, aimDistance);
+            return grid.WorldToGrid(ray.GetPoint(targetDistance));
         }
 
         private void RefreshGridPatternStock(GridBlockItem item, bool force)
@@ -771,6 +939,7 @@ namespace VoxelEngine.GridSystem
 
             _gridPatternContextSupported = true;
             _gridPatternReason = string.Empty;
+            _gridPatternTarget = target;
             RefreshGridPatternStock(item, forceStock);
 
             _gridPatternDesiredCount = GridPlacementPatternPlanner.Build(
@@ -1076,8 +1245,13 @@ namespace VoxelEngine.GridSystem
         private void CancelGridPattern()
         {
             _gridPatternActive = false;
+            _gridPatternLocked = false;
+            _gridPatternLockNeedsBuildRelease = false;
+            _gridPatternBuildWasHeld = false;
+            _gridPatternNudgeIntent = 0;
             _gridPatternGrid = null;
             _gridPatternItem = null;
+            _gridPatternTarget = Vector3Int.zero;
             _gridPatternPreviewCount = 0;
             _gridPatternClearCount = 0;
             _gridPatternDesiredCount = 0;
@@ -2709,18 +2883,46 @@ namespace VoxelEngine.GridSystem
             RotationSteps = _rotSteps;
         }
 
-        private GridEntity FindNearbyGrid(Vector3 worldPoint, GridSize size)
+        private GridEntity FindNearbyGrid(Vector3 worldPoint, GridSize size, bool allowPatternAssist = false)
         {
             float cs = size.CellSize();
             GridEntity best = null;
-            float bestDist = cs * 0.9f;
+            if (!allowPatternAssist)
+            {
+                float bestDistance = cs * 0.9f;
+                foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude))
+                {
+                    if (ge.gridSize != size) continue;
+                    Vector3Int gp = ge.WorldToGrid(worldPoint);
+                    if (!ge.HasNeighbor(gp) && ge.GetBlock(gp) == null) continue;
+                    float distance = Vector3.Distance(worldPoint, ge.GridToWorld(gp));
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    best = ge;
+                }
+                return best;
+            }
+
+            // Pattern aiming often lands on nearby terrain or empty space beside the
+            // construct. Search a small native-cell neighborhood instead of requiring the
+            // crosshair point to sit within one cell of a block center.
+            const int searchCells = 3;
+            float bestDistanceSqr = cs * cs * searchCells * searchCells;
             foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude))
             {
                 if (ge.gridSize != size) continue;
-                var gp = ge.WorldToGrid(worldPoint);
-                if (!ge.HasNeighbor(gp) && ge.GetBlock(gp) == null) continue;
-                float d = Vector3.Distance(worldPoint, ge.GridToWorld(gp));
-                if (d < bestDist) { bestDist = d; best = ge; }
+                Vector3Int centerCell = ge.WorldToGrid(worldPoint);
+                for (int x = -searchCells; x <= searchCells; x++)
+                for (int y = -searchCells; y <= searchCells; y++)
+                for (int z = -searchCells; z <= searchCells; z++)
+                {
+                    Vector3Int cell = centerCell + new Vector3Int(x, y, z);
+                    if (ge.GetBlock(cell) == null) continue;
+                    float distanceSqr = (worldPoint - ge.GridToWorld(cell)).sqrMagnitude;
+                    if (distanceSqr >= bestDistanceSqr) continue;
+                    bestDistanceSqr = distanceSqr;
+                    best = ge;
+                }
             }
             return best;
         }

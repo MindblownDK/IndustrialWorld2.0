@@ -1,9 +1,31 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.52.1-dev`
+**Current Version:** `17.52.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.52.2-dev] Reachable, Freezable Grid Patterns
+
+**Type:** PATCH - keeps grid-pattern plans attached to their selected construct through aim loss, improves off-grid aiming range, and adds native-cell freeze/nudge controls. No save schema, item, recipe, research node or keybind change.
+
+**GitHub title:** `[17.52.2-dev] Keep grid-pattern drags on the selected grid and add freeze/nudge controls`
+
+#### Fixed
+
+- **Grid-pattern drags could cancel as soon as the ray left the grid collider.** Once a gesture is active, non-grid hits and empty aim now continue to target the same grid in cell space; explicitly aiming at a different grid still cancels the gesture.
+- **Pattern-mode grid acquisition was limited to a point less than one cell from a block center, and empty-ray aiming was pinned to the nearest point to the anchor.** The matching-grid assist now searches occupied cells within three native cells, and empty-ray projection reaches at least the configured build reach or a ten-cell run. Long spans and taller walls are no longer constrained by the player's distance to the anchor.
+
+#### Added
+
+- **Freeze and nudge for an active grid-pattern plan.** `BuildLock` freezes the whole plan; arrow keys nudge it one native cell in grid X/Z and Ctrl + Up/Down moves it along grid Y. Right-click commits the frozen plan, and the placement card states the frozen/nudge controls.
+
+#### Validation
+
+- All modified/new C# files parsed with the C# grammar and `git diff --check` is clean.
+- Headless geometry checks passed for large-grid aim reach, the expanded pattern acquisition radius, and dimension-preserving native-cell nudges. These checks do not execute the C# code.
+- No C# compiler or Unity runtime was available. Unity compilation and in-game acceptance remain pending.
+- Voxel Engine Setup is not needed; no item, prefab, recipe or research content was added.
 
 ### [17.52.1-dev] Armour Patterns, Right-Click Clarity
 
