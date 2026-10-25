@@ -18,6 +18,10 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - **A drag can continue when the aim leaves colliders.** Empty-ray aiming is measured on the selected plan plane (or the authored vertical / sloped chain axis), so the press-drag gesture can keep growing past a platform edge or into open sky without losing its last plan.
 - **The cost card describes the hammer plan.** It reports the pattern, planned dimensions or count, plane label, valid-cell count, and total ingredient cost for the clear cells. Its entrance eases in; plan status colour changes ease over 0.1 seconds.
 
+#### Fixed
+
+- **Unity reported a local-name collision in the planner's one-cell path.** Renamed the inner slope-family flag so it no longer conflicts with the later method-scope flag; placement behavior is unchanged.
+
 #### Changed
 
 - **The preview is the release contract.** Every planned cell carries its own placement pose, compatible socket path, overlap result, support span / anchor, pillar height and railing rise. The plan is capped by carried materials plus the currently authorized storage-network stock; release rechecks affordability and world validity, then places exactly the clear, affordable cells shown by that refreshed preview and charges their total cost. Invalid cells remain red and are skipped.

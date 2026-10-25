@@ -140,14 +140,14 @@ namespace VoxelEngine.Building.Tiered
             size = Vector2Int.one;
             if (cellBudget == 1)
             {
-                bool slopeFamily = family == BuildFamily.Stairs
+                bool singleCellSlopeFamily = family == BuildFamily.Stairs
                     || family == BuildFamily.SlantedRoof
                     || family == BuildFamily.SlantedTriangularRoof;
                 planeLabel = pattern switch
                 {
-                    PlacementPattern.Deck => slopeFamily ? "SLOPE · WIDTH + RISE" : "FLAT · SIDE + DEPTH",
+                    PlacementPattern.Deck => singleCellSlopeFamily ? "SLOPE · WIDTH + RISE" : "FLAT · SIDE + DEPTH",
                     PlacementPattern.Wall => wallRunIsDepth ? "VERTICAL · DEPTH + UP" : "VERTICAL · SIDE + UP",
-                    PlacementPattern.Pillar => slopeFamily ? "CHAIN · UP THE SLOPE" : "STACK · UP",
+                    PlacementPattern.Pillar => singleCellSlopeFamily ? "CHAIN · UP THE SLOPE" : "STACK · UP",
                     _ => "LINE",
                 };
                 return 1;
