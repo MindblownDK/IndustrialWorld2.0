@@ -1,9 +1,26 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.52.0-dev`
+**Current Version:** `17.52.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.52.1-dev] Armour Patterns, Right-Click Clarity
+
+**Type:** PATCH - fixes ordinary armour blocks being falsely classified as item pipes and clarifies the grid placement prompts. No save schema, item, recipe, research node or keybind change.
+
+**GitHub title:** `[17.52.1-dev] Restore armour grid-pattern eligibility and clarify right-click placement prompts`
+
+#### Fixed
+
+- **Every `GItem_...` asset could be mistaken for an item pipe.** The legacy fallback searched for the substring `item`, which also occurs in ordinary item IDs such as `GItem_ArmorLarge`; that forced armour blocks into SINGLE ONLY. The fallback now looks for pipe-specific liquid, water, gas or item-pipe names, while prefab component checks remain authoritative. Large armour can use patterns on a matching native-size grid; actual pipe and authored-snap families remain single-placement.
+- **The grid placement card exposed the raw `Mouse 1` binding.** Single placement now reads “RIGHT CLICK TO PLACE A BLOCK”; pattern gestures and release prompts use the same plain wording.
+
+#### Validation
+
+- C# grammar parsing and whitespace checks passed for the modified/new source files. Headless name-classification checks confirm `GItem_ArmorLarge` is not a pipe while pipe-specific IDs still match.
+- No C# compiler or Unity runtime was available. Grid-pattern compilation and in-game acceptance remain pending.
+- Voxel Engine Setup is not needed; no item, prefab, recipe or research content was added.
 
 ### [17.52.0-dev] Five Patterns, One Native Grid
 

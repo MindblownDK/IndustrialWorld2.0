@@ -560,7 +560,6 @@ namespace VoxelEngine.GridSystem.UI
             string turnKey = GameSettings.GetKey(InputAction.BuildRotate);
             string lockKey = GameSettings.GetKey(InputAction.BuildLock);
             string wheelKey = GameSettings.GetKey(InputAction.BuildWheel);
-            string buildKey = GameSettings.GetKey(InputAction.Build);
             string gridKey = GameSettings.GetKey(InputAction.BuildToggleGrid);
 
             string primary, secondary;
@@ -572,21 +571,21 @@ namespace VoxelEngine.GridSystem.UI
             else if (gridBlock && gridBuilder != null && pattern != PlacementPattern.Single
                 && gridBuilder.GridPatternGestureActive)
             {
-                primary = "RELEASE " + buildKey + "  place " + gridBuilder.GridPatternClearCount + " cells";
+                primary = "RELEASE RIGHT CLICK  ·  PLACE " + gridBuilder.GridPatternClearCount + " CELLS";
                 secondary = "PATTERN LOCKED  ·  " + wheelKey + "  opens options";
             }
             else if (gridBlock && pattern != PlacementPattern.Single)
             {
                 primary = gridBuilder != null && gridBuilder.GridPatternContextSupported
-                    ? "HOLD " + buildKey + " + DRAG  ·  " + patternText
-                    : "CLICK " + buildKey + "  place one block";
+                    ? "HOLD RIGHT CLICK + DRAG  ·  " + patternText
+                    : "RIGHT CLICK TO PLACE A BLOCK";
                 secondary = gridBuilder != null && gridBuilder.GridPatternContextSupported
                     ? wheelKey + "  pattern wheel  ·  CTRL+SCROLL  modes  ·  " + turnKey + "  rotate"
                     : "SINGLE ONLY  ·  " + (gridBuilder != null ? gridBuilder.GridPatternReason : "grid builder unavailable");
             }
             else if (gridBlock)
             {
-                primary = "CLICK " + buildKey + "  place one block";
+                primary = "RIGHT CLICK TO PLACE A BLOCK";
                 secondary = wheelKey + "  pattern / armour options  ·  " + turnKey + "  rotate";
             }
             else if (runCells > 1)

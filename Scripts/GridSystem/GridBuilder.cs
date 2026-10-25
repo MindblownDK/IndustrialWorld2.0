@@ -1716,11 +1716,29 @@ namespace VoxelEngine.GridSystem
             if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null) { family = PipeFamily.Liquid; return true; }
             if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null) { family = PipeFamily.Gas; return true; }
             if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null) { family = PipeFamily.Item; return true; }
-            string id = (item.itemId ?? "").ToLowerInvariant();
-            string dn = (item.displayName ?? "").ToLowerInvariant();
-            if (id.Contains("liquid") || id.Contains("water") || dn.Contains("liquid") || dn.Contains("water")) { family = PipeFamily.Liquid; return true; }
-            if (id.Contains("gas") || dn.Contains("gas")) { family = PipeFamily.Gas; return true; }
-            if (id.Contains("item") || dn.Contains("item pipe")) { family = PipeFamily.Item; return true; }
+            string id = (item.itemId ?? string.Empty).ToLowerInvariant();
+            string displayName = (item.displayName ?? string.Empty).ToLowerInvariant();
+            // Grid item IDs share the generic GItem_ prefix; require an actual pipe token
+            // before normalizing separators so ordinary blocks never enter this fallback.
+            if (!id.Contains("pipe") && !displayName.Contains("pipe")) return false;
+            string normalizedId = id.Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty);
+            string normalizedName = displayName.Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty);
+            if (normalizedId.Contains("liquidpipe") || normalizedName.Contains("liquidpipe")
+                || normalizedId.Contains("waterpipe") || normalizedName.Contains("waterpipe"))
+            {
+                family = PipeFamily.Liquid;
+                return true;
+            }
+            if (normalizedId.Contains("gaspipe") || normalizedName.Contains("gaspipe"))
+            {
+                family = PipeFamily.Gas;
+                return true;
+            }
+            if (normalizedId.Contains("itempipe") || normalizedName.Contains("itempipe"))
+            {
+                family = PipeFamily.Item;
+                return true;
+            }
             return false;
         }
 
