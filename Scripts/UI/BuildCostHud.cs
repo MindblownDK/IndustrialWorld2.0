@@ -18,13 +18,17 @@ namespace VoxelEngine.UI
     {
         // ── State ──────────────────────────────────────────────────────
         private static VisualElement _root, _container, _card;
-        private static Label         _nameLabel, _costLabel;
+        private static Label         _nameLabel, _planLabel, _costLabel;
+        private static bool _isVisible;
+        private static int _visibilityToken;
 
         // ── Mount ──────────────────────────────────────────────────────
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (_root == uiRoot && _container != null && _container.parent == uiRoot) return;
             _root = uiRoot;
+            _visibilityToken++;
+            _isVisible = false;
             if (_container != null) _container.RemoveFromHierarchy();
 
             // Centre-bottom anchor.
@@ -36,6 +40,14 @@ namespace VoxelEngine.UI
             _container.style.alignItems  = Align.Center;
             _container.pickingMode       = PickingMode.Ignore;
             _container.style.display     = DisplayStyle.None;
+            _container.style.opacity     = 0f;
+            _container.style.scale       = new StyleScale(new Scale(new Vector3(0.96f, 0.96f, 1f)));
+            _container.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName>
+                { "opacity", "scale" };
+            _container.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
+                { new TimeValue(0.13f, TimeUnit.Second), new TimeValue(0.13f, TimeUnit.Second) };
+            _container.style.transitionTimingFunction = new System.Collections.Generic.List<EasingFunction>
+                { new EasingFunction(EasingMode.EaseOutCubic), new EasingFunction(EasingMode.EaseOutCubic) };
             uiRoot.Add(_container);
 
             // Card.
@@ -70,13 +82,67 @@ namespace VoxelEngine.UI
             _nameLabel.pickingMode = PickingMode.Ignore;
             _card.Add(_nameLabel);
 
+            _planLabel = new Label("");
+            _planLabel.style.color                   = new StyleColor(T.TextSecondary);
+            _planLabel.style.fontSize                = 10;
+            _planLabel.style.marginTop               = 3;
+            _planLabel.style.unityTextAlign           = TextAnchor.MiddleCenter;
+            _planLabel.style.whiteSpace              = WhiteSpace.Normal;
+            _planLabel.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName>
+                { "color" };
+            _planLabel.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
+                { new TimeValue(0.10f, TimeUnit.Second) };
+            _planLabel.style.transitionTimingFunction = new System.Collections.Generic.List<EasingFunction>
+                { new EasingFunction(EasingMode.EaseOutCubic) };
+            _planLabel.pickingMode = PickingMode.Ignore;
+            _card.Add(_planLabel);
+
             _costLabel = new Label("");
             _costLabel.style.fontSize        = 11;
             _costLabel.style.marginTop       = 3;
             _costLabel.style.unityTextAlign  = TextAnchor.MiddleCenter;
+            _costLabel.style.whiteSpace      = WhiteSpace.Normal;
             _costLabel.enableRichText        = true;
             _costLabel.pickingMode = PickingMode.Ignore;
             _card.Add(_costLabel);
+        }
+
+        private static void ShowContainer()
+        {
+            if (_container == null) return;
+            if (_isVisible)
+            {
+                _container.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            _isVisible = true;
+            int token = ++_visibilityToken;
+            VisualElement container = _container;
+            container.style.display = DisplayStyle.Flex;
+            container.style.opacity = 0f;
+            container.style.scale = new StyleScale(new Scale(new Vector3(0.96f, 0.96f, 1f)));
+            container.schedule.Execute(() =>
+            {
+                if (_container != container || !_isVisible || token != _visibilityToken) return;
+                container.style.opacity = 1f;
+                container.style.scale = new StyleScale(new Scale(Vector3.one));
+            }).ExecuteLater(10);
+        }
+
+        private static void HideContainer()
+        {
+            if (_container == null || !_isVisible) return;
+            _isVisible = false;
+            int token = ++_visibilityToken;
+            VisualElement container = _container;
+            container.style.opacity = 0f;
+            container.style.scale = new StyleScale(new Scale(new Vector3(0.96f, 0.96f, 1f)));
+            container.schedule.Execute(() =>
+            {
+                if (_container != container || _isVisible || token != _visibilityToken) return;
+                container.style.display = DisplayStyle.None;
+            }).ExecuteLater(140);
         }
 
         // ── Tick ───────────────────────────────────────────────────────
@@ -86,52 +152,132 @@ namespace VoxelEngine.UI
 
             var wheel = HammerBuildWheel.Instance;
             if (wheel == null || !wheel.ActiveFamily.HasValue)
-            { _container.style.display = DisplayStyle.None; return; }
+            { HideContainer(); return; }
 
             var inv = UnityEngine.Object.FindAnyObjectByType<Inventory>();
             if (inv == null)
-            { _container.style.display = DisplayStyle.None; return; }
+            { HideContainer(); return; }
 
             var stack = inv.ActiveStack;
             if (stack.IsEmpty || !(stack.item is Hammer))
-            { _container.style.display = DisplayStyle.None; return; }
+            { HideContainer(); return; }
 
-            var registry = BuildSystemV2.Instance?.registry;
-            if (registry == null) { _container.style.display = DisplayStyle.None; return; }
+            var buildSystem = BuildSystemV2.Instance;
+            var registry = buildSystem != null ? buildSystem.registry : null;
+            if (registry == null) { HideContainer(); return; }
 
-            var def = registry.Get(wheel.ActiveFamily.Value);
-            if (def == null) { _container.style.display = DisplayStyle.None; return; }
+            BuildFamily family = wheel.ActiveFamily.Value;
+            var def = registry.Get(family);
+            if (def == null) { HideContainer(); return; }
 
-            _container.style.display = DisplayStyle.Flex;
+            ShowContainer();
             _nameLabel.text = def.displayName;
 
-            // Build rich-text cost string.
-            if (def.placeCost == null || def.placeCost.items == null || def.placeCost.items.Length == 0)
+            var pattern = VoxelEngine.Building.PlacementOptions.Pattern;
+            bool supported = BuildSystemV2.SupportsHammerPattern(family, pattern);
+            bool activeRun = buildSystem.HammerPatternActive;
+            string planText;
+            Color planTint;
+            if (pattern == VoxelEngine.Building.PlacementPattern.Single)
             {
-                _costLabel.text              = "<color=#55CC77>Free</color>";
-                _costLabel.style.color       = new StyleColor(T.AccentGreen);
+                planText = "SINGLE · CLICK TO BUILD";
+                planTint = T.TextSecondary;
+            }
+            else if (!supported)
+            {
+                planText = "SINGLE FALLBACK · "
+                    + BuildSystemV2.HammerPatternFallbackReason(family, pattern);
+                planTint = T.AccentAmber;
+            }
+            else if (activeRun)
+            {
+                int planned = buildSystem.HammerPatternPreviewCount;
+                int valid = buildSystem.HammerPatternValidCount;
+                string size = pattern == VoxelEngine.Building.PlacementPattern.Deck
+                    || pattern == VoxelEngine.Building.PlacementPattern.Wall
+                    ? buildSystem.HammerPatternPlanSize.x + " × " + buildSystem.HammerPatternPlanSize.y
+                    : planned + " CELLS";
+                planText = VoxelEngine.Building.PlacementOptions.PatternName(pattern) + "  " + size
+                    + " · " + buildSystem.HammerPatternPlaneLabel + " · "
+                    + valid + "/" + planned + " CLEAR";
+                planTint = valid == planned && planned > 0 ? T.AccentGreen
+                    : valid > 0 ? T.AccentAmber : T.AccentRed;
+            }
+            else
+            {
+                planText = VoxelEngine.Building.PlacementOptions.PatternName(pattern)
+                    + " · PRESS + DRAG · RELEASE TO BUILD";
+                planTint = T.AccentCyan;
+            }
+            _planLabel.text = planText;
+            _planLabel.style.color = new StyleColor(planTint);
+
+            int pieces = activeRun ? buildSystem.HammerPatternValidCount : 1;
+            int multiplier = activeRun ? BuildSystemV2.HammerPatternCostMultiplier : 1;
+            if (activeRun && pieces <= 0)
+            {
+                _costLabel.text = buildSystem.HammerPatternAffordableCount <= 0
+                    ? "NO AFFORDABLE CELLS · CARRY MATERIALS"
+                    : "NO VALID CELLS · CHECK THE RED PREVIEWS";
+                _costLabel.style.color = new StyleColor(T.AccentRed);
+                T.Border(_card, 1, T.BorderRed);
                 return;
             }
 
-            var sb = new System.Text.StringBuilder();
-            bool allAfford = true;
-            bool first     = true;
-
-            foreach (var ing in def.placeCost.items)
+            if (def.placeCost?.items == null || def.placeCost.items.Length == 0)
             {
-                if (ing.item == null || ing.count <= 0) continue;
-                if (!first) sb.Append("   ");
-                int  have    = inv.container.CountOf(ing.item);
-                bool enough  = have >= ing.count;
+                _costLabel.text = activeRun
+                    ? "<color=#55CC77>Free · " + pieces + " pieces</color>"
+                    : "<color=#55CC77>Free</color>";
+                _costLabel.style.color = new StyleColor(T.AccentGreen);
+                T.Border(_card, 1, T.BorderBright);
+                return;
+            }
+
+            var sb = new System.Text.StringBuilder(192);
+            bool allAfford = true;
+            bool first = true;
+            var costs = def.placeCost.items;
+            for (int i = 0; i < costs.Length; i++)
+            {
+                ItemDefinition item = costs[i].item;
+                if (item == null || costs[i].count <= 0) continue;
+                bool alreadyCounted = false;
+                for (int prior = 0; prior < i; prior++)
+                {
+                    if (costs[prior].item != item) continue;
+                    alreadyCounted = true;
+                    break;
+                }
+                if (alreadyCounted) continue;
+
+                long basePerPiece = 0L;
+                for (int duplicate = i; duplicate < costs.Length; duplicate++)
+                    if (costs[duplicate].item == item && costs[duplicate].count > 0)
+                        basePerPiece += costs[duplicate].count;
+                long perPieceLong = basePerPiece * multiplier;
+                long totalLong = perPieceLong * pieces;
+                int perPiece = perPieceLong >= int.MaxValue ? int.MaxValue : (int)perPieceLong;
+                int total = totalLong >= int.MaxValue ? int.MaxValue : (int)totalLong;
+                int available = buildSystem != null
+                    ? buildSystem.GetAvailableBuildCount(item)
+                    : inv.container != null ? inv.container.CountOf(item) : 0;
+                bool enough = available >= total;
                 if (!enough) allAfford = false;
                 string hex = enough ? "#66DD88" : "#DD5544";
-                sb.Append($"<color={hex}>{ing.count}</color> <color=#A0A8B8>{ing.item.displayName}</color> <color={hex}>({have})</color>");
+                if (!first) sb.Append("   ");
+                sb.Append("<color=").Append(hex).Append(">")
+                    .Append(total).Append("</color> <color=#A0A8B8>")
+                    .Append(item.displayName).Append("</color> <color=")
+                    .Append(hex).Append(">( ");
+                if (activeRun) sb.Append(perPiece).Append(" × ").Append(pieces).Append(" · ");
+                sb.Append(available).Append(" available )</color>");
                 first = false;
             }
 
             _costLabel.enableRichText = true;
-            _costLabel.text           = sb.ToString();
-            // Pulse the card border if we can/can't afford.
+            _costLabel.text = sb.ToString();
+            _costLabel.style.color = new StyleColor(allAfford ? T.AccentGreen : T.AccentRed);
             T.Border(_card, 1, allAfford ? T.BorderBright : T.BorderRed);
         }
     }

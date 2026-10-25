@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.50.0-dev`
-**Roadmap Version:** `17.50.0-dev`
+**Current Version:** `17.51.0-dev`
+**Roadmap Version:** `17.51.0-dev`
 **Date:** 2026-10-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 17.51.0-dev - A Press, a Drag, a Whole Hammer Build
+- The hammer wheel's Ctrl + scroll ring opens the shared pattern face and returns to families; module cells keep their authored socket pitch, and unsupported family-pattern pairs remain SINGLE with a reason
+- Hammer plans use authored module cells, validate each cell's overlap and support, and cap the preview by carried plus authorized storage-network materials
+- The cost card shows plan size, plane and total material cost; release rebuilds and commits the clear cells from that refreshed preview
+
 ### 17.50.0-dev - A Deck Is Flat, a Wall Can Turn
 - Static patterns state their planes outright: DECK is side + depth in the gravity plane, WALL is one horizontal run + up; face detection no longer decides either
 - A wall's run turns from side to depth mid-gesture as the player moves around the anchor, and a deck is measured on its flat plane so it grows forward and back past surface edges
@@ -45,17 +50,14 @@
 - Deck edges cap at eight a side and a commit at thirty-two cells, so a wall is not a window
 - A wall's plane is read from the piece under the crosshair, then from the nearest built piece, so extending a wall works from any approach and no branch can quietly decide "floor" while a wall is in reach
 
-### 17.48.0-dev - A Wall You State Instead of Catch
-- DECK PLANE joins the plot dial: AUTO reads the aim, WALL always fills the last face seen, so a wall is reached deliberately
-- The remembered face survives ground hits and keeps a stated WALL plan on its own wall; the face test loosened to about forty-four degrees from vertical
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
-- **Patterns for grid blocks and the building hammer (17.44.0-dev):** the pattern ring, the frame alignment and the frozen hologram shipped for static blocks only. Grid-block cells (`GridBuilder`) and hammer pieces (`BuildSystemV2` / `PlacedTieredBlock`) still place one at a time; their runs need a cell-space planner (grid coordinates rather than world poses) and a hammer cost preview per piece before the release gesture can be shared.
+- **Grid-block pattern placement (17.51.0-dev):** the Building Hammer now plans and previews module-cell runs with an exact affordability-capped release commit; grid-block cells (`GridBuilder`) remain single-placement and still need a cell-space planner and per-cell cost preview.
+- **Building Hammer runtime acceptance (17.51.0-dev):** Unity compilation and play-mode confirmation of wheel selection, no-hit dragging, module/socket joins, overlap and support refusals, carried / storage-network affordability caps, and exact preview-to-release cost and cell parity remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
 - **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
 - **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, the Automatic Tree Farm and the Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm; the Farm pages already show `FarmPlot`/`CropPlanter`/`TreeFarmPlot` beds and gain the new blocks' beds when they land. `IFarmBed` needs `Water01`/`IsDead` for the true water and dead-crop states the references show - today water is derived from `NeedsWater` and a planted bed reads as dead only while it reports `NeedsOxygen`/`NeedsWater`.
@@ -186,6 +188,17 @@
 - Never gate an action on a presentation flag. `GhostValid` is the ghost's material, not the probe's answer - anything that must be true for a placement to happen asks `IsPlacementValid` directly (17.44.7-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
+
+### Building Hammer Patterns (17.51.0-dev)
+
+~~Press-drag-release multi-placement from the hammer wheel's Ctrl + scroll pattern face, with a family-aware module preview and an affordability-capped release commit.~~ *(17.51.0-dev)*
+
+**Rules that bind:**
+- Unsupported family-pattern pairs stay SINGLE and name the mismatch; never auto-map to a different pattern. Foundations, Floors, FloorHatches and flat Roofs use SPAN / DECK; Wall, HalfWall, Doorway, Window and WallFrame use SPAN / PILLAR / WALL; TriangularWall variants and CompoundWall use SPAN only; Pillar uses PILLAR. Stairs and sloped roof families chain along their authored run and rise; other shaped roof panels use their authored edges. Fittings, Railing, GateFrames and Station families stay SINGLE.
+- Cell positions follow authored module sockets (7.5 m; 5.625 m storey; 2.8 m HalfWall), with overlap and structural support validated per cell. The plan is capped by carried plus authorized storage-network materials, and the clear cells in the refreshed release preview are the cells charged and built.
+- The cost card states plan size, plane, clear-cell count and total cost. The shared hammer wheel does not add a keybind or change static placement settings.
+
+**Status:** implemented in `Scripts/Building/Tiered/HammerPlacementPlanner.cs`, `BuildSystemV2.cs`, `HammerBuildWheel.cs`, `BuildSocket.cs` and `Scripts/UI/BuildCostHud.cs`; no Voxel Engine Setup content action is needed. Unity build / play-mode acceptance remains open.
 
 ### Real Crusaders - Player Model & Readable Loadout (milestone 6 design)
 

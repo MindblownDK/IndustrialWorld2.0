@@ -1,9 +1,37 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.50.0-dev`
+**Current Version:** `17.51.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [17.51.0-dev] A Press, a Drag, a Whole Hammer Build
+
+**Type:** MINOR - adds press-drag-release pattern placement to the Building Hammer, with a family-aware module plan, exact affordability preview and release commit. No save schema, item, recipe, research node or keybind change.
+
+**GitHub title:** `[17.51.0-dev] Give the Building Hammer a Ctrl-scroll pattern face and place the costed socket plan on release`
+
+#### Added
+
+- **The hammer wheel gets a placement-pattern face.** `HammerBuildWheel` reuses `PlacementModeRing`: Ctrl + scroll moves from the family wheel to the shared pattern face and back. The module plan deliberately has no lattice-step face; its cell pitch comes from authored sockets. With a supported pattern selected, press the existing Build action, drag by moving the aim, and release to place. No extra keybind or separate wheel was added.
+- **Hammer plans are module-aligned, family-aware cells (`HammerPlacementPlanner`).** The plan uses the authored 7.5 m module, 5.625 m storey and 2.8 m half-wall pitch, not the cosmetic static-block lattice. The contract is explicit: Foundation, Floor, FloorHatch and flat Roof use SPAN / DECK; Wall, HalfWall, Doorway, Window and WallFrame use SPAN / PILLAR / WALL; TriangularWall variants and CompoundWall use SPAN only; Pillar uses PILLAR; Stairs use SPAN / DECK / PILLAR along the flight and across its width; SlantedRoof and SlantedTriangularRoof also chain across width and up the slope; the other shaped roof panels use their authored SPAN / DECK edges. Fittings, Railing, GateFrames and all Station pieces remain SINGLE. Any unlisted pairing stays SINGLE with a reason - it is never silently remapped.
+- **A drag can continue when the aim leaves colliders.** Empty-ray aiming is measured on the selected plan plane (or the authored vertical / sloped chain axis), so the press-drag gesture can keep growing past a platform edge or into open sky without losing its last plan.
+- **The cost card describes the hammer plan.** It reports the pattern, planned dimensions or count, plane label, valid-cell count, and total ingredient cost for the clear cells. Its entrance eases in; plan status colour changes ease over 0.1 seconds.
+
+#### Changed
+
+- **The preview is the release contract.** Every planned cell carries its own placement pose, compatible socket path, overlap result, support span / anchor, pillar height and railing rise. The plan is capped by carried materials plus the currently authorized storage-network stock; release rechecks affordability and world validity, then places exactly the clear, affordable cells shown by that refreshed preview and charges their total cost. Invalid cells remain red and are skipped.
+- **Two authored socket families now match their existing module geometry.** `BuildSocketCompat` recognizes FloorHatch as a neighboring deck, and recognizes WallFrame's authored side and top joins. No prefab/socket asset was added or regenerated.
+- **Ctrl + scroll is modal while the hammer wheel is open.** The ring changes the pattern face without also rotating the ghost on the same wheel movement.
+- **Hammer-pattern UI state is instance-owned.** The requested public static `HammerPatternCostMultiplier` remains initialized to `1`; the active plan, counts, size, plane and warning stay on the owning `BuildSystemV2` instance. Disabling or destroying the active builder clears its preview state and ghost pool.
+
+#### Validation
+
+- Parsed all six modified C# files with a C# grammar; no syntax error or missing-node reported. `git diff --check` is clean.
+- Audited the pattern-family matrix against `BuildSocketCompat` and the authored socket positions in `TieredRebuildSetup.AddSockets`, including the stair / sloped-roof chain transforms and the unchanged SINGLE families.
+- Eight standalone geometry checks mirroring the planner arithmetic passed: flat 3 x 2 deck, complete rectangle under a cell budget, 3 x 3 wall, half-wall pitch, authored stair rise/run, one-cell affordability cap and positive / negative vertical counts. These are headless arithmetic checks, not execution of the C# planner or a Unity test.
+- No item, prefab, recipe or research content was added; Voxel Engine Setup is not needed for this code-only change.
+- Unity compilation, play-mode validation, and runtime simulation were not run.
 
 ### [17.50.0-dev] A Deck Is Flat, a Wall Can Turn
 

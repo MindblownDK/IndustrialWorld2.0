@@ -39,6 +39,7 @@ namespace VoxelEngine.UI
         private readonly string _baseLabel;
         private readonly string _baseSwapsHint;
         private readonly bool _home;
+        private readonly bool _includeStep;
 
         private Stage _stage = Stage.Base;
 
@@ -49,12 +50,14 @@ namespace VoxelEngine.UI
         /// variants of their own), so the ring starts on PATTERN and never shows an
         /// empty base face.
         /// </param>
-        public PlacementModeRing(RadialWheelController wheel, string baseLabel, bool home)
+        public PlacementModeRing(RadialWheelController wheel, string baseLabel, bool home,
+            bool includeStep = true)
         {
             _wheel = wheel;
             _baseLabel = baseLabel;
             _baseSwapsHint = wheel != null ? wheel.SwapHint : string.Empty;
             _home = home;
+            _includeStep = includeStep;
             if (_wheel == null) return;
 
             _wheel.CtrlSwapGroup = Advance;
@@ -83,7 +86,8 @@ namespace VoxelEngine.UI
                 case Stage.Pattern:
                     _wheel.GroupLabel = "BUILD PATTERN";
                     _wheel.SwapHint = string.Empty;
-                    _wheel.CtrlSwapHint = "LATTICE STEP";
+                    _wheel.CtrlSwapHint = _includeStep ? "LATTICE STEP"
+                        : "BACK TO " + (_baseLabel ?? string.Empty);
                     _wheel.IdleTitle = "KEEP PATTERN";
                     _wheel.IdleIcon = PlacementPatternIcons.For(PlacementOptions.Pattern);
                     break;
@@ -119,7 +123,7 @@ namespace VoxelEngine.UI
             if (_wheel == null) return;
             _stage = _stage switch
             {
-                Stage.Pattern => Stage.Step,
+                Stage.Pattern => _includeStep ? Stage.Step : Stage.Base,
                 Stage.Step => _home ? Stage.Seat : Stage.Base,
                 Stage.Seat => _home ? Stage.Pattern : Stage.Base,
                 _ => Stage.Pattern,

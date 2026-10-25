@@ -27,6 +27,14 @@ namespace VoxelEngine.Building.Tiered
         private const float HalfWallHeight = 2.8f;
 
         public static BuildSystemV2 Instance { get; private set; }
+        public bool HammerPatternActive { get; private set; }
+        public int HammerPatternPreviewCount { get; private set; }
+        public int HammerPatternValidCount { get; private set; }
+        public int HammerPatternAffordableCount { get; private set; }
+        public static int HammerPatternCostMultiplier { get; private set; } = 1;
+        public Vector2Int HammerPatternPlanSize { get; private set; }
+        public string HammerPatternPlaneLabel { get; private set; } = string.Empty;
+        public string HammerPatternWarning { get; private set; } = string.Empty;
 
         [Header("Refs")]
         public Camera shootCamera;
@@ -72,6 +80,43 @@ namespace VoxelEngine.Building.Tiered
         private float _pillarHeight = ConstructionStorey;
         private const float MaximumPillarHeight = ConstructionStorey * 1.5f;
 
+        private struct HammerPlanCell
+        {
+            public PlacementCell placement;
+            public BuildFamily family;
+            public PlacedTieredBlock host;
+            public bool valid;
+            public int structuralSpan;
+            public Vector3 structuralAnchor;
+            public float pillarHeight;
+            public float railingRise;
+        }
+
+        private bool _patternActive;
+        private bool _wallRunIsDepth;
+        private bool _buildWasHeld;
+        private BuildFamily _patternFamily;
+        private PlacementPattern _patternMode = PlacementPattern.Single;
+        private TieredBlockDefinition _patternDefinition;
+        private Vector3 _patternAnchorPosition;
+        private Quaternion _patternAnchorRotation;
+        private Vector3 _patternUp = Vector3.up;
+        private PlacedTieredBlock _patternAnchorHost;
+        private int _patternAnchorSpan;
+        private bool _patternAnchorValid;
+        private Vector3 _patternAnchorSupport;
+        private float _patternAnchorPillarHeight = ConstructionStorey;
+        private float _patternAnchorRailingRise;
+        private Vector3 _lastPatternTarget;
+        private int _patternSignature = -1;
+        private float _nextPatternValidationTime;
+        private TieredBlockDefinition _patternPreviewDefinition;
+        private readonly List<PlacementCell> _hammerPlacements = new(PlacementOptions.MaxCells);
+        private readonly List<HammerPlanCell> _hammerPlan = new(PlacementOptions.MaxCells);
+        private readonly List<GameObject> _hammerGhosts = new(PlacementOptions.MaxCells - 1);
+        private readonly List<Material> _hammerGhostMaterials = new(PlacementOptions.MaxCells - 1);
+        private readonly List<BuildSocket> _patternSocketScratch = new(16);
+
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
@@ -89,7 +134,12 @@ namespace VoxelEngine.Building.Tiered
         private void Update()
         {
             bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
-            if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld) { HideGhost(); return; }
+            if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld)
+            {
+                HideGhost();
+                _buildWasHeld = GameSettings.IsHeld(InputAction.Build);
+                return;
+            }
 
             // Toggle grid mode.
             if (GameSettings.WasPressed(InputAction.BuildToggleGrid))
@@ -106,10 +156,33 @@ namespace VoxelEngine.Building.Tiered
             ctrl = Input.GetKey(KeyCode.LeftControl);
             float wheel = Input.mouseScrollDelta.y;
 #endif
-            if (ctrl && Mathf.Abs(wheel) > 0.01f) _ghostYaw += Mathf.Sign(wheel) * yawStep;
-            if (GameSettings.WasPressed(InputAction.BuildRotate)) _ghostYaw += yawStep;
+            bool hammerWheelOpen = buildWheelHeld || (HammerBuildWheel.Instance != null
+                && HammerBuildWheel.Instance.IsOpen);
+            if (!hammerWheelOpen)
+            {
+                if (ctrl && Mathf.Abs(wheel) > 0.01f) _ghostYaw += Mathf.Sign(wheel) * yawStep;
+                if (GameSettings.WasPressed(InputAction.BuildRotate)) _ghostYaw += yawStep;
+            }
 
             UpdateGhost();
+            _buildWasHeld = GameSettings.IsHeld(InputAction.Build);
+        }
+
+        private void OnDisable()
+        {
+            if (Instance == null || Instance == this) HideGhost();
+            _buildWasHeld = false;
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == null || Instance == this) CancelHammerPattern();
+            for (int i = 0; i < _hammerGhosts.Count; i++)
+                if (_hammerGhosts[i] != null) Destroy(_hammerGhosts[i]);
+            _hammerGhosts.Clear();
+            _hammerGhostMaterials.Clear();
+            if (_ghost != null) Destroy(_ghost);
+            if (Instance == this) Instance = null;
         }
 
         // ---------- Ghost / placement ----------
@@ -152,15 +225,43 @@ namespace VoxelEngine.Building.Tiered
                 if (_ghost != null) Destroy(_ghost);
                 _ghostDef = def;
                 _ghost = Instantiate(def.GetPrefab(BuildTier.Wood));
+                if (_ghost == null) { HideGhost(); return; }
                 _ghost.name = "BuildGhost";
                 _appliedGhostMaterial = null;
                 StripGhost(_ghost);
             }
 
+            if (shootCamera == null) shootCamera = Camera.main;
+            if (shootCamera == null) { HideGhost(); return; }
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+            bool hammerWheelOpen = holdingHammer && HammerBuildWheel.Instance != null
+                && HammerBuildWheel.Instance.IsOpen;
             if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
             {
-                _ghost.SetActive(false);
+                if (_patternActive && holdingHammer && !hammerWheelOpen
+                    && _patternFamily == activeFam.Value && _patternDefinition == def)
+                {
+                    // Keep the last measured cells when the crosshair leaves every collider;
+                    // releasing still commits the visible plan rather than stranding the press.
+                    _ghost.SetActive(true);
+                    if (!HandleHammerPattern(def, activeFam.Value, hasCurrentAim: false))
+                        CancelHammerPattern();
+                }
+                else
+                {
+                    if (_patternActive) CancelHammerPattern();
+                    PlacementPattern selectedPattern = PlacementOptions.Pattern;
+                    bool canPattern = holdingHammer && !hammerWheelOpen
+                        && selectedPattern != PlacementPattern.Single
+                        && HammerPlacementPlanner.Supports(activeFam.Value, selectedPattern);
+                    bool patternPress = GameSettings.WasPressed(InputAction.Build)
+                        || (GameSettings.IsHeld(InputAction.Build) && !_buildWasHeld);
+                    if (canPattern && patternPress)
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Run needs a clear anchor",
+                            "Aim at a valid socket or build surface before dragging.",
+                            null, VoxelEngine.UI.UITheme.AccentAmber);
+                    _ghost.SetActive(false);
+                }
                 return;
             }
             _ghost.SetActive(true);
@@ -199,8 +300,36 @@ namespace VoxelEngine.Building.Tiered
                 ghostPillar.Configure(_pillarHeight);
             ApplyGhostMaterialIfChanged(_ghostValid ? _matValid : _matInvalid);
 
+            PlacementPattern pattern = PlacementOptions.Pattern;
+            bool patternSupported = HammerPlacementPlanner.Supports(activeFam.Value, pattern);
+            HammerPatternWarning = !holdingHammer || pattern == PlacementPattern.Single || patternSupported
+                ? string.Empty
+                : HammerPlacementPlanner.UnsupportedReason(activeFam.Value, pattern);
+
+            bool placementInputAllowed = !VoxelEngine.UI.UIState.IsBlocking
+                && (holdingHammer ? !hammerWheelOpen
+                    : !stack.IsEmpty && stack.item is BuildToken);
+            if (_patternActive && (!holdingHammer || !placementInputAllowed || !patternSupported
+                || _patternFamily != activeFam.Value || _patternDefinition != def))
+                CancelHammerPattern();
+
+            if (holdingHammer && placementInputAllowed && pattern != PlacementPattern.Single && patternSupported
+                && HandleHammerPattern(def, activeFam.Value, hasCurrentAim: true))
+                return;
+
+            // An unsupported pattern never guesses a new plane or family: it is a
+            // clear single-click fallback, named on the cost card and once on click.
+            bool buildPressed = GameSettings.WasPressed(InputAction.Build);
+            if (holdingHammer && placementInputAllowed && buildPressed
+                && pattern != PlacementPattern.Single && !patternSupported)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Single placement",
+                    HammerPatternWarning + " The selected pattern remains unchanged.",
+                    null, VoxelEngine.UI.UITheme.AccentAmber);
+            }
+
             // Place on the standard build action (RMB by default).
-            if (_ghostValid && GameSettings.WasPressed(InputAction.Build))
+            if (placementInputAllowed && _ghostValid && buildPressed)
             {
                 int pillarCostMultiplier = activeFam.Value == BuildFamily.Pillar
                     ? Mathf.Max(1, Mathf.CeilToInt(_pillarHeight / ConstructionStorey))
@@ -209,8 +338,6 @@ namespace VoxelEngine.Building.Tiered
                 {
                     PayCost(def.placeCost, pillarCostMultiplier);
                     Place(def, _ghostPos, _ghostRot, _railingRise);
-                    // The feedback HUD receives the primary cost directly; building a
-                    // second formatted summary here was unused work on every placement.
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(
                         def.displayName, def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].item : null,
                         def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].count * pillarCostMultiplier : 0);
@@ -218,8 +345,806 @@ namespace VoxelEngine.Building.Tiered
             }
         }
 
+        /// <summary>Placement-pattern contract exposed to the hammer wheel and its cost card.</summary>
+        public static bool SupportsHammerPattern(BuildFamily family, PlacementPattern pattern)
+            => HammerPlacementPlanner.Supports(family, pattern);
+
+        public static string HammerPatternFallbackReason(BuildFamily family, PlacementPattern pattern)
+            => HammerPlacementPlanner.UnsupportedReason(family, pattern);
+
+        private bool HandleHammerPattern(TieredBlockDefinition def, BuildFamily family, bool hasCurrentAim)
+        {
+            PlacementPattern pattern = PlacementOptions.Pattern;
+            if (def == null || pattern == PlacementPattern.Single
+                || !HammerPlacementPlanner.Supports(family, pattern)) return false;
+
+            bool held = GameSettings.IsHeld(InputAction.Build);
+            bool pressed = GameSettings.WasPressed(InputAction.Build)
+                || (held && !_buildWasHeld);
+
+            if (!_patternActive)
+            {
+                if (!pressed) return false;
+
+                float pillarHeight = family == BuildFamily.Pillar
+                    ? Mathf.Max(0.5f, _pillarHeight) : ConstructionStorey;
+                int costMultiplier = PlacementCostMultiplier(family, pillarHeight);
+                int affordable = GetAffordablePieceCount(def, costMultiplier);
+                HammerPatternAffordableCount = affordable;
+                HammerPatternCostMultiplier = costMultiplier;
+                if (affordable <= 0)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Not enough materials",
+                        "A run needs the cost of at least one " + def.displayName + ".",
+                        null, VoxelEngine.UI.UITheme.AccentAmber);
+                    return true;
+                }
+                if (!_ghostValid)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Run needs a clear anchor",
+                        "Aim at a valid socket or build surface before dragging.",
+                        null, VoxelEngine.UI.UITheme.AccentAmber);
+                    return true;
+                }
+
+                _patternActive = true;
+                HammerPatternActive = true;
+                _patternFamily = family;
+                _patternMode = pattern;
+                _patternDefinition = def;
+                _patternAnchorPosition = _ghostPos;
+                _patternAnchorRotation = _ghostRot;
+                _patternUp = GravityProvider.GetUp(_patternAnchorPosition);
+                if (_patternUp.sqrMagnitude < 0.0001f) _patternUp = Vector3.up;
+                _patternAnchorHost = _ghostHost;
+                _patternAnchorSpan = _structuralSpan;
+                _patternAnchorValid = _ghostValid;
+                _patternAnchorSupport = _structuralAnchor;
+                _patternAnchorPillarHeight = pillarHeight;
+                _patternAnchorRailingRise = _railingRise;
+                _lastPatternTarget = _patternAnchorPosition;
+                _wallRunIsDepth = pattern == PlacementPattern.Wall
+                    && HammerPlacementPlanner.InitialWallRunIsDepth(_patternAnchorRotation,
+                        _patternUp, CurrentCameraForward());
+                _patternSignature = -1;
+                _nextPatternValidationTime = 0f;
+                HammerPatternWarning = string.Empty;
+                PlacementFeedback.Snap(_patternAnchorPosition, 1);
+            }
+            else if (_patternFamily != family || _patternDefinition != def || _patternMode != pattern)
+            {
+                CancelHammerPattern();
+                return false;
+            }
+
+            if (hasCurrentAim) _lastPatternTarget = _ghostPos;
+            if (_patternMode == PlacementPattern.Wall)
+            {
+                bool nextDepth = HammerPlacementPlanner.UpdateWallRunIsDepth(
+                    _wallRunIsDepth, _patternAnchorRotation, _patternUp, CurrentCameraForward());
+                if (nextDepth != _wallRunIsDepth)
+                {
+                    _wallRunIsDepth = nextDepth;
+                    _patternSignature = -1;
+                    PlacementFeedback.Snap(_patternAnchorPosition, 1);
+                }
+            }
+            if (!hasCurrentAim) UpdateHammerPatternAimFromView();
+
+            UpdateHammerPatternPlan(def, family, forceValidation: !held);
+            if (!held)
+            {
+                int placed = CommitHammerPattern(def, family);
+                if (placed > 0) PlacementFeedback.Placed(_patternAnchorPosition, placed);
+                else PlacementFeedback.Refused(_patternAnchorPosition);
+                CancelHammerPattern();
+            }
+            return true;
+        }
+
+        private Vector3 CurrentCameraForward()
+        {
+            if (shootCamera == null) shootCamera = Camera.main;
+            return shootCamera != null ? shootCamera.transform.forward : Vector3.forward;
+        }
+
+        private void UpdateHammerPatternAimFromView()
+        {
+            if (shootCamera == null) shootCamera = Camera.main;
+            if (shootCamera == null) return;
+
+            Ray ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            float aimLimit = Mathf.Max(12f, reach) * 3f;
+            Vector3 rayPoint = ray.GetPoint(aimLimit);
+            Vector3 axisA;
+            Vector3 axisB;
+            Vector3 up = _patternUp.sqrMagnitude > 0.0001f ? _patternUp.normalized : Vector3.up;
+            bool slopeFamily = _patternFamily == BuildFamily.Stairs
+                || _patternFamily == BuildFamily.SlantedRoof
+                || _patternFamily == BuildFamily.SlantedTriangularRoof;
+            HammerPlacementPlanner.ResolveHorizontalAxes(_patternAnchorRotation, up,
+                out Vector3 right, out Vector3 forward);
+            Vector3 slopeStep = forward * ConstructionModule + up * ConstructionStorey;
+            Vector3 slopeAxis = slopeStep.sqrMagnitude > 0.0001f ? slopeStep.normalized : forward;
+
+            if (_patternMode == PlacementPattern.Pillar)
+            {
+                Vector3 chainAxis = slopeFamily ? slopeAxis : up;
+                _lastPatternTarget = _patternAnchorPosition
+                    + chainAxis * Vector3.Dot(rayPoint - _patternAnchorPosition, chainAxis);
+                return;
+            }
+
+            if (_patternMode == PlacementPattern.Deck)
+            {
+                axisA = right;
+                axisB = slopeFamily ? slopeAxis : forward;
+            }
+            else if (_patternMode == PlacementPattern.Wall)
+            {
+                axisA = _wallRunIsDepth ? forward : right;
+                axisB = up;
+            }
+            else
+            {
+                // SPAN uses the same view ray as a hit aim; its planner chooses the
+                // family's strongest authored axis from that three-dimensional delta.
+                _lastPatternTarget = rayPoint;
+                return;
+            }
+
+            Vector3 planeNormal = Vector3.Cross(axisA, axisB);
+            if (planeNormal.sqrMagnitude < 0.0001f) planeNormal = up;
+            planeNormal.Normalize();
+            Plane plane = new Plane(planeNormal, _patternAnchorPosition);
+            if (plane.Raycast(ray, out float enter) && enter > 0f)
+                rayPoint = ray.GetPoint(Mathf.Min(enter, aimLimit));
+            _lastPatternTarget = _patternAnchorPosition
+                + Vector3.ProjectOnPlane(rayPoint - _patternAnchorPosition, planeNormal);
+        }
+
+        private int GetAffordablePieceCount(TieredBlockDefinition def, int costMultiplier)
+        {
+            costMultiplier = Mathf.Max(1, costMultiplier);
+            if (def == null || def.placeCost == null || def.placeCost.items == null
+                || def.placeCost.items.Length == 0) return PlacementOptions.MaxCells;
+            if (inventory == null || inventory.container == null) return 0;
+
+            var rack = BuildNetworkRack();
+            int affordable = PlacementOptions.MaxCells;
+            var costs = def.placeCost.items;
+            for (int i = 0; i < costs.Length; i++)
+            {
+                ItemDefinition item = costs[i].item;
+                if (item == null || costs[i].count <= 0) continue;
+                bool alreadyCounted = false;
+                for (int prior = 0; prior < i; prior++)
+                {
+                    if (costs[prior].item != item) continue;
+                    alreadyCounted = true;
+                    break;
+                }
+                if (alreadyCounted) continue;
+
+                long perPiece = 0L;
+                for (int duplicate = i; duplicate < costs.Length; duplicate++)
+                    if (costs[duplicate].item == item && costs[duplicate].count > 0)
+                        perPiece += (long)costs[duplicate].count * costMultiplier;
+                if (perPiece <= 0L) continue;
+
+                long available = inventory.container.CountOf(item);
+                if (rack != null) available += rack.NetworkCount(item.itemId);
+                long availablePieces = available / perPiece;
+                int clampedAvailablePieces = availablePieces > int.MaxValue
+                    ? int.MaxValue : (int)availablePieces;
+                affordable = Mathf.Min(affordable, clampedAvailablePieces);
+                if (affordable <= 0) return 0;
+            }
+            return affordable;
+        }
+
+        private static int PlacementCostMultiplier(BuildFamily family, float pillarHeight)
+            => family == BuildFamily.Pillar
+                ? Mathf.Max(1, Mathf.CeilToInt(pillarHeight / ConstructionStorey))
+                : 1;
+
+        private void UpdateHammerPatternPlan(TieredBlockDefinition def, BuildFamily family,
+            bool forceValidation)
+        {
+            int costMultiplier = PlacementCostMultiplier(family, _patternAnchorPillarHeight);
+            int affordable = GetAffordablePieceCount(def, costMultiplier);
+            HammerPatternAffordableCount = affordable;
+            HammerPatternCostMultiplier = costMultiplier;
+
+            if (affordable <= 0)
+            {
+                _hammerPlacements.Clear();
+                _hammerPlan.Clear();
+                HammerPatternPreviewCount = 0;
+                HammerPatternValidCount = 0;
+                HammerPatternPlanSize = Vector2Int.zero;
+                HammerPatternPlaneLabel = "NO AFFORDABLE CELLS";
+                _patternSignature = -1;
+                HideHammerGhosts();
+                _ghostValid = false;
+                ApplyGhostMaterialIfChanged(_matInvalid);
+                return;
+            }
+
+            HammerPlacementPlanner.Build(family, _patternMode,
+                _patternAnchorPosition, _patternAnchorRotation, _lastPatternTarget, _patternUp,
+                _wallRunIsDepth, _patternAnchorPillarHeight, affordable, _hammerPlacements,
+                out Vector2Int size, out string planeLabel);
+
+            int signature = HammerPlanSignature(family, _patternMode, _wallRunIsDepth,
+                _hammerPlacements);
+            if (!forceValidation && signature == _patternSignature
+                && Time.unscaledTime < _nextPatternValidationTime)
+            {
+                PlaceHammerGhostAtTip();
+                return;
+            }
+
+            _patternSignature = signature;
+            _nextPatternValidationTime = Time.unscaledTime + 0.18f;
+            _hammerPlan.Clear();
+            HammerPatternValidCount = 0;
+
+            for (int i = 0; i < _hammerPlacements.Count; i++)
+            {
+                PlacementCell placement = _hammerPlacements[i];
+                PlacedTieredBlock host = i == 0
+                    ? _patternAnchorHost
+                    : FindCompatibleSocketHostAt(placement.position, family);
+                int span = i == 0 ? _patternAnchorSpan : 0;
+                Vector3 support = i == 0 ? _patternAnchorSupport : Vector3.zero;
+
+                if (RequiresPatternSupport(family))
+                {
+                    if (host != null)
+                    {
+                        _structuralAnchor = Vector3.zero;
+                        int resolved = ResolveStructuralSpan(host, family);
+                        if (resolved > 0 && (span <= 0 || resolved < span))
+                        {
+                            span = resolved;
+                            support = _structuralAnchor;
+                        }
+                    }
+
+                    if ((span < 1 || span > 2)
+                        && TryFindPlannedPatternSupport(family, placement.position, i,
+                            out int inheritedSpan, out Vector3 inheritedAnchor))
+                    {
+                        span = inheritedSpan;
+                        support = inheritedAnchor;
+                    }
+                }
+
+                _structuralSpan = span;
+                _structuralAnchor = support;
+                bool connected = i == 0 || host != null
+                    || HasCompatiblePlannedSocket(def, family, placement, i)
+                    || (RequiresPatternBaseSupport(family)
+                        && HasPlannedVerticalSupport(placement, family, i));
+                bool valid = ValidateOverlap(placement.position, family, host);
+                if (i == 0) valid &= _patternAnchorValid;
+                else valid &= connected;
+                if (RequiresPatternSupport(family))
+                    valid &= span >= 1 && span <= 2;
+                if (RequiresPatternBaseSupport(family))
+                    valid &= HasPatternBaseSupport(placement, family, host, i);
+                if (BuildFamilyInfo.IsRoofPanel(family)
+                    && !RoofPanelHasEaveContact(placement.position, placement.rotation)
+                    && !HasPlannedRoofContact(placement.position, i))
+                    valid = false;
+
+                var planned = new HammerPlanCell
+                {
+                    placement = placement,
+                    family = family,
+                    host = host,
+                    valid = valid,
+                    structuralSpan = span,
+                    structuralAnchor = support,
+                    pillarHeight = _patternAnchorPillarHeight,
+                    railingRise = _patternAnchorRailingRise,
+                };
+                _hammerPlan.Add(planned);
+                if (valid) HammerPatternValidCount++;
+            }
+
+            HammerPatternPreviewCount = _hammerPlan.Count;
+            HammerPatternPlanSize = size;
+            HammerPatternPlaneLabel = planeLabel;
+            ShowHammerPatternPreview(def);
+        }
+
+        private static bool RequiresPatternSupport(BuildFamily family)
+            => family == BuildFamily.Floor || family == BuildFamily.FloorHatch
+                || family == BuildFamily.Stairs || family == BuildFamily.Roof
+                || BuildFamilyInfo.IsRoofPanel(family);
+
+        private static bool RequiresPatternBaseSupport(BuildFamily family)
+            => family == BuildFamily.Foundation
+                || StructuralLoadState.IsVerticalSupport(family)
+                || family == BuildFamily.TriangularWall
+                || family == BuildFamily.TriangularWallInverted
+                || family == BuildFamily.CompoundWall;
+
+        private bool HasPatternBaseSupport(PlacementCell placement, BuildFamily family,
+            PlacedTieredBlock host, int beforeIndex)
+        {
+            if (HasPlannedVerticalSupport(placement, family, beforeIndex)) return true;
+            if (HasExistingStructuralSupport(host)) return true;
+            return HasWorldVerticalBaseSupport(placement.position, placement.rotation)
+                || HasWorldVerticalOverheadSupport(placement.position, placement.rotation, family);
+        }
+
+        private bool HasPlannedVerticalSupport(PlacementCell placement, BuildFamily family,
+            int beforeIndex)
+        {
+            for (int i = 0; i < beforeIndex; i++)
+            {
+                HammerPlanCell previous = _hammerPlan[i];
+                if (!previous.valid) continue;
+
+                Vector3 previousUp = (previous.placement.rotation * Vector3.up).normalized;
+                Vector3 currentUp = (placement.rotation * Vector3.up).normalized;
+                Vector3 toCurrent = placement.position - previous.placement.position;
+                Vector3 toPrevious = -toCurrent;
+                float previousHeight = previous.family == BuildFamily.HalfWall ? HalfWallHeight
+                    : previous.family == BuildFamily.Pillar ? previous.pillarHeight : ConstructionStorey;
+                float currentHeight = family == BuildFamily.HalfWall ? HalfWallHeight
+                    : family == BuildFamily.Pillar ? _patternAnchorPillarHeight : ConstructionStorey;
+
+                Vector3 previousPlanar = Vector3.ProjectOnPlane(toCurrent, previousUp);
+                float previousRise = Vector3.Dot(toCurrent, previousUp);
+                bool restsOnPrevious = previousPlanar.sqrMagnitude <= 0.1225f
+                    && Mathf.Abs(previousRise - previousHeight) <= 0.35f
+                    && BuildSocketCompat.AreCompatible(previous.family, SocketSide.Top, family);
+                if (restsOnPrevious) return true;
+
+                Vector3 currentPlanar = Vector3.ProjectOnPlane(toPrevious, currentUp);
+                float currentRise = Vector3.Dot(toPrevious, currentUp);
+                bool hangsFromPrevious = currentPlanar.sqrMagnitude <= 0.1225f
+                    && Mathf.Abs(currentRise - currentHeight) <= 0.35f
+                    && BuildSocketCompat.AreCompatible(family, SocketSide.Top, previous.family);
+                if (hangsFromPrevious) return true;
+            }
+            return false;
+        }
+
+        private static bool HasExistingStructuralSupport(PlacedTieredBlock host)
+        {
+            if (host == null || host.definition == null) return false;
+            BuildFamily hostFamily = host.definition.family;
+            if (hostFamily == BuildFamily.Foundation) return true;
+            if (host.TryGetComponent<AdjustablePillar>(out var pillar))
+                return pillar.IsSupportGrounded();
+            if (BuildFamilyInfo.IsDeck(hostFamily))
+                return StructuralLoadState.TryResolveSupportBase(host, out var carryingDeck)
+                    || carryingDeck != null;
+            if (StructuralLoadState.TryResolveSupportBase(host, out var supportDeck)
+                || supportDeck != null) return true;
+            var load = host.GetComponent<StructuralLoadState>();
+            return load != null && load.armed;
+        }
+
+        private bool HasWorldVerticalBaseSupport(Vector3 position, Quaternion rotation)
+        {
+            Vector3 up = rotation * Vector3.up;
+            Vector3 centre = position - up * 0.15f;
+            Vector3 halfExtents = new(0.6f, 0.25f, 0.6f);
+            int count = Physics.OverlapBoxNonAlloc(centre, halfExtents,
+                s_placementOverlapProbe, rotation, ~0, QueryTriggerInteraction.Ignore);
+            if (HasWorldVerticalBaseSupport(s_placementOverlapProbe, count)) return true;
+            if (count >= s_placementOverlapProbe.Length)
+            {
+                Collider[] overflow = Physics.OverlapBox(centre, halfExtents,
+                    rotation, ~0, QueryTriggerInteraction.Ignore);
+                return HasWorldVerticalBaseSupport(overflow, overflow.Length);
+            }
+            return false;
+        }
+
+        private bool HasWorldVerticalBaseSupport(Collider[] hits, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Collider collider = hits[i];
+                if (collider == null || IsDynamicBody(collider)) continue;
+                if (transform.root != null && collider.transform.IsChildOf(transform.root)) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == null || HasExistingStructuralSupport(block)) return true;
+            }
+            return false;
+        }
+
+        private bool HasWorldVerticalOverheadSupport(Vector3 position,
+            Quaternion rotation, BuildFamily family)
+        {
+            if (family == BuildFamily.Foundation) return false;
+            Vector3 up = rotation * Vector3.up;
+            float height = family == BuildFamily.HalfWall ? HalfWallHeight
+                : family == BuildFamily.Pillar ? _patternAnchorPillarHeight : ConstructionStorey;
+            Vector3 centre = position + up * (height + 0.1f);
+            Vector3 halfExtents = new(0.6f, 0.25f, 0.6f);
+            int count = Physics.OverlapBoxNonAlloc(centre, halfExtents,
+                s_placementOverlapProbe, rotation, ~0, QueryTriggerInteraction.Ignore);
+            if (HasWorldVerticalOverheadSupport(s_placementOverlapProbe, count, family)) return true;
+            if (count >= s_placementOverlapProbe.Length)
+            {
+                Collider[] overflow = Physics.OverlapBox(centre, halfExtents,
+                    rotation, ~0, QueryTriggerInteraction.Ignore);
+                return HasWorldVerticalOverheadSupport(overflow, overflow.Length, family);
+            }
+            return false;
+        }
+
+        private static bool HasWorldVerticalOverheadSupport(Collider[] hits,
+            int count, BuildFamily family)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Collider collider = hits[i];
+                if (collider == null || IsDynamicBody(collider)) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == null || block.definition == null) continue;
+                BuildFamily hostFamily = block.definition.family;
+                if (family == BuildFamily.Pillar || BuildFamilyInfo.IsDeck(hostFamily)
+                    || StructuralLoadState.IsVerticalSupport(hostFamily)
+                    || hostFamily == BuildFamily.TriangularWall
+                    || hostFamily == BuildFamily.TriangularWallInverted
+                    || hostFamily == BuildFamily.CompoundWall) return true;
+            }
+            return false;
+        }
+
+        private bool HasCompatiblePlannedSocket(TieredBlockDefinition def, BuildFamily family,
+            PlacementCell placement, int beforeIndex)
+        {
+            if (HasSpecialPlannedJoint(family, placement, beforeIndex)) return true;
+            GameObject prefab = def != null ? def.GetPrefab(BuildTier.Wood) : null;
+            if (prefab == null) return false;
+
+            _patternSocketScratch.Clear();
+            prefab.GetComponentsInChildren<BuildSocket>(true, _patternSocketScratch);
+            if (_patternSocketScratch.Count == 0) return false;
+
+            for (int i = 0; i < beforeIndex; i++)
+            {
+                HammerPlanCell previous = _hammerPlan[i];
+                if (!previous.valid) continue;
+                for (int socketIndex = 0; socketIndex < _patternSocketScratch.Count; socketIndex++)
+                {
+                    BuildSocket socket = _patternSocketScratch[socketIndex];
+                    if (socket == null || !BuildSocketCompat.AreCompatible(
+                            previous.family, socket.side, family)) continue;
+                    Vector3 localSocket = prefab.transform.InverseTransformPoint(socket.transform.position);
+                    localSocket = Vector3.Scale(localSocket, prefab.transform.localScale);
+                    Vector3 expected = previous.placement.position
+                        + previous.placement.rotation * localSocket;
+                    if ((expected - placement.position).sqrMagnitude <= 0.1225f) return true;
+                }
+            }
+            return false;
+        }
+
+        private bool HasSpecialPlannedJoint(BuildFamily family, PlacementCell placement,
+            int beforeIndex)
+        {
+            for (int i = 0; i < beforeIndex; i++)
+            {
+                HammerPlanCell previous = _hammerPlan[i];
+                if (!previous.valid || previous.family != family) continue;
+                Vector3 delta = placement.position - previous.placement.position;
+                Vector3 up = (previous.placement.rotation * Vector3.up).normalized;
+                Vector3 forward = (previous.placement.rotation * Vector3.forward).normalized;
+
+                if (family == BuildFamily.Pillar)
+                {
+                    Vector3 expected = up * previous.pillarHeight;
+                    Vector3 lowerExpected = (placement.rotation * Vector3.up).normalized
+                        * _patternAnchorPillarHeight;
+                    if ((delta - expected).sqrMagnitude <= 0.1225f
+                        || (delta + expected).sqrMagnitude <= 0.1225f
+                        || (delta - lowerExpected).sqrMagnitude <= 0.1225f
+                        || (delta + lowerExpected).sqrMagnitude <= 0.1225f) return true;
+                }
+                else if (family == BuildFamily.Stairs
+                    || family == BuildFamily.SlantedRoof
+                    || family == BuildFamily.SlantedTriangularRoof)
+                {
+                    Vector3 slopeStep = forward * ConstructionModule + up * ConstructionStorey;
+                    bool slopeJoint = (delta - slopeStep).sqrMagnitude <= 0.1225f
+                        || (delta + slopeStep).sqrMagnitude <= 0.1225f;
+                    bool widthJoint = family == BuildFamily.Stairs
+                        && ((delta - previous.placement.rotation * Vector3.right * ConstructionModule).sqrMagnitude <= 0.1225f
+                            || (delta + previous.placement.rotation * Vector3.right * ConstructionModule).sqrMagnitude <= 0.1225f);
+                    if (slopeJoint || widthJoint) return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TryFindPlannedPatternSupport(BuildFamily family, Vector3 position, int beforeIndex,
+            out int span, out Vector3 anchor)
+        {
+            span = int.MaxValue;
+            anchor = Vector3.zero;
+            float slopeStep = Mathf.Sqrt(ConstructionModule * ConstructionModule
+                                       + ConstructionStorey * ConstructionStorey);
+            for (int i = 0; i < beforeIndex; i++)
+            {
+                var previous = _hammerPlan[i];
+                if (!previous.valid || previous.structuralSpan < 1
+                    || !CanRelayPatternSupport(previous, family)) continue;
+
+                float distance = Vector3.Distance(position, previous.placement.position);
+                bool adjacent = Mathf.Abs(distance - ConstructionModule) <= 0.35f
+                    || ((family == BuildFamily.Stairs || family == BuildFamily.SlantedRoof
+                         || family == BuildFamily.SlantedTriangularRoof)
+                        && Mathf.Abs(distance - slopeStep) <= 0.35f);
+                if (!adjacent) continue;
+
+                int candidateSpan = previous.structuralSpan + 1;
+                if (candidateSpan >= span) continue;
+                span = candidateSpan;
+                anchor = previous.structuralAnchor;
+            }
+            return span != int.MaxValue;
+        }
+
+        private static bool CanRelayPatternSupport(HammerPlanCell previous, BuildFamily family)
+        {
+            if (BuildFamilyInfo.IsRoofPanel(family))
+                return BuildFamilyInfo.IsRoofPanel(previous.family);
+            if (family == BuildFamily.Stairs)
+                return previous.family == BuildFamily.Stairs;
+            return BuildFamilyInfo.IsDeck(family) && BuildFamilyInfo.IsDeck(previous.family);
+        }
+
+        private bool HasPlannedRoofContact(Vector3 position, int beforeIndex)
+        {
+            float slopeStep = Mathf.Sqrt(ConstructionModule * ConstructionModule
+                                       + ConstructionStorey * ConstructionStorey);
+            for (int i = 0; i < beforeIndex; i++)
+            {
+                var previous = _hammerPlan[i];
+                if (!previous.valid) continue;
+                if (!BuildFamilyInfo.IsRoofPanel(previous.family)) continue;
+                float distance = Vector3.Distance(position, previous.placement.position);
+                if (Mathf.Abs(distance - ConstructionModule) <= 0.35f
+                    || Mathf.Abs(distance - slopeStep) <= 0.35f) return true;
+            }
+            return false;
+        }
+
+        private PlacedTieredBlock FindCompatibleSocketHostAt(Vector3 position, BuildFamily family)
+        {
+            _socketHosts.Clear();
+            BuildSocket bestSocket = null;
+            float searchRadius = Mathf.Max(socketSnapRadius, ConstructionModule + 0.5f);
+            float bestSqr = searchRadius * searchRadius;
+            int count = Physics.OverlapSphereNonAlloc(position, searchRadius,
+                s_socketOverlapProbe, ~0, QueryTriggerInteraction.UseGlobal);
+            ConsiderSocketCandidates(s_socketOverlapProbe, count, family, position,
+                ref bestSocket, ref bestSqr);
+            if (count >= s_socketOverlapProbe.Length)
+            {
+                var overflow = Physics.OverlapSphere(position, searchRadius,
+                    ~0, QueryTriggerInteraction.UseGlobal);
+                ConsiderSocketCandidates(overflow, overflow.Length, family, position,
+                    ref bestSocket, ref bestSqr);
+            }
+
+            if (bestSocket == null
+                || (bestSocket.transform.position - position).sqrMagnitude > 0.0625f) return null;
+            return bestSocket.GetComponentInParent<PlacedTieredBlock>();
+        }
+
+        private void ShowHammerPatternPreview(TieredBlockDefinition def)
+        {
+            if (def == null || _hammerPlan.Count == 0)
+            {
+                HideHammerGhosts();
+                return;
+            }
+
+            if (_patternPreviewDefinition != def)
+            {
+                for (int i = 0; i < _hammerGhosts.Count; i++)
+                    if (_hammerGhosts[i] != null) Destroy(_hammerGhosts[i]);
+                _hammerGhosts.Clear();
+                _hammerGhostMaterials.Clear();
+                _patternPreviewDefinition = def;
+            }
+
+            int wanted = Mathf.Clamp(_hammerPlan.Count - 1, 0, PlacementOptions.MaxCells - 1);
+            while (_hammerGhosts.Count < wanted)
+            {
+                GameObject preview = Instantiate(def.GetPrefab(BuildTier.Wood));
+                if (preview == null) break;
+                preview.name = "HammerRunGhost";
+                StripGhost(preview);
+                _hammerGhosts.Add(preview);
+                _hammerGhostMaterials.Add(null);
+            }
+
+            for (int i = 0; i < _hammerGhosts.Count; i++)
+            {
+                GameObject preview = _hammerGhosts[i];
+                if (preview == null) continue;
+                bool used = i < wanted;
+                if (preview.activeSelf != used) preview.SetActive(used);
+                if (!used) continue;
+
+                HammerPlanCell cell = _hammerPlan[i];
+                preview.transform.SetPositionAndRotation(cell.placement.position, cell.placement.rotation);
+                if (preview.TryGetComponent<AdjustablePillar>(out var pillar))
+                    pillar.Configure(cell.pillarHeight);
+                Material material = cell.valid ? _matValid : _matInvalid;
+                if (i >= _hammerGhostMaterials.Count) _hammerGhostMaterials.Add(null);
+                if (_hammerGhostMaterials[i] != material)
+                {
+                    ApplyGhostMaterial(preview, material);
+                    _hammerGhostMaterials[i] = material;
+                }
+            }
+
+            PlaceHammerGhostAtTip();
+        }
+
+        private void PlaceHammerGhostAtTip()
+        {
+            if (_ghost == null || _hammerPlan.Count == 0) return;
+            HammerPlanCell tip = _hammerPlan[_hammerPlan.Count - 1];
+            _ghost.SetActive(true);
+            _ghost.transform.SetPositionAndRotation(tip.placement.position, tip.placement.rotation);
+            if (_ghost.TryGetComponent<AdjustablePillar>(out var pillar))
+                pillar.Configure(tip.pillarHeight);
+            _ghostValid = tip.valid;
+            ApplyGhostMaterialIfChanged(tip.valid ? _matValid : _matInvalid);
+        }
+
+        private void HideHammerGhosts()
+        {
+            for (int i = 0; i < _hammerGhosts.Count; i++)
+                if (_hammerGhosts[i] != null && _hammerGhosts[i].activeSelf)
+                    _hammerGhosts[i].SetActive(false);
+        }
+
+        private int CommitHammerPattern(TieredBlockDefinition def, BuildFamily family)
+        {
+            if (def == null) return 0;
+            if (_hammerPlan.Count == 0)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("No cells placed",
+                    "The run no longer has an affordable cell.",
+                    null, VoxelEngine.UI.UITheme.AccentAmber);
+                return 0;
+            }
+            int placed = 0;
+            int costMultiplier = PlacementCostMultiplier(family, _patternAnchorPillarHeight);
+            int commitBudget = GetAffordablePieceCount(def, costMultiplier);
+            for (int i = 0; i < _hammerPlan.Count && placed < commitBudget; i++)
+            {
+                HammerPlanCell cell = _hammerPlan[i];
+                if (!cell.valid) continue;
+
+                PayCost(def.placeCost, costMultiplier);
+                _structuralSpan = cell.structuralSpan;
+                _structuralAnchor = cell.structuralAnchor;
+                _pillarHeight = cell.pillarHeight;
+                _railingRise = cell.railingRise;
+                _ghostHost = cell.host;
+                Place(def, cell.placement.position, cell.placement.rotation, cell.railingRise);
+                placed++;
+            }
+
+            if (placed > 0)
+            {
+                string spent = DescribePatternCost(def.placeCost, placed, costMultiplier);
+                string detail = placed + " of " + _hammerPlan.Count + " planned cells built";
+                if (placed < _hammerPlan.Count) detail += " · blocked cells skipped";
+                if (!string.IsNullOrEmpty(spent)) detail += " · spent " + spent;
+                VoxelEngine.UI.BuildFeedbackHud.Show(placed + " " + def.displayName + " placed",
+                    detail, null, VoxelEngine.UI.UITheme.AccentGreen);
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("No cells placed",
+                    HammerPatternValidCount == 0
+                        ? "Every planned cell is blocked or lacks structural support."
+                        : "The required materials are no longer available.",
+                    null, VoxelEngine.UI.UITheme.AccentAmber);
+            }
+            return placed;
+        }
+
+        private static string DescribePatternCost(TierCost cost, int pieces, int multiplier)
+        {
+            if (cost?.items == null) return string.Empty;
+            var builder = new System.Text.StringBuilder();
+            for (int i = 0; i < cost.items.Length; i++)
+            {
+                ItemDefinition item = cost.items[i].item;
+                if (item == null || cost.items[i].count <= 0) continue;
+                bool alreadyCounted = false;
+                for (int prior = 0; prior < i; prior++)
+                {
+                    if (cost.items[prior].item != item) continue;
+                    alreadyCounted = true;
+                    break;
+                }
+                if (alreadyCounted) continue;
+
+                long basePerPiece = 0L;
+                for (int duplicate = i; duplicate < cost.items.Length; duplicate++)
+                    if (cost.items[duplicate].item == item && cost.items[duplicate].count > 0)
+                        basePerPiece += cost.items[duplicate].count;
+                long total = basePerPiece * pieces * multiplier;
+                if (builder.Length > 0) builder.Append(", ");
+                builder.Append(total).Append(' ').Append(item.displayName);
+            }
+            return builder.ToString();
+        }
+
+        private static int HammerPlanSignature(BuildFamily family, PlacementPattern pattern,
+            bool wallRunIsDepth, List<PlacementCell> placements)
+        {
+            unchecked
+            {
+                int signature = 17;
+                signature = signature * 31 + (int)family;
+                signature = signature * 31 + (int)pattern;
+                signature = signature * 31 + (wallRunIsDepth ? 1 : 0);
+                signature = signature * 31 + (placements != null ? placements.Count : 0);
+                if (placements == null) return signature;
+                for (int i = 0; i < placements.Count; i++)
+                {
+                    Vector3 p = placements[i].position;
+                    Vector3 e = placements[i].rotation.eulerAngles;
+                    signature = signature * 31 + Mathf.RoundToInt(p.x * 100f);
+                    signature = signature * 31 + Mathf.RoundToInt(p.y * 100f);
+                    signature = signature * 31 + Mathf.RoundToInt(p.z * 100f);
+                    signature = signature * 31 + Mathf.RoundToInt(e.x);
+                    signature = signature * 31 + Mathf.RoundToInt(e.y);
+                    signature = signature * 31 + Mathf.RoundToInt(e.z);
+                }
+                return signature;
+            }
+        }
+
+        private void CancelHammerPattern()
+        {
+            _patternActive = false;
+            _patternFamily = default;
+            _patternMode = PlacementPattern.Single;
+            _patternDefinition = null;
+            _patternAnchorHost = null;
+            _patternAnchorSpan = 0;
+            _patternAnchorValid = false;
+            _patternAnchorSupport = Vector3.zero;
+            _patternAnchorPillarHeight = ConstructionStorey;
+            _patternSignature = -1;
+            _hammerPlacements.Clear();
+            _hammerPlan.Clear();
+            HideHammerGhosts();
+            HammerPatternActive = false;
+            HammerPatternPreviewCount = 0;
+            HammerPatternValidCount = 0;
+            HammerPatternAffordableCount = 0;
+            HammerPatternCostMultiplier = 1;
+            HammerPatternPlanSize = Vector2Int.zero;
+            HammerPatternPlaneLabel = string.Empty;
+            HammerPatternWarning = string.Empty;
+        }
+
         private void HideGhost()
         {
+            CancelHammerPattern();
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostDef = null; }
             _appliedGhostMaterial = null;
         }
@@ -746,28 +1671,39 @@ namespace VoxelEngine.Building.Tiered
             Vector3 up = rotation * Vector3.up;
             Vector3 fwd = rotation * Vector3.forward;
             Vector3 right = rotation * Vector3.right;
-            // Eave box first, then the two rake edges (for panels joining sideways).
-            Vector3[] centres =
+            for (int probe = 0; probe < 3; probe++)
             {
-                position + fwd * (-ConstructionModule * 0.5f + 0.2f) - up * 0.1f,
-                position + right * (ConstructionModule * 0.5f) + up * 0.5f + fwd * 0f,
-                position - right * (ConstructionModule * 0.5f) + up * 0.5f + fwd * 0f,
-            };
-            Vector3[] halves =
-            {
-                new(ConstructionModule * 0.5f, 0.75f, 0.65f),
-                new(0.5f, 1.2f, ConstructionModule * 0.45f),
-                new(0.5f, 1.2f, ConstructionModule * 0.45f),
-            };
-            for (int probe = 0; probe < centres.Length; probe++)
-            {
-                var overlaps = Physics.OverlapBox(centres[probe], halves[probe], rotation,
-                    ~0, QueryTriggerInteraction.Ignore);
-                for (int i = 0; i < overlaps.Length; i++)
+                Vector3 centre = probe switch
                 {
-                    var block = overlaps[i] != null ? overlaps[i].GetComponentInParent<PlacedTieredBlock>() : null;
-                    if (block != null && block.definition != null && block != ignore) return true;
+                    0 => position + fwd * (-ConstructionModule * 0.5f + 0.2f) - up * 0.1f,
+                    1 => position + right * (ConstructionModule * 0.5f) + up * 0.5f,
+                    _ => position - right * (ConstructionModule * 0.5f) + up * 0.5f,
+                };
+                Vector3 halfExtents = probe == 0
+                    ? new Vector3(ConstructionModule * 0.5f, 0.75f, 0.65f)
+                    : new Vector3(0.5f, 1.2f, ConstructionModule * 0.45f);
+                int count = Physics.OverlapBoxNonAlloc(centre, halfExtents,
+                    s_placementOverlapProbe, rotation, ~0, QueryTriggerInteraction.Ignore);
+                if (HasRoofSupportInOverlap(s_placementOverlapProbe, count, ignore)) return true;
+                if (count >= s_placementOverlapProbe.Length)
+                {
+                    Collider[] overflow = Physics.OverlapBox(centre, halfExtents,
+                        rotation, ~0, QueryTriggerInteraction.Ignore);
+                    if (HasRoofSupportInOverlap(overflow, overflow.Length, ignore)) return true;
                 }
+            }
+            return false;
+        }
+
+        private static bool HasRoofSupportInOverlap(Collider[] overlaps, int count,
+            PlacedTieredBlock ignore)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Collider collider = overlaps[i];
+                PlacedTieredBlock block = collider != null
+                    ? collider.GetComponentInParent<PlacedTieredBlock>() : null;
+                if (block != null && block.definition != null && block != ignore) return true;
             }
             return false;
         }

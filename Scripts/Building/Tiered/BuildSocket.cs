@@ -114,9 +114,11 @@ namespace VoxelEngine.Building.Tiered
             if (host == BuildFamily.Doorway && side == SocketSide.Bottom)
                 return incoming == BuildFamily.Stairs;
 
-            // Walls/doorways/windows accept floors/roofs on top, and other walls horizontally.
+            // Walls, openings and wall frames accept floors/roofs on their authored
+            // top joints, and matching wall pieces on their side joints.
             if (host == BuildFamily.Wall || host == BuildFamily.Doorway ||
-                host == BuildFamily.Window || host == BuildFamily.HalfWall)
+                host == BuildFamily.Window || host == BuildFamily.HalfWall
+                || host == BuildFamily.WallFrame)
             {
                 if (side == SocketSide.Top)
                     return incoming == BuildFamily.Roof     ||
@@ -124,6 +126,7 @@ namespace VoxelEngine.Building.Tiered
                            incoming == BuildFamily.Wall     ||
                            incoming == BuildFamily.Doorway  ||
                            incoming == BuildFamily.Window   ||
+                           incoming == BuildFamily.WallFrame ||
                            incoming == BuildFamily.TriangularWall ||
                            incoming == BuildFamily.TriangularWallInverted ||
                            BuildFamilyInfo.IsRoofPanel(incoming);
@@ -134,7 +137,8 @@ namespace VoxelEngine.Building.Tiered
                     return incoming == BuildFamily.Wall
                         || incoming == BuildFamily.Doorway
                         || incoming == BuildFamily.Window
-                        || incoming == BuildFamily.HalfWall;
+                        || incoming == BuildFamily.HalfWall
+                        || incoming == BuildFamily.WallFrame;
             }
 
             // Pillars accept floors on top, walls to all sides.
@@ -147,7 +151,8 @@ namespace VoxelEngine.Building.Tiered
 
             // Floors and flat roofs accept walls and pillars on top, stairs on
             // their perimeter, and more decks one complete module to the side.
-            if (host == BuildFamily.Floor || host == BuildFamily.Roof)
+            if (host == BuildFamily.Floor || host == BuildFamily.FloorHatch
+                || host == BuildFamily.Roof)
             {
                 if (side == SocketSide.Top)
                     return incoming == BuildFamily.Wall ||
@@ -157,11 +162,13 @@ namespace VoxelEngine.Building.Tiered
                            incoming == BuildFamily.Window ||
                            incoming == BuildFamily.TriangularWall ||
                            incoming == BuildFamily.TriangularWallInverted ||
+                           incoming == BuildFamily.WallFrame ||
                            incoming == BuildFamily.GateFrame;
                 if (side == SocketSide.TopNorth || side == SocketSide.TopSouth ||
                     side == SocketSide.TopEast || side == SocketSide.TopWest)
                     return incoming == BuildFamily.Stairs;
-                return incoming == BuildFamily.Floor || incoming == BuildFamily.Roof;
+                return incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch
+                    || incoming == BuildFamily.Roof;
             }
 
             // Floors continue from either stair landing. The authored sockets sit
