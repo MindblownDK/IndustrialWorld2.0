@@ -12,8 +12,9 @@ using VoxelEngine.Research;
 namespace VoxelEngine.EditorTools
 {
     /// <summary>
-    /// Collapses duplicate science-pack recipes onto one craftable recipe per tier.
-    /// Token items, the hammer, and unrelated recipes are not touched.
+    /// Collapses duplicate science-pack recipes onto one craftable recipe per tier (I–VI).
+    /// Pack I starts unlocked in hand; Packs II–VI are gated by their dedicated Science Pack
+    /// research nodes.
     /// </summary>
     public static class ScienceRecipeRepair
     {
@@ -29,7 +30,7 @@ namespace VoxelEngine.EditorTools
                 $"Canonical recipes kept: {kept}\n" +
                 $"Duplicate recipe assets deleted: {deleted}\n" +
                 $"Research costs rewired: {rewired}\n\n" +
-                "Pack I crafts in hand. Pack II needs a Crafting Bench. Pack III needs an Assembler.";
+                "Pack I crafts in hand (default). Pack II crafts at a Crafting Bench; Packs III–VI craft at an Assembler once researched.";
             Debug.Log("[ScienceRecipeRepair] " + message.Replace("\n", " "));
             EditorUtility.DisplayDialog("Voxel Engine Setup", message, "OK");
         }
@@ -41,8 +42,8 @@ namespace VoxelEngine.EditorTools
             EnsureFolder(CanonicalFolder);
 
             var items = LoadAssets<ItemDefinition>();
-            var packs = new ScienceItem[4];
-            for (int tier = 1; tier <= 3; tier++)
+            var packs = new ScienceItem[ScienceItem.MaxTier + 1];
+            for (int tier = 1; tier <= ScienceItem.MaxTier; tier++)
             {
                 packs[tier] = FindPack(items, tier);
                 if (packs[tier] != null)
@@ -68,34 +69,47 @@ namespace VoxelEngine.EditorTools
                 }
             }
 
-            var wood = FindItem(items, Root + "/Items/Item_WoodLog.asset", "wood_log", "Wood Log");
-            var stone = FindItem(items, Root + "/Items/Item_Stone.asset", "stone", "Stone");
-            var iron = FindItem(items, Root + "/Items/Item_IronIngot.asset", "iron_ingot", "Iron Ingot");
-            var copper = FindItem(items, Root + "/Items/Item_CopperIngot.asset", "copper_ingot", "Copper Ingot");
-            var steel = FindItem(items, Root + "/Items/Item_SteelIngot.asset", "steel_ingot", "Steel Ingot");
+            var wood       = FindItem(items, Root + "/Items/Item_WoodLog.asset", "wood_log", "Wood Log");
+            var stone      = FindItem(items, Root + "/Items/Item_Stone.asset", "stone", "Stone");
+            var iron       = FindItem(items, Root + "/Items/Item_IronIngot.asset", "iron_ingot", "Iron Ingot");
+            var copper     = FindItem(items, Root + "/Items/Item_CopperIngot.asset", "copper_ingot", "Copper Ingot");
+            var steel      = FindItem(items, Root + "/Items/Item_SteelIngot.asset", "steel_ingot", "Steel Ingot");
+            var circuit    = FindItem(items, Root + "/Industrial/Items/Item_Circuit.asset", "item_circuit", "Electronic Circuit");
+            var plastic    = FindItem(items, Root + "/Industrial/Items/Item_Plastic.asset", "item_plastic", "Plastic Bar");
+            var steelPlate = FindItem(items, Root + "/Industrial/Items/Item_SteelPlate.asset", "item_steelplate", "Steel Plate");
+            var advCircuit = FindItem(items, Root + "/Industrial/Items/Item_AdvCircuit.asset", "item_advcircuit", "Advanced Circuit");
+            var brass      = FindItem(items, Root + "/Items/Item_BrassIngot.asset", "brass_ingot", "Brass Ingot");
+            var silicon    = FindItem(items, Root + "/Items/Item_Silicon.asset", "silicon", "Silicon");
+            var graphite   = FindItem(items, Root + "/Industrial/Items/Item_Graphite.asset", "graphite", "Graphite");
+            var leuPellet  = FindItem(items, Root + "/Survival/NuclearItems/Item_LEUPellet.asset", "item_leupellet", "LEU Pellet");
+            var platinum   = FindItem(items, Root + "/Items/Item_Platinum.asset", "platinum", "Platinum");
+            var gold       = FindItem(items, Root + "/Items/Item_Gold.asset", "gold", "Gold");
 
-            var byTier = new List<RecipeDefinition>[4];
-            for (int tier = 1; tier <= 3; tier++) byTier[tier] = new List<RecipeDefinition>();
+            var byTier = new List<RecipeDefinition>[ScienceItem.MaxTier + 1];
+            for (int tier = 1; tier <= ScienceItem.MaxTier; tier++) byTier[tier] = new List<RecipeDefinition>();
             foreach (var guid in AssetDatabase.FindAssets("t:RecipeDefinition"))
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 var recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(path);
                 if (recipe == null) continue;
                 int tier = ScienceTier(recipe);
-                if (tier >= 1 && tier <= 3) byTier[tier].Add(recipe);
+                if (tier >= 1 && tier <= ScienceItem.MaxTier) byTier[tier].Add(recipe);
             }
 
-            var canonical = new RecipeDefinition[4];
+            var canonical = new RecipeDefinition[ScienceItem.MaxTier + 1];
             var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(Root + "/RecipeRegistry.asset");
-            for (int tier = 1; tier <= 3; tier++)
+            for (int tier = 1; tier <= ScienceItem.MaxTier; tier++)
             {
                 if (packs[tier] == null) continue;
-                canonical[tier] = WriteCanonical(registry, tier, packs[tier], byTier[tier], wood, stone, iron, copper, steel);
+                canonical[tier] = WriteCanonical(
+                    registry, tier, packs[tier], byTier[tier],
+                    wood, stone, iron, copper, steel, circuit, plastic, steelPlate,
+                    advCircuit, brass, silicon, graphite, leuPellet, platinum, gold);
                 if (canonical[tier] != null) kept++;
             }
 
             var doomed = new List<RecipeDefinition>();
-            for (int tier = 1; tier <= 3; tier++)
+            for (int tier = 1; tier <= ScienceItem.MaxTier; tier++)
             {
                 foreach (var recipe in byTier[tier])
                 {
@@ -109,7 +123,7 @@ namespace VoxelEngine.EditorTools
                 if (reg.recipes == null) continue;
                 int before = reg.recipes.Count;
                 reg.recipes.RemoveAll(recipe => recipe == null || doomed.Contains(recipe) || IsDuplicateScience(recipe, canonical));
-                for (int tier = 1; tier <= 3; tier++)
+                for (int tier = 1; tier <= ScienceItem.MaxTier; tier++)
                 {
                     if (canonical[tier] != null && !reg.recipes.Contains(canonical[tier]))
                         reg.recipes.Add(canonical[tier]);
@@ -126,8 +140,8 @@ namespace VoxelEngine.EditorTools
                 {
                     var cost = node.cost[i];
                     if (cost.pack == null) continue;
-                    int tier = cost.pack.tier;
-                    if (tier < 1 || tier > 3 || packs[tier] == null || cost.pack == packs[tier]) continue;
+                    int tier = cost.pack.EffectiveTier;
+                    if (tier < 1 || tier > ScienceItem.MaxTier || packs[tier] == null || cost.pack == packs[tier]) continue;
                     cost.pack = packs[tier];
                     node.cost[i] = cost;
                     changed = true;
@@ -149,7 +163,10 @@ namespace VoxelEngine.EditorTools
         private static RecipeDefinition WriteCanonical(
             RecipeRegistry registry, int tier, ScienceItem pack, List<RecipeDefinition> existing,
             ItemDefinition wood, ItemDefinition stone, ItemDefinition iron,
-            ItemDefinition copper, ItemDefinition steel)
+            ItemDefinition copper, ItemDefinition steel, ItemDefinition circuit,
+            ItemDefinition plastic, ItemDefinition steelPlate, ItemDefinition advCircuit,
+            ItemDefinition brass, ItemDefinition silicon, ItemDefinition graphite,
+            ItemDefinition leuPellet, ItemDefinition platinum, ItemDefinition gold)
         {
             string path = $"{CanonicalFolder}/Recipe_ScienceT{tier}.asset";
             var recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(path);
@@ -159,10 +176,12 @@ namespace VoxelEngine.EditorTools
                 AssetDatabase.CreateAsset(recipe, path);
             }
 
-            recipe.displayName = string.IsNullOrEmpty(pack.displayName) ? $"Science Pack {tier}" : pack.displayName;
+            recipe.displayName = string.IsNullOrEmpty(pack.displayName)
+                ? $"Science Pack {ScienceItem.GetTierRomanNumeral(tier)}"
+                : pack.displayName;
             recipe.outputItem = pack;
-            if (recipe.outputCount <= 0) recipe.outputCount = 1;
-            recipe.unlockedByDefault = true;
+            if (recipe.outputCount <= 0) recipe.outputCount = tier >= 4 ? 2 : 1;
+            recipe.unlockedByDefault = tier <= 1;
             recipe.requiredStation = tier switch
             {
                 1 => StationTier.None,
@@ -171,32 +190,15 @@ namespace VoxelEngine.EditorTools
             };
             if (!HasCraftableInputs(recipe))
             {
-                RecipeDefinition donor = null;
-                int donorScore = int.MinValue;
-                if (existing != null)
+                recipe.inputs = tier switch
                 {
-                    foreach (var other in existing)
-                    {
-                        if (other == null || other == recipe || !HasCraftableInputs(other)) continue;
-                        int score = other.inputs.Length;
-                        if (score > donorScore)
-                        {
-                            donor = other;
-                            donorScore = score;
-                        }
-                    }
-                }
-                if (donor != null)
-                    recipe.inputs = CloneInputs(donor.inputs);
-                else
-                {
-                    recipe.inputs = tier switch
-                    {
-                        1 => Ingredients((wood, 1), (stone, 1)),
-                        2 => Ingredients((iron, 1), (copper, 1)),
-                        _ => Ingredients((steel, 1), (copper, 2))
-                    };
-                }
+                    1 => Ingredients((wood, 1), (stone, 1)),
+                    2 => Ingredients((iron, 1), (copper, 1)),
+                    3 => Ingredients((steel, 1), (circuit, 1), (copper, 1)),
+                    4 => Ingredients((plastic, 2), (circuit, 1), (steelPlate, 2)),
+                    5 => Ingredients((advCircuit, 1), (brass, 2), (silicon, 2), (graphite, 1)),
+                    _ => Ingredients((leuPellet, 1), (advCircuit, 2), (platinum, 2), (gold, 2))
+                };
             }
             EditorUtility.SetDirty(recipe);
             if (registry != null && registry.recipes != null && !registry.recipes.Contains(recipe))
@@ -205,15 +207,6 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(registry);
             }
             return recipe;
-        }
-
-        private static RecipeIngredient[] CloneInputs(RecipeIngredient[] inputs)
-        {
-            if (inputs == null) return System.Array.Empty<RecipeIngredient>();
-            var copy = new RecipeIngredient[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-                copy[i] = new RecipeIngredient { item = inputs[i].item, count = inputs[i].count };
-            return copy;
         }
 
         private static bool HasCraftableInputs(RecipeDefinition recipe)
@@ -238,18 +231,18 @@ namespace VoxelEngine.EditorTools
         private static bool IsDuplicateScience(RecipeDefinition recipe, RecipeDefinition[] canonical)
         {
             int tier = ScienceTier(recipe);
-            return tier >= 1 && tier <= 3 && canonical[tier] != null && recipe != canonical[tier];
+            return tier >= 1 && tier <= ScienceItem.MaxTier && canonical[tier] != null && recipe != canonical[tier];
         }
 
         private static int ScienceTier(RecipeDefinition recipe)
         {
             if (recipe == null) return 0;
-            if (recipe.outputItem is ScienceItem pack && pack.tier >= 1 && pack.tier <= 3)
-                return pack.tier;
+            if (recipe.outputItem is ScienceItem pack && pack.EffectiveTier >= 1 && pack.EffectiveTier <= ScienceItem.MaxTier)
+                return pack.EffectiveTier;
             string name = Path.GetFileNameWithoutExtension(AssetDatabase.GetAssetPath(recipe));
-            if (name == "Recipe_ScienceT1") return 1;
-            if (name == "Recipe_ScienceT2") return 2;
-            if (name == "Recipe_ScienceT3") return 3;
+            for (int t = 1; t <= ScienceItem.MaxTier; t++)
+                if (string.Equals(name, $"Recipe_ScienceT{t}", StringComparison.OrdinalIgnoreCase))
+                    return t;
             return 0;
         }
 
@@ -261,7 +254,7 @@ namespace VoxelEngine.EditorTools
             ScienceItem fallback = null;
             foreach (var item in items)
             {
-                if (item is not ScienceItem pack || pack.tier != tier) continue;
+                if (item is not ScienceItem pack || pack.EffectiveTier != tier) continue;
                 if (string.Equals(pack.itemId, "item_sciencet" + tier, StringComparison.OrdinalIgnoreCase))
                     return pack;
                 fallback ??= pack;

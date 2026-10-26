@@ -1,9 +1,9 @@
 // Assets/Scripts/Editor/Nuclear/NuclearSetupGuide.cs
 //
-// Editor wizard that creates all nuclear items and recipes.
-// Menu: Tools > Voxel Engine > Create Nuclear Content
-
+// Ensures the unique Control Rod Assembly item and recipe under Nuclear/ while
+// preserving the canonical reactor fuel/waste items under Survival/NuclearItems/.
 #if UNITY_EDITOR
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using VoxelEngine.Crafting;
@@ -13,100 +13,73 @@ namespace VoxelEngine.Nuclear
 {
     public static class NuclearSetupGuide
     {
-        // Invoked from the Setup Wizard (Step 11). No standalone menu item —
-        // nuclear content is generated as part of the survival content step.
         public static void CreateAll()
         {
-            string basePath = "Assets/VoxelEngineAssets/Nuclear";
+            const string assetRoot = "Assets/VoxelEngineAssets";
+            const string basePath = assetRoot + "/Nuclear";
             if (!AssetDatabase.IsValidFolder(basePath))
-                AssetDatabase.CreateFolder("Assets/VoxelEngineAssets", "Nuclear");
+                AssetDatabase.CreateFolder(assetRoot, "Nuclear");
             if (!AssetDatabase.IsValidFolder(basePath + "/Items"))
                 AssetDatabase.CreateFolder(basePath, "Items");
             if (!AssetDatabase.IsValidFolder(basePath + "/Recipes"))
                 AssetDatabase.CreateFolder(basePath, "Recipes");
 
-            // ── ITEMS ────────────────────────────────────────────
-            var enrichedRod = CreateItem("Item_EnrichedFuelRod", "Enriched Fuel Rod",
-                "Enriched uranium fuel rod for the nuclear reactor core.",
-                new Color(0.2f, 0.9f, 0.3f), "Nuclear", basePath + "/Items");
+            string controlRodPath = basePath + "/Items/Item_ControlRod.asset";
+            var controlRod = AssetDatabase.LoadAssetAtPath<ResourceItem>(controlRodPath);
+            bool createdRod = controlRod == null;
+            if (createdRod)
+            {
+                controlRod = ScriptableObject.CreateInstance<ResourceItem>();
+                AssetDatabase.CreateAsset(controlRod, controlRodPath);
+            }
+            if (createdRod || string.IsNullOrWhiteSpace(controlRod.itemId))
+                controlRod.itemId = "item_controlrod";
+            if (createdRod || string.IsNullOrWhiteSpace(controlRod.displayName))
+                controlRod.displayName = "Control Rod Assembly";
+            if (createdRod || string.IsNullOrWhiteSpace(controlRod.description))
+                controlRod.description = "Boron-cobalt neutron-absorbing control rods for regulating fission reactor cores.";
+            if (createdRod)
+            {
+                controlRod.iconTint = new Color(0.30f, 0.32f, 0.38f);
+                controlRod.category = "Nuclear";
+                controlRod.maxStack = 64;
+                controlRod.massPerUnit = 2.5f;
+            }
+            EditorUtility.SetDirty(controlRod);
 
-            var leuPellet = CreateItem("Item_LEUPellet", "LEU Pellet",
-                "Low-Enriched Uranium pellet for the portable reactor.",
-                new Color(0.3f, 0.7f, 0.2f), "Nuclear", basePath + "/Items");
+            string recipePath = basePath + "/Recipes/Recipe_ControlRod.asset";
+            var recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(recipePath);
+            if (recipe == null)
+            {
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                AssetDatabase.CreateAsset(recipe, recipePath);
+            }
+            recipe.displayName = "Control Rod Assembly";
+            recipe.outputItem = controlRod;
+            recipe.outputCount = 1;
+            recipe.requiredStation = StationTier.Assembler;
+            if (recipe.craftSeconds <= 0f) recipe.craftSeconds = 5f;
+            recipe.unlockedByDefault = false;
 
-            var spentRod = CreateItem("Item_SpentFuelRod", "Spent Fuel Rod",
-                "Exhausted fuel rod. Reprocess to recover uranium.",
-                new Color(0.5f, 0.4f, 0.2f), "Nuclear", basePath + "/Items");
+            var steel = AssetDatabase.LoadAssetAtPath<ItemDefinition>(assetRoot + "/Items/Item_SteelIngot.asset");
+            var cobalt = AssetDatabase.LoadAssetAtPath<ItemDefinition>(assetRoot + "/Items/Item_Cobalt.asset");
+            if (recipe.inputs == null || recipe.inputs.Length == 0 || recipe.inputs[0].item == null)
+            {
+                var inputs = new List<RecipeIngredient>();
+                if (steel != null) inputs.Add(new RecipeIngredient { item = steel, count = 5 });
+                if (cobalt != null) inputs.Add(new RecipeIngredient { item = cobalt, count = 3 });
+                recipe.inputs = inputs.ToArray();
+            }
+            EditorUtility.SetDirty(recipe);
 
-            var depletedU = CreateItem("Item_DepletedUranium", "Depleted Uranium",
-                "Byproduct of enrichment. Can be reprocessed into LEU pellets.",
-                new Color(0.4f, 0.5f, 0.3f), "Nuclear", basePath + "/Items");
-
-            var hlWaste = CreateItem("Item_HighLevelWaste", "High-Level Waste",
-                "Vitrified nuclear waste. Must be stored safely. Cannot be reprocessed further.",
-                new Color(0.6f, 0.2f, 0.1f), "Nuclear", basePath + "/Items");
-
-            var controlRod = CreateItem("Item_ControlRod", "Control Rod Assembly",
-                "Boron carbide control rods for regulating reactor power.",
-                new Color(0.3f, 0.3f, 0.35f), "Nuclear", basePath + "/Items");
-
-            // ── RECIPES ──────────────────────────────────────────
-            // Control Rod = 5 Steel + 3 Cobalt @ Assembler
-            CreateRecipe("Recipe_ControlRod", "Control Rod Assembly", controlRod, 1,
-                new[] { ("Item_SteelIngot", 5), ("Item_Cobalt", 3) },
-                StationTier.Assembler, basePath + "/Recipes");
+            var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(assetRoot + "/RecipeRegistry.asset");
+            if (registry != null && registry.recipes != null && !registry.recipes.Contains(recipe))
+            {
+                registry.recipes.Add(recipe);
+                EditorUtility.SetDirty(registry);
+            }
 
             AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-
-            Debug.Log("[Nuclear] Created 6 items + recipes in " + basePath);
-            EditorUtility.DisplayDialog("Nuclear Content Created",
-                "Created:\n" +
-                "• Enriched Fuel Rod (for big reactor)\n" +
-                "• LEU Pellet (for portable reactor)\n" +
-                "• Spent Fuel Rod (waste, reprocessable)\n" +
-                "• Depleted Uranium (waste, reprocessable)\n" +
-                "• High-Level Waste (final waste)\n" +
-                "• Control Rod Assembly\n\n" +
-                "Next steps:\n" +
-                "1. Create prefabs for: ReactorCore, GasPipe, SteamTurbine,\n" +
-                "   PortableReactor, UraniumProcessor, WasteReprocessor\n" +
-                "2. Add BlockItem assets pointing to the prefabs\n" +
-                "3. Add recipes to RecipeRegistry\n" +
-                "4. Set the item references on each component\n" +
-                "5. Add GasNetwork to your scene", "OK");
-        }
-
-        private static ItemDefinition CreateItem(string id, string displayName,
-            string desc, Color tint, string category, string folder)
-        {
-            var item = ScriptableObject.CreateInstance<ResourceItem>();
-            item.itemId = id.ToLower();
-            item.displayName = displayName;
-            item.description = desc;
-            item.iconTint = tint;
-            item.category = category;
-            item.maxStack = 64;
-            AssetDatabase.CreateAsset(item, $"{folder}/{id}.asset");
-            return item;
-        }
-
-        private static void CreateRecipe(string id, string displayName,
-            ItemDefinition output, int outputCount,
-            (string itemId, int count)[] inputs, StationTier station, string folder)
-        {
-            var recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
-            recipe.displayName = displayName;
-            recipe.outputItem = output;
-            recipe.outputCount = outputCount;
-            recipe.requiredStation = station;
-            recipe.unlockedByDefault = false; // must research nuclear tech first
-            // Note: input items must be linked manually in the inspector
-            // since we can't easily find them by ID in a wizard.
-            recipe.inputs = new RecipeIngredient[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-                recipe.inputs[i] = new RecipeIngredient { count = inputs[i].count };
-            AssetDatabase.CreateAsset(recipe, $"{folder}/{id}.asset");
         }
     }
 }

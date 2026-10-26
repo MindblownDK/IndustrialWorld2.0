@@ -14,7 +14,7 @@ namespace VoxelEngine.Research
     public class ResearchLab : MonoBehaviour
     {
         public ItemContainer scienceInput;
-        public const int INPUT_SLOTS = 3; // 3 slots for the 3 science tiers
+        public const int INPUT_SLOTS = VoxelEngine.Items.ScienceItem.MaxTier; // 6 slots for Science Packs I–VI
 
         private void Awake()
         {

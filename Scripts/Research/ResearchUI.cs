@@ -504,6 +504,7 @@ namespace VoxelEngine.Research
                 return;
             }
             _labBar.style.display = DisplayStyle.Flex;
+            _labBar.style.flexWrap = Wrap.Wrap;
             _labBar.style.paddingLeft = 10;
             _labBar.style.paddingRight = 10;
             _labBar.style.paddingTop = 5;
@@ -521,10 +522,10 @@ namespace VoxelEngine.Research
             title.style.fontSize = 10;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
-            title.style.marginRight = 12;
+            title.style.marginRight = 10;
             _labBar.Add(title);
 
-            for (int tier = 1; tier <= 3; tier++)
+            for (int tier = 1; tier <= ScienceItem.MaxTier; tier++)
             {
                 string id = $"item_sciencet{tier}";
                 int inLab = _activeLab.scienceInput.CountOfId(id);
@@ -535,31 +536,33 @@ namespace VoxelEngine.Research
                 var packGroup = new VisualElement();
                 packGroup.style.flexDirection = FlexDirection.Row;
                 packGroup.style.alignItems = Align.Center;
-                packGroup.style.marginRight = 12;
+                packGroup.style.marginRight = 9;
+                packGroup.style.marginTop = 2;
+                packGroup.style.marginBottom = 2;
                 _labBar.Add(packGroup);
 
                 var dot = BuildTierDot(ScienceItem.GetTierColor(tier), ScienceItem.GetTierRomanNumeral(tier), 16);
-                dot.style.marginRight = 5;
+                dot.style.marginRight = 4;
                 packGroup.Add(dot);
 
-                var countLbl = new Label($"Lab: {inLab}  (Bag: {inBag})");
+                var countLbl = new Label($"{inLab} ({inBag})");
                 countLbl.style.color = inLab > 0 ? TextPrimary : TextMuted;
                 countLbl.style.fontSize = 10;
-                countLbl.style.marginRight = 6;
+                countLbl.style.marginRight = 4;
                 packGroup.Add(countLbl);
 
                 int capturedTier = tier;
-                var loadBtn = StyledButton("+Load", new Color(0.16f, 0.32f, 0.40f), () =>
+                var loadBtn = StyledButton("+10", new Color(0.16f, 0.32f, 0.40f), () =>
                 {
                     TransferSciencePackToLab(capturedTier, 10);
                     RebuildLabBar();
                     RebuildCanvas();
                     RebuildDetails();
                 });
-                loadBtn.style.minHeight = 22;
+                loadBtn.style.minHeight = 20;
                 loadBtn.style.fontSize = 9;
-                loadBtn.style.paddingLeft = 7;
-                loadBtn.style.paddingRight = 7;
+                loadBtn.style.paddingLeft = 5;
+                loadBtn.style.paddingRight = 5;
                 loadBtn.SetEnabled(inBag > 0);
                 packGroup.Add(loadBtn);
             }
@@ -836,7 +839,7 @@ namespace VoxelEngine.Research
                 foreach (var n in tree.nodes)
                 {
                     if (n == null) continue;
-                    if (n.upgradeKind == PlayerUpgradeKind.UnlockFlight || n.nodeId == "up_flight") continue;
+                    if (n.nodeId == "up_flight" || n.nodeId == "up_stam") continue;
                     total++;
                     if (n.category == ResearchCategory.PlayerUpgrades) { players++; continue; }
                     counts.TryGetValue(n.subCategory, out int c);
@@ -1026,8 +1029,7 @@ namespace VoxelEngine.Research
             foreach (var n in tree.nodes)
             {
                 if (n == null) continue;
-                // Flight is a jetpack, not a research unlock.
-                if (n.upgradeKind == PlayerUpgradeKind.UnlockFlight || n.nodeId == "up_flight") continue;
+                if (n.nodeId == "up_flight" || n.nodeId == "up_stam") continue;
                 // 17.27.3-dev: the strip filters by branch; ALL (index 0) filters nothing.
                 if (!BranchAccepts(n)) continue;
                 if (!string.IsNullOrEmpty(_searchQuery))
@@ -1516,8 +1518,11 @@ namespace VoxelEngine.Research
             icon.pickingMode = PickingMode.Ignore;
             SetRadius(icon, size * 0.5f);
 
+            float lum = 0.299f * tierColor.r + 0.587f * tierColor.g + 0.114f * tierColor.b;
             var numeral = new Label(romanNumeral);
-            numeral.style.color = new Color(0.98f, 0.99f, 1f);
+            numeral.style.color = lum > 0.60f
+                ? new Color(0.05f, 0.08f, 0.12f)
+                : new Color(0.98f, 0.99f, 1f);
             numeral.style.fontSize = size >= 16 ? 8 : 7;
             numeral.style.unityFontStyleAndWeight = FontStyle.Bold;
             numeral.style.unityTextAlign = TextAnchor.MiddleCenter;

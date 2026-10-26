@@ -164,6 +164,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build the main-menu scene", BuildMainMenuScene),
                 Setup("Build base crafting, tools, stations and blocks", BuildBaseCraftingContent),
                 Setup("Build research tree, science packs and research lab", BuildResearchContent),
+                Setup("Apply 18.0.0-dev progression, 6-science-pack & asset consolidation overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
                 Setup("Repair science pack recipes", () => ScienceRecipeRepair.Run()),
                 Setup("Anchor runtime shaders for standalone builds", () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103()),
                 Setup("Wire multiplayer bootstrap in the active game scene", () => VoxelEngine.EditorTools.NetworkSetup.RunStep105()));
@@ -318,6 +319,7 @@ namespace VoxelEngine.EditorTools
 
             AddSetupGroup(parent, ref number, "Maintenance & Repair",
                 "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
+                Setup("Apply 18.0.0-dev progression, 6-science-pack & asset consolidation overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
                 Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
                 Setup("Apply 17.13.1-dev progression and Furnace/Smelting repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
                 Setup("Repair Smelting-to-Furnace unlock link (non-destructive, 17.15.0-dev)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.RepairFurnaceSmeltingUnlockOnly()),
@@ -2761,11 +2763,17 @@ namespace VoxelEngine.EditorTools
                 return sci;
             }
             var sciT1 = MakeScience("Item_ScienceT1", "Science Pack I",   VoxelEngine.Items.ScienceItem.GetTierColor(1), 1,
-                "Tier 1 research input. Crafted in your inventory from wood + stone.");
+                "Red basic research pack. Crafted in hand from wood and stone.");
             var sciT2 = MakeScience("Item_ScienceT2", "Science Pack II",  VoxelEngine.Items.ScienceItem.GetTierColor(2), 2,
-                "Tier 2 research input. Crafted at a Crafting Bench from iron + copper ingots.");
+                "Green automation research pack. Crafted at a Crafting Bench from iron and copper ingots.");
             var sciT3 = MakeScience("Item_ScienceT3", "Science Pack III", VoxelEngine.Items.ScienceItem.GetTierColor(3), 3,
-                "Tier 3 research input. Crafted at an Assembler from steel + circuitry.");
+                "Blue industrial research pack. Crafted at an Assembler from steel, electronic circuits, and copper.");
+            var sciT4 = MakeScience("Item_ScienceT4", "Science Pack IV",  VoxelEngine.Items.ScienceItem.GetTierColor(4), 4,
+                "Purple chemical research pack. Crafted at an Assembler from plastic bars, steel plates, and electronic circuits.");
+            var sciT5 = MakeScience("Item_ScienceT5", "Science Pack V",   VoxelEngine.Items.ScienceItem.GetTierColor(5), 5,
+                "Amber high-energy research pack. Crafted at an Assembler from advanced circuits, brass, silicon, and graphite.");
+            var sciT6 = MakeScience("Item_ScienceT6", "Science Pack VI",  VoxelEngine.Items.ScienceItem.GetTierColor(6), 6,
+                "Cyan astral singularity research pack. Crafted at an Assembler from LEU pellets, advanced circuits, platinum, and gold.");
 
             // ---- 2) Research Lab prefab ----
             string labPath = $"{prefabsFolder}/ResearchLab.prefab";
@@ -2809,15 +2817,15 @@ namespace VoxelEngine.EditorTools
                     "Run Core & Project Bootstrap -> Build base crafting first - RecipeRegistry.asset doesn\'t exist.", "OK");
                 return;
             }
-            // Science pack recipes (always unlocked).
+            // Pack I starts unlocked in hand; Packs II–VI are gated by dedicated Science Pack research nodes.
             var recSci1 = AddRecipe("Recipe_ScienceT1", "Science Pack I", sciT1, 1, VoxelEngine.Crafting.StationTier.None, true, ((VoxelEngine.Items.ItemDefinition)woodLog, 1), ((VoxelEngine.Items.ItemDefinition)stone, 1));
             if (recSci1 != null)
             {
                 recSci1.craftSeconds = 5f;
                 EditorUtility.SetDirty(recSci1);
             }
-            var recSci2 = AddRecipe("Recipe_ScienceT2", "Science Pack II", sciT2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
-            var recSci3 = AddRecipe("Recipe_ScienceT3", "Science Pack III", sciT3, 1, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)steelIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
+            var recSci2 = AddRecipe("Recipe_ScienceT2", "Science Pack II", sciT2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
+            var recSci3 = AddRecipe("Recipe_ScienceT3", "Science Pack III", sciT3, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelIngot, 1), ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
             var recLab  = AddRecipe("Recipe_ResearchLab", "Research Lab", blockLab, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)plank, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
 
             // ---- 4) Find some existing recipes we'll gate behind research ----
@@ -3121,18 +3129,14 @@ namespace VoxelEngine.EditorTools
                 "+20 max HP per rank. The body adapts to harsh environments.",
                 1, 0, new[] { (sciT1, 3) },
                 VoxelEngine.Research.PlayerUpgradeKind.BonusMaxHealth, 20f, 10);
-            MakePlayerNode("up_stam",  "Endurance",
-                "+15 max stamina per rank. Sprint and jump longer without resting.",
-                1, 1, new[] { (sciT1, 3) },
-                VoxelEngine.Research.PlayerUpgradeKind.BonusMaxStamina, 15f, 10);
             MakePlayerNode("up_dmg",   "Strength",
                 "+2 flat damage per rank. Hit harder with any tool.",
                 1, 2, new[] { (sciT1, 4) },
                 VoxelEngine.Research.PlayerUpgradeKind.BonusDamage, 2f, 10);
-            MakePlayerNode("up_inv",   "Pack Mule",
-                "+5 backpack slots per rank. Carry more stuff back to base.",
+            MakePlayerNode("up_inv",   "Exoskeletal Load Harness",
+                "+75 kg max carry capacity per rank. Pneumatic load-transfer struts and servo-braced hip frames route pack mass directly through your boots into the ground.",
                 1, 3, new[] { (sciT1, 5) },
-                VoxelEngine.Research.PlayerUpgradeKind.BonusInventorySlots, 5f, 6);
+                VoxelEngine.Research.PlayerUpgradeKind.BonusCarryWeightKg, 75f, 6);
 
             // Tier 2 — requires T2 science as well.
             MakePlayerNode("up_sprint","Wind Sprinter",
@@ -3219,9 +3223,9 @@ namespace VoxelEngine.EditorTools
             }
             EditorUtility.SetDirty(tree);
 
-            // Do not run ScienceRecipeRepair here: that legacy repair deletes duplicate
-            // recipe assets. Science recipes are authored above; only safe links are merged.
+            // Science packs I–VI, dedicated research nodes, and registry links are finalized below.
             EditorUtility.SetDirty(recipeRegistry);
+            VoxelEngine.EditorTools.ProgressionOverhaul18Setup.RunSilent();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
@@ -3285,9 +3289,8 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
-            // ---- 1) Liquid Canister item (9.16.0 — replaces the Water Bucket; the class
-            //          was renamed on the same file so the asset GUID survives) ----
-            string bucketPath = $"{itemsFolder}/Tool_WaterBucket.asset";
+            // ---- 1) Canonical Liquid Canister item ----
+            string bucketPath = $"{itemsFolder}/Tool_LiquidCanister.asset";
             var bucket = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.LiquidCanister>(bucketPath);
             bool bucketCreated = bucket == null;
             if (bucket == null)
@@ -3295,7 +3298,7 @@ namespace VoxelEngine.EditorTools
                 bucket = ScriptableObject.CreateInstance<VoxelEngine.Items.LiquidCanister>();
                 AssetDatabase.CreateAsset(bucket, bucketPath);
             }
-            bucket.itemId       = "water_bucket";   // stable id — old saves keep resolving
+            bucket.itemId       = "liquid_canister";
             if (bucketCreated || string.IsNullOrEmpty(bucket.displayName)
                 || bucket.displayName == "Water Bucket" || bucket.displayName == "Liquid Bucket")
             {
@@ -3310,11 +3313,9 @@ namespace VoxelEngine.EditorTools
             if (bucketCreated)
             {
                 bucket.iconTint      = new Color(0.20f, 0.50f, 0.85f);
-                bucket.category      = "Fluids";
+                bucket.category      = "Tools";
             }
             bucket.maxStack     = 1;
-            // Serialized maxDurability MUST match the canister capacity (legacy bucket
-            // assets carry 1 = one scoop) — durability now stores millilitres.
             bucket.maxDurability = VoxelEngine.Items.LiquidCanister.CapacityMl;
             bucket.toolType     = VoxelEngine.Items.ToolType.Other;
             EditorUtility.SetDirty(bucket);
@@ -3455,7 +3456,7 @@ namespace VoxelEngine.EditorTools
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             if (recipeRegistry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Core & Project Bootstrap -> Build base crafting first.", "OK"); return; }
 
-            AddRecipe("Recipe_WaterBucket", "Liquid Canister", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
+            AddRecipe("Recipe_LiquidCanister", "Liquid Canister", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
             AddRecipe("Recipe_TankSolid", "Water Tank (Solid)", bTankSolid, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 6));
             AddRecipe("Recipe_TankGlass", "Water Tank (Glass)", bTankGlass, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 4));
             AddRecipe("Recipe_PipeSolid", "Liquid Pipe (Solid) x4 · 0.5 m", bPipeSolid, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
@@ -4257,15 +4258,15 @@ namespace VoxelEngine.EditorTools
             };
             registry.recipes.RemoveAll(r => r != null && System.Array.IndexOf(toReplace, r.name) >= 0);
 
-            // ── Plating tier (gated by "Plating" research) ──
-            var recIronPlate   = AddRecipe("Recipe_IronPlate", "Iron Plate", ironPlate, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)ironIngot, 2));
-            var recCopperPlate = AddRecipe("Recipe_CopperPlate", "Copper Plate", copperPlate, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
-            var recSteelPlate  = AddRecipe("Recipe_SteelPlate", "Steel Plate", steelPlate, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelIngot, 2));
-            var recIronGear    = AddRecipe("Recipe_IronGear", "Iron Gear", ironGear, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)ironPlate, 2));
+            // ── Plating tier (gated by "Plating" research; crafted at Crafting Bench so players can build their first Assembler) ──
+            var recIronPlate   = AddRecipe("Recipe_IronPlate", "Iron Plate", ironPlate, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironIngot, 2));
+            var recCopperPlate = AddRecipe("Recipe_CopperPlate", "Copper Plate", copperPlate, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
+            var recSteelPlate  = AddRecipe("Recipe_SteelPlate", "Steel Plate", steelPlate, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)steelIngot, 2));
+            var recIronGear    = AddRecipe("Recipe_IronGear", "Iron Gear", ironGear, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironPlate, 2));
 
             // ── Wires & circuits (gated by Electronics / Adv Electronics) ──
             var recCopperWire  = AddRecipe("Recipe_CopperWire", "Copper Wire x2", copperWire, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
-            var recCircuit     = AddRecipe("Recipe_Circuit", "Electronic Circuit", circuitBasic, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)ironPlate, 1), ((VoxelEngine.Items.ItemDefinition)copperWire, 3));
+            var recCircuit     = AddRecipe("Recipe_Circuit", "Electronic Circuit", circuitBasic, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironPlate, 1), ((VoxelEngine.Items.ItemDefinition)copperWire, 3));
             var recAdvCircuit  = AddRecipe("Recipe_AdvCircuit", "Advanced Circuit", circuitAdv, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)circuitBasic, 2), ((VoxelEngine.Items.ItemDefinition)plastic, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 4));
 
             // ── Oil chain (gated by Oil Extraction / Refining / Plastics) ──
@@ -4404,19 +4405,19 @@ namespace VoxelEngine.EditorTools
             // Lock the glass-tank / glass-pipe recipes so the node actually gates them.
             LockRecipe(recPipeGlass); LockRecipe(recTankGlass);
 
-            // T2 — Fluid Handling: gates the existing water bucket / pump / pipes / tanks.
-            var recWaterBucket = FindRecipeByName("Recipe_WaterBucket");
-            var recPipeSolid   = FindRecipeByName("Recipe_PipeSolid");
-            var recTankSolid   = FindRecipeByName("Recipe_TankSolid");
-            var recWaterPump   = FindRecipeByName("Recipe_WaterPump");
+            // T2 — Fluid Handling: gates the canonical Liquid Canister, pump, pipes, and tanks.
+            var recLiquidCanister = FindRecipeByName("Recipe_LiquidCanister");
+            var recPipeSolid      = FindRecipeByName("Recipe_PipeSolid");
+            var recTankSolid      = FindRecipeByName("Recipe_TankSolid");
+            var recWaterPump      = FindRecipeByName("Recipe_WaterPump");
             var nFluidHandling = MakeOrUpdateEnvNode("res_fluid_handling", "Fluid Handling",
                 "Move water with pumps and pipes. Foundational for refining, cooling, and farming.",
                 tier: 2, col: 4, sub: VoxelEngine.Research.ResearchSubCategory.Logistics,
                 tint: new Color(0.40f, 0.85f, 0.95f), seconds: 40f,
                 cost: new[] { (sciT1, 12), (sciT2, 6) },
-                unlocks: new[] { recWaterBucket, recPipeSolid, recTankSolid, recWaterPump },
+                unlocks: new[] { recLiquidCanister, recPipeSolid, recTankSolid, recWaterPump },
                 prereqs: new[] { nSmelting });
-            LockRecipe(recWaterBucket); LockRecipe(recPipeSolid); LockRecipe(recTankSolid); LockRecipe(recWaterPump);
+            LockRecipe(recLiquidCanister); LockRecipe(recPipeSolid); LockRecipe(recTankSolid); LockRecipe(recWaterPump);
 
             // T3 — Electronics: unlocks Copper Wire + Electronic Circuit. Prereqs: Plating + Electricity.
             var nElectronics = MakeOrUpdateEnvNode("res_electronics", "Electronics",
@@ -5166,76 +5167,11 @@ namespace VoxelEngine.EditorTools
             hoe.category      = "Tools";
             EditorUtility.SetDirty(hoe);
 
-            // ── Foods (each crop yields a raw harvest item; cooking yields better food) ──
-            var foodWheatRaw = ScriptableObject.CreateInstance<VoxelEngine.Farming.FoodItem>();
-            foodWheatRaw.itemId = "wheat";  foodWheatRaw.displayName = "Wheat";  foodWheatRaw.description = "Raw wheat grain. Restores a little hunger when eaten raw. Bake into Bread for 3x the nutrition.";
-            foodWheatRaw.iconTint = new Color(0.92f, 0.85f, 0.45f); foodWheatRaw.maxStack = 99; foodWheatRaw.category = "Food";
-            foodWheatRaw.hungerRestore = 5f; foodWheatRaw.healthRestore = 0f; foodWheatRaw.staminaRestore = 0f;
-            AssetDatabase.CreateAsset(foodWheatRaw, $"{ITEMS}/Food_Wheat.asset");
-
-            var foodCornRaw = ScriptableObject.CreateInstance<VoxelEngine.Farming.FoodItem>();
-            foodCornRaw.itemId = "corn"; foodCornRaw.displayName = "Corn"; foodCornRaw.description = "Sweet corn. Edible raw — feeds 8 hunger.";
-            foodCornRaw.iconTint = new Color(0.95f, 0.82f, 0.20f); foodCornRaw.maxStack = 99; foodCornRaw.category = "Food";
-            foodCornRaw.hungerRestore = 8f;
-            AssetDatabase.CreateAsset(foodCornRaw, $"{ITEMS}/Food_Corn.asset");
-
-            var foodCarrotRaw = ScriptableObject.CreateInstance<VoxelEngine.Farming.FoodItem>();
-            foodCarrotRaw.itemId = "carrot"; foodCarrotRaw.displayName = "Carrot"; foodCarrotRaw.description = "Crunchy root vegetable. Feeds 10 hunger.";
-            foodCarrotRaw.iconTint = new Color(0.95f, 0.55f, 0.20f); foodCarrotRaw.maxStack = 99; foodCarrotRaw.category = "Food";
-            foodCarrotRaw.hungerRestore = 10f;
-            AssetDatabase.CreateAsset(foodCarrotRaw, $"{ITEMS}/Food_Carrot.asset");
-
-            var foodBread = ScriptableObject.CreateInstance<VoxelEngine.Farming.FoodItem>();
-            foodBread.itemId = "bread"; foodBread.displayName = "Bread"; foodBread.description = "Baked from 3 wheat. Restores 25 hunger.";
-            foodBread.iconTint = new Color(0.85f, 0.65f, 0.30f); foodBread.maxStack = 99; foodBread.category = "Food";
-            foodBread.hungerRestore = 25f;
-            AssetDatabase.CreateAsset(foodBread, $"{ITEMS}/Food_Bread.asset");
-
-            var foodStew = ScriptableObject.CreateInstance<VoxelEngine.Farming.FoodItem>();
-            foodStew.itemId = "stew"; foodStew.displayName = "Vegetable Stew"; foodStew.description = "Hearty stew from carrots + corn. Restores 35 hunger + 10 health.";
-            foodStew.iconTint = new Color(0.85f, 0.40f, 0.20f); foodStew.maxStack = 99; foodStew.category = "Food";
-            foodStew.hungerRestore = 35f; foodStew.healthRestore = 10f;
-            AssetDatabase.CreateAsset(foodStew, $"{ITEMS}/Food_Stew.asset");
-
-            // ── Seeds ──
-            VoxelEngine.Farming.SeedItem MakeSeed(string assetName, string display, Color tint, string desc)
-            {
-                var s = ScriptableObject.CreateInstance<VoxelEngine.Farming.SeedItem>();
-                s.itemId = assetName.ToLower(); s.displayName = display; s.description = desc;
-                s.iconTint = tint; s.maxStack = 99; s.category = "Seeds";
-                AssetDatabase.CreateAsset(s, $"{ITEMS}/{assetName}.asset");
-                return s;
-            }
-            var seedWheat  = MakeSeed("Seed_Wheat",  "Wheat Seeds",  new Color(0.88f, 0.80f, 0.45f),
-                "Plant on a Tilled Soil block. Grows in ~2 minutes when irrigated.");
-            var seedCorn   = MakeSeed("Seed_Corn",   "Corn Seeds",   new Color(0.92f, 0.78f, 0.20f),
-                "Plant on a Tilled Soil block. Grows in ~3 minutes when irrigated.");
-            var seedCarrot = MakeSeed("Seed_Carrot", "Carrot Seeds", new Color(0.95f, 0.55f, 0.25f),
-                "Plant on a Tilled Soil block. Grows in ~2 minutes when irrigated.");
-
-            // ── Crop definitions (data) ──
-            VoxelEngine.Farming.CropDefinition MakeCrop(string assetName, string display, float growthTime,
-                float foodValue, VoxelEngine.Items.ItemDefinition harvest, int harvestAmount,
-                VoxelEngine.Farming.SeedItem seed, int seedReturn = 1, bool requiresWater = true)
-            {
-                var c = ScriptableObject.CreateInstance<VoxelEngine.Farming.CropDefinition>();
-                c.cropName = display; c.growthTime = growthTime; c.growthStages = 4;
-                c.requiresWater = requiresWater; c.irrigatedSpeedMultiplier = 2f; c.droughtToleranceSec = 30f;
-                c.harvestItem = harvest; c.harvestAmount = harvestAmount;
-                c.seedItem = seed; c.seedReturnAmount = seedReturn;
-                c.foodValue = foodValue;
-                c.stageScales = new[] { 0.2f, 0.4f, 0.7f, 1.0f };
-                AssetDatabase.CreateAsset(c, $"{FARM_CROPS}/{assetName}.asset");
-                return c;
-            }
-            var cropWheat  = MakeCrop("Crop_Wheat",  "Wheat",  120f, 5f, foodWheatRaw,  3, seedWheat,  1);
-            var cropCorn   = MakeCrop("Crop_Corn",   "Corn",   180f, 8f, foodCornRaw,   2, seedCorn,   1);
-            var cropCarrot = MakeCrop("Crop_Carrot", "Carrot", 120f, 10f, foodCarrotRaw, 2, seedCarrot, 1);
-
-            // Hook each seed back to its crop.
-            seedWheat.crop = cropWheat;   EditorUtility.SetDirty(seedWheat);
-            seedCorn.crop  = cropCorn;    EditorUtility.SetDirty(seedCorn);
-            seedCarrot.crop = cropCarrot; EditorUtility.SetDirty(seedCarrot);
+            // ── Canonical Farming suite (6 crops, 6 seeds, 12 foods, 6 cooking recipes under Farming/) ──
+            VoxelEngine.Farming.FarmingSetupGuide.CreateAll();
+            var foodWheatRaw  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Farming.FoodItem>($"{ASSET_ROOT}/Farming/Foods/Food_Wheat.asset");
+            var foodCornRaw   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Farming.FoodItem>($"{ASSET_ROOT}/Farming/Foods/Food_Corn.asset");
+            var foodCarrotRaw = AssetDatabase.LoadAssetAtPath<VoxelEngine.Farming.FoodItem>($"{ASSET_ROOT}/Farming/Foods/Food_Carrot.asset");
 
             // ── Tilled Soil (FarmPlot) prefab ──
             var tilledPrefab = MakePref(FARM_PREFABS, "TilledSoil",
@@ -5305,9 +5241,9 @@ namespace VoxelEngine.EditorTools
             AddRecipe(STORE_RECIPES, "Recipe_Cryobed", "Cryobed", blockCryobed, 1, VoxelEngine.Crafting.StationTier.Assembler, false,
                 ((VoxelEngine.Items.ItemDefinition)steelPlate, 6), ((VoxelEngine.Items.ItemDefinition)glass, 4), ((VoxelEngine.Items.ItemDefinition)circuit, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 6));
 
-            // ── Biomass (compressed organic matter for Biofarm) ──
-            var biomass = MakeRes(MISC_ITEMS, "Item_Biomass", "Biomass",
-                "Compressed organic matter from crops (wheat/corn/carrot/seed). Fuel for the Biofarm Oxygen Garden. 1 biomass = 45s of slow O₂ production.",
+            // ── Biomass (canonical asset in Items/) ──
+            var biomass = MakeRes($"{ASSET_ROOT}/Items", "Item_Biomass", "Biomass",
+                "Compressed organic matter from crops and plant fiber. Fuel for the Biofarm Oxygen Garden and Biofuel chain.",
                 new Color(0.35f, 0.65f, 0.30f), VoxelEngine.Items.ResourceCategory.Misc, "Farming", maxStack: 200);
             AddRecipe(FARM_RECIPES, "Recipe_Biomass", "Biomass x4", biomass, 4, VoxelEngine.Crafting.StationTier.CraftingBench, false,
                 ((VoxelEngine.Items.ItemDefinition)foodWheatRaw, 2), ((VoxelEngine.Items.ItemDefinition)foodCornRaw, 1));
@@ -5925,9 +5861,7 @@ namespace VoxelEngine.EditorTools
             }
             catch (System.Exception ex) { Debug.LogWarning("[VoxelEngineSetup] Ruins biome injection failed: " + ex.Message); }
 
-            // Cooking recipes — happen at any Furnace (treated like a smelting recipe? simpler as bench recipes here).
-            AddRecipe(FARM_RECIPES, "Recipe_Cook_Bread", "Bread", foodBread, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodWheatRaw, 3));
-            AddRecipe(FARM_RECIPES, "Recipe_Cook_Stew", "Vegetable Stew", foodStew, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodCarrotRaw, 2), ((VoxelEngine.Items.ItemDefinition)foodCornRaw, 1));
+            // Cooking recipes are authored canonically by FarmingSetupGuide under Farming/Recipes/.
 
             // ════════════════════════════════════════════════════════════
             //  WRENCH — universal network connector tool
@@ -6663,8 +6597,9 @@ namespace VoxelEngine.EditorTools
                 };
                 var farmUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>();
                 foreach (var name in new[] { "Recipe_Hoe", "Recipe_TilledSoil", "Recipe_Sprinkler",
-                                             "Recipe_Harvester", "Recipe_Cook_Bread", "Recipe_Cook_Stew",
-                                             "Recipe_Biomass", "Recipe_Biofarm", "Recipe_GBiofarm" })
+                                             "Recipe_Harvester", "Recipe_SeedPlanter", "Recipe_Biomass",
+                                             "Cook_Bread", "Cook_Stew", "Cook_RoastPotato",
+                                             "Cook_CornBread", "Cook_BerryPie", "Cook_PumpkinSoup" })
                 {
                     var r = RGet(name);
                     if (r != null) farmUnlocks.Add(r);
@@ -6684,8 +6619,9 @@ namespace VoxelEngine.EditorTools
             // Farming crops/recipes + Nuclear fission content are now produced
             // as part of Step 11 so a single click builds the full survival tier.
             // ────────────────────────────────────────────────────────────
-            VoxelEngine.Farming.FarmingSetupGuide.CreateAll();
+            // Nuclear Control Rod Assembly (canonical fuel/waste items already live under Survival/NuclearItems/).
             VoxelEngine.Nuclear.NuclearSetupGuide.CreateAll();
+            VoxelEngine.EditorTools.ProgressionOverhaul18Setup.RunSilent();
 
             // ────────────────────────────────────────────────────────────
             // Save everything.

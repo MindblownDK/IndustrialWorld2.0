@@ -186,13 +186,16 @@ namespace VoxelEngine.Crafting
                 if (recipe.inputs == null || recipe.inputs.Length == 0) continue;
                 var sciPack = recipe.outputItem as ScienceItem;
                 bool science = sciPack != null;
+                bool baselineScience = sciPack != null && sciPack.EffectiveTier <= 1;
                 if (science && scienceCap.HasValue)
                 {
                     if ((int)ScienceStation(sciPack) > (int)scienceCap.Value) continue;
                 }
                 else if (!stationFilter(recipe)) continue;
 
-                if (!science && !ignoreResearchLock)
+                // Only Pack I is baseline-craftable from minute zero; Packs II–VI are
+                // gated by their dedicated Science Pack research nodes.
+                if (!baselineScience && !ignoreResearchLock)
                 {
                     if (researchManager != null)
                     {
@@ -206,7 +209,7 @@ namespace VoxelEngine.Crafting
 
                 if (science)
                 {
-                    int tier = ((ScienceItem)recipe.outputItem).tier;
+                    int tier = sciPack.EffectiveTier;
                     if (!bestScience.TryGetValue(tier, out var current) || ScienceRecipeScore(recipe) > ScienceRecipeScore(current))
                         bestScience[tier] = recipe;
                     continue;
@@ -221,8 +224,8 @@ namespace VoxelEngine.Crafting
 
         private static StationTier ScienceStation(ScienceItem pack)
         {
-            if (pack == null || pack.tier <= 1) return StationTier.None;
-            if (pack.tier == 2) return StationTier.CraftingBench;
+            if (pack == null || pack.EffectiveTier <= 1) return StationTier.None;
+            if (pack.EffectiveTier == 2) return StationTier.CraftingBench;
             return StationTier.Assembler;
         }
 

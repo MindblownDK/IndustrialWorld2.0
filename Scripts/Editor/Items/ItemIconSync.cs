@@ -36,7 +36,14 @@ namespace VoxelEngine.EditorTools
             "external_storage",
             "blank_pattern",
             "crafting_card",
-            "welder_tool"
+            "welder_tool",
+            "liquid_canister",
+            "item_sciencet1",
+            "item_sciencet2",
+            "item_sciencet3",
+            "item_sciencet4",
+            "item_sciencet5",
+            "item_sciencet6"
         };
 
         /// <summary>Runs once per editor session after the import pipeline settles.
@@ -182,6 +189,7 @@ namespace VoxelEngine.EditorTools
             string[] candidates =
             {
                 itemId,
+                itemId + "_icon",
                 itemId.Replace("item_", ""),
                 itemId.Replace("gitem_", "")
             };

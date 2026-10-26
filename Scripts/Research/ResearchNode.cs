@@ -32,13 +32,11 @@ namespace VoxelEngine.Research
     /// </summary>
     public enum PlayerUpgradeKind
     {
-        None,
-        BonusMaxHealth,        // +N max HP per rank
-        BonusInventorySlots,   // +N backpack slots per rank
-        BonusDamage,           // +N flat damage per rank
-        BonusMaxStamina,       // +N max stamina per rank
-        BonusSprintMultiplier, // +N to sprint multiplier per rank (capped to 5x)
-        UnlockFlight           // single-rank toggle: enables fly mode permanently
+        None = 0,
+        BonusMaxHealth = 1,        // +N max HP per rank
+        BonusCarryWeightKg = 2,    // +N kg max player carry capacity per rank
+        BonusDamage = 3,           // +N flat damage per rank
+        BonusSprintMultiplier = 5  // +N to sprint multiplier per rank (capped to 5x)
     }
 
     [CreateAssetMenu(menuName = "Voxel Engine/Research/Node", fileName = "Research_New")]

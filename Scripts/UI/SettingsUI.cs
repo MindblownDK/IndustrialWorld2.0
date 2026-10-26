@@ -778,7 +778,7 @@ namespace VoxelEngine.UI
                 row.style.backgroundColor = new StyleColor(T.BgCard);
                 T.Radius(row, 5f);
 
-                var lbl = new Label(Prettify(a.ToString()));
+                var lbl = new Label(a == InputAction.ToggleFly ? "Toggle Jetpack" : Prettify(a.ToString()));
                 lbl.style.color    = new StyleColor(T.TextSecondary);
                 lbl.style.fontSize = 12;
                 lbl.style.flexGrow = 1;

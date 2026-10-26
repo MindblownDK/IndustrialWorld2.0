@@ -505,7 +505,7 @@ namespace VoxelEngine.Research
         /// <summary>
         /// Dev convenience driven by Tools ▸ Debug (Spawner): takes every node
         /// straight to its maxRanks cap, so the repeatable upgrade nodes (HP,
-        /// damage, stamina, sprint, inventory) read as fully stacked. Implies
+        /// damage, sprint, carry capacity) read as fully stacked. Implies
         /// UnlockAll() for every node.
         /// </summary>
         public int MaxAllRanks()

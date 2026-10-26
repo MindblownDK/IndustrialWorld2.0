@@ -1,9 +1,40 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `17.52.2-dev`
+**Current Version:** `18.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.0.0-dev] Six-Spectrum Science, Grounded Carry Capacity, and Full Progression Consolidation
+
+**Type:** MAJOR - clean-break progression overhaul requiring a fresh save. Expands Science Packs from three tiers to six spectrum-coded tiers with dedicated research gates, removes non-jetpack flight and all stamina remnants, replaces inventory-slot upgrades with grounded carry-weight upgrades, retires the legacy Water Bucket and Fire Igniter tools, fixes Crafting Bench bootstrap softlocks, registers all orphaned research nodes, wires every unclaimed recipe, and consolidates duplicate item and recipe assets.
+
+**GitHub title:** `[18.0.0-dev] Overhaul 6-pack research progression, remove free flight and stamina, replace slot upgrades with carry capacity, and consolidate duplicate assets`
+
+#### Added
+
+- **Six-tier Science Pack spectrum (`ScienceItem`, `ResearchLab`, `ResearchUI`, `ProgressionOverhaul18Setup`).** Science Packs now span six color-coded tiers across item icons, `iconTint`, lab bars, and node cost pills: Pack I (Red), Pack II (Green), Pack III (Blue), Pack IV (Purple), Pack V (Amber/Gold), and Pack VI (Cyan/White). Custom illustrated 512x512 RGBA sprites and Unity Sprite `.meta` files are included for `item_sciencet1` through `item_sciencet6`.
+- **Dedicated Science Pack II-VI research gates.** Pack I remains craftable in hand from the start (`1 Wood Log + 1 Stone`). Packs II through VI are locked behind dedicated General-branch nodes (`res_science_pack_2` through `res_science_pack_6`) with a strict DAG bootstrap guard ensuring no direct or transitive prerequisite of Pack `K` ever costs a pack `>= K`.
+- **Missing progression nodes authored and wired.** Added `res_storage_crafting` (Tier 4, activating the existing runtime `IsUnlocked("res_storage_crafting")` gate for Crafting/Pattern Terminals, Blank Patterns, and Crafting Cards), `res_build_from_network` (Tier 5, activating the existing runtime `IsUnlocked("res_build_from_network")` gate for the Wireless Handheld Terminal), `res_railways` (Tier 3), and `res_rail_signalling` (Tier 4).
+- **Idempotent Setup Wizard progression overhaul (`ProgressionOverhaul18Setup`).** Added `"Apply 18.0.0-dev progression, 6-science-pack & asset consolidation overhaul"` under both `Core & Project Bootstrap` and `Maintenance & Repair` in `VoxelEngineSetupWindow` (plus `Tools -> Voxel Engine -> Apply 18.0.0 Progression & Research Overhaul`).
+
+#### Changed
+
+- **Exoskeletal Load Harness replaces backpack-slot upgrades (`PlayerUpgradeKind.BonusCarryWeightKg`, `PlayerStats`, `ItemContainer`).** Player inventory size remains fixed at `10` hotbar + `30` backpack slots; `up_inv` now grants `+75 kg` max player carry capacity per rank across `6` ranks (`450 kg` base up to `900 kg`), grounded as pneumatic load-transfer struts and servo-braced hip frames routing pack mass through the player's boots.
+- **Flight is strictly jetpack-driven (`PlayerController`, `GameSettings`, `SettingsUI`).** Removed `PlayerUpgradeKind.UnlockFlight`, `PlayerStats.HasFlightUnlocked`, `up_flight`, persisted `K_FLY_MODE` preferences, `PlayerControllerEditor`, and `SimpleFlyController`. `InputAction.ToggleFly` now reads `"Toggle Jetpack"` in Settings and engages flight only while wearing a valid, fueled jetpack.
+- **Research Lab and UI expanded for six packs.** `ResearchLab.INPUT_SLOTS` increases from `3` to `6`. `ResearchUI` renders all six pack counters in the lab bar with wrap-safe spacing and luminance-aware dark text contrast on bright Amber (`V`) and Cyan/White (`VI`) Roman badges.
+- **Maritime and Advanced Electronics dependency alignment.** Shifted `res_maritime_*` nodes from disconnected Tier 1-5 placements to Tiers 4-8 rooted under `res_shipbuilding`, and added `res_plastics` as a prerequisite of `res_adv_electronics`.
+
+#### Fixed
+
+- **Early-game Assembler chicken-and-egg crafting softlock and Iron tool station bug.** `Recipe_IronPlate`, `Recipe_CopperPlate`, `Recipe_SteelPlate`, `Recipe_IronGear`, `Recipe_Circuit`, `Recipe_PickIron`, `Recipe_AxeIron`, `Recipe_IronSword`, `Recipe_PickSteel`, `Recipe_PortableBattery`, and `Recipe_ProspectingScanner` now craft at `StationTier.CraftingBench` instead of `StationTier.Assembler`, allowing players to forge Iron tools upon unlocking Smelting and craft the components needed for their first Assembler.
+- **33 unregistered research nodes, 49 unclaimed locked recipes, null science pack references, and zero-cost nodes.** Registered all valid orphaned `ResearchNode` assets (`orbital_*`, `interplanetary_logistics`, `relic_*`, `res_mil_*`, petrochemical, pollution, ore-washing, biofuel, road, shuttle, and upgrade nodes) into `ResearchTree.asset`, wired every unclaimed recipe (`Recipe_LiquidCanister`, grid utilities, season monitors, satellite sensors, maritime pumps/consoles/turbos, control rods, gas/item pipes, storage CPUs/PSUs/RAM/drawers, deep-core tools, farming cooking recipes), enforced `unlockedByDefault = false` on research-claimed recipes, and rebalanced Tiers 1-8 across Packs I-VI.
+- **Non-destructive Farming and Nuclear Setup generators.** Updated `FarmingSetupGuide`, `NuclearSetupGuide`, and `VoxelEngineSetupWindow` Step 11 so re-running Setup preserves existing asset GUIDs and never recreates duplicate `Survival/Items/{Food_*,Seed_*}` or `Nuclear/Items/*` twins.
+
+#### Removed
+
+- **Complete stamina removal.** Removed `PlayerUpgradeKind.BonusMaxStamina`, `up_stam`, all `PlayerStats` stamina fields/hooks, and `FoodItem.staminaRestore`.
+- **Water Bucket, Fire Igniter, and duplicate item/recipe twins.** Deleted `FireIgniter.cs`, removed `FireIgniter` interaction/setup code, removed `water_bucket.png`, consolidated `Tool_WaterBucket` / `Recipe_WaterBucket` / `Fluids/Recipes/Recipe_LiquidCanister` into canonical `Items/Tool_LiquidCanister.asset` (`liquid_canister`) + `Recipes/Recipe_LiquidCanister.asset`, and repointed + retired all duplicate item, crop, and recipe twins (`Item_Cobalt`, `Item_Sand`, `Item_Biomass`, Nuclear items, Farming foods/seeds/crops, Industrial/Fluid/Research/Grid duplicate recipes, and broken duplicate `res_adv_automation`).
 
 ### [17.52.2-dev] Reachable, Freezable Grid Patterns
 

@@ -11,7 +11,7 @@
 //     body's speed ALONG such a surface while it sinks slowly. All three read the same
 //     steep-surface rule (the complement of walkable ground) as every other probe in this
 //     file, and all three are off while flying, swimming or walking a hull.
-//   • Optional FLY mode (toggleable via GameSettings.FlyMode or the ToggleFly key).
+//   • Jetpack 6DOF flight (toggleable via the ToggleFly / Jetpack key while wearing a fueled jetpack).
 //
 // Uses CharacterController for collision so it works on the voxel terrain meshes.
 
@@ -693,9 +693,7 @@ namespace VoxelEngine.Player
         private bool HasFlightPermission()
         {
             var equipment = GetComponent<PlayerEquipment>();
-            return PlayerStats.Instance == null
-                || PlayerStats.Instance.HasFlightUnlocked
-                || (equipment != null && equipment.HasUsableJetpack);
+            return equipment != null && equipment.HasUsableJetpack;
         }
 
         private void UpdateFlyToggle()
@@ -705,8 +703,7 @@ namespace VoxelEngine.Player
 
             if (GameSettings.WasPressed(InputAction.ToggleFly))
             {
-                // Only allow toggling fly mode if research has unlocked it (OR if the user
-                // is in dev/editor and just wants to enable it via Settings).
+                // Flight requires an equipped, fueled jetpack suited to the local atmosphere.
                 var equipment = GetComponent<PlayerEquipment>();
                 bool equippedNow = equipment != null && equipment.TryQuickEquipActiveJetpack();
                 bool allowed = HasFlightPermission();
@@ -815,7 +812,7 @@ namespace VoxelEngine.Player
                 ? Mathf.Min(5f, playerStats.SprintMultiplier
                     + Mathf.Max(0f, sprintMultiplier - playerStats.baseSprintMultiplier))
                 : sprintMultiplier;
-            // Stamina removed — sprint is always available when held.
+            // Sprint is available whenever held.
             bool canSprint = sprintHeld;
             _sprinting = canSprint && wish.y > 0.1f && !_sliding;
             if (canSprint && wish.y > 0.1f)
@@ -1872,32 +1869,22 @@ namespace VoxelEngine.Player
             if (!uiLocked && GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
             var equipment = GetComponent<PlayerEquipment>();
-            bool researchFlight = PlayerStats.Instance != null && PlayerStats.Instance.HasFlightUnlocked;
 
-            // Fuel/charge accounting: drain while flying; cut flight when no legal,
-            // fueled pack remains (no atmosphere / dry tanks) and no research-only
-            // flight permission remains.
+            // Fuel/charge accounting: drain while flying; cut flight immediately when no
+            // valid, fueled jetpack remains (no atmosphere / dry tanks / unequipped pack).
             var jets = equipment != null ? equipment.GetJetpackSummary() : PlayerEquipment.JetpackSummary.Empty;
-            // No equipment component at all (dev flight) keeps free boost; with
-            // equipment, boost only engages when the drive pack reports afterburner fuel.
-            bool boosting = (equipment == null || jets.canBoost)
-                            && !uiLocked && GameSettings.IsHeld(InputAction.Sprint);
-            if (equipment != null)
+            if (equipment == null || !jets.canFly)
             {
-                if (!researchFlight && !jets.canFly)
-                {
-                    CutJetpackFlight(jets.offlineReason);
-                    return;
-                }
+                CutJetpackFlight(jets.offlineReason);
+                return;
+            }
 
-                bool fueled = equipment.TryConsumeFlightFuel(dt, boosting);
-                if (!fueled && !researchFlight)
-                {
-                    CutJetpackFlight("Out of fuel — fill Portable H₂ Tanks / Batteries / Cells");
-                    return;
-                }
-                // Fuel ran out. Boost stops. Flight itself already ended above unless a grant remains.
-                if (!fueled) boosting = false;
+            bool boosting = jets.canBoost && !uiLocked && GameSettings.IsHeld(InputAction.Sprint);
+            bool fueled = equipment.TryConsumeFlightFuel(dt, boosting);
+            if (!fueled)
+            {
+                CutJetpackFlight("Out of fuel — fill Portable H₂ Tanks / Batteries / Cells");
+                return;
             }
 
             float packSpeed = jets.speedMul > 0f ? jets.speedMul : 1f;

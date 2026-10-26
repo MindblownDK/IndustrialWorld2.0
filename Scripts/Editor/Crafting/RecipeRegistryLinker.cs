@@ -27,6 +27,9 @@ namespace VoxelEngine.EditorTools
         private static readonly HashSet<string> RetiredRecipeNames = new(StringComparer.OrdinalIgnoreCase)
         {
             "Recipe_EmptyBarrel",
+            "Recipe_WaterBucket",
+            "Recipe_FireIgniter",
+            "Recipe_GThrustLarge",
             "Recipe_Locomotive",
             "Recipe_GItemPipe",
             "Recipe_GGasPipe",
@@ -297,7 +300,7 @@ namespace VoxelEngine.EditorTools
         {
             if (!(recipe.outputItem is ScienceItem science)) return false;
             string canonicalPath =
-                $"{AssetRoot}/Recipes/Recipe_ScienceT{science.tier}.asset";
+                $"{AssetRoot}/Recipes/Recipe_ScienceT{science.EffectiveTier}.asset";
             return !string.Equals(path.Replace('\\', '/'), canonicalPath,
                 StringComparison.OrdinalIgnoreCase);
         }

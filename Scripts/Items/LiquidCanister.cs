@@ -1,9 +1,9 @@
 // Assets/Scripts/VoxelEngine/Items/LiquidCanister.cs
 //
 // ╔══════════════════════════════════════════════════════════════════════╗
-// ║             LIQUID CANISTER (9.16.0) — replaces the Water Bucket      ║
+// ║                      LIQUID CANISTER                                 ║
 // ║                                                                      ║
-// ║  A portable 10 L canister for the 7 liquids. ItemStack.durability    ║
+// ║  A portable 10 L canister for all world liquids. ItemStack.durability║
 // ║  stores millilitres (0 = empty, 10000 = full); payload holds the     ║
 // ║  carried LiquidType (null = empty). Rules:                           ║
 // ║                                                                      ║
@@ -15,16 +15,12 @@
 // ║   • RMB on an infinity pump jack → fills 500 ml of crude oil from    ║
 // ║     the jack pump's infinite reservoir node                          ║
 // ║   • LMB on the world      → pours 500 ml onto the hit cell           ║
-// ║                                                                      ║
-// ║  Save-stable: the itemId stays "water_bucket" so existing worlds     ║
-// ║  resolve the same asset; legacy full buckets (durability 1) are      ║
-// ║  upgraded to full canisters on first use.                            ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 using UnityEngine;
 
 namespace VoxelEngine.Items
 {
-    [CreateAssetMenu(menuName = "Voxel Engine/Items/Liquid Canister", fileName = "Canister_New")]
+    [CreateAssetMenu(menuName = "Voxel Engine/Items/Liquid Canister", fileName = "Tool_LiquidCanister")]
     public class LiquidCanister : ToolItem
     {
         /// <summary>Capacity in millilitres (10 L).</summary>
@@ -40,34 +36,21 @@ namespace VoxelEngine.Items
 
         public LiquidCanister() { toolType = ToolType.Other; maxDurability = CapacityMl; maxStack = 1; }
 
-        /// <summary>Legacy migration: a pre-9.16.0 "full bucket" (durability 1) reads as a
-        /// full canister after the first touch. Buckets from before the liquid payload
-        /// existed carried water only, so a missing payload defaults to water.</summary>
-        public static void NormalizeLegacy(ItemStack stack)
-        {
-            if (stack == null || stack.durability <= 0 || stack.durability > 1) return;
-            if (!(stack.payload is LiquidType)) stack.payload = LiquidType.Water;
-            stack.durability = CapacityMl;
-        }
-
         /// <summary>True when the canister carries nothing.</summary>
         public static bool IsEmpty(ItemStack stack)
         {
-            NormalizeLegacy(stack);
             return stack == null || stack.durability <= 0 || !(stack.payload is LiquidType);
         }
 
         /// <summary>True when the canister is completely full.</summary>
         public static bool IsFull(ItemStack stack)
         {
-            NormalizeLegacy(stack);
             return stack != null && stack.durability >= CapacityMl && stack.payload is LiquidType;
         }
 
         /// <summary>The carried liquid, or null when empty.</summary>
         public static LiquidType? CarriedLiquid(ItemStack stack)
         {
-            NormalizeLegacy(stack);
             if (stack == null || stack.durability <= 0 || !(stack.payload is LiquidType t)) return null;
             return t;
         }
@@ -79,7 +62,6 @@ namespace VoxelEngine.Items
         /// </summary>
         public static bool AddMl(ItemStack stack, LiquidType liquid, int millilitres)
         {
-            NormalizeLegacy(stack);
             if (stack == null || millilitres <= 0) return false;
             var carried = CarriedLiquid(stack);
             if (carried != null && carried.Value != liquid) return false;
@@ -96,7 +78,6 @@ namespace VoxelEngine.Items
         /// <summary>Remove liquid from the canister. At zero the canister empties (payload cleared).</summary>
         public static bool RemoveMl(ItemStack stack, int millilitres)
         {
-            NormalizeLegacy(stack);
             if (stack == null || millilitres <= 0 || stack.durability <= 0 || !(stack.payload is LiquidType)) return false;
             stack.durability = Mathf.Max(0, stack.durability - millilitres);
             if (stack.durability <= 0)

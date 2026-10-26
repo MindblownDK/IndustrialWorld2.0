@@ -76,10 +76,10 @@ namespace VoxelEngine.EditorTools
             return null;
         }
 
-        /// <summary>Science pack of a tier (1..3). Null when the item is missing.</summary>
+        /// <summary>Science pack of a tier (1..6). Null when the item is missing.</summary>
         public static ScienceItem FindSciencePack(int tier)
         {
-            int clamped = Mathf.Clamp(tier, 1, 3);
+            int clamped = Mathf.Clamp(tier, 1, ScienceItem.MaxTier);
             return AssetDatabase.LoadAssetAtPath<ScienceItem>(
                 $"Assets/VoxelEngineAssets/Items/Item_ScienceT{clamped}.asset");
         }

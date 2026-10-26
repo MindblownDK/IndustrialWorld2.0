@@ -1,7 +1,6 @@
 // Assets/Scripts/VoxelEngine/Player/PlayerStats.cs
 //
-// Central player stats: HP, hunger, oxygen, damage bonus, sprint multiplier, inventory size.
-// Stamina removed from gameplay (6.74) — fields kept inert for save compatibility.
+// Central player stats: HP, hunger, oxygen, damage bonus, sprint multiplier, carry capacity.
 // Listens to ResearchManager to recompute when player upgrades unlock.
 
 using System;
@@ -63,7 +62,6 @@ namespace VoxelEngine.Player
         // not escalate it the way heated metal escalates fire damage.
         private float _causticTimer;
         private float _causticDps;
-        public float baseMaxStamina     = 100f;
         public float baseDamage         = 5f;     // bare-hand contribution
         public float baseSprintMultiplier = 1.6f;
         public float baseMaxHunger      = 100f;
@@ -72,20 +70,13 @@ namespace VoxelEngine.Player
         private const float SuitTankAmbientRefillLps = 6f;
         public int   baseBackpackSlots  = 30;     // matches Inventory.BACKPACK_SIZE
 
-        [Header("Stamina")]
-        public float staminaSprintDrain = 18f;    // per second while sprinting
-        public float staminaRegen       = 12f;    // per second otherwise
-        public float staminaJumpCost    = 12f;
-
-        public float MaxHealth    { get; private set; }
-        public float Health       { get; private set; }
-        public float MaxStamina   { get; private set; }
-        public float Stamina      { get; private set; }
-        public float DamageBonus  { get; private set; }
-        public float SprintMultiplier { get; private set; }
-        public int   BackpackSlots    { get; private set; }
-        public bool  HasFlightUnlocked{ get; private set; }
-        public bool  IsDead      { get; private set; }
+        public float MaxHealth           { get; private set; }
+        public float Health              { get; private set; }
+        public float DamageBonus         { get; private set; }
+        public float SprintMultiplier    { get; private set; }
+        public float BonusCarryWeightKg  { get; private set; }
+        public int   BackpackSlots       { get; private set; }
+        public bool  IsDead              { get; private set; }
         public float MaxHunger   { get; private set; }
         public float Hunger      { get; private set; }
         public float MaxOxygen   { get; private set; }
@@ -105,7 +96,6 @@ namespace VoxelEngine.Player
             Instance = this;
             Recalculate();
             Health  = MaxHealth;
-            Stamina = MaxStamina;
             MaxHunger = baseMaxHunger;
             Hunger = MaxHunger;
             MaxOxygen = baseMaxOxygen;
@@ -125,9 +115,6 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
-            // Out-of-combat stamina regen handled by player controller via TickStamina(...) hook.
-            // (Left here so we never have a frame where Stamina goes negative.)
-            if (Stamina < 0f) Stamina = 0f;
             // Hunger drains slowly over time.
             Hunger -= Time.deltaTime * 0.08f; // ~20 min to go from 100 to 0
             if (Hunger < 0f) { Hunger = 0f; TakeDamage(Time.deltaTime * 2f); }
@@ -227,7 +214,6 @@ namespace VoxelEngine.Player
             ApplyEnvironmentalHazards(equipment);
 
             if (Health > MaxHealth)   Health = MaxHealth;
-            if (Stamina > MaxStamina) Stamina = MaxStamina;
             if (Hunger > MaxHunger)   Hunger = MaxHunger;
             if (Oxygen > MaxOxygen)   Oxygen = MaxOxygen;
         }
@@ -270,12 +256,10 @@ namespace VoxelEngine.Player
         // ============================================================
         public void Recalculate()
         {
-            float dmg = baseDamage;
-            int   inv = baseBackpackSlots;
-            float hp  = baseMaxHealth;
-            float st  = baseMaxStamina;
-            float spr = baseSprintMultiplier;
-            bool flight = false;
+            float dmg      = baseDamage;
+            float carryKg  = 0f;
+            float hp       = baseMaxHealth;
+            float spr      = baseSprintMultiplier;
 
             var rm = ResearchManager.Instance;
             if (rm != null && rm.tree != null)
@@ -287,29 +271,28 @@ namespace VoxelEngine.Player
                     if (rank <= 0) continue;
                     switch (n.upgradeKind)
                     {
-                        case PlayerUpgradeKind.BonusMaxHealth:        hp += n.upgradePerRankAmount * rank; break;
-                        case PlayerUpgradeKind.BonusInventorySlots:   inv += Mathf.RoundToInt(n.upgradePerRankAmount) * rank; break;
-                        case PlayerUpgradeKind.BonusDamage:           dmg += n.upgradePerRankAmount * rank; break;
-                        case PlayerUpgradeKind.BonusMaxStamina:       st += n.upgradePerRankAmount * rank; break;
-                        case PlayerUpgradeKind.BonusSprintMultiplier: spr += n.upgradePerRankAmount * rank; break;
-                        case PlayerUpgradeKind.UnlockFlight:          break;
+                        case PlayerUpgradeKind.BonusMaxHealth:        hp      += n.upgradePerRankAmount * rank; break;
+                        case PlayerUpgradeKind.BonusCarryWeightKg:    carryKg += n.upgradePerRankAmount * rank; break;
+                        case PlayerUpgradeKind.BonusDamage:           dmg     += n.upgradePerRankAmount * rank; break;
+                        case PlayerUpgradeKind.BonusSprintMultiplier: spr     += n.upgradePerRankAmount * rank; break;
                     }
                 }
             }
 
-            MaxHealth        = hp;
-            MaxHunger        = baseMaxHunger;
-            MaxOxygen        = baseMaxOxygen;
-            MaxStamina       = st;
-            DamageBonus      = dmg;
-            SprintMultiplier = Mathf.Min(5f, spr);  // hard cap as requested
-            BackpackSlots    = inv;
-            HasFlightUnlocked = flight;
+            MaxHealth          = hp;
+            MaxHunger          = baseMaxHunger;
+            MaxOxygen          = baseMaxOxygen;
+            DamageBonus        = dmg;
+            SprintMultiplier   = Mathf.Min(5f, spr);
+            BonusCarryWeightKg = Mathf.Max(0f, carryKg);
+            BackpackSlots      = baseBackpackSlots;
 
-            // Auto-grow the player's inventory to fit new slots.
             var inventory = GetComponent<Inventory>();
             if (inventory != null && inventory.container != null)
+            {
                 inventory.container.Resize(Inventory.HOTBAR_SIZE + BackpackSlots);
+                inventory.container.RaiseChanged();
+            }
 
             OnStatsChanged?.Invoke();
         }
@@ -492,7 +475,6 @@ namespace VoxelEngine.Player
             Debug.Log("[Player] Died — awaiting respawn selection.");
             IsDead = true;
             Health = 0f;
-            Stamina = 0f;
             VoxelEngine.Settings.GameSettings.FlyMode = false;
             // 14.36.0: everything carried spills into a loot bag at the death
             // position - slot-exact, owner-beaconed, lootable by anyone who
@@ -511,7 +493,6 @@ namespace VoxelEngine.Player
         {
             IsDead = false;
             Health  = MaxHealth;
-            Stamina = MaxStamina;
             MaxHunger = baseMaxHunger;
             Hunger = MaxHunger;
             MaxOxygen = baseMaxOxygen;
@@ -526,7 +507,6 @@ namespace VoxelEngine.Player
         {
             IsDead = false;
             Health  = MaxHealth;
-            Stamina = MaxStamina;
             MaxHunger = baseMaxHunger;
             Hunger = MaxHunger;
             MaxOxygen = baseMaxOxygen;
@@ -545,7 +525,6 @@ namespace VoxelEngine.Player
         {
             IsDead = false;
             Health  = MaxHealth;
-            Stamina = MaxStamina;
             MaxHunger = baseMaxHunger;
             Hunger = MaxHunger;
             MaxOxygen = baseMaxOxygen;
@@ -555,12 +534,5 @@ namespace VoxelEngine.Player
             if (spawner != null) spawner.RespawnAtCosmic(xKm, yKm, zKm, ordinaryBedSpawn);
             OnStatsChanged?.Invoke();
         }
-
-        // ============================================================
-        //                       Stamina hooks
-        // ============================================================
-        public bool TrySpendStamina(float amount) { return true; /* stamina removed */ }
-        public void RegenStamina(float dt) { /* stamina removed */ }
-        public void DrainStamina(float dt) { /* stamina removed */ }
     }
 }

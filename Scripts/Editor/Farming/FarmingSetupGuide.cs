@@ -164,7 +164,10 @@ namespace VoxelEngine.Farming
         private static FoodItem CreateFood(string fileName, string displayName, float hunger, float health,
             Color tint, string folder)
         {
-            var food = ScriptableObject.CreateInstance<FoodItem>();
+            string path = $"{folder}/{fileName}.asset";
+            var food = AssetDatabase.LoadAssetAtPath<FoodItem>(path);
+            if (food != null) return food;
+            food = ScriptableObject.CreateInstance<FoodItem>();
             food.itemId = fileName.ToLower();
             food.displayName = displayName;
             food.iconTint = tint;
@@ -172,19 +175,22 @@ namespace VoxelEngine.Farming
             food.maxStack = 64;
             food.hungerRestore = hunger;
             food.healthRestore = health;
-            AssetDatabase.CreateAsset(food, $"{folder}/{fileName}.asset");
+            AssetDatabase.CreateAsset(food, path);
             return food;
         }
 
         private static SeedItem CreateSeed(string fileName, string displayName, Color tint, string folder)
         {
-            var seed = ScriptableObject.CreateInstance<SeedItem>();
+            string path = $"{folder}/{fileName}.asset";
+            var seed = AssetDatabase.LoadAssetAtPath<SeedItem>(path);
+            if (seed != null) return seed;
+            seed = ScriptableObject.CreateInstance<SeedItem>();
             seed.itemId = fileName.ToLower();
             seed.displayName = displayName;
             seed.iconTint = tint;
             seed.category = "Farming";
             seed.maxStack = 64;
-            AssetDatabase.CreateAsset(seed, $"{folder}/{fileName}.asset");
+            AssetDatabase.CreateAsset(seed, path);
             return seed;
         }
 
@@ -192,7 +198,10 @@ namespace VoxelEngine.Farming
             ItemDefinition harvestItem, int harvestAmt, ItemDefinition seedItem, int seedReturn, float foodValue,
             Color[] stageColors, string folder)
         {
-            var crop = ScriptableObject.CreateInstance<CropDefinition>();
+            string path = $"{folder}/{fileName}.asset";
+            var crop = AssetDatabase.LoadAssetAtPath<CropDefinition>(path);
+            if (crop != null) return crop;
+            crop = ScriptableObject.CreateInstance<CropDefinition>();
             crop.cropName = cropName;
             crop.growthTime = growthTime;
             crop.growthStages = 4;
@@ -206,7 +215,7 @@ namespace VoxelEngine.Farming
             crop.foodValue = foodValue;
             crop.stageColors = stageColors;
             crop.stageScales = new[] { 0.15f, 0.35f, 0.65f, 1.0f };
-            AssetDatabase.CreateAsset(crop, $"{folder}/{fileName}.asset");
+            AssetDatabase.CreateAsset(crop, path);
             return crop;
         }
 
@@ -215,17 +224,38 @@ namespace VoxelEngine.Farming
             (ItemDefinition item, int count)[] inputs,
             StationTier station, string folder)
         {
-            var recipe = ScriptableObject.CreateInstance<CookingRecipe>();
-            recipe.displayName = displayName;
-            recipe.outputItem = output;
-            recipe.outputCount = outputCount;
-            recipe.requiredStation = station;
-            recipe.unlockedByDefault = true;
-            recipe.inputs = new RecipeIngredient[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-                recipe.inputs[i] = new RecipeIngredient { item = inputs[i].item, count = inputs[i].count };
-            recipe.craftSeconds = CraftTimeDefaults.Suggest(station, recipe.inputs);
-            AssetDatabase.CreateAsset(recipe, $"{folder}/{fileName}.asset");
+            string path = $"{folder}/{fileName}.asset";
+            var recipe = AssetDatabase.LoadAssetAtPath<CookingRecipe>(path);
+            bool created = recipe == null;
+            if (created)
+            {
+                recipe = ScriptableObject.CreateInstance<CookingRecipe>();
+                AssetDatabase.CreateAsset(recipe, path);
+            }
+            if (created || string.IsNullOrWhiteSpace(recipe.displayName))
+                recipe.displayName = displayName;
+            if (created || recipe.outputItem == null)
+                recipe.outputItem = output;
+            if (created || recipe.outputCount <= 0)
+                recipe.outputCount = outputCount;
+            if (created)
+                recipe.requiredStation = station;
+            recipe.unlockedByDefault = false;
+            if (created || recipe.inputs == null || recipe.inputs.Length == 0)
+            {
+                recipe.inputs = new RecipeIngredient[inputs.Length];
+                for (int i = 0; i < inputs.Length; i++)
+                    recipe.inputs[i] = new RecipeIngredient { item = inputs[i].item, count = inputs[i].count };
+                recipe.craftSeconds = CraftTimeDefaults.Suggest(station, recipe.inputs);
+            }
+            EditorUtility.SetDirty(recipe);
+
+            var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>("Assets/VoxelEngineAssets/RecipeRegistry.asset");
+            if (registry != null && registry.recipes != null && !registry.recipes.Contains(recipe))
+            {
+                registry.recipes.Add(recipe);
+                EditorUtility.SetDirty(registry);
+            }
         }
     }
 }

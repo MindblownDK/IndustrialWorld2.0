@@ -253,13 +253,6 @@ namespace VoxelEngine.EditorTools
             Repair("Maritime/Recipes/Recipe_MEngineSmall.asset", PathItem("Maritime/Items/MItem_EngineSmall.asset") ?? Item("Crude Engine"), 1, (iron, 6), (ironGear, 4), (copperWire, 4));
             Repair("Maritime/Recipes/Recipe_MHelm.asset", PathItem("Maritime/Items/MItem_Helm.asset") ?? Item("Helm"), 1, (plank, 6), (iron, 2), (ironGear, 2));
 
-            Repair("GridSystem/Recipes/Recipe_GThrustLarge.asset",
-                PathItem("GridSystem/Items/GItem_AtmoThruster_Large.asset") ?? Item("Large Atmospheric Thruster") ?? Item("Large Thruster"),
-                1,
-                (steelPlate ?? steel, 12),
-                (copperWire ?? copper, 16),
-                (circuit, 2));
-
             var advancedCircuit = Item("Item_AdvCircuit") ?? Item("Item_AdvancedCircuit") ?? Item("Advanced Circuit");
             Repair("Factory/Recipes/Recipe_AssemblerMk1.asset",
                 PathItem("Factory/Items/Block_AssemblerMk1.asset") ?? Item("Assembler Mk.1"), 1,

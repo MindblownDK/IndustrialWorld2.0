@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `17.52.2-dev`
-**Roadmap Version:** `17.52.2-dev`
-**Date:** 2026-10-25
+**Current Version:** `18.0.0-dev`
+**Roadmap Version:** `18.0.0-dev`
+**Date:** 2026-10-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.0.0-dev - Six-Spectrum Science, Carry Capacity & Progression Consolidation
+- Science Packs span six color-coded tiers (I Red through VI Cyan/White) with 6-slot Research Labs, Pack I in hand, and Packs II-VI gated by dedicated nodes
+- Non-jetpack flight, stamina, Water Bucket, and Fire Igniter are removed; `up_inv` now grants `+75 kg` carry capacity per rank via Exoskeletal Load Harness
+- `ProgressionOverhaul18Setup` registers all valid research nodes, fixes Crafting Bench bootstrap stations, wires unclaimed recipes, and consolidates duplicate item/recipe twins
+
 ### 17.52.2-dev - Reachable, Freezable Grid Patterns
 - Pattern-mode acquisition searches matching occupied cells within three native cells; active drags stay on their grid through non-grid hits and empty aim
 - Empty-ray aim reaches the configured build distance or pattern scale, supporting longer runs and taller walls
@@ -49,17 +54,13 @@
 - Hammer plans use authored module cells, validate each cell's overlap and support, and cap the preview by carried plus authorized storage-network materials
 - The cost card shows plan size, plane and total material cost; release rebuilds and commits the clear cells from that refreshed preview
 
-### 17.50.0-dev - A Deck Is Flat, a Wall Can Turn
-- Static patterns state their planes outright: DECK is side + depth in the gravity plane, WALL is one horizontal run + up; face detection no longer decides either
-- A wall's run turns from side to depth mid-gesture as the player moves around the anchor, and a deck is measured on its flat plane so it grows forward and back past surface edges
-- The assist card draws the held block's own proportions with a front arrow and marked top, states rotation in degrees and the armed plan's size and plane; Ctrl quantises onto the global gravity frame on open ground
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
+- **18.0.0-dev progression overhaul runtime acceptance (18.0.0-dev):** Unity compilation, Setup overhaul execution, 6-pack lab bar/icons, Crafting Bench bootstrap crafting, Exoskeletal Load Harness carry-weight scaling, jetpack-only flight enforcement, and zero-duplicate asset validation remain pending on a fresh save.
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
 - **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
@@ -85,7 +86,7 @@
 - **Tree, hammer repair, HUD, crafting, and Setup acceptance (17.14.0-dev):** confirm felled trees stay absent after reopening; wheel-centre left/right modes and proportional repair costs; target-label recovery; single-queue/per-recipe crafting and smooth progress; and that Setup leaves CargoLaunchPad unchanged while reporting a targeted player-prefab scan.
 - **17.9 runtime acceptance (17.10.0-dev):** melee reliability, distant-hostile sleep, refresh-rate FPS cap, live settings updates, admin scroll retention, and release-player Infinite Health exclusion still need Unity build/play validation.
 - **Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
-- **Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.
+- ~~**Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.~~ *(18.0.0-dev)*
 - **Water Pump recipe report (17.10.0-dev):** source setup authors separate Water Pump and Marine Water Pump outputs/recipes; neither was removed. Confirm whether the reported repeated UI row persists after Setup before treating it as an accidental duplicate.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.
 - **Pollution history and higher threat tiers** (deferred 17.3.0; slices 14.70.0 / 14.73.0 / 17.2.0 / 17.17.2 / 17.18.0): live bearings, capped packs, approach ambushes, exposed logistics raids, recruitment heat and the deadzoned hostile curve shipped earlier; 17.18.0-dev closed the deferred core - residual-load history is now read from the sidecar's slow climate channel, and organized waves, elite ghouls and a siege brute answer dirty districts on their own cooldowns. Player-facing residual-load readouts shipped in 17.30.0-dev (the district pressure card and the map's `INDUSTRIAL PRESSURE` section; `IndustrialPressureReadout` + `PollutionService.ClimateBurdenAt`). Remaining open: a dedicated siege-creature species with its own art (the brute is the ghoul rig promoted), residual effects on flora/ecology curves, and live-play tuning of tier thresholds.

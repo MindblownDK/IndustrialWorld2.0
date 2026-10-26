@@ -752,10 +752,10 @@ namespace VoxelEngine.Player
 
             if (buildDown)
             {
-                // 0) Liquid Canister RMB (9.16.0 — the bucket's replacement). The canister
-                //    exchanges liquid with the infinity jack pump, the water pump, the marine
-                //    pump and grid liquid tanks, and scoops from liquid pools. Any other
-                //    target falls through to the normal handlers untouched.
+                // 0) Liquid Canister RMB. The canister exchanges liquid with the
+                //    infinity jack pump, the water pump, the marine pump and grid
+                //    liquid tanks, and scoops from liquid pools. Any other target
+                //    falls through to the normal handlers untouched.
                 var stackRmb = inventory.ActiveStack;
                 if (!stackRmb.IsEmpty && stackRmb.item is LiquidCanister)
                 {
@@ -922,30 +922,6 @@ namespace VoxelEngine.Player
                         }
                         // Dry cell: fall through untouched.
                     }
-                }
-
-                // 0b) Fire Igniter RMB (9.16.0 fire system) — sparks a flammable liquid cell.
-                var stackIgn = inventory.ActiveStack;
-                if (!stackIgn.IsEmpty && stackIgn.item is FireIgniter && world != null)
-                {
-                    var posIgn = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
-                    var posIgn2 = world.WorldToVoxel(hit.point);
-                    bool ignited = VoxelEngine.Fire.FireManager.TryIgniteAt(posIgn)
-                                || (posIgn2 != posIgn && VoxelEngine.Fire.FireManager.TryIgniteAt(posIgn2));
-                    if (ignited)
-                    {
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Igniter", "The fuel catches fire!",
-                            null, new Color(1f, 0.55f, 0.15f));
-                        ConsumeDurability(stackIgn);
-                        _nextHit = Time.time + 0.25f;
-                    }
-                    else if (Time.time >= _nextHit)
-                    {
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Igniter", "Nothing flammable there",
-                            null, new Color(1f, 0.6f, 0.2f));
-                        _nextHit = Time.time + 0.3f;
-                    }
-                    return;
                 }
 
                 // 0b2) Code Lock RMB (13.17.0) — fits the lock on a door, gate,
@@ -2531,8 +2507,7 @@ namespace VoxelEngine.Player
 
             var stack = inventory.ActiveStack;
 
-            // Liquid Canister: LMB pours one click (500 ml) into the world (9.16.0 — the
-            // bucket's replacement; scooping happens on RMB).
+            // Liquid Canister: LMB pours one click (500 ml) into the world (scooping happens on RMB).
             if (!stack.IsEmpty && stack.item is LiquidCanister)
             {
                 var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(stack);

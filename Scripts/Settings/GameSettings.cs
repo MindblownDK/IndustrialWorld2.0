@@ -70,7 +70,6 @@ namespace VoxelEngine.Settings
         private const string K_REFRESH      = "ve.refresh";
         private const string K_VIEWDIST     = "ve.viewDistance";
         private const string K_KEY_PREFIX   = "ve.key.";
-        private const string K_FLY_MODE     = "ve.flyMode";
         private const string K_VOICE_MODE   = "ve.voiceMode";
         private const string K_VOICE_ON     = "ve.voiceEnabled";   // pre-v21, migrated
         // pre-v21, migrated
@@ -177,39 +176,18 @@ namespace VoxelEngine.Settings
         // owned a jetpack.
         //
         // The live value is per-process now. PlayerPrefs is read once to seed it, so
-        // the dev convenience of starting in fly mode survives, and it is only written
-        // back when something deliberately saves a preference rather than on every
-        // toggle in the air.
+        // Runtime-only jetpack thrust state (never persisted across sessions; flight requires an active jetpack).
         private static bool _flyMode;
-        private static bool _flyModeSeeded;
 
         public static bool FlyMode
         {
-            get
-            {
-                if (!_flyModeSeeded)
-                {
-                    _flyMode = PlayerPrefs.GetInt(K_FLY_MODE, 0) != 0;
-                    _flyModeSeeded = true;
-                }
-                return _flyMode;
-            }
+            get => _flyMode;
             set
             {
-                _flyModeSeeded = true;
                 if (_flyMode == value) return;
                 _flyMode = value;
                 Notify();
             }
-        }
-
-        /// <summary>Write the current fly mode out as a saved preference. Only the
-        /// settings screen and the editor inspector call this - gameplay must not, or
-        /// the shared-key problem above comes straight back.</summary>
-        public static void PersistFlyModePreference()
-        {
-            PlayerPrefs.SetInt(K_FLY_MODE, FlyMode ? 1 : 0);
-            PlayerPrefs.Save();
         }
         public static bool  ScreenShake      { get => PlayerPrefs.GetInt("ve_screenshake", 1) != 0; set { PlayerPrefs.SetInt("ve_screenshake", value ? 1 : 0); Notify(); } }
         /// <summary>17.20.0-dev: subtle surface wind-line streaks. Ctrl+B toggles in
@@ -620,7 +598,6 @@ namespace VoxelEngine.Settings
             ResolutionHeight = Screen.currentResolution.height;
             RefreshRate      = DEFAULT_REFRESH_RATE;
             FlyMode          = false;
-            PersistFlyModePreference();
             VoiceMode        = VoiceTalkMode.PushToTalk;
             VoiceActivation  = DEFAULT_VOICE_GATE;
             VoiceVolume      = DEFAULT_VOICE_VOL;

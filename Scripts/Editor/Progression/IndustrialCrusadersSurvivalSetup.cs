@@ -463,7 +463,6 @@ namespace VoxelEngine.EditorTools
                 steak.category = "Food";
                 steak.hungerRestore = 35f;
                 steak.healthRestore = 20f;
-                steak.staminaRestore = 0f;
             }
             else
             {

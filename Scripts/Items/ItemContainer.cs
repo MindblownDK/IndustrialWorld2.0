@@ -45,12 +45,16 @@ namespace VoxelEngine.Items
             {
                 if (OverrideMaxWeightKg > 0f) return OverrideMaxWeightKg;
                 var session = VoxelEngine.Menu.WorldSession.Instance;
-                if (session == null) return UsePlayerWeightProfile
-                    ? VoxelEngine.Menu.WorldSession.DefaultPlayerInventoryWeightKg
-                    : VoxelEngine.Menu.WorldSession.DefaultContainerWeightKg;
-                return UsePlayerWeightProfile
-                    ? session.PlayerInventoryWeightLimitKg
-                    : session.ContainerWeightLimitKg;
+                float baseLimit = session == null
+                    ? (UsePlayerWeightProfile
+                        ? VoxelEngine.Menu.WorldSession.DefaultPlayerInventoryWeightKg
+                        : VoxelEngine.Menu.WorldSession.DefaultContainerWeightKg)
+                    : (UsePlayerWeightProfile
+                        ? session.PlayerInventoryWeightLimitKg
+                        : session.ContainerWeightLimitKg);
+                if (UsePlayerWeightProfile && VoxelEngine.Player.PlayerStats.Instance != null)
+                    baseLimit += Mathf.Max(0f, VoxelEngine.Player.PlayerStats.Instance.BonusCarryWeightKg);
+                return baseLimit;
             }
         }
         public float RemainingWeightKg => Mathf.Max(0f, MaxWeightKg - CurrentWeightKg);
