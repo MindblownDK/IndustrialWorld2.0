@@ -17,7 +17,7 @@ MonoBehaviour:
   description: 'A one-metre cobble cell that drapes over the terrain. Laid for feet,
     not wheels: it speeds walking a little and gives vehicles nothing, so it is the
     cheap way to tie a base together.'
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: fcf0416751f98e7b4d27a02cf71b5760, type: 3}
   iconTint: {r: 0.42, g: 0.4, b: 0.37, a: 1}
   maxStack: 200
   massPerUnit: 18
@@ -26,10 +26,13 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 1604654273390126856, guid: fc313011aa1a1bc42aaa771234b01032, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 0
   blockHealth: 100
+  softClearance: 0
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

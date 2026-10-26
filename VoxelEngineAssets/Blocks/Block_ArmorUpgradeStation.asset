@@ -16,16 +16,22 @@ MonoBehaviour:
   displayName: Armor Upgrade Station
   description: An anvil workstation that installs one armor upgrade module at a time.
     Tier 1 takes 30 seconds; higher tiers take longer.
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 186dfe004d98d8e498d2b0f8630cf43e, type: 3}
   iconTint: {r: 0.92, g: 0.52, b: 0.16, a: 1}
   maxStack: 20
   massPerUnit: 10
   category: Stations
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 7023429993592690237, guid: c4ec07e2394b8724b82e07bff4e3a125, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
   blockHealth: 240
+  softClearance: 0
   miningTier: 2
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

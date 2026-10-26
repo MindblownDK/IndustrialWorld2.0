@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Rail Station
   description: A named stop with a cargo hold. Set it to LOAD or UNLOAD and trains
     will trade with it automatically. Must sit within 4 m of track.
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 08990d5ad555d794fb101d2687e8af8d, type: 3}
   iconTint: {r: 0.78, g: 0.68, b: 0.4, a: 1}
   maxStack: 900
   massPerUnit: 1
@@ -25,10 +25,13 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 2543759138447215268, guid: a12db258e3a40894db4f6e8cbf5811e1, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
   blockHealth: 100
+  softClearance: 0
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

@@ -1,9 +1,30 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.0.0-dev`
+**Current Version:** `18.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.1.0-dev] Complete Item Icon Coverage, Automated Wild-Crop Biome Scatter, and Setup Wizard Consolidation
+
+**Type:** MINOR - adds 194 new 512x512 RGBA item icons with Unity Sprite `.meta` files across all missing `ItemIcons/` categories, renames orphaned armor-station icons to match their exact `itemId`s, automates cooking-recipe registration and 3D wild-crop biome scatter setup inside `FarmingSetupGuide`, populates missing item descriptions, and removes the standalone `ProgressionOverhaul18Setup` menu item from `Tools > Voxel Engine` so setup actions live exclusively inside `Voxel Engine Setup`. Save-compatible with `18.0.0-dev`.
+
+**GitHub title:** `[18.1.0-dev] Add all 196 missing item icons, automate wild-crop biome scatter and cooking registry setup, and consolidate Setup Wizard entry points`
+
+#### Added
+
+- **Complete `ItemIcons` sprite coverage (`VoxelEngineAssets/ItemIcons/**`, `ItemIconSync`).** Added 194 custom 512x512 RGBA cel-posterized sticker icons and Unity Sprite `.png.meta` files across `Blocks`, `Combat`, `Factory`, `Farming`, `Fauna`, `GridSystem`, `Industrial`, `Items`, `Survival`, `Tiered`, and `Tools` (covering all 28 tiered structural/station build tokens, all 25 T1-T5 armor upgrade modules, 5 boss relic cores, ores, crushed/washed minerals, slags, catalysts, exotic matter canisters, storage/logistics chests, railway blocks and bogies, petrochemical towers, roads, farming machines, orbital satellites, wheel hubs/tires, grid vents/scrubbers/hatches, warp drives/gates, and handheld scanners).
+- **Automated 3D Wild Crop prefabs and habitable biome scatter (`FarmingSetupGuide`, `EcologyPressure`).** `FarmingSetupGuide.CreateAll()` now non-destructively creates six 3D harvestable `WildCrop` prefabs (`WildPlant_Wheat`, `WildPlant_Corn`, `WildPlant_Carrot`, `WildPlant_Potato`, `WildBush_Berry`, `WildPlant_Pumpkin`) under `Farming/Prefabs/WildCrops/` and wires them into `Biome_Plains`, `Biome_Steppes`, `Biome_Forest`, `Biome_Taiga`, and `Biome_GreekMarble` via `CustomBiomeScatterSetup.EnsureEntry`, preserving any hand-tuned scatter densities and scales. `EcologyPressure.IsLivingFlora` recognizes `WildCrop` prefabs so wild crops respect ecological vitality and never spawn on barren or stone surfaces.
+
+#### Changed
+
+- **Setup Wizard-only entry point (`ProgressionOverhaul18Setup`, `VoxelEngineSetupWindow`).** Removed `[MenuItem("Tools/Voxel Engine/Apply 18.0.0 Progression & Research Overhaul")]` from the top menu bar; the overhaul action now lives exclusively inside `Tools -> Voxel Engine -> Setup Wizard` (`Core & Project Bootstrap` and `Maintenance & Repair`) and automatically triggers `ItemIconSync` plus `CropDefinition.icon` synchronization.
+- **Silent, self-sufficient `FarmingSetupGuide` execution.** Removed the modal prompt instructing manual `RecipeRegistry` and biome-scatter edits; `FarmingSetupGuide.CreateAll()` automatically creates/loads `RecipeRegistry.asset`, registers every `CookingRecipe` asset, populates missing Farming food/seed descriptions, and links `CropDefinition.icon` from each crop's harvest item.
+
+#### Fixed
+
+- **Orphaned and placeholder item icon bindings (`ItemIconSync`, `Combat/block_armorstation.png`, `Combat/block_armorupgradestation.png`).** Renamed `armor_station.png` and `armor_upgrade_station.png` (preserving `.meta` GUIDs) to `block_armorstation.png` and `block_armorupgradestation.png`, added `"item_" + itemId` resolution so normalized `biomass` matches `Survival/item_biomass.png`, and added `gravel`, `gitem_season_monitor`, `upgrade_machine_efficiency`, `upgrade_machine_speed`, `gitem_auto_run_pilot_large`, and `gitem_auto_run_pilot_small` to `ExactIconRepairIds` so placeholder `iron_ore.png` and low-resolution stub icons rebind cleanly (`no-matching-png=0`, `ambiguous-png=0`).
+- **Blank item descriptions (`ProgressionOverhaul18Setup`, `FarmingSetupGuide`).** Non-destructively populates missing `description` strings on `ItemDefinition` assets whose descriptions were previously empty while preserving all authored text.
 
 ### [18.0.0-dev] Six-Spectrum Science, Grounded Carry Capacity, and Full Progression Consolidation
 

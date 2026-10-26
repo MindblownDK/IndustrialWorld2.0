@@ -17,7 +17,7 @@ MonoBehaviour:
   description: "A 5-metre cell of portal ring. Assemble frames into a sealed outline
     (square or ring, up to 64x64 cells - 320 m a side) and mount a Portal Controller
     within 8 m of it. Frame walls leak no light \u2014 only a sealed aperture charges."
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 198ee10530fe569dc993ae88b39a1197, type: 3}
   iconTint: {r: 0.35, g: 0.75, b: 1, a: 1}
   maxStack: 100
   massPerUnit: 120
@@ -26,10 +26,13 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 6985694409963775007, guid: 9fbcb54387801b94dbcc8e48d6226a20, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 0
   blockHealth: 400
+  softClearance: 0
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

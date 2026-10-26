@@ -41,27 +41,26 @@ namespace VoxelEngine.EditorTools
         private const string TreePath = ResearchDir + "/ResearchTree.asset";
         private const string RegistryPath = Root + "/RecipeRegistry.asset";
 
-        [MenuItem("Tools/Voxel Engine/Apply 18.0.0 Progression & Research Overhaul")]
         public static void Run()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                EditorUtility.DisplayDialog("Voxel Engine — 18.0.0 Overhaul",
+                EditorUtility.DisplayDialog("Voxel Engine — 18.1.0 Overhaul",
                     "Exit Play Mode before running the progression overhaul.", "OK");
                 return;
             }
 
-            var summary = ExecuteCore();
-            EditorUtility.DisplayDialog("Voxel Engine — 18.0.0 Progression Overhaul", summary, "OK");
+            var summary = ExecuteCore(silent: false);
+            EditorUtility.DisplayDialog("Voxel Engine — 18.1.0 Progression & Icon Overhaul", summary, "OK");
         }
 
         public static void RunSilent()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-            ExecuteCore();
+            ExecuteCore(silent: true);
         }
 
-        private static string ExecuteCore()
+        private static string ExecuteCore(bool silent = false)
         {
             EnsureFolder(ItemsDir);
             EnsureFolder(RecipesDir);
@@ -120,24 +119,61 @@ namespace VoxelEngine.EditorTools
             // 9) Balance science pack costs across T1–T8 (Packs I–VI) & enforce DAG bootstrap safety.
             int rebalancedNodes = RebalanceAllNodeScienceCosts(tree, packs);
 
-            // 10) Final registry & tree hygiene (deduplicate, strip nulls, lock claimed recipes).
+            // 10) Final registry, tree, item-description, icon-binding & crop-icon hygiene.
             CleanRegistryAndTree(registry, tree);
+            int filledDescriptions = PopulateMissingItemDescriptions();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
+            ItemIconSync.Sync(auto: silent);
+            FarmingSetupGuide.SyncCropIcons();
+            AssetDatabase.SaveAssets();
+
             string summary =
-                "[18.0.0-dev] Progression & Research Overhaul complete:\n\n" +
-                $"• Science Packs I–VI configured (Red, Green, Blue, Purple, Amber, Cyan)\n" +
+                "[18.1.0-dev] Progression, Wild-Crop & Item-Icon Overhaul complete:\n\n" +
+                "• Science Packs I–VI configured (Red, Green, Blue, Purple, Amber, Cyan)\n" +
+                "• Farming cooking recipes registered in RecipeRegistry & 6 wild crop scatter prefabs wired to habitable biomes\n" +
                 $"• Serialized references repointed: {repointedProps}\n" +
                 $"• Retired duplicate/legacy assets deleted: {deletedTwins}\n" +
                 $"• Retired research nodes removed: {removedNodes}\n" +
                 $"• ResearchTree active nodes registered: {tree.nodes.Count} (+{registeredNodes} newly linked)\n" +
                 $"• Crafting station bootstrap fixes applied: {stationFixes}\n" +
                 $"• Progression recipes wired & gated: {wiredRecipes}\n" +
-                $"• Research node costs balanced across Packs I–VI: {rebalancedNodes}";
+                $"• Research node costs balanced across Packs I–VI: {rebalancedNodes}\n" +
+                $"• Blank item descriptions populated: {filledDescriptions}";
             Debug.Log(summary.Replace("\n", " | "));
             return summary;
+        }
+
+        private static int PopulateMissingItemDescriptions()
+        {
+            int updated = 0;
+            foreach (string guid in AssetDatabase.FindAssets("t:ItemDefinition", new[] { Root }))
+            {
+                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                if (item == null || !string.IsNullOrWhiteSpace(item.description)) continue;
+
+                string label = !string.IsNullOrWhiteSpace(item.displayName) ? item.displayName.Trim() : item.name;
+                string id = (item.itemId ?? string.Empty).Trim().ToLowerInvariant();
+                string cat = (item.category ?? string.Empty).Trim();
+
+                string desc = id switch
+                {
+                    "cobalt" => "Dense bluish-silver transition-metal ore refined for superalloys, reactor control rods, and high-energy cells.",
+                    "sand" => "Fine silica aggregate harvested from beaches, riverbeds, and deserts. Smelt into Glass or blend into concrete and asphalt.",
+                    "stationary_radar_beacon" => "Fixed surface radar transponder that marks industrial outposts and relays local airspace telemetry.",
+                    _ when id.StartsWith("gitem_") => $"Modular grid-construct component ({label}) engineered for vehicles, vessels, and orbital frames.",
+                    _ when id.StartsWith("build_") => $"Tiered structural building element ({label}) supporting wood, stone, concrete, and reinforced construction.",
+                    _ when !string.IsNullOrEmpty(cat) => $"{label} ({cat}) used in industrial crafting, construction, and logistics.",
+                    _ => $"{label} used in industrial crafting, construction, and world progression."
+                };
+
+                item.description = desc;
+                EditorUtility.SetDirty(item);
+                updated++;
+            }
+            return updated;
         }
 
         // ─────────────────────────────────────────────────────────────────────────

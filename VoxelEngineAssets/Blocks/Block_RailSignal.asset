@@ -17,7 +17,7 @@ MonoBehaviour:
   description: Shows whether the stretch of line beside it is held by a train. Trains
     already stop for occupied track on their own - a signal makes that visible so
     a waiting train has an obvious reason.
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 2c985332692b9d504cc3fc515fd01fc5, type: 3}
   iconTint: {r: 0.25, g: 0.9, b: 0.35, a: 1}
   maxStack: 900
   massPerUnit: 1
@@ -26,10 +26,13 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 4902961632398799154, guid: 860cba87d09f8ae49a30fbd67a315279, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
   blockHealth: 100
+  softClearance: 0
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

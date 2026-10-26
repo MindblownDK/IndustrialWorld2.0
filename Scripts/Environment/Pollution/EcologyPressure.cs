@@ -106,6 +106,7 @@ namespace VoxelEngine.Environment
                     "scrap", "crystal", "spire", "basalt", "vent", "marble", "ice"))
                 return false;
             if (prefab.GetComponentInChildren<VoxelEngine.Trees.Tree>(true) != null) return true;
+            if (prefab.GetComponentInChildren<VoxelEngine.Farming.WildCrop>(true) != null) return true;
             return ContainsAny(name, "tree", "cactus", "shrub", "bush", "reed",
                 "fern", "fung", "moss", "palm", "cypress", "flora", "plant");
         }

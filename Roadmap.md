@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.0.0-dev`
-**Roadmap Version:** `18.0.0-dev`
+**Current Version:** `18.1.0-dev`
+**Roadmap Version:** `18.1.0-dev`
 **Date:** 2026-10-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.1.0-dev - Complete Item Icons, Automated Wild Crops & Setup Consolidation
+- All 600 active `ItemDefinition` assets resolve to exact `ItemIcons/` sprites (`no-matching-png=0`, `ambiguous-png=0`) with Unity Sprite `.meta` files and non-empty descriptions
+- `FarmingSetupGuide` automatically registers all `CookingRecipe` assets in `RecipeRegistry.asset`, generates six 3D `WildCrop` prefabs, and links them non-destructively onto habitable `BiomeDefinition` scatter lists
+- `ProgressionOverhaul18Setup` runs exclusively from `VoxelEngineSetupWindow` without adding top-level `Tools > Voxel Engine` menu clutter
+
 ### 18.0.0-dev - Six-Spectrum Science, Carry Capacity & Progression Consolidation
 - Science Packs span six color-coded tiers (I Red through VI Cyan/White) with 6-slot Research Labs, Pack I in hand, and Packs II-VI gated by dedicated nodes
 - Non-jetpack flight, stamina, Water Bucket, and Fire Igniter are removed; `up_inv` now grants `+75 kg` carry capacity per rank via Exoskeletal Load Harness
@@ -48,11 +53,6 @@
 - Ordinary one-cell grid blocks on a matching native grid use SINGLE, SPAN, PILLAR, DECK and WALL; custom, multi-cell, precision and socket families remain single-placement
 - Cell-space previews validate occupancy, support and obstruction, apply the selected armour shape per cell, and cap by carried stock plus authorized wireless stock
 - Release refreshes the plan, reserves one item per placeable cell from inventory then accessible storage, commits successful cells and returns stock for failed cells
-
-### 17.51.0-dev - A Press, a Drag, a Whole Hammer Build
-- The hammer wheel's Ctrl + scroll ring opens the shared pattern face and returns to families; module cells keep their authored socket pitch, and unsupported family-pattern pairs remain SINGLE with a reason
-- Hammer plans use authored module cells, validate each cell's overlap and support, and cap the preview by carried plus authorized storage-network materials
-- The cost card shows plan size, plane and total material cost; release rebuilds and commits the clear cells from that refreshed preview
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

@@ -14,19 +14,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.WaterBucket
   itemId: liquid_canister
   displayName: Liquid Canister
-  description: A 10 L canister that holds ONE liquid at a time. RMB on a liquid pool
-    to scoop 0.5 L per click (again and again until full). LMB pours 0.5 L into the
-    world. RMB a liquid tank or water pump to pour the liquid in, and RMB an infinity
-    jack pump to fill the canister with crude oil.
+  description: A 10 L industrial canister that holds ONE liquid at a time. RMB on
+    a liquid pool to scoop 0.5 L per click until full; LMB pours 0.5 L into the world.
+    RMB a liquid tank or water pump to transfer liquid, or RMB an active jack pump
+    to draw crude oil.
   icon: {fileID: 21300000, guid: 0969ff2242870024d9dadf58623fbf56, type: 3}
   iconTint: {r: 0.2, g: 0.5, b: 0.85, a: 1}
   maxStack: 1
-  massPerUnit: 1
-  category: Fluids
+  massPerUnit: 2
+  category: Tools
   requiresContainment: 0
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   toolType: 4
   miningTier: 1
   strength: 60

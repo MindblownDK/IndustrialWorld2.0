@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: Research_res_science_pack_5
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_science_pack_5
+  displayName: High-Energy Production Science (Pack V)
+  description: Machine brass-and-graphite isotope canisters around silicon and advanced
+    circuits to fund nuclear, orbital, and foundry engineering.
+  iconTint: {r: 0.96, g: 0.72, b: 0.18, a: 1}
+  category: 0
+  subCategory: 0
+  tier: 5
+  column: 0
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: 70fbdf8adaf37944eb9668606f411a0d, type: 2}
+  - {fileID: 11400000, guid: 353c57d429eda7b4a9a49fb77ece5e83, type: 2}
+  - {fileID: 11400000, guid: e9e6d12c7cf4b8a4da8d0f3c39ddf37f, type: 2}
+  requiresOrbitalLab: 0
+  requiresRelic: 0
+  researchSeconds: 95
+  cost:
+  - pack: {fileID: 11400000, guid: 8c4bb8c69288cbe4bb74ab787695d922, type: 2}
+    count: 35
+  - pack: {fileID: 11400000, guid: 696585341d09a9045a4bf5d29dc1e467, type: 2}
+    count: 25
+  unlocksRecipes:
+  - {fileID: 11400000, guid: f09621856ee2d1f4e800c4124b185dfd, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

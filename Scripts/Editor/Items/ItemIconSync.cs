@@ -43,7 +43,13 @@ namespace VoxelEngine.EditorTools
             "item_sciencet3",
             "item_sciencet4",
             "item_sciencet5",
-            "item_sciencet6"
+            "item_sciencet6",
+            "gravel",
+            "gitem_season_monitor",
+            "upgrade_machine_efficiency",
+            "upgrade_machine_speed",
+            "gitem_auto_run_pilot_large",
+            "gitem_auto_run_pilot_small"
         };
 
         /// <summary>Runs once per editor session after the import pipeline settles.
@@ -191,7 +197,8 @@ namespace VoxelEngine.EditorTools
                 itemId,
                 itemId + "_icon",
                 itemId.Replace("item_", ""),
-                itemId.Replace("gitem_", "")
+                itemId.Replace("gitem_", ""),
+                "item_" + itemId
             };
 
             for (int i = 0; i < candidates.Length; i++)

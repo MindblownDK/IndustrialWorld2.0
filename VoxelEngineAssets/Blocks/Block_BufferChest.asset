@@ -17,7 +17,7 @@ MonoBehaviour:
   description: 36-slot hybrid store. It keeps itself topped up to a stock target
     from providers, and supplies requesters in range. Its faces are not pinned, so
     pipes can both fill and drain it.
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 0fbf81b042d49856977c078b1f7c2798, type: 3}
   iconTint: {r: 0.55, g: 0.45, b: 0.85, a: 1}
   maxStack: 900
   massPerUnit: 1
@@ -26,10 +26,13 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 772740776566899034, guid: a54841f8b9aba074f832c428b015a91f, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
   blockHealth: 100
+  softClearance: 0
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

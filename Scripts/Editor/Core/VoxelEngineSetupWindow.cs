@@ -164,7 +164,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build the main-menu scene", BuildMainMenuScene),
                 Setup("Build base crafting, tools, stations and blocks", BuildBaseCraftingContent),
                 Setup("Build research tree, science packs and research lab", BuildResearchContent),
-                Setup("Apply 18.0.0-dev progression, 6-science-pack & asset consolidation overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
+                Setup("Apply 18.1.0-dev progression, 6-science-pack, wild-crop & icon overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
                 Setup("Repair science pack recipes", () => ScienceRecipeRepair.Run()),
                 Setup("Anchor runtime shaders for standalone builds", () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103()),
                 Setup("Wire multiplayer bootstrap in the active game scene", () => VoxelEngine.EditorTools.NetworkSetup.RunStep105()));
@@ -319,7 +319,7 @@ namespace VoxelEngine.EditorTools
 
             AddSetupGroup(parent, ref number, "Maintenance & Repair",
                 "Optional non-destructive repair passes. These are not normal content prerequisites.", false,
-                Setup("Apply 18.0.0-dev progression, 6-science-pack & asset consolidation overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
+                Setup("Apply 18.1.0-dev progression, 6-science-pack, wild-crop & icon overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
                 Setup("Audit and repair item identity", () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79()),
                 Setup("Apply 17.13.1-dev progression and Furnace/Smelting repairs (non-destructive)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.Run()),
                 Setup("Repair Smelting-to-Furnace unlock link (non-destructive, 17.15.0-dev)", () => VoxelEngine.EditorTools.IndustrialCrusadersProgressionSetup.RepairFurnaceSmeltingUnlockOnly()),

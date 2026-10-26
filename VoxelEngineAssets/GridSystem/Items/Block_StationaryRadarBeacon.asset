@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: stationary_radar_beacon
   displayName: Stationary Radar Beacon
-  description: 
+  description: Fixed surface radar transponder that marks industrial outposts and
+    relays local airspace telemetry.
   icon: {fileID: 21300000, guid: cbf05e1ef9915624281d102654809512, type: 3}
   iconTint: {r: 1, g: 1, b: 1, a: 1}
   maxStack: 999
@@ -30,6 +31,7 @@ MonoBehaviour:
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 0
   blockHealth: 100
+  softClearance: 0
   miningTier: 0
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

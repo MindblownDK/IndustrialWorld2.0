@@ -17,7 +17,7 @@ MonoBehaviour:
   description: Fills a sealed station compartment with breathable air and replaces
     what leaks away. Needs power and a fully enclosed room - a dock collar is open
     by design and will not hold pressure.
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: e318d171caa8441c0846e102425de7e2, type: 3}
   iconTint: {r: 0.62, g: 0.78, b: 0.84, a: 1}
   maxStack: 900
   massPerUnit: 1
@@ -26,10 +26,13 @@ MonoBehaviour:
   cannotBeCarried: 0
   isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
   placedPrefab: {fileID: 4528006675890272758, guid: 9d6f804f1bd01044480dda2cb425944d, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
   blockHealth: 100
+  softClearance: 0
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}
