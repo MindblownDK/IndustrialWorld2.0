@@ -21,7 +21,8 @@ namespace VoxelEngine.EditorTools
     public static class ItemIconSync
     {
         private const string IconRoot = "Assets/VoxelEngineAssets/ItemIcons";
-        private const string SessionKey = "IW.ItemIconSync.Ran";
+        private const string SessionKey = "IW.ItemIconSync.Ran.18_1_1";
+        private const string LegacyKnightHelmetPath = "Assets/knight helmet.png";
 
         private static readonly HashSet<string> ExactIconRepairIds = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -49,7 +50,10 @@ namespace VoxelEngine.EditorTools
             "upgrade_machine_efficiency",
             "upgrade_machine_speed",
             "gitem_auto_run_pilot_large",
-            "gitem_auto_run_pilot_small"
+            "gitem_auto_run_pilot_small",
+            "gitem_cargolarge",
+            "gitem_cargosmall",
+            "space_helmet"
         };
 
         /// <summary>Runs once per editor session after the import pipeline settles.
@@ -140,6 +144,7 @@ namespace VoxelEngine.EditorTools
             }
 
             if (assigned > 0) AssetDatabase.SaveAssets();
+            RetireLegacyRootPlaceholderIcons();
 
             // Automatic repair remains quiet when a healthy project has no missing
             // references. The manual Setup action always prints the complete audit.
@@ -159,10 +164,27 @@ namespace VoxelEngine.EditorTools
             if (!auto && mismatches.Count > 0)
                 AppendReportList(report, "Icon binding differences:", mismatches);
 
-            if (assigned > 0 || missingPng > 0 || mismatchedBinding > 0 || ambiguousPng > 0)
+            if (missingPng > 0 || mismatchedBinding > 0 || ambiguousPng > 0)
                 Debug.LogWarning(report.ToString());
             else
                 Debug.Log(report.ToString());
+        }
+
+        private static void RetireLegacyRootPlaceholderIcons()
+        {
+            if (AssetDatabase.LoadMainAssetAtPath(LegacyKnightHelmetPath) == null) return;
+
+            foreach (var guid in AssetDatabase.FindAssets("t:ItemDefinition"))
+            {
+                var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                if (item != null && item.icon != null &&
+                    string.Equals(AssetDatabase.GetAssetPath(item.icon), LegacyKnightHelmetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            AssetDatabase.DeleteAsset(LegacyKnightHelmetPath);
         }
 
         private static Dictionary<string, List<Sprite>> BuildIconIndex()

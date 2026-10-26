@@ -45,13 +45,13 @@ namespace VoxelEngine.EditorTools
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                EditorUtility.DisplayDialog("Voxel Engine — 18.1.0 Overhaul",
+                EditorUtility.DisplayDialog("Voxel Engine — 18.1.1 Overhaul",
                     "Exit Play Mode before running the progression overhaul.", "OK");
                 return;
             }
 
             var summary = ExecuteCore(silent: false);
-            EditorUtility.DisplayDialog("Voxel Engine — 18.1.0 Progression & Icon Overhaul", summary, "OK");
+            EditorUtility.DisplayDialog("Voxel Engine — 18.1.1 Progression & Icon Overhaul", summary, "OK");
         }
 
         public static void RunSilent()
@@ -131,7 +131,7 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
 
             string summary =
-                "[18.1.0-dev] Progression, Wild-Crop & Item-Icon Overhaul complete:\n\n" +
+                "[18.1.1-dev] Progression, Wild-Crop & Item-Icon Overhaul complete:\n\n" +
                 "• Science Packs I–VI configured (Red, Green, Blue, Purple, Amber, Cyan)\n" +
                 "• Farming cooking recipes registered in RecipeRegistry & 6 wild crop scatter prefabs wired to habitable biomes\n" +
                 $"• Serialized references repointed: {repointedProps}\n" +

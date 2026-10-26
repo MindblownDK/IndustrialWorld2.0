@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.1.0-dev`
-**Roadmap Version:** `18.1.0-dev`
+**Current Version:** `18.1.1-dev`
+**Roadmap Version:** `18.1.1-dev`
 **Date:** 2026-10-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,8 +29,13 @@
 
 ## 0. Recently Done
 
+### 18.1.1-dev - Zero-Warning Canonical ItemIcon Bindings
+- `gitem_cargolarge`, `gitem_cargosmall`, and `space_helmet` rebind automatically to their `ItemIcons/` sprites (`exact=602`, `no-matching-png=0`, `wrong-binding-left-alone=0`, `ambiguous-png=0`)
+- Unused root-level `Assets/knight helmet.png` is removed and guarded against lingering local copies once `space_helmet` rebinds
+- `ItemIconSync` logs `Debug.Log` instead of `Debug.LogWarning` whenever zero missing, mismatched, or ambiguous entries remain
+
 ### 18.1.0-dev - Complete Item Icons, Automated Wild Crops & Setup Consolidation
-- All 600 active `ItemDefinition` assets resolve to exact `ItemIcons/` sprites (`no-matching-png=0`, `ambiguous-png=0`) with Unity Sprite `.meta` files and non-empty descriptions
+- All active `ItemDefinition` assets resolve to exact `ItemIcons/` sprites (`no-matching-png=0`, `ambiguous-png=0`) with Unity Sprite `.meta` files and non-empty descriptions
 - `FarmingSetupGuide` automatically registers all `CookingRecipe` assets in `RecipeRegistry.asset`, generates six 3D `WildCrop` prefabs, and links them non-destructively onto habitable `BiomeDefinition` scatter lists
 - `ProgressionOverhaul18Setup` runs exclusively from `VoxelEngineSetupWindow` without adding top-level `Tools > Voxel Engine` menu clutter
 
@@ -48,11 +53,6 @@
 - Armour and ordinary `GItem_...` blocks remain pattern-eligible on matching native-size grids; pipe checks now use pipe-specific IDs and components
 - Grid placement prompts say RIGHT CLICK for single placement, drag start and plan release
 - Grid-pattern Unity compilation and play-mode acceptance remain open
-
-### 17.52.0-dev - Five Patterns, One Native Grid
-- Ordinary one-cell grid blocks on a matching native grid use SINGLE, SPAN, PILLAR, DECK and WALL; custom, multi-cell, precision and socket families remain single-placement
-- Cell-space previews validate occupancy, support and obstruction, apply the selected armour shape per cell, and cap by carried stock plus authorized wireless stock
-- Release refreshes the plan, reserves one item per placeable cell from inventory then accessible storage, commits successful cells and returns stock for failed cells
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -85,7 +85,7 @@
 - **Voxel mining drops (17.13.1-dev):** confirm dirt, stone, and each generated ore award the intended items, including the runtime fallback and full-inventory spill cases.
 - **Tree, hammer repair, HUD, crafting, and Setup acceptance (17.14.0-dev):** confirm felled trees stay absent after reopening; wheel-centre left/right modes and proportional repair costs; target-label recovery; single-queue/per-recipe crafting and smooth progress; and that Setup leaves CargoLaunchPad unchanged while reporting a targeted player-prefab scan.
 - **17.9 runtime acceptance (17.10.0-dev):** melee reliability, distant-hostile sleep, refresh-rate FPS cap, live settings updates, admin scroll retention, and release-player Infinite Health exclusion still need Unity build/play validation.
-- **Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.
+- ~~**Full-project missing-icon audit (17.13.0-dev):** Crafting Card and Welder PNGs and exact-ID repair targets are present; the Unity audit has not run, and non-target tuned references must remain unchanged.~~ *(18.1.1-dev)*
 - ~~**Setup 79 duplicate IDs (17.13.0-dev):** Thomas will remove the identified duplicate items manually; do not edit, rename, or consolidate them unless asked.~~ *(18.0.0-dev)*
 - **Water Pump recipe report (17.10.0-dev):** source setup authors separate Water Pump and Marine Water Pump outputs/recipes; neither was removed. Confirm whether the reported repeated UI row persists after Setup before treating it as an accidental duplicate.
 - **Boat-wake visual acceptance** (implemented 17.1.8-dev): runtime shape, crest interaction, performance, and near-shore response still need in-game verification. The 17.1.7 flow fixtures pass, but do not validate shader appearance; 17.1.5 camera verification also remains open.

@@ -1,9 +1,24 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.1.0-dev`
+**Current Version:** `18.1.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.1.1-dev] Rebind Final Cargo and Space Helmet Icons and Retire Loose Root Helmet Texture
+
+**Type:** PATCH - rebinds the final three non-canonical item icon references (`gitem_cargolarge`, `gitem_cargosmall`, and `space_helmet`) to their canonical `ItemIcons/` sprites, removes the unused root-folder `Assets/knight helmet.png` texture, and clears the remaining `ItemIconSync` warning so all 602 active `ItemDefinition` assets match their exact `ItemIcons/` sprites (`exact=602`, `no-matching-png=0`, `wrong-binding-left-alone=0`, `ambiguous-png=0`). Save-compatible with `18.1.0-dev`.
+
+**GitHub title:** `[18.1.1-dev] Rebind final cargo and space helmet icons to ItemIcons and retire loose root helmet texture`
+
+#### Fixed
+
+- **Final three mismatched item icon bindings (`ItemIconSync`, `GItem_CargoLarge`, `GItem_CargoSmall`, `Equip_SpaceHelmet`).** Added `gitem_cargolarge`, `gitem_cargosmall`, and `space_helmet` to `ItemIconSync.ExactIconRepairIds` and bumped the session auto-sync key (`IW.ItemIconSync.Ran.18_1_1`) so `GItem_CargoLarge`, `GItem_CargoSmall`, and `Equip_SpaceHelmet` rebind automatically to `ItemIcons/GridSystem/gitem_cargolarge.png`, `ItemIcons/GridSystem/gitem_cargosmall.png`, and `ItemIcons/Survival/space_helmet.png`, bringing `ItemIconSync` to `exact=602`, `no-matching-png=0`, `wrong-binding-left-alone=0`, and `ambiguous-png=0`.
+- **Audit log severity (`ItemIconSync`).** `ItemIconSync.Sync` now logs a clean `Debug.Log` whenever `missingPng`, `mismatchedBinding`, and `ambiguousPng` are all zero, reserving `Debug.LogWarning` strictly for unresolved missing, mismatched, or ambiguous icon entries.
+
+#### Removed
+
+- **Loose root-folder `Assets/knight helmet.png` placeholder (`knight helmet.png`, `ItemIconSync`).** Removed `Assets/knight helmet.png` (and `.meta`) after confirming `Equip_SpaceHelmet` was its sole reference across all scripts, ScriptableObjects, UI documents, prefabs, and scenes; `ItemIconSync` also deletes any lingering local copy once no `ItemDefinition` references it.
 
 ### [18.1.0-dev] Complete Item Icon Coverage, Automated Wild-Crop Biome Scatter, and Setup Wizard Consolidation
 
