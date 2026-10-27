@@ -8,6 +8,16 @@
 // know whether the bed is empty, what is in it, how far along it is, and
 // whether it is thirsty. That is this interface, and nothing else.
 //
+// 18.2.0-dev — the interface learned the two things the page was faking.
+//
+// The remastered farm page drew a water column that was either a stub (dry) or
+// full (watered) and a bed that read as "dead" only while it reported a missing
+// water or oxygen requirement. Both were guesses about a number the beds
+// already had. Water01 and IsDead are that number: the hydration a bed is
+// actually holding right now, and whether the crop on it is already lost.
+// Neither field is saved in a new shape and no bed changed how it grows, so a
+// save written before this round loads exactly as it did.
+//
 // Biofarms deliberately do not implement it. A Biofarm is an oxygen machine
 // that eats biomass; it is not a bed with a crop in it, and a farm page that
 // counted it would be lying about what the player owns.
@@ -62,5 +72,21 @@ namespace VoxelEngine.Farming
 
         /// <summary>True when the bed has no crop in it.</summary>
         bool IsEmpty { get; }
+
+        /// <summary>
+        /// 0..1 hydration the bed is holding right now: 1 while it is being watered,
+        /// falling as a planted crop goes without, 0 when the tray is empty. This is a
+        /// reading, not a preference - a bed that needs no water still reports the
+        /// water it has, so a screen can draw one honest column for every bed type.
+        /// </summary>
+        float Water01 { get; }
+
+        /// <summary>
+        /// True when the crop on this bed is already lost - it dried out, or it was
+        /// planted somewhere it could never grow. A dead bed still holds its crop
+        /// (that is what the player is looking at) but it cannot be harvested and it
+        /// cannot be replanted until it is cleared. An empty bed is not dead.
+        /// </summary>
+        bool IsDead { get; }
     }
 }

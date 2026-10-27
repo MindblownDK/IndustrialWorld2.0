@@ -23,6 +23,10 @@ namespace VoxelEngine.Farming
         public bool isOxygenated;
         public float timeSinceLastWater;
 
+        [Tooltip("True when the crop on this plot was lost to drought. A dead plot keeps its " +
+                 "crop visible, cannot be harvested, and cannot be replanted until it is cleared.")]
+        public bool isDead;
+
         [Header("Settings")]
         public float irrigationCheckRadius = 6f;
         public float irrigationCheckInterval = 2f;
@@ -33,10 +37,28 @@ namespace VoxelEngine.Farming
         public string BedName => "SOIL";
         public string CropName => plantedCrop != null ? plantedCrop.cropName : string.Empty;
         public float Growth01 => plantedCrop != null ? Mathf.Clamp01(growthProgress) : 0f;
-        public bool IsReady => plantedCrop != null && growthProgress >= 0.999f;
-        public bool NeedsWater => plantedCrop != null && plantedCrop.requiresWater && !isIrrigated;
-        public bool NeedsOxygen => plantedCrop != null && plantedCrop.requiresOxygen && !isOxygenated;
+        public bool IsReady => plantedCrop != null && !isDead && growthProgress >= 0.999f;
+        public bool NeedsWater => plantedCrop != null && !isDead && plantedCrop.requiresWater && !isIrrigated;
+        public bool NeedsOxygen => plantedCrop != null && !isDead && plantedCrop.requiresOxygen && !isOxygenated;
         public bool IsEmpty => plantedCrop == null;
+        public bool IsDead => isDead && plantedCrop != null;
+
+        /// <summary>0..1 hydration the soil is holding: full while watered, then falling over
+        /// the crop's own drought tolerance, so a screen can draw a level instead of a guess.</summary>
+        public float Water01
+        {
+            get
+            {
+                if (plantedCrop == null) return 0f;
+                if (isDead) return 0f;
+                if (isIrrigated) return 1f;
+                float tolerance = Mathf.Max(1f, plantedCrop.droughtToleranceSec * 2f);
+                return Mathf.Clamp01(1f - timeSinceLastWater / tolerance);
+            }
+        }
+
+        /// <summary>True when a harvest would succeed right now.</summary>
+        public bool CanHarvestNow => IsReady;
 
         // Visual
         private GameObject _cropVisual;
@@ -65,6 +87,13 @@ namespace VoxelEngine.Farming
 
             if (plantedCrop == null) return;
 
+            // A lost crop does not grow back, whatever the weather does next.
+            if (isDead)
+            {
+                UpdateSoilColor();
+                return;
+            }
+
             // Track drought.
             if (!isIrrigated)
             {
@@ -72,9 +101,10 @@ namespace VoxelEngine.Farming
                 if (plantedCrop.requiresWater &&
                     timeSinceLastWater > plantedCrop.droughtToleranceSec * 2f)
                 {
-                    // Crop dies from drought.
-                    Debug.Log($"[Farm] {plantedCrop.cropName} died from drought.");
-                    ClearCrop();
+                    // Crop dies from drought. It stays on the plot as a brown, wilted
+                    // husk so the player can see which plot was lost and clear it; a plot
+                    // that silently emptied itself read as "nothing was ever planted".
+                    KillCrop();
                     return;
                 }
             }
@@ -104,9 +134,10 @@ namespace VoxelEngine.Farming
         /// <summary>Plant a seed on this plot.</summary>
         public bool TryPlant(CropDefinition crop)
         {
-            if (plantedCrop != null) return false; // already planted
+            if (plantedCrop != null) return false; // already planted (a dead crop must be cleared first)
             plantedCrop = crop;
             growthProgress = 0f;
+            isDead = false;
             timeSinceLastWater = 0f;
             isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
             _lastStage = -1;
@@ -114,31 +145,69 @@ namespace VoxelEngine.Farming
             return true;
         }
 
+        /// <summary>What a harvest would give up right now, without taking it.</summary>
+        public FarmHarvestYield PeekHarvest()
+        {
+            if (!CanHarvestNow) return default;
+            return FarmHarvestYield.Crop(
+                plantedCrop.harvestItem,
+                Mathf.Max(1, plantedCrop.harvestAmount),
+                plantedCrop.seedItem,
+                Mathf.Max(0, plantedCrop.seedReturnAmount));
+        }
+
+        /// <summary>
+        /// Take the crop off the plot. <paramref name="replant"/> keeps the same crop with its
+        /// growth reset, otherwise the plot is emptied. This and <see cref="TryHarvest"/> are
+        /// the only two ways a crop leaves a plot - an automated harvester used to write
+        /// growthProgress directly, which is how soil and trays disagreed on the yield.
+        /// </summary>
+        public bool TakeHarvest(bool replant, out FarmHarvestYield yield)
+        {
+            yield = default;
+            if (!CanHarvestNow) return false;
+
+            yield = PeekHarvest();
+
+            if (replant)
+            {
+                growthProgress = 0f;
+                timeSinceLastWater = 0f;
+                _lastStage = -1;
+                UpdateCropVisual();
+            }
+            else
+            {
+                ClearCrop();
+            }
+            return true;
+        }
+
         /// <summary>Harvest the mature crop. Returns items to the player.</summary>
         public bool TryHarvest(Inventory inv)
         {
-            if (plantedCrop == null || growthProgress < 1f) return false;
+            var crop = plantedCrop;
+            if (crop == null || !TakeHarvest(false, out var yield)) return false;
 
-            if (plantedCrop.harvestItem != null && inv != null)
+            if (yield.item != null && inv != null)
             {
-                inv.Add(plantedCrop.harvestItem, plantedCrop.harvestAmount);
+                inv.Add(yield.item, yield.count);
                 VoxelEngine.UI.BuildFeedbackHud.Show(
-                    $"Harvested {plantedCrop.cropName}",
-                    $"+{plantedCrop.harvestAmount} {plantedCrop.harvestItem.displayName}",
-                    plantedCrop.harvestItem.icon,
+                    $"Harvested {crop.cropName}",
+                    $"+{yield.count} {yield.item.displayName}",
+                    yield.item.icon,
                     new Color(0.40f, 0.80f, 0.30f));
 
                 // Feed the player if there's food value.
-                if (plantedCrop.foodValue > 0)
+                if (crop.foodValue > 0)
                 {
                     var stats = inv.GetComponent<VoxelEngine.Player.PlayerStats>();
-                    if (stats != null) stats.Feed(plantedCrop.foodValue);
+                    if (stats != null) stats.Feed(crop.foodValue);
                 }
             }
-            if (plantedCrop.seedItem != null && inv != null)
-                inv.Add(plantedCrop.seedItem, plantedCrop.seedReturnAmount);
+            if (yield.seedItem != null && yield.seedCount > 0 && inv != null)
+                inv.Add(yield.seedItem, yield.seedCount);
 
-            ClearCrop();
             return true;
         }
 
@@ -150,13 +219,28 @@ namespace VoxelEngine.Farming
             UpdateSoilColor();
         }
 
-        private void ClearCrop()
+        /// <summary>Empty the plot. A live crop is lost, not refunded; a dead one is simply cleared.</summary>
+        public void ClearCrop()
         {
             plantedCrop = null;
             growthProgress = 0f;
+            isDead = false;
+            timeSinceLastWater = 0f;
             _lastStage = -1;
             if (_cropVisual != null) Destroy(_cropVisual);
             _cropVisual = null;
+            UpdateSoilColor();
+        }
+
+        /// <summary>Lose the crop to drought. The plot keeps it, brown and wilted, so the
+        /// player can see which plot died and clear it themselves.</summary>
+        private void KillCrop()
+        {
+            if (plantedCrop == null || isDead) return;
+            isDead = true;
+            Debug.Log($"[Farm] {plantedCrop.cropName} died from drought on tilled soil.");
+            _lastStage = -1;
+            UpdateCropVisual(force: true);
             UpdateSoilColor();
         }
 
@@ -245,14 +329,26 @@ namespace VoxelEngine.Farming
             UpdateCropVisual();
         }
 
-        private void UpdateCropVisual()
+        private void UpdateCropVisual(bool force = false)
         {
             if (plantedCrop == null || _cropVisual == null) return;
+
+            // A lost crop is drawn brown and collapsed, so a dead plot never looks like a
+            // ripe one from across the base.
+            if (isDead)
+            {
+                if (!force && _lastStage == DeadStage) return;
+                _lastStage = DeadStage;
+                _cropVisual.transform.localScale = new Vector3(0.24f, 0.08f, 0.24f);
+                _cropVisual.transform.localPosition = new Vector3(0, 0.14f, 0);
+                TintCropVisual(new Color(0.42f, 0.31f, 0.18f));
+                return;
+            }
 
             int stage = Mathf.FloorToInt(growthProgress * (plantedCrop.growthStages - 1));
             stage = Mathf.Clamp(stage, 0, plantedCrop.growthStages - 1);
 
-            if (stage == _lastStage) return;
+            if (!force && stage == _lastStage) return;
             _lastStage = stage;
 
             // Scale
@@ -263,14 +359,19 @@ namespace VoxelEngine.Farming
             _cropVisual.transform.localPosition = new Vector3(0, scaleY * 0.5f + 0.1f, 0);
 
             // Color
-            if (_cropRenderer != null && plantedCrop.stageColors != null
-                && stage < plantedCrop.stageColors.Length)
-            {
-                Color c = plantedCrop.stageColors[stage];
-                _cropRenderer.material.color = c;
-                if (_cropRenderer.material.HasProperty("_BaseColor"))
-                    _cropRenderer.material.SetColor("_BaseColor", c);
-            }
+            if (plantedCrop.stageColors != null && stage < plantedCrop.stageColors.Length)
+                TintCropVisual(plantedCrop.stageColors[stage]);
+        }
+
+        /// <summary>Sentinel for "the visual is currently showing a lost crop".</summary>
+        private const int DeadStage = -2;
+
+        private void TintCropVisual(Color c)
+        {
+            if (_cropRenderer == null || _cropRenderer.material == null) return;
+            _cropRenderer.material.color = c;
+            if (_cropRenderer.material.HasProperty("_BaseColor"))
+                _cropRenderer.material.SetColor("_BaseColor", c);
         }
     }
 }

@@ -67,6 +67,15 @@ namespace VoxelEngine.Farming
         public bool NeedsWater => isPlanted && !isIrrigated;
         public bool NeedsOxygen => false;
         public bool IsEmpty => !isPlanted;
+
+        /// <summary>18.2.0-dev: a sapling bed is either watered or it is not - there is no
+        /// drought buffer to draw a level from, and pretending otherwise would be a lie on
+        /// the screen. 1 while irrigated with a tree in it, 0 otherwise.</summary>
+        public float Water01 => isPlanted && isIrrigated ? 1f : 0f;
+
+        /// <summary>A timber bed never loses its plot to drought; the sapling simply stops
+        /// growing. Nothing on this bed can be dead.</summary>
+        public bool IsDead => false;
         public bool IsIrrigated => isIrrigated;
         public string GrowthStageLabel => StageLabel;
 

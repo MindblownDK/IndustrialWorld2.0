@@ -1766,11 +1766,12 @@ namespace VoxelEngine.GridSystem
                 return Finish(canvas);
             }
 
-            int ready = 0, dry = 0, oxygenShort = 0, empty = 0;
+            int ready = 0, dry = 0, oxygenShort = 0, empty = 0, dead = 0;
             for (int i = 0; i < _farmFound.Count; i++)
             {
                 var bed = _farmFound[i].bed;
                 if (bed == null) continue;
+                if (bed.IsDead) dead++;
                 if (bed.IsEmpty) empty++;
                 else if (bed.IsReady) ready++;
                 if (!bed.IsEmpty && bed.NeedsWater) dry++;
@@ -1782,14 +1783,12 @@ namespace VoxelEngine.GridSystem
             {
                 int row = 1;
                 canvas.Text(0, row, "READY " + ready, false, ScreenInk.Ok);
-                int x = 7 + ready.ToString().Length + 1;
-                canvas.TextClipped(x, row, "DRY " + dry, 8, dry > 0 ? ScreenInk.Warn : ScreenInk.Dim);
-                x += 7;
-                canvas.TextClipped(x, row, "NO O2 " + oxygenShort, 10,
+                int x = 8 + ready.ToString(CultureInfo.InvariantCulture).Length;
+                x = AppendFarmCount(canvas, x, row, "DRY", dry, dry > 0 ? ScreenInk.Warn : ScreenInk.Dim);
+                x = AppendFarmCount(canvas, x, row, "NO O2", oxygenShort,
                     oxygenShort > 0 ? ScreenInk.Warn : ScreenInk.Dim);
-                x += 12;
-                if (x < canvas.Columns)
-                    canvas.TextClipped(x, row, "EMPTY " + empty, 10, ScreenInk.Dim);
+                x = AppendFarmCount(canvas, x, row, "DEAD", dead, dead > 0 ? ScreenInk.Warn : ScreenInk.Dim);
+                AppendFarmCount(canvas, x, row, "EMPTY", empty, ScreenInk.Dim);
             }
 
             // Plot cards below the summary: each card is a little picture of its bed.
@@ -1827,10 +1826,12 @@ namespace VoxelEngine.GridSystem
         {
             var bed = entry.bed;
             bool empty = bed == null || bed.IsEmpty;
-            bool ready = !empty && bed.IsReady;
-            bool failing = !empty && !ready && (bed.NeedsOxygen || bed.NeedsWater);
+            bool dead = !empty && bed.IsDead;
+            bool ready = !empty && !dead && bed.IsReady;
+            bool failing = !empty && !dead && !ready && (bed.NeedsOxygen || bed.NeedsWater);
 
             ScreenInk growthInk = empty ? ScreenInk.Dim
+                : dead ? ScreenInk.Warn
                 : ready ? ScreenInk.Accent
                 : failing ? ScreenInk.Warn
                 : ScreenInk.Ok;
@@ -1839,16 +1840,17 @@ namespace VoxelEngine.GridSystem
             var product = FarmProductItem(bed);
             if (product != null) canvas.Icon(x, y, 2, 2, product);
 
-            // Water level: one thin column, full when the bed is watered.
-            float water = empty ? 0f : bed.NeedsWater ? 0.12f : 1f;
+            // Water level: one thin column, drawn from the bed's own hydration reading
+            // instead of a dry/full guess.
+            float water = empty ? 0f : Mathf.Clamp01(bed.Water01);
             canvas.VBarInk(x + 2, y, 3, water, ScreenInk.Ok, ScreenInk.Dim);
 
             // Growth: the wide column, filling upward from the base.
-            float growth = empty ? 0f : ready ? 1f : Mathf.Clamp01(bed.Growth01);
+            float growth = empty || dead ? 0f : ready ? 1f : Mathf.Clamp01(bed.Growth01);
             canvas.VBarInk(x + 3, y, 3, growth, growthInk, empty ? ScreenInk.Dim : ScreenInk.Dim);
 
             // The state word under the card.
-            string word = empty ? "EMPTY" : ready ? "READY" : failing ? "FAIL" : "GROW";
+            string word = empty ? "EMPTY" : dead ? "DEAD" : ready ? "READY" : failing ? "FAIL" : "GROW";
             canvas.TextCentered(x, y + 3, Mathf.Min(6, canvas.Columns - x), word, growthInk);
         }
 
@@ -1886,10 +1888,11 @@ namespace VoxelEngine.GridSystem
                 if (bed == null) continue;
 
                 bool empty = bed.IsEmpty;
-                bool ready = !empty && bed.IsReady;
-                bool failing = !empty && !ready && (bed.NeedsOxygen || bed.NeedsWater);
-                ScreenInk growthInk = empty ? ScreenInk.Dim : ready ? ScreenInk.Accent
-                    : failing ? ScreenInk.Warn : ScreenInk.Ok;
+                bool dead = !empty && bed.IsDead;
+                bool ready = !empty && !dead && bed.IsReady;
+                bool failing = !empty && !dead && !ready && (bed.NeedsOxygen || bed.NeedsWater);
+                ScreenInk growthInk = empty ? ScreenInk.Dim : dead ? ScreenInk.Warn
+                    : ready ? ScreenInk.Accent : failing ? ScreenInk.Warn : ScreenInk.Ok;
 
                 var product = FarmProductItem(bed);
                 int nameX = 0;
@@ -1899,21 +1902,25 @@ namespace VoxelEngine.GridSystem
                     nameX = 3;
                 }
 
-                // Water: a short tick column; growth: the wide bar beside it.
-                float water = empty ? 0f : bed.NeedsWater ? 0.12f : 1f;
+                // Water: a short tick column drawn from the bed's own hydration reading;
+                // growth: the wide bar beside it.
+                float water = empty ? 0f : Mathf.Clamp01(bed.Water01);
                 int growthWidth = Mathf.Max(3, canvas.Columns - nameX - 11);
+                float fill = empty || dead ? 0f : ready ? 1f : Mathf.Clamp01(bed.Growth01);
                 canvas.VBarInk(nameX, row, 2, water, ScreenInk.Ok, ScreenInk.Dim);
-                canvas.Bar(nameX + 2, row, growthWidth, empty ? 0f : ready ? 1f : Mathf.Clamp01(bed.Growth01),
+                canvas.Bar(nameX + 2, row, growthWidth, fill,
                     '\u2588', '\u2591', growthInk);
-                canvas.Bar(nameX + 2, row + 1, growthWidth, empty ? 0f : ready ? 1f : Mathf.Clamp01(bed.Growth01),
+                canvas.Bar(nameX + 2, row + 1, growthWidth, fill,
                     '\u2588', '\u2591', growthInk);
 
-                string state = empty ? "EMPTY" : ready ? "READY TO PICK"
+                string state = empty ? "EMPTY" : dead ? "DEAD - CLEAR"
+                    : ready ? "READY TO PICK"
                     : failing ? (bed.NeedsOxygen ? "NO O2" : "DRY")
                     : (Mathf.Clamp01(bed.Growth01) * 100f).ToString("0") + "%";
-                canvas.TextRightClipped(canvas.Columns - 1, row, state, 10, growthInk);
+                canvas.TextRightClipped(canvas.Columns - 1, row, state, 12, growthInk);
 
                 string crop = empty ? bed.BedName : (string.IsNullOrEmpty(bed.CropName) ? bed.BedName : bed.CropName);
+                if (bed is CropPlanter ported && ported.autoDumpWhenRipe) crop += " \u00b7 PORT";
                 canvas.TextClipped(nameX, row + 1,
                     (entry.vertical ? "VERT \u00b7 " : "FLAT \u00b7 ") + crop,
                     canvas.Columns - nameX, ScreenInk.Dim);
@@ -1925,6 +1932,16 @@ namespace VoxelEngine.GridSystem
                 canvas.TextClipped(0, canvas.Rows - 1,
                     "+" + (_farmFound.Count - shown) + " MORE PLOTS", canvas.Columns, ScreenInk.Dim);
             return Finish(canvas);
+        }
+
+        /// <summary>One "LABEL n" pill on the FARMS summary line. Returns the column the next
+        /// one starts at, so the line never overlaps itself on a narrow screen.</summary>
+        private static int AppendFarmCount(ScreenCanvas canvas, int x, int row, string label, int value, ScreenInk ink)
+        {
+            if (x >= canvas.Columns) return x;
+            string text = label + " " + value.ToString(CultureInfo.InvariantCulture);
+            canvas.TextClipped(x, row, text, canvas.Columns - x, ink);
+            return x + text.Length + 2;
         }
 
         private static ItemDefinition FarmProductItem(IFarmBed bed)

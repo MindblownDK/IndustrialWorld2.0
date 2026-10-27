@@ -222,6 +222,10 @@ namespace VoxelEngine.EditorTools
                 Setup("Build the deep-core programme", () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86()),
                 Setup("Rebuild the Quarry machine with a spinning cutter wheel and a fitted name plate (17.27.3-dev)", () => VoxelEngine.EditorTools.QuarryMachineSetup.RunStep121()));
 
+            AddSetupGroup(parent, ref number, "Farming & Greenhouse",
+                "Crop beds, irrigation and the automation that keeps a farm running while the player is away.", false,
+                Setup("Author planter output ports and Harvester bed coverage (18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()));
+
             AddSetupGroup(parent, ref number, "Fluids, Atmosphere & Environment",
                 "Water, liquids, weather, pressure, thermal hazards and pollution. The duplicate spherical-water action was removed; one action now owns that setup.", false,
                 Setup("Build native spherical fluids, pools, pumps, pipes and wakes", BuildFluidContent),
@@ -329,6 +333,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Repair stolen item identities", () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81()),
                 Setup("Repair known recipe input/output references", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
                 Setup("Audit and rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
+                Setup("Repair planter output ports and Harvester bed coverage (non-destructive, 18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()),
                 Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
                 Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()),

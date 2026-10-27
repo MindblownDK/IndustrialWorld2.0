@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.1.1-dev`
-**Roadmap Version:** `18.1.1-dev`
+**Current Version:** `18.2.0-dev`
+**Roadmap Version:** `18.2.0-dev`
 **Date:** 2026-10-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.2.0-dev - Planter Automation, Honest Bed Readings, Saved Trays
+- A Seed Planter with a belt, chute or pipe against it empties itself and replants from its own seed return; the Harvester covers soil, trays and sapling beds through one authority entry point and clears a lost bed instead of stalling on it
+- `IFarmBed` reports `Water01` and `IsDead`, so the FARMS and PLOT STATUS pages draw a real moisture level and a real lost-crop state; a drought no longer empties a bed in silence
+- A planted tray is saved through the shared machine-process record (crop, growth, fertilizer, loss) and comes back after a reload; automation is host-only
+
 ### 18.1.1-dev - Zero-Warning Canonical ItemIcon Bindings
 - `gitem_cargolarge`, `gitem_cargosmall`, and `space_helmet` rebind automatically to their `ItemIcons/` sprites (`exact=602`, `no-matching-png=0`, `wrong-binding-left-alone=0`, `ambiguous-png=0`)
 - Unused root-level `Assets/knight helmet.png` is removed and guarded against lingering local copies once `space_helmet` rebinds
@@ -49,27 +54,23 @@
 - Empty-ray aim reaches the configured build distance or pattern scale, supporting longer runs and taller walls
 - BuildLock freezes the plan; arrow keys nudge it in native cells and right-click commits it
 
-### 17.52.1-dev - Armour Patterns, Right-Click Clarity
-- Armour and ordinary `GItem_...` blocks remain pattern-eligible on matching native-size grids; pipe checks now use pipe-specific IDs and components
-- Grid placement prompts say RIGHT CLICK for single placement, drag start and plan release
-- Grid-pattern Unity compilation and play-mode acceptance remain open
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
+- **Planter automation and bed-telemetry runtime acceptance (18.2.0-dev):** Unity compilation, Setup Wizard run of `PlanterAutomationSetup`, port geometry on the existing Seed Planter prefab, tray-to-belt dumping, self-replanting across a full row, Harvester coverage of all three bed families with a full belt and with no belt at all, dead-bed clearing, `Water01` fall across a drought, `DEAD`/`PORT` rendering on both farm pages, and tray save/load round-trips (including a crop whose asset was renamed) remain pending in Unity.
 - **18.0.0-dev progression overhaul runtime acceptance (18.0.0-dev):** Unity compilation, Setup overhaul execution, 6-pack lab bar/icons, Crafting Bench bootstrap crafting, Exoskeletal Load Harness carry-weight scaling, jetpack-only flight enforcement, and zero-duplicate asset validation remain pending on a fresh save.
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
 - **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
-- **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, the Automatic Tree Farm and the Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm; the Farm pages already show `FarmPlot`/`CropPlanter`/`TreeFarmPlot` beds and gain the new blocks' beds when they land. `IFarmBed` needs `Water01`/`IsDead` for the true water and dead-crop states the references show - today water is derived from `NeedsWater` and a planted bed reads as dead only while it reports `NeedsOxygen`/`NeedsWater`.
+- **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, the Automatic Tree Farm and the Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm; the Farm pages already show `FarmPlot`/`CropPlanter`/`TreeFarmPlot` beds and gain the new blocks' beds when they land. `IFarmBed` carries `Water01`/`IsDead` since 18.2.0-dev, so the bed pages already draw a real moisture level and a real lost-crop state; what stays open here is the grid-farm blocks themselves.
 - ~~**Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.~~ *(17.43.0-dev)*
 - **Screen engine runtime acceptance (17.42.0-dev):** the page remaster is code-complete and statically checked but untested in Unity - fit resolution on every screen size, per-page palettes, the 12 graph series against live grids, icon placement on glass, split-pane outlines, and the typing/Escape input fixes all need in-game verification.
 - **Restored-grid clearance acceptance (17.40.0-dev):** the low-hull probe and bounded correction are implemented, but flat-ground, slope, small-grid and large-grid save/load checks have not run in Unity.
 - **Per-pane sources (17.36.0-dev):** a split screen links one source list, and its panes share it. A pane that could be pointed at its own container is a genuinely different feature - it changes the saved shape from a list to a list per pane - and no page currently needs it: the canvas pages read the construct themselves.
-- **Planter automation (17.36.0-dev):** `CropPlanter` is manual on purpose - plant, harvest, fertilize by hand. A harvester that empties a row of trays, and a conveyor port on the tray itself, are the next step for a farm that runs while the player is away.
+- ~~**Planter automation (17.36.0-dev):** `CropPlanter` is manual on purpose - plant, harvest, fertilize by hand. A harvester that empties a row of trays, and a conveyor port on the tray itself, are the next step for a farm that runs while the player is away.~~ *(18.2.0-dev - the tray's own output port empties it into a belt, chute, pipe or funnel and keeps one seed back to replant; `Harvester` covers trays, soil and sapling beds through `FarmHarvestService`; planting, fertilizing and clearing a lost crop stay manual by design.)*
 - **Cockpit shell switching in place (17.37.0-dev, authoring done in 17.39.0-dev):** one cockpit item, both shells inside one prefab, the shell chosen on the build wheel, written to `shellStyle` on placement and saved with the block, so a cockpit's hull is now a property of the block rather than of the item. What is still open is changing it on a cockpit that already exists - a wrench or terminal action from the seat or from outside - which needs a decision on whether a re-skinned cockpit keeps its integrity, name and description.
 - **Placement-wheel favorites and ordering (17.40.0-dev, expanded 17.41.0-dev):** cockpit shells and Grid Window shape/pane selectors are contextual; pinning or reordering their options remains deferred as a presentation-only player preference.
 - **Cockpit and Grid Window runtime acceptance (17.41.0-dev):** Unity setup execution, cockpit sightlines/MFDs/thrust direction/cab durability, window shape and pane appearance, rotated two-cell placement/removal, detached-grid splits, and save/network round-trips remain unverified.
@@ -192,6 +193,20 @@
 - Never gate an action on a presentation flag. `GhostValid` is the ghost's material, not the probe's answer - anything that must be true for a placement to happen asks `IsPlacementValid` directly (17.44.7-dev).
 
 **Status:** implemented in `Scripts/Building/PlacementOptions.cs`, `PlacementPatternPlanner.cs`, `PlacementAlign.cs`, `PlacementLock.cs`, `PlacementLattice.cs`, `PlacementFeedback.cs`, `Scripts/UI/PlacementModeRing.cs`, `Scripts/UI/PlacementWheel.cs` and `Scripts/GridSystem/UI/BlockRotationHud.cs`, with the integration in `BuildSystem.cs`; no Voxel Engine Setup content action is needed and no item, prefab or recipe was authored.
+
+### Farm Beds, Irrigation & Planter Automation (18.2.0-dev)
+
+~~A watered row of Seed Planter trays feeds a belt on its own, every bed reports the moisture it actually holds and whether its crop is already lost, and a planted tray survives a reload.~~ *(18.2.0-dev)*
+
+**Rules that bind:**
+- The belt against a tray IS the switch: there is no per-tray toggle and no panel. `autoDumpWhenRipe` is the prefab's policy, and the route is the player's choice of where the tray points.
+- Nothing leaves a bed until the route can accept the whole payload - a full belt is a wait, never a lost harvest - and an automated pass that finds no room hands the yield to the machine's own buffer instead.
+- `replantAfterPortHarvest` keeps exactly one seed of each port harvest as the next planting. A tray therefore cycles on its own harvest, never on thin air; a crop with a zero seed return clears after its dump and has to be replanted.
+- A lost crop is kept, not deleted: it cannot be harvested, cannot be planted over, and must be cleared by a player right-click or a Harvester with `clearDeadBeds`. `Water01` is a reading (full while watered, falling across the crop's own drought tolerance), never a dry/full guess.
+- Automation is host-only (`NetworkSession.SimulationIsRemote`); growth stays local per bed, so a guest renders the host's harvests without taking a second one.
+- Planting, fertilizing and clearing stay player actions by design; the Harvester is the only thing that replants in bulk, and only the crop that was already there.
+
+**Status:** implemented in `Scripts/Farming/CropPlanter.cs`, `FarmAutomation.cs`, `Harvester.cs`, `FarmPlot.cs`, `IFarmBed.cs`, `Scripts/GridSystem/GridScreenBlock.Pages.cs` and `Scripts/Player/PlayerInteractionTool.cs`; authored by the Setup Wizard step "Author planter output ports and Harvester bed coverage (18.2.0-dev)" (`Scripts/Editor/Farming/PlanterAutomationSetup.cs`), which adds the port geometry to the existing prefab and changes no recipe, tier or power value.
 
 ### Building Hammer Patterns (17.51.0-dev)
 

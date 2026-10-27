@@ -986,6 +986,19 @@ namespace VoxelEngine.Player
                 var farmPlot = hit.collider.GetComponentInParent<VoxelEngine.Farming.FarmPlot>();
                 if (farmPlot != null)
                 {
+                    // A crop lost to drought has to be cleared before anything else grows here.
+                    if (farmPlot.IsDead)
+                    {
+                        string lostCrop = farmPlot.CropName;
+                        farmPlot.ClearCrop();
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Cleared Dead Crop",
+                            lostCrop + " - right-click with a seed to replant",
+                            null,
+                            new Color(0.78f, 0.52f, 0.30f));
+                        return;
+                    }
+
                     // Try harvest first.
                     if (farmPlot.growthProgress >= 1f) { farmPlot.TryHarvest(inventory); return; }
                     // Try plant seed.
@@ -1006,6 +1019,20 @@ namespace VoxelEngine.Player
                 var seedPlanter = hit.collider.GetComponentInParent<VoxelEngine.Farming.CropPlanter>();
                 if (seedPlanter != null)
                 {
+                    // A dead tray keeps its crop so the player can see what was lost; the
+                    // first right-click clears it, the next one plants.
+                    if (seedPlanter.IsDead)
+                    {
+                        string lostCrop = seedPlanter.CropName;
+                        seedPlanter.ClearCrop();
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Cleared Dead Crop",
+                            lostCrop + " dried out - right-click with a seed to replant",
+                            null,
+                            new Color(0.78f, 0.52f, 0.30f));
+                        return;
+                    }
+
                     if (seedPlanter.IsReady)
                     {
                         seedPlanter.TryHarvest(inventory);
@@ -1045,7 +1072,12 @@ namespace VoxelEngine.Player
                         seedPlanter.IsEmpty
                             ? "Right-click with a seed to plant"
                             : seedPlanter.CropName + " - " + seedPlanter.StateLabel
-                              + (seedPlanter.IsFertilized ? " - Fertilized" : ""),
+                              + (seedPlanter.IsFertilized ? " - Fertilized" : "")
+                              + (seedPlanter.autoDumpWhenRipe
+                                    ? (seedPlanter.replantAfterPortHarvest
+                                        ? " - Port armed, self-replanting"
+                                        : " - Port armed")
+                                    : ""),
                         null,
                         new Color(0.38f, 0.72f, 0.36f));
                     return;

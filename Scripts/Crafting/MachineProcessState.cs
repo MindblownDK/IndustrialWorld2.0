@@ -78,6 +78,18 @@ namespace VoxelEngine.Crafting
         /// <summary>Values of the machine-specific numbers, parallel to <see cref="extraKeys"/>.</summary>
         public List<float> extraValues = new List<float>();
 
+        /// <summary>
+        /// 18.2.0-dev: keys of the machine-specific NAMES, parallel to
+        /// <see cref="textValues"/>. A Seed Planter has to remember which crop it is
+        /// holding, and a crop is a ScriptableObject name rather than a number - the
+        /// number lists above cannot carry that. Additive: a save written before this
+        /// round loads with both text lists null and every machine unaffected.
+        /// </summary>
+        public List<string> textKeys = new List<string>();
+
+        /// <summary>Values of the machine-specific names, parallel to <see cref="textKeys"/>.</summary>
+        public List<string> textValues = new List<string>();
+
         /// <summary>Write a machine-specific number, replacing any earlier value under the same key.</summary>
         public void SetExtra(string key, float value)
         {
@@ -104,12 +116,40 @@ namespace VoxelEngine.Crafting
         /// <summary>Read a machine-specific switch, carried as 0 or 1.</summary>
         public bool GetExtraBool(string key, bool fallback) => GetExtra(key, fallback ? 1f : 0f) >= 0.5f;
 
+        /// <summary>
+        /// 18.2.0-dev: write a machine-specific NAME, replacing any earlier value under
+        /// the same key. Used by the Seed Planter for the crop it is holding; kept out of
+        /// the number lists because an asset name is not a float.
+        /// </summary>
+        public void SetText(string key, string value)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (textKeys == null) textKeys = new List<string>();
+            if (textValues == null) textValues = new List<string>();
+
+            int at = textKeys.IndexOf(key);
+            if (at >= 0 && at < textValues.Count) { textValues[at] = value ?? string.Empty; return; }
+            textKeys.Add(key);
+            textValues.Add(value ?? string.Empty);
+        }
+
+        /// <summary>Read a machine-specific name, falling back to the given default when the key is absent.</summary>
+        public string GetText(string key, string fallback)
+        {
+            if (string.IsNullOrEmpty(key) || textKeys == null || textValues == null) return fallback;
+            int at = textKeys.IndexOf(key);
+            if (at < 0 || at >= textValues.Count) return fallback;
+            string value = textValues[at];
+            return string.IsNullOrEmpty(value) ? fallback : value;
+        }
+
         /// <summary>True when this payload carries nothing worth applying — keeps a restore from touching live settings.</summary>
         public bool IsEmpty => string.IsNullOrEmpty(recipeName)
                             && string.IsNullOrEmpty(selectedRecipeName)
                             && progressSeconds <= 0f
                             && (tanks == null || tanks.Count == 0)
-                            && (extraKeys == null || extraKeys.Count == 0);
+                            && (extraKeys == null || extraKeys.Count == 0)
+                            && (textKeys == null || textKeys.Count == 0);
     }
 
     /// <summary>

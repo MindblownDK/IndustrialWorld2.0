@@ -1,9 +1,37 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.1.1-dev`
+**Current Version:** `18.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.2.0-dev] Planter Automation, True Farm-Bed Telemetry and Saved Trays
+
+**Type:** MINOR - adds an output port to the Seed Planter, real hydration and lost-crop state to every farm bed, and full persistence for a planted tray. New systems, no new items, no save break: a world saved on `18.1.1-dev` loads with the same blocks, items and recipes, and its trays come back as empty trays exactly as they did before (nothing was saved on them then). Save-compatible with `18.1.1-dev`.
+
+**GitHub title:** `[18.2.0-dev] Automate seed planters with an output port, save planted trays, and give farm beds true water and lost-crop states`
+
+#### Added
+
+- **Seed Planter output port (`CropPlanter`, `FarmItemRouter`).** A belt, chute, funnel or item pipe placed against a tray is now the switch: a ripe crop leaves the tray by itself (`autoDumpWhenRipe`, `dumpRadius` 1.6 m, `dumpIntervalSeconds` 1). Nothing is taken until the route can accept the whole load, so a full belt is a wait instead of a lost harvest, and `replantAfterPortHarvest` keeps one seed of every port harvest back as the next planting - a watered row with a belt against it keeps cycling with no player and no seed stock.
+- **Shared farm automation authority (`Farming/FarmAutomation.cs`).** `FarmHarvestYield` (what a bed gives up), `FarmItemRouter` (moving a stack into the neighbouring route without ever dropping it), `FarmHarvestService.WorkBed` (the single entry point every automated bed pass goes through) and `CropCatalog` (a saved crop name back into a live `CropDefinition`, resolved through the item catalog rather than the asset database).
+- **True farm-bed telemetry (`IFarmBed.Water01`, `IFarmBed.IsDead`).** Every bed now reports the hydration it is actually holding (full while watered, then falling across the crop's own drought tolerance) and whether its crop is already lost, instead of the screen inferring both from `NeedsWater`/`NeedsOxygen`.
+- **Saved Seed Planter state (`CropPlanter` implements `IMachineProcessState`, `MachineProcessState.SetText`/`GetText`).** The planted crop, its growth, its fertilizer and its lost state ride the existing additive machine-process record, so a tray survives a reload. The shared payload gained two parallel name lists (`textKeys`/`textValues`) because a crop is an asset name, not a number; both are null-safe and a pre-18.2.0 save simply has none.
+- **Farming & Greenhouse group in the Setup Wizard (`VoxelEngineSetupWindow`, `PlanterAutomationSetup.RunStep122`).** One non-destructive step authors the tray's port geometry, fills in only unset automation values, verifies the Harvester's coverage fields, and re-links both block items, their recipes and the item catalog.
+
+#### Changed
+
+- **The Harvester works every bed type (`Harvester`).** Tilled soil, Seed Planter trays and Tree Farming Plots are all covered, each filterable (`harvestSoilPlots`, `harvestPlanters`, `harvestTreeBeds`), so one machine can be pointed at a single family without moving anything. A dead bed is cleared instead of blocking its row (`clearDeadBeds`). Bed lists are cached for 2 s, so a large farm costs one scene pass per refresh rather than one per bed per scan. Power (40 W), scan radius (8 m), scan interval (2 s) and output slots (6) are unchanged.
+- **Harvests no longer write bed fields directly (`Harvester`, `FarmPlot`, `CropPlanter`).** Every automated pass now goes through `FarmHarvestService.WorkBed` and the bed's own peek/commit pair (`PeekHarvest`, `TakeHarvest`), which is how soil and trays came to disagree on yield, fertilizer bonus and seed return.
+- **Farm screens report the bed instead of guessing (`GridScreenBlock.Pages`).** The water columns on the FARMS cards and the PLOT STATUS rows are drawn from `Water01`, the summary line gains a `DEAD` count, a lost crop reads `DEAD` / `DEAD - CLEAR`, and a tray with an armed port shows `PORT` beside its crop name.
+- **A lost crop stays visible (`FarmPlot`, `CropPlanter`, `PlayerInteractionTool`).** Drought no longer empties a bed in silence with a debug line: the crop stays on the bed, brown and collapsed, cannot be harvested, cannot be planted over, and is cleared by the first right-click with named feedback.
+- **Automation is host-only (`Harvester`, `CropPlanter`).** Both check `NetworkSession.SimulationIsRemote`, so a guest renders the host's outcome instead of harvesting the same tray a second time.
+
+#### Fixed
+
+- **A planted Seed Planter came back empty after a reload.** Trays had no save record at all; they now save and restore through the shared machine-process payload, and a crop asset that no longer resolves restores as an empty tray rather than as the wrong crop.
+- **A planted bed read as `DEAD` only while it was thirsty.** The farm page inferred death from `NeedsWater`/`NeedsOxygen`; a crop that had actually dried out and been cleared was indistinguishable from one that had never been planted.
+- **The Harvester ignored the greenhouse rule and the fertilizer bonus.** It kept a plot's crop after harvesting and wrote `growthProgress` directly, so a crop that required a sealed room could still be harvested outside one and fertilized trays paid no bonus through automation.
 
 ### [18.1.1-dev] Rebind Final Cargo and Space Helmet Icons and Retire Loose Root Helmet Texture
 
