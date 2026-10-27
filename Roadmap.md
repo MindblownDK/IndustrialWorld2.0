@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.2.0-dev`
-**Roadmap Version:** `18.2.0-dev`
+**Current Version:** `18.2.1-dev`
+**Roadmap Version:** `18.2.1-dev`
 **Date:** 2026-10-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.2.1-dev - Display and Machine-Module Unlocks Authored
+- Camera Block, all seven glass screens and both universal machine modules are claimed by research (`res_grid_displays` is new; the modules sit on `res_factory_automation`), so no shipped recipe is gated with no owner
+- The repair pass only claims recipes nobody owns, decides families from the produced item rather than an asset name, and names anything still orphaned instead of guessing a branch
+- `PlanterAutomationSetup` compiles again (three adjacent string literals became explicit concatenations)
+
 ### 18.2.0-dev - Planter Automation, Honest Bed Readings, Saved Trays
 - A Seed Planter with a belt, chute or pipe against it empties itself and replants from its own seed return; the Harvester covers soil, trays and sapling beds through one authority entry point and clears a lost bed instead of stalling on it
 - `IFarmBed` reports `Water01` and `IsDead`, so the FARMS and PLOT STATUS pages draw a real moisture level and a real lost-crop state; a drought no longer empties a bed in silence
@@ -49,17 +54,13 @@
 - Non-jetpack flight, stamina, Water Bucket, and Fire Igniter are removed; `up_inv` now grants `+75 kg` carry capacity per rank via Exoskeletal Load Harness
 - `ProgressionOverhaul18Setup` registers all valid research nodes, fixes Crafting Bench bootstrap stations, wires unclaimed recipes, and consolidates duplicate item/recipe twins
 
-### 17.52.2-dev - Reachable, Freezable Grid Patterns
-- Pattern-mode acquisition searches matching occupied cells within three native cells; active drags stay on their grid through non-grid hits and empty aim
-- Empty-ray aim reaches the configured build distance or pattern scale, supporting longer runs and taller walls
-- BuildLock freezes the plan; arrow keys nudge it in native cells and right-click commits it
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
+- **Display and module unlock acceptance (18.2.1-dev):** confirm in Unity that `DisplayAndModuleUnlockSetup` creates `res_grid_displays` once, that all eight orphaned recipes appear under a node, that no other branch loses a recipe, that nothing in the report reads "still orphaned", and that the Camera Block and every screen are craftable after the node is researched and not before.
 - **Planter automation and bed-telemetry runtime acceptance (18.2.0-dev):** Unity compilation, Setup Wizard run of `PlanterAutomationSetup`, port geometry on the existing Seed Planter prefab, tray-to-belt dumping, self-replanting across a full row, Harvester coverage of all three bed families with a full belt and with no belt at all, dead-bed clearing, `Water01` fall across a drought, `DEAD`/`PORT` rendering on both farm pages, and tray save/load round-trips (including a crop whose asset was renamed) remain pending in Unity.
 - **18.0.0-dev progression overhaul runtime acceptance (18.0.0-dev):** Unity compilation, Setup overhaul execution, 6-pack lab bar/icons, Crafting Bench bootstrap crafting, Exoskeletal Load Harness carry-weight scaling, jetpack-only flight enforcement, and zero-duplicate asset validation remain pending on a fresh save.
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.

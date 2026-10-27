@@ -173,22 +173,22 @@ namespace VoxelEngine.Farming
 
             if (bed.IsEmpty || !bed.IsReady) return FarmWorkOutcome.Idle;
 
-            if (!FarmBedAccess.TryPeekHarvest(bed, out var yield))
+            if (!FarmBedAccess.TryPeekHarvest(bed, out var harvest))
                 return FarmWorkOutcome.Idle;
-            if (yield.IsEmpty) return FarmWorkOutcome.Idle;
+            if (harvest.IsEmpty) return FarmWorkOutcome.Idle;
 
             // Ask the route before taking anything. A ripe tray that waits one more
             // pass is fine; a tray emptied into a full belt is a lost harvest.
             bool routed = origin != null
-                && (yield.item == null
-                    || FarmItemRouter.RoomFor(origin.position, pushRadius, origin.gameObject, yield.item, yield.count) >= yield.count)
-                && (yield.seedItem == null
-                    || FarmItemRouter.RoomFor(origin.position, pushRadius, origin.gameObject, yield.seedItem, yield.seedCount) >= yield.seedCount);
+                && (harvest.item == null
+                    || FarmItemRouter.RoomFor(origin.position, pushRadius, origin.gameObject, harvest.item, harvest.count) >= harvest.count)
+                && (harvest.seedItem == null
+                    || FarmItemRouter.RoomFor(origin.position, pushRadius, origin.gameObject, harvest.seedItem, harvest.seedCount) >= harvest.seedCount);
 
             if (!routed && buffer == null)
                 return FarmWorkOutcome.PortBlocked;
 
-            if (!FarmBedAccess.TryTakeHarvest(bed, autoReplant, out yield))
+            if (!FarmBedAccess.TryTakeHarvest(bed, autoReplant, out harvest))
                 return FarmWorkOutcome.Idle;
 
             // Push what the route takes, then hand every leftover unit to the buffer. The
@@ -196,20 +196,20 @@ namespace VoxelEngine.Farming
             // where two consumers share a collider and the room was counted twice.
             if (routed && origin != null)
             {
-                if (yield.item != null && yield.count > 0)
-                    yield.count -= FarmItemRouter.Push(origin, pushRadius, yield.item, yield.count);
-                if (yield.seedItem != null && yield.seedCount > 0)
-                    yield.seedCount -= FarmItemRouter.Push(origin, pushRadius, yield.seedItem, yield.seedCount);
+                if (harvest.item != null && harvest.count > 0)
+                    harvest.count -= FarmItemRouter.Push(origin, pushRadius, harvest.item, harvest.count);
+                if (harvest.seedItem != null && harvest.seedCount > 0)
+                    harvest.seedCount -= FarmItemRouter.Push(origin, pushRadius, harvest.seedItem, harvest.seedCount);
             }
 
             if (buffer != null)
             {
-                if (yield.item != null && yield.count > 0)
-                    buffer.Insert(new ItemStack(yield.item, yield.count));
-                if (yield.seedItem != null && yield.seedCount > 0)
-                    buffer.Insert(new ItemStack(yield.seedItem, yield.seedCount));
+                if (harvest.item != null && harvest.count > 0)
+                    buffer.Insert(new ItemStack(harvest.item, harvest.count));
+                if (harvest.seedItem != null && harvest.seedCount > 0)
+                    buffer.Insert(new ItemStack(harvest.seedItem, harvest.seedCount));
             }
-            else if (routed && (yield.count > 0 || yield.seedCount > 0))
+            else if (routed && (harvest.count > 0 || harvest.seedCount > 0))
             {
                 Debug.LogWarning("[Farming] A harvest was taken with no buffer to hold the leftovers; "
                     + "give the harvesting machine an output container.");
@@ -244,32 +244,32 @@ namespace VoxelEngine.Farming
     /// </summary>
     internal static class FarmBedAccess
     {
-        public static bool TryPeekHarvest(IFarmBed bed, out FarmHarvestYield yield)
+        public static bool TryPeekHarvest(IFarmBed bed, out FarmHarvestYield harvest)
         {
             switch (bed)
             {
                 case CropPlanter planter when planter.CanHarvestNow:
-                    yield = planter.PeekHarvest();
+                    harvest = planter.PeekHarvest();
                     return true;
                 case FarmPlot plot when plot.CanHarvestNow:
-                    yield = plot.PeekHarvest();
+                    harvest = plot.PeekHarvest();
                     return true;
                 default:
-                    yield = default;
+                    harvest = default;
                     return false;
             }
         }
 
-        public static bool TryTakeHarvest(IFarmBed bed, bool replant, out FarmHarvestYield yield)
+        public static bool TryTakeHarvest(IFarmBed bed, bool replant, out FarmHarvestYield harvest)
         {
             switch (bed)
             {
                 case CropPlanter planter:
-                    return planter.TakeHarvest(replant, out yield);
+                    return planter.TakeHarvest(replant, out harvest);
                 case FarmPlot plot:
-                    return plot.TakeHarvest(replant, out yield);
+                    return plot.TakeHarvest(replant, out harvest);
                 default:
-                    yield = default;
+                    harvest = default;
                     return false;
             }
         }

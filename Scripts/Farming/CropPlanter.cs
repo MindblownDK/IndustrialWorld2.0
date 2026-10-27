@@ -231,13 +231,12 @@ namespace VoxelEngine.Farming
         /// tray with its growth reset (a Harvester's auto-replant), otherwise the tray is emptied.
         /// This and <see cref="TryHarvest(Inventory)"/> are the only two ways a crop leaves a tray.
         /// </summary>
-        public bool TakeHarvest(bool replant, out FarmHarvestYield yield)
+        public bool TakeHarvest(bool replant, out FarmHarvestYield harvest)
         {
-            yield = default;
+            harvest = default;
             if (!CanHarvestNow) return false;
 
-            var crop = plantedCrop;
-            yield = PeekHarvest();
+            harvest = PeekHarvest();
 
             if (replant)
             {
@@ -261,15 +260,15 @@ namespace VoxelEngine.Farming
         {
             // The crop is read before the tray is emptied - TakeHarvest clears it.
             var crop = plantedCrop;
-            if (crop == null || !TakeHarvest(false, out var yield)) return false;
+            if (crop == null || !TakeHarvest(false, out var harvest)) return false;
 
-            if (yield.item != null && inventory != null)
+            if (harvest.item != null && inventory != null)
             {
-                inventory.Add(yield.item, yield.count);
+                inventory.Add(harvest.item, harvest.count);
                 VoxelEngine.UI.BuildFeedbackHud.Show(
                     "Harvested " + crop.cropName,
-                    "+" + yield.count + " " + yield.item.displayName,
-                    yield.item.icon,
+                    "+" + harvest.count + " " + harvest.item.displayName,
+                    harvest.item.icon,
                     new Color(0.40f, 0.80f, 0.30f));
 
                 if (crop.foodValue > 0f)
@@ -279,8 +278,8 @@ namespace VoxelEngine.Farming
                 }
             }
 
-            if (yield.seedItem != null && yield.seedCount > 0 && inventory != null)
-                inventory.Add(yield.seedItem, yield.seedCount);
+            if (harvest.seedItem != null && harvest.seedCount > 0 && inventory != null)
+                inventory.Add(harvest.seedItem, harvest.seedCount);
 
             return true;
         }
@@ -356,12 +355,12 @@ namespace VoxelEngine.Farming
             if (seedsLeaving > 0 && peek.seedItem != null
                 && !FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.seedItem, seedsLeaving)) return;
 
-            if (!TakeHarvest(selfReplant, out var yield)) return;
+            if (!TakeHarvest(selfReplant, out var harvest)) return;
 
-            if (yield.item != null && yield.count > 0)
-                FarmItemRouter.Push(transform, dumpRadius, yield.item, yield.count);
-            if (seedsLeaving > 0 && yield.seedItem != null)
-                FarmItemRouter.Push(transform, dumpRadius, yield.seedItem, seedsLeaving);
+            if (harvest.item != null && harvest.count > 0)
+                FarmItemRouter.Push(transform, dumpRadius, harvest.item, harvest.count);
+            if (seedsLeaving > 0 && harvest.seedItem != null)
+                FarmItemRouter.Push(transform, dumpRadius, harvest.seedItem, seedsLeaving);
         }
 
         private void UpdatePortIndicator()

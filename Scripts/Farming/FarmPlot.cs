@@ -162,12 +162,12 @@ namespace VoxelEngine.Farming
         /// the only two ways a crop leaves a plot - an automated harvester used to write
         /// growthProgress directly, which is how soil and trays disagreed on the yield.
         /// </summary>
-        public bool TakeHarvest(bool replant, out FarmHarvestYield yield)
+        public bool TakeHarvest(bool replant, out FarmHarvestYield harvest)
         {
-            yield = default;
+            harvest = default;
             if (!CanHarvestNow) return false;
 
-            yield = PeekHarvest();
+            harvest = PeekHarvest();
 
             if (replant)
             {
@@ -187,15 +187,15 @@ namespace VoxelEngine.Farming
         public bool TryHarvest(Inventory inv)
         {
             var crop = plantedCrop;
-            if (crop == null || !TakeHarvest(false, out var yield)) return false;
+            if (crop == null || !TakeHarvest(false, out var harvest)) return false;
 
-            if (yield.item != null && inv != null)
+            if (harvest.item != null && inv != null)
             {
-                inv.Add(yield.item, yield.count);
+                inv.Add(harvest.item, harvest.count);
                 VoxelEngine.UI.BuildFeedbackHud.Show(
                     $"Harvested {crop.cropName}",
-                    $"+{yield.count} {yield.item.displayName}",
-                    yield.item.icon,
+                    $"+{harvest.count} {harvest.item.displayName}",
+                    harvest.item.icon,
                     new Color(0.40f, 0.80f, 0.30f));
 
                 // Feed the player if there's food value.
@@ -205,8 +205,8 @@ namespace VoxelEngine.Farming
                     if (stats != null) stats.Feed(crop.foodValue);
                 }
             }
-            if (yield.seedItem != null && yield.seedCount > 0 && inv != null)
-                inv.Add(yield.seedItem, yield.seedCount);
+            if (harvest.seedItem != null && harvest.seedCount > 0 && inv != null)
+                inv.Add(harvest.seedItem, harvest.seedCount);
 
             return true;
         }

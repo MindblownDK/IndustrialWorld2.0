@@ -165,6 +165,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Build base crafting, tools, stations and blocks", BuildBaseCraftingContent),
                 Setup("Build research tree, science packs and research lab", BuildResearchContent),
                 Setup("Apply 18.1.1-dev progression, 6-science-pack, wild-crop & icon overhaul", () => VoxelEngine.EditorTools.ProgressionOverhaul18Setup.Run()),
+                Setup("Author missing display and machine-module research unlocks (18.2.1-dev)", () => VoxelEngine.EditorTools.DisplayAndModuleUnlockSetup.RunStep123()),
                 Setup("Repair science pack recipes", () => ScienceRecipeRepair.Run()),
                 Setup("Anchor runtime shaders for standalone builds", () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103()),
                 Setup("Wire multiplayer bootstrap in the active game scene", () => VoxelEngine.EditorTools.NetworkSetup.RunStep105()));
@@ -334,6 +335,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Repair known recipe input/output references", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
                 Setup("Audit and rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
                 Setup("Repair planter output ports and Harvester bed coverage (non-destructive, 18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()),
+                Setup("Repair recipes gated with no research unlock (screens, camera, machine modules) (18.2.1-dev)", () => VoxelEngine.EditorTools.DisplayAndModuleUnlockSetup.RunStep123()),
                 Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
                 Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()),

@@ -1,9 +1,30 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.2.0-dev`
+**Current Version:** `18.2.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.2.1-dev] Author the Missing Display and Machine-Module Research Unlocks, Fix a Setup Compile Error
+
+**Type:** PATCH - a compile fix and a data-repair pass. Eight already-shipped items (the Camera Block, seven glass screens and two universal machine modules) had recipes flagged as not-default that no research node claimed, so nothing in the game could ever unlock them. Save-compatible with `18.2.0-dev`; no item, recipe, prefab, cost or save field changes meaning.
+
+**GitHub title:** `[18.2.1-dev] Author research unlocks for screens, camera and machine modules, and fix the planter setup compile error`
+
+#### Fixed
+
+- **Setup compile error (`PlanterAutomationSetup`).** Three continuation lines of the Harvester block description were written as adjacent string literals, which C# does not join (`CS1003: Syntax error, ',' expected` at lines 90-92). They are explicit `+` concatenations now, and the whole file was re-scanned for the same pattern (none remain).
+- **Recipes gated with no unlock authored (Camera Block, Small/Medium/Large/Wide/Extra Large/Detail/Structural Screen, Machine Speed Module, Machine Efficiency Module).** `GridScreenSetup` and `UniversalUpgradeSetup` correctly write `unlockedByDefault = false`, but the families they author had no research node, so the audit reported them as unreachable. `DisplayAndModuleUnlockSetup.RunStep123` authors one node for the display family and puts the two modules on Factory Automation, claiming only recipes that no node currently owns.
+
+#### Added
+
+- **`Editor/Progression/DisplayAndModuleUnlockSetup.cs` (18.2.1-dev).** One non-destructive setup step built on the project's own `ResearchAuthoring` toolkit:
+  - `res_grid_displays` ("Grid Displays & Optics", Tier 3, Logistics, column 8): Unlocks the Camera Block and every glass screen.
+  - Machine Speed and Machine Efficiency Modules are appended to the existing `res_factory_automation`; that node is only authored from scratch on a project where the factory branch does not exist yet.
+  - Classification is decided from the ITEM a recipe produces (`screen`, `camera`, `upgrade_machine`, "Machine Speed/Efficiency Module"), never from an asset name, so a renamed asset cannot silently unhook it. Rail signage (departure boards, Nixie readouts, brass display screens, rail ids) is explicitly excluded and stays with the signalling branch.
+  - Only recipes claimed by nobody are touched, so no branch can lose a recipe to this pass. Node design values (tier, column, prerequisites, science cost) are written only while a node is still empty.
+  - The pass ends by naming any recipe that is still gated with no owner, instead of guessing a branch for it.
+- **Two Setup Wizard entry points (`VoxelEngineSetupWindow`).** "Author missing display and machine-module research unlocks (18.2.1-dev)" under Core & Project Bootstrap, and "Repair recipes gated with no research unlock (screens, camera, machine modules) (18.2.1-dev)" under Maintenance & Repair.
 
 ### [18.2.0-dev] Planter Automation, True Farm-Bed Telemetry and Saved Trays
 

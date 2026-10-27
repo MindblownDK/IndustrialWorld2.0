@@ -88,9 +88,9 @@ namespace VoxelEngine.EditorTools
                 "block_harvester",
                 "Harvester",
                 "Automated crop picker. Scans 8 m for mature Tilled Soil, Seed Planter trays and Tree "
-                "Farming Plots, harvests them, replants the same crop, clears a bed whose crop was "
-                "lost, and pushes the yield into adjacent belts, chutes or pipes. A full belt is a "
-                "wait, never a lost harvest. ~40 W.",
+                + "Farming Plots, harvests them, replants the same crop, clears a bed whose crop was "
+                + "lost, and pushes the yield into adjacent belts, chutes or pipes. A full belt is a "
+                + "wait, never a lost harvest. ~40 W.",
                 new Color(0.55f, 0.45f, 0.20f),
                 new Vector3Int(1, 1, 1),
                 maxHp: 400,
