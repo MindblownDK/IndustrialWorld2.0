@@ -55,6 +55,8 @@ namespace VoxelEngine.Farming
         public bool harvestPlanters = true;
         [Tooltip("Work the 3x1x3 sapling beds.")]
         public bool harvestTreeBeds = true;
+        [Tooltip("Work planting boxes (Small, Big and Large beds).")]
+        public bool harvestPlantBoxes = true;
 
         [Header("Output")]
         public int outputSlots = 6;
@@ -75,6 +77,7 @@ namespace VoxelEngine.Farming
         private readonly List<CropPlanter> _planters = new List<CropPlanter>();
         private readonly List<FarmPlot> _plots = new List<FarmPlot>();
         private readonly List<TreeFarmPlot> _trees = new List<TreeFarmPlot>();
+        private readonly List<PlantBox> _boxes = new List<PlantBox>();
 
         private void Awake()
         {
@@ -116,6 +119,7 @@ namespace VoxelEngine.Farming
             _planters.Clear();
             _plots.Clear();
             _trees.Clear();
+            _boxes.Clear();
 
             float radiusSq = scanRadius * scanRadius;
             Vector3 here = transform.position;
@@ -134,6 +138,14 @@ namespace VoxelEngine.Farming
                 for (int i = 0; i < found.Length; i++)
                     if (found[i] != null && Vector3.SqrMagnitude(found[i].transform.position - here) <= radiusSq)
                         _plots.Add(found[i]);
+            }
+
+            if (harvestPlantBoxes)
+            {
+                var found = FindObjectsByType<PlantBox>(FindObjectsInactive.Exclude);
+                for (int i = 0; i < found.Length; i++)
+                    if (found[i] != null && Vector3.SqrMagnitude(found[i].transform.position - here) <= radiusSq)
+                        _boxes.Add(found[i]);
             }
 
             if (harvestTreeBeds)
@@ -161,6 +173,13 @@ namespace VoxelEngine.Farming
                 var plot = _plots[i];
                 if (plot == null) continue;
                 FarmHarvestService.WorkBed(plot, transform, pushRadius, Output, autoReplant, clearDeadBeds);
+            }
+
+            for (int i = 0; i < _boxes.Count; i++)
+            {
+                var box = _boxes[i];
+                if (box == null) continue;
+                FarmHarvestService.WorkBed(box, transform, pushRadius, Output, autoReplant, clearDeadBeds);
             }
 
             for (int i = 0; i < _trees.Count; i++)

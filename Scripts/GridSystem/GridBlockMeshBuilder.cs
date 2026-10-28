@@ -19,7 +19,10 @@ namespace VoxelEngine.GridSystem
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
             GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, FlareVent, RouteRecorder, RefuelConnector, Generic,
             // 17.37.0-dev - the two seated cockpits. Appended so no existing style id moves.
-            CockpitCrawler, CockpitCab
+            CockpitCrawler, CockpitCab,
+            // 18.4.0-dev - the two grid farm plots. Appended, never inserted, so no
+            // existing style id moves.
+            VerticalFarm, FarmBox
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -85,6 +88,8 @@ namespace VoxelEngine.GridSystem
                 case Style.ExhaustScrubber: BuildExhaustScrubber(root, cs, body, metal, glow); break;
                 case Style.GasVent:      BuildGasVent(root, cs, body, metal, glow); break;
                 case Style.FlareVent:    BuildFlareVent(root, cs, body, metal, glow); break;
+                case Style.VerticalFarm: BuildVerticalFarm(root, cs, body, metal, glow); break;
+                case Style.FarmBox:      BuildFarmBox(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -597,6 +602,84 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── primitive helpers ─────────────────────────────────────────────────────
+        /// <summary>
+        /// 18.4.0-dev: a tall frame with three glass trays stacked inside it, each with a
+        /// lit growing strip. Read from across a hangar it should say "stacked beds" -
+        /// that is the whole reason the block exists.
+        /// </summary>
+        private static void BuildVerticalFarm(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            float half = cs * 0.5f;
+            var glass = Mat(new Color(0.45f, 0.72f, 0.62f, 0.30f), 0.1f, 0.95f);
+            var leaf = Mat(new Color(0.32f, 0.66f, 0.28f), 0.1f, 0.35f);
+            var soil = Mat(new Color(0.26f, 0.18f, 0.10f), 0f, 0.25f);
+
+            // Skid and back spine: the plot stands on the deck and leans on the hull.
+            Box(r, body, new Vector3(0f, -half * 0.94f, 0f), new Vector3(cs * 0.92f, cs * 0.10f, cs * 0.92f));
+            Box(r, metal, new Vector3(0f, 0f, -half * 0.82f), new Vector3(cs * 0.90f, cs * 0.86f, cs * 0.06f));
+
+            // Three trays, bottom to top, each a soil strip under a low glass lip.
+            for (int i = 0; i < 3; i++)
+            {
+                float y = Mathf.Lerp(-half * 0.62f, half * 0.66f, i / 2f);
+                Box(r, metal, new Vector3(0f, y, 0f), new Vector3(cs * 0.84f, cs * 0.05f, cs * 0.64f));
+                Box(r, soil, new Vector3(0f, y + cs * 0.035f, 0f), new Vector3(cs * 0.76f, cs * 0.03f, cs * 0.56f));
+                Box(r, leaf, new Vector3(0f, y + cs * 0.09f, 0f), new Vector3(cs * 0.66f, cs * 0.09f, cs * 0.46f));
+                Box(r, glow, new Vector3(0f, y + cs * 0.16f, cs * 0.30f), new Vector3(cs * 0.62f, cs * 0.02f, cs * 0.04f));
+                Box(r, glass, new Vector3(0f, y + cs * 0.07f, cs * 0.32f), new Vector3(cs * 0.84f, cs * 0.16f, cs * 0.02f));
+            }
+
+            // Uprights at the four corners, and the irrigation riser on the -X side.
+            foreach (var c in Corners(half * 0.90f))
+                Box(r, metal, new Vector3(c.x, 0f, c.z), new Vector3(cs * 0.06f, cs * 0.92f, cs * 0.06f));
+            Cyl(r, Mat(new Color(0.20f, 0.55f, 0.92f), 0.5f, 0.5f),
+                new Vector3(-half * 0.86f, 0f, half * 0.40f), cs * 0.035f, cs * 0.80f);
+        }
+
+        /// <summary>
+        /// 18.4.0-dev: a wide, low glass box with a 3x3 bed inside and a raised rim, so it
+        /// reads as "one cell of hull floor, given to a garden". The tree socket in the
+        /// middle is a visible square of open soil - the only cell on a grid plot a sapling
+        /// will take.
+        /// </summary>
+        private static void BuildFarmBox(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            float half = cs * 0.5f;
+            var glass = Mat(new Color(0.45f, 0.72f, 0.62f, 0.28f), 0.1f, 0.95f);
+            var soil = Mat(new Color(0.27f, 0.19f, 0.11f), 0f, 0.25f);
+            var leaf = Mat(new Color(0.34f, 0.68f, 0.30f), 0.1f, 0.35f);
+
+            // Deck tray, rim and soil.
+            Box(r, body, new Vector3(0f, -half * 0.82f, 0f), new Vector3(cs * 0.96f, cs * 0.30f, cs * 0.96f));
+            Box(r, metal, new Vector3(0f, -half * 0.62f, half * 0.92f), new Vector3(cs * 0.96f, cs * 0.10f, cs * 0.06f));
+            Box(r, metal, new Vector3(0f, -half * 0.62f, -half * 0.92f), new Vector3(cs * 0.96f, cs * 0.10f, cs * 0.06f));
+            Box(r, metal, new Vector3(half * 0.92f, -half * 0.62f, 0f), new Vector3(cs * 0.06f, cs * 0.10f, cs * 0.84f));
+            Box(r, metal, new Vector3(-half * 0.92f, -half * 0.62f, 0f), new Vector3(cs * 0.06f, cs * 0.10f, cs * 0.84f));
+            Box(r, soil, new Vector3(0f, -half * 0.60f, 0f), new Vector3(cs * 0.84f, cs * 0.06f, cs * 0.84f));
+
+            // A 3x3 of low crop rows, with the centre cell left open as the tree socket.
+            float step = cs * 0.26f;
+            for (int x = -1; x <= 1; x++)
+            {
+                for (int z = -1; z <= 1; z++)
+                {
+                    var p = new Vector3(x * step, -half * 0.54f, z * step);
+                    bool centre = x == 0 && z == 0;
+                    Box(r, centre ? soil : leaf, p, new Vector3(cs * 0.20f, cs * 0.06f, cs * 0.20f));
+                }
+            }
+
+            // Corner posts and a glass skirt so the bed is enclosed but never hidden.
+            foreach (var c in Corners(half * 0.90f))
+                Box(r, metal, new Vector3(c.x, -half * 0.30f, c.z), new Vector3(cs * 0.05f, cs * 0.44f, cs * 0.05f));
+            Box(r, glass, new Vector3(0f, -half * 0.30f, half * 0.90f), new Vector3(cs * 0.84f, cs * 0.44f, cs * 0.02f));
+            Box(r, glass, new Vector3(0f, -half * 0.30f, -half * 0.90f), new Vector3(cs * 0.84f, cs * 0.44f, cs * 0.02f));
+
+            // Grow lamps over the bed.
+            for (int i = -1; i <= 1; i++)
+                Box(r, glow, new Vector3(i * step, half * 0.02f, 0f), new Vector3(cs * 0.06f, cs * 0.02f, cs * 0.70f));
+        }
+
         private static readonly Vector3 V0 = Vector3.zero;
         private static Vector3 One(float cs) => new Vector3(cs, cs, cs);
 

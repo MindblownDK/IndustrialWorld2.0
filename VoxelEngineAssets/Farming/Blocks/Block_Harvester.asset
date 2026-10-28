@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_Harvester
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_harvester
+  displayName: Harvester
+  description: Automated crop picker. Scans 8 m for mature Tilled Soil, Seed Planter
+    trays and Tree Farming Plots, harvests them, replants the same crop, clears a
+    bed whose crop was lost, and pushes the yield into adjacent belts, chutes or
+    pipes. A full belt is a wait, never a lost harvest. ~40 W.
+  icon: {fileID: 21300000, guid: cb7f2c19216f119fab3fad88708e00e6, type: 3}
+  iconTint: {r: 0.55, g: 0.45, b: 0.2, a: 1}
+  maxStack: 900
+  massPerUnit: 12
+  category: Misc
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
+  placedPrefab: {fileID: 101889488389859086, guid: ff825ed3705528a4397c4e573da084ef, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 1
+  blockHealth: 100
+  softClearance: 0
+  miningTier: 1
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

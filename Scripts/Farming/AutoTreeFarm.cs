@@ -77,6 +77,10 @@ namespace VoxelEngine.Farming
         // Visual animation transforms
         private Transform _treeRoot;
         private Transform _sawCarriage;
+        private Transform _inputLid;
+        private Transform _outputLid;
+        private Transform _statusBeacon;
+        private Transform _waterGauge;
         private Transform _sawBlade;
 
         private static readonly Collider[] OverlapBuf = new Collider[48];
@@ -634,11 +638,26 @@ namespace VoxelEngine.Farming
             if (rootMr != null) rootMr.enabled = false;
 
             var existing = transform.Find("Generated_AutoTreeFarmVisuals");
+
+            // A prefab built before 18.3.0-dev has an open frame with the bins buried
+            // inside it. If the intake hopper is missing the machine is rebuilt rather
+            // than patched, so an old world gets the new body the first time it loads.
+            if (existing != null && existing.Find("InputHopper") == null)
+            {
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+                existing = null;
+            }
+
             if (existing != null)
             {
                 _treeRoot = existing.Find("GrowingTreeRoot");
                 _sawCarriage = existing.Find("SawCarriage");
                 if (_sawCarriage != null) _sawBlade = _sawCarriage.Find("SawBlade");
+                _inputLid = existing.Find("InputHopper/Lid");
+                _outputLid = existing.Find("OutputBin/Lid");
+                _statusBeacon = existing.Find("StatusBeacon");
+                _waterGauge = existing.Find("WaterGauge");
                 return;
             }
 
@@ -706,6 +725,70 @@ namespace VoxelEngine.Farming
             MakePart(_treeRoot, PrimitiveType.Sphere, "Canopy_Crown", new Vector3(0f, 3.58f, 0f), new Vector3(1.60f, 1.18f, 1.60f), Vector3.zero, foliageBright);
             MakePart(_treeRoot, PrimitiveType.Sphere, "Canopy_West", new Vector3(-0.68f, 2.50f, 0.26f), new Vector3(1.38f, 1.12f, 1.38f), Vector3.zero, foliageBright);
             MakePart(_treeRoot, PrimitiveType.Sphere, "Canopy_East", new Vector3(0.70f, 2.58f, -0.22f), new Vector3(1.38f, 1.12f, 1.38f), Vector3.zero, foliageMid);
+
+            // ── 18.3.0-dev restyle ───────────────────────────────────────────
+            // The machine used to be an open frame around a small tree: the block's
+            // model stopped well short of its 4x3x4 footprint, and the four input slots
+            // and eight output slots lived behind the pillars where nobody could see
+            // them. The body now fills the block and both bins hang off the outside
+            // faces, so what goes in and what comes out is visible from the ground.
+            Color glassPane = new Color(0.55f, 0.78f, 0.82f, 0.35f);
+            Color binSteel = new Color(0.30f, 0.34f, 0.39f);
+            Color saplingGreen = new Color(0.34f, 0.62f, 0.26f);
+            Color logBrown = new Color(0.46f, 0.31f, 0.17f);
+
+            // Roof truss: closes the silhouette so the block reads as a machine, not a fence.
+            MakePart(root, PrimitiveType.Cube, "RoofTruss_N", new Vector3(0f, 2.42f, 1.76f), new Vector3(3.62f, 0.14f, 0.18f), Vector3.zero, frameSteel);
+            MakePart(root, PrimitiveType.Cube, "RoofTruss_S", new Vector3(0f, 2.42f, -1.76f), new Vector3(3.62f, 0.14f, 0.18f), Vector3.zero, frameSteel);
+            MakePart(root, PrimitiveType.Cube, "RoofTruss_E", new Vector3(1.76f, 2.42f, 0f), new Vector3(0.18f, 0.14f, 3.62f), Vector3.zero, frameSteel);
+            MakePart(root, PrimitiveType.Cube, "RoofTruss_W", new Vector3(-1.76f, 2.42f, 0f), new Vector3(0.18f, 0.14f, 3.62f), Vector3.zero, frameSteel);
+            MakePart(root, PrimitiveType.Cube, "RoofRidge", new Vector3(0f, 2.52f, 0f), new Vector3(3.30f, 0.12f, 3.30f), Vector3.zero, gantrySteel);
+
+            // Growth housing: a framed glass box around the bed, so the tree and the saw
+            // carriage stay visible instead of sitting in a dark hole. A solid band at
+            // the bottom hides the machinery while leaving the canopy in view.
+            MakePart(root, PrimitiveType.Cube, "HousingBase", new Vector3(0f, -0.66f, 0f), new Vector3(3.52f, 0.30f, 3.52f), Vector3.zero, binSteel);
+            MakePart(root, PrimitiveType.Cube, "Glass_N", new Vector3(0f, 0.90f, 1.72f), new Vector3(3.36f, 2.86f, 0.06f), Vector3.zero, glassPane);
+            MakePart(root, PrimitiveType.Cube, "Glass_S", new Vector3(0f, 0.90f, -1.72f), new Vector3(3.36f, 2.86f, 0.06f), Vector3.zero, glassPane);
+            MakePart(root, PrimitiveType.Cube, "Glass_E", new Vector3(1.72f, 0.90f, 0f), new Vector3(0.06f, 2.86f, 3.36f), Vector3.zero, glassPane);
+            MakePart(root, PrimitiveType.Cube, "Glass_W", new Vector3(-1.72f, 0.90f, 0f), new Vector3(0.06f, 2.86f, 3.36f), Vector3.zero, glassPane);
+
+            // Service hatch on -Z: always open, so the saw carriage and the stump are
+            // readable from outside while a cycle runs.
+            MakePart(root, PrimitiveType.Cube, "HatchFrame_Top", new Vector3(0f, -0.34f, -1.78f), new Vector3(1.42f, 0.10f, 0.12f), Vector3.zero, hazardYellow);
+            MakePart(root, PrimitiveType.Cube, "HatchFrame_Bottom", new Vector3(0f, 0.30f, -1.78f), new Vector3(1.42f, 0.10f, 0.12f), Vector3.zero, hazardYellow);
+
+            // Input hopper on -X: saplings and fertiliser go in here. The stack of
+            // saplings on the lip is the tell that this face is the intake.
+            var hopper = new GameObject("InputHopper").transform;
+            hopper.SetParent(root, false);
+            hopper.localPosition = new Vector3(-1.86f, -0.60f, 0.72f);
+            MakePart(hopper, PrimitiveType.Cube, "Body", Vector3.zero, new Vector3(0.38f, 0.70f, 0.86f), Vector3.zero, binSteel);
+            MakePart(hopper, PrimitiveType.Cube, "Chute", new Vector3(0.20f, -0.16f, 0f), new Vector3(0.24f, 0.24f, 0.62f), Vector3.zero, gantrySteel);
+            MakePart(hopper, PrimitiveType.Cube, "Lid", new Vector3(-0.04f, 0.36f, 0f), new Vector3(0.46f, 0.06f, 0.90f), Vector3.zero, hazardYellow);
+            MakePart(hopper, PrimitiveType.Cube, "SaplingsA", new Vector3(-0.04f, 0.24f, -0.18f), new Vector3(0.30f, 0.22f, 0.22f), new Vector3(0f, 8f, 0f), saplingGreen);
+            MakePart(hopper, PrimitiveType.Cube, "SaplingsB", new Vector3(-0.04f, 0.24f, 0.16f), new Vector3(0.30f, 0.22f, 0.22f), new Vector3(0f, -6f, 0f), saplingGreen);
+            _inputLid = hopper.Find("Lid");
+
+            // Output bin on +X: logs and biomass come out here, open-topped so a full
+            // bin is obvious without opening a panel.
+            var output = new GameObject("OutputBin").transform;
+            output.SetParent(root, false);
+            output.localPosition = new Vector3(1.86f, -0.62f, -0.72f);
+            MakePart(output, PrimitiveType.Cube, "Body", Vector3.zero, new Vector3(0.38f, 0.74f, 0.92f), Vector3.zero, binSteel);
+            MakePart(output, PrimitiveType.Cube, "Lip_W", new Vector3(-0.20f, 0.40f, 0f), new Vector3(0.06f, 0.08f, 0.92f), Vector3.zero, hazardYellow);
+            MakePart(output, PrimitiveType.Cube, "Lip_E", new Vector3(0.20f, 0.40f, 0f), new Vector3(0.06f, 0.08f, 0.92f), Vector3.zero, hazardYellow);
+            MakePart(output, PrimitiveType.Cube, "Lid", new Vector3(0f, 0.40f, 0f), new Vector3(0.44f, 0.05f, 0.92f), Vector3.zero, gantrySteel);
+            MakePart(output, PrimitiveType.Cube, "LogsA", new Vector3(0f, 0.28f, -0.22f), new Vector3(0.34f, 0.20f, 0.34f), new Vector3(90f, 0f, 0f), logBrown);
+            MakePart(output, PrimitiveType.Cube, "LogsB", new Vector3(0f, 0.28f, 0.20f), new Vector3(0.34f, 0.20f, 0.34f), new Vector3(90f, 12f, 0f), logBrown);
+            _outputLid = output.Find("Lid");
+
+            // Water sight glass on -Z and a status beacon on the +Z rail.
+            MakePart(root, PrimitiveType.Cube, "WaterGaugeHouse", new Vector3(-0.96f, -0.10f, -1.80f), new Vector3(0.26f, 1.10f, 0.10f), Vector3.zero, binSteel);
+            var gaugeGo = MakePart(root, PrimitiveType.Cube, "WaterGauge", new Vector3(-0.96f, -0.10f, -1.86f), new Vector3(0.14f, 1.00f, 0.05f), Vector3.zero, waterBlue);
+            _waterGauge = gaugeGo.transform;
+            var beaconGo = MakePart(root, PrimitiveType.Cube, "StatusBeacon", new Vector3(0f, 1.28f, 1.82f), new Vector3(0.30f, 0.10f, 0.10f), Vector3.zero, hazardYellow);
+            _statusBeacon = beaconGo.transform;
         }
 
         private void UpdateVisualAnimation(float dt)
@@ -735,6 +818,35 @@ namespace VoxelEngine.Farming
                 float cutPhase = _growth01 > 0.88f ? Mathf.InverseLerp(0.88f, 1.0f, _growth01) : 0f;
                 float zPos = Mathf.Lerp(-1.25f, -0.22f, Mathf.Sin(cutPhase * Mathf.PI));
                 _sawCarriage.localPosition = new Vector3(0f, -0.52f, zPos);
+            }
+
+            // Bins and gauges answer questions at a glance: a closed lid means there is
+            // nothing to collect, a lit beacon means the gantry is running, and the sight
+            // glass is the irrigation tank.
+            if (_outputLid != null)
+                _outputLid.localPosition = new Vector3(0f, outputC != null && !outputC.IsEmpty() ? 0.40f : 0.46f, 0f);
+
+            if (_inputLid != null)
+                _inputLid.localPosition = new Vector3(-0.04f, inputC != null && !inputC.IsEmpty() ? 0.36f : 0.42f, 0f);
+
+            if (_waterGauge != null)
+            {
+                float fill = waterTank != null && waterTank.capacity > 0f
+                    ? Mathf.Clamp01(waterTank.stored / waterTank.capacity) : 0f;
+                _waterGauge.localScale = new Vector3(0.14f, Mathf.Max(0.03f, 1.00f * fill), 0.05f);
+                _waterGauge.localPosition = new Vector3(-0.96f, -0.10f - 0.5f + 0.5f * fill, -1.86f);
+            }
+
+            if (_statusBeacon != null && _statusBeacon.TryGetComponent<MeshRenderer>(out var beaconMr))
+            {
+                Color tint = IsActive ? new Color(0.36f, 0.92f, 0.48f)
+                    : IsOutputFull() ? new Color(0.90f, 0.44f, 0.24f)
+                    : new Color(0.84f, 0.72f, 0.28f);
+                var mpb = new MaterialPropertyBlock();
+                beaconMr.GetPropertyBlock(mpb);
+                mpb.SetColor(BaseColorId, tint);
+                mpb.SetColor(ColorId, tint);
+                beaconMr.SetPropertyBlock(mpb);
             }
 
             if (_sawBlade != null && IsActive)

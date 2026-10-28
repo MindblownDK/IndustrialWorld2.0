@@ -1,0 +1,809 @@
+#if UNITY_EDITOR
+using System.Collections.Generic;
+using UnityEditor;
+using UnityEngine;
+using VoxelEngine.Building;
+using VoxelEngine.Crafting;
+using VoxelEngine.Farming;
+using VoxelEngine.Items;
+using VoxelEngine.Power;
+
+namespace VoxelEngine.EditorTools
+{
+    /// <summary>
+    /// Non-destructive Setup Wizard step (18.3.0-dev) that puts the world-side farm
+    /// overhaul into an existing project.
+    ///
+    /// Created when missing:
+    ///   * Small Plant Box, Big Plant Box and Large Plant Bed - three separate blocks,
+    ///     because a 1x1 bed and a 3x3 bed are not the same item at two prices. Each is a
+    ///     prefab, a block item, an icon and a recipe;
+    ///   * Auto Farm Plot - the powered, self-emptying version of tilled soil. Tilled Soil
+    ///     itself is left exactly as it is and stays the manual early-game block.
+    ///
+    /// Repaired when present, never rewired from scratch:
+    ///   * the Sprinkler prefab gains the 18.3.0 body (mast, sight glass, rotating head)
+    ///     and its new tank fields, keeping the authored wattage;
+    ///   * the Automatic Tree Farm rebuilds its body so the input hopper and output bin
+    ///     stand outside the frame instead of behind it.
+    ///
+    /// Nothing is deleted and no authored number is overwritten: an existing field keeps
+    /// its value, an existing prefab keeps its tuning, and every asset only ever gains
+    /// components it did not have.
+    ///
+    /// Editor-only: invoked from Tools -> Voxel Engine -> Voxel Engine Setup.
+    /// </summary>
+    public static class WorldFarmOverhaulSetup
+    {
+        private const string AssetRoot         = "Assets/VoxelEngineAssets";
+        private const string FarmRoot          = AssetRoot + "/Farming";
+        private const string FarmPrefabsFolder = FarmRoot + "/Prefabs";
+        private const string FarmBlocksFolder  = FarmRoot + "/Blocks";
+        private const string FarmRecipesFolder = FarmRoot + "/Recipes";
+        private const string ForestryMats      = AssetRoot + "/Materials/Forestry";
+        private const string IconRoot          = AssetRoot + "/ItemIcons/Farming";
+        private const string RecipeRegistryPath = AssetRoot + "/RecipeRegistry.asset";
+        private const string CatalogPath       = "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset";
+
+        public static void RunStep124()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorUtility.DisplayDialog("Farm Overhaul Setup",
+                    "Exit Play Mode before running setup.", "OK");
+                return;
+            }
+
+            var created = new List<string>();
+            var repaired = new List<string>();
+            var preserved = new List<string>();
+
+            EnsureFolders();
+
+            var woodLog = FindItem("Item_WoodLog");
+            var clay = FindItem("Item_Clay");
+            var ironPlate = FindItem("Item_IronPlate");
+            var steelPlate = FindItem("Item_SteelPlate") ?? ironPlate;
+            var copperWire = FindItem("Item_CopperWire");
+            var glass = FindItem("Item_Glass");
+            var circuit = FindItem("Item_Circuit");
+            var sapling = FindItem("Seed_TreeSapling");
+            var biomass = FindItem("Item_Biomass");
+
+            // ── 1) Three planting boxes ─────────────────────────────────────
+            var small = EnsurePlantBox(PlantBoxSize.Small, "PlantBoxSmall", "Block_PlantBoxSmall",
+                "block_plant_box_small", "Small Plant Box", 1, 40f,
+                "A one-metre planting box. Right-click with a seed to plant, right-click when ripe to harvest, "
+                + "fertilize once with biomass or Organic Fertilizer, and water it by hand with a Liquid Canister "
+                + "or automatically with a Sprinkler. Holds one crop.",
+                new Color(0.34f, 0.66f, 0.32f),
+                woodLog, clay, ironPlate, copperWire, glass, sapling, biomass,
+                created, repaired, preserved);
+
+            var big = EnsurePlantBox(PlantBoxSize.Big, "PlantBoxBig", "Block_PlantBoxBig",
+                "block_plant_box_big", "Big Plant Box", 2, 60f,
+                "A two-by-two planting box with four cells. Same rules as the small box - hand water or a Sprinkler, "
+                + "one fertilizer per cell - but four crops share one tank.",
+                new Color(0.30f, 0.64f, 0.34f),
+                woodLog, clay, ironPlate, copperWire, glass, sapling, biomass,
+                created, repaired, preserved);
+
+            var large = EnsurePlantBox(PlantBoxSize.Large, "PlantBedLarge", "Block_PlantBedLarge",
+                "block_plant_bed_large", "Large Plant Bed", 3, 90f,
+                "A three-by-three raised bed with nine cells and a trellis. The only planting box that accepts a "
+                + "tree sapling: one cell can carry a tree to full timber while the other eight grow crops. Hand water, "
+                + "or connect a Sprinkler to keep the whole bed irrigated.",
+                new Color(0.26f, 0.60f, 0.30f),
+                woodLog, clay, ironPlate, copperWire, glass, sapling, biomass,
+                created, repaired, preserved);
+
+            EnsureRecipe("Recipe_PlantBoxSmall", "Small Plant Box", small, StationTier.CraftingBench,
+                created, repaired, preserved, ((ItemDefinition)woodLog, 4), ((ItemDefinition)clay, 2));
+            EnsureRecipe("Recipe_PlantBoxBig", "Big Plant Box", big, StationTier.CraftingBench,
+                created, repaired, preserved, ((ItemDefinition)woodLog, 8), ((ItemDefinition)clay, 4), ((ItemDefinition)ironPlate, 2));
+            EnsureRecipe("Recipe_PlantBedLarge", "Large Plant Bed", large, StationTier.Assembler,
+                created, repaired, preserved, ((ItemDefinition)woodLog, 12), ((ItemDefinition)clay, 8),
+                ((ItemDefinition)ironPlate, 4), ((ItemDefinition)copperWire, 4));
+
+            // ── 2) Auto Farm Plot ───────────────────────────────────────────
+            var autoPlot = EnsureAutoFarmPlot(ironPlate, steelPlate, clay, glass, created, repaired, preserved);
+            EnsureRecipe("Recipe_AutoFarmPlot", "Auto Farm Plot", autoPlot, StationTier.Assembler,
+                created, repaired, preserved, ((ItemDefinition)ironPlate, 2), ((ItemDefinition)clay, 2), ((ItemDefinition)copperWire, 2));
+
+            // ── 3) Sprinkler rebuild ────────────────────────────────────────
+            RepairSprinkler(repaired, preserved);
+
+            // ── 4) Automatic Tree Farm restyle ──────────────────────────────
+            RepairAutoTreeFarm(woodLog, sapling, biomass, repaired, preserved);
+
+            // ── 5) Icons ────────────────────────────────────────────────────
+            EnsureIcon("block_plant_box_small", IconKind.SmallBox, IconRoot);
+            EnsureIcon("block_plant_box_big", IconKind.BigBox, IconRoot);
+            EnsureIcon("block_plant_bed_large", IconKind.LargeBed, IconRoot);
+            EnsureIcon("block_auto_farm_plot", IconKind.AutoPlot, IconRoot);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Farm overhaul (18.3.0-dev)");
+            sb.AppendLine();
+            sb.AppendLine($"Created: {created.Count}");
+            AppendList(sb, created);
+            sb.AppendLine();
+            sb.AppendLine($"Repaired: {repaired.Count}");
+            AppendList(sb, repaired);
+            sb.AppendLine();
+            sb.AppendLine($"Preserved: {preserved.Count}");
+            AppendList(sb, preserved);
+            sb.AppendLine();
+            sb.AppendLine("Plant boxes: Small = 1 crop, Big = 4, Large = 9 (trees only on Large).");
+            sb.AppendLine("Sprinkler: fill by hand with a Liquid Canister, or connect a pipe for automatic refill.");
+
+            Debug.Log("[Farm Overhaul] " + sb.ToString().Replace("\n", "\n[Farm Overhaul] "));
+            EditorUtility.DisplayDialog("Farm Overhaul Complete",
+                $"Created {created.Count}, repaired {repaired.Count}, preserved {preserved.Count}.\n\n"
+                + "Small/Big Plant Box and the Large Plant Bed are in the Farming tab. "
+                + "The Auto Farm Plot replaces the manual plot once you have power.", "OK");
+        }
+
+        // ── Planting boxes ──────────────────────────────────────────────────
+        private static BlockItem EnsurePlantBox(PlantBoxSize size, string prefabName, string assetName,
+            string itemId, string displayName, int cellsPerSide, float waterCapacity, string description,
+            Color tint, ItemDefinition woodLog, ItemDefinition clay, ItemDefinition ironPlate,
+            ItemDefinition copperWire, ItemDefinition glass, ItemDefinition sapling, ItemDefinition biomass,
+            List<string> created, List<string> repaired, List<string> preserved)
+        {
+            int side = Mathf.Clamp(cellsPerSide, 1, 3);
+            var block = EnsureBlockItem($"{FarmBlocksFolder}/{assetName}.asset", itemId, displayName, description,
+                tint, new Vector3Int(side, 1, side), maxHp: 90 + side * side * 30,
+                category: "Farming", created, repaired, preserved);
+
+            string prefabPath = $"{FarmPrefabsFolder}/{prefabName}.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+
+            var root = new GameObject(prefabName);
+            try
+            {
+                var box = root.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.16f, 0f);
+                box.size = new Vector3(side * 0.96f, 0.34f, side * 0.96f);
+
+                var pb = root.AddComponent<PlacedBlock>();
+                pb.Item = block;
+                pb.Hp = block.blockHealth;
+
+                var plant = root.AddComponent<PlantBox>();
+                plant.boxSize = size;
+                plant.cellsPerSide = side;
+                plant.waterCapacity = waterCapacity;
+                plant.waterStored = waterCapacity;
+                plant.woodLogItem = woodLog;
+                plant.saplingItem = sapling;
+                plant.biomassItem = biomass;
+                plant.autoDumpWhenRipe = true;
+                plant.replantAfterPortHarvest = true;
+                plant.RebuildVisuals();
+                AssignFarmMaterials(root);
+
+                var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                block.placedPrefab = saved;
+                EditorUtility.SetDirty(block);
+
+                if (existing != null) preserved.Add($"{displayName} prefab tuning");
+                else created.Add($"{displayName} prefab");
+
+                return block;
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        // ── Auto Farm Plot ──────────────────────────────────────────────────
+        private static BlockItem EnsureAutoFarmPlot(ItemDefinition ironPlate, ItemDefinition steelPlate,
+            ItemDefinition clay, ItemDefinition glass, List<string> created, List<string> repaired,
+            List<string> preserved)
+        {
+            const string displayName = "Auto Farm Plot";
+            var block = EnsureBlockItem($"{FarmBlocksFolder}/Block_AutoFarmPlot.asset",
+                "block_auto_farm_plot", displayName,
+                "Powered one-metre plot. Plant a seed, water it by hand with a Liquid Canister, and it hands its "
+                + "harvest to a belt, chute, funnel or item pipe standing next to it - replanting itself if you leave "
+                + "self re-seeding on. Draws a trickle of power while it works. Tilled Soil stays the manual plot for "
+                + "the early game.",
+                new Color(0.44f, 0.62f, 0.30f), new Vector3Int(1, 1, 1), maxHp: 110,
+                category: "Farming", created, repaired, preserved);
+
+            const string prefabPath = FarmPrefabsFolder + "/AutoFarmPlot.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+
+            var root = new GameObject("AutoFarmPlot");
+            try
+            {
+                var box = root.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.16f, 0f);
+                box.size = new Vector3(0.96f, 0.34f, 0.96f);
+
+                var pb = root.AddComponent<PlacedBlock>();
+                pb.Item = block;
+                pb.Hp = block.blockHealth;
+
+                var power = root.AddComponent<PowerConsumer>();
+                power.wattsPerSecond = 8f;
+                power.connectRadius = 2f;
+
+                var plot = root.AddComponent<FarmPlot>();
+                plot.automatic = true;
+                plot.autoDumpWhenRipe = true;
+                plot.replantAfterPortHarvest = true;
+                plot.waterCapacity = 40f;
+                plot.waterStored = 40f;
+                plot.dumpRadius = 1.7f;
+                plot.dumpIntervalSeconds = 1f;
+                AssignFarmMaterials(root);
+
+                var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                block.placedPrefab = saved;
+                EditorUtility.SetDirty(block);
+
+                if (existing != null) preserved.Add($"{displayName} prefab tuning");
+                else created.Add($"{displayName} prefab");
+
+                return block;
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        // ── Sprinkler ───────────────────────────────────────────────────────
+        private static void RepairSprinkler(List<string> repaired, List<string> preserved)
+        {
+            const string prefabPath = FarmPrefabsFolder + "/Sprinkler.prefab";
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null)
+            {
+                preserved.Add("Sprinkler prefab (not present yet - run the farming content step first)");
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                bool changed = false;
+
+                var power = contents.GetComponent<PowerConsumer>();
+                if (power == null)
+                {
+                    power = contents.AddComponent<PowerConsumer>();
+                    power.wattsPerSecond = 20f;
+                    power.connectRadius = 2f;
+                    changed = true;
+                    repaired.Add("Sprinkler power draw");
+                }
+
+                var sprinkler = contents.GetComponent<Sprinkler>();
+                if (sprinkler == null)
+                {
+                    sprinkler = contents.AddComponent<Sprinkler>();
+                    changed = true;
+                    repaired.Add("Sprinkler component");
+                }
+
+                // Only fill in what has never been authored; a tuned sprinkler keeps its numbers.
+                if (sprinkler.waterCapacity <= 0f) { sprinkler.waterCapacity = 60f; sprinkler.waterStored = 60f; changed = true; }
+                if (sprinkler.litresPerSecond <= 0f) { sprinkler.litresPerSecond = 0.4f; changed = true; }
+                if (sprinkler.refillLitresPerSecond <= 0f) { sprinkler.refillLitresPerSecond = 2f; changed = true; }
+                if (sprinkler.radius <= 0f) { sprinkler.radius = 8f; changed = true; }
+                if (sprinkler.wattsWhileSpraying <= 0f) { sprinkler.wattsWhileSpraying = 20f; changed = true; }
+
+                // The old body was a single blue cube; the new one is a mast with a sight
+                // glass, so an old prefab has to be rebuilt rather than left as it is.
+                sprinkler.RebuildVisuals();
+                AssignFarmMaterials(contents);
+                changed = true;
+
+                var collider = contents.GetComponent<BoxCollider>();
+                if (collider != null)
+                {
+                    collider.center = new Vector3(0f, 0.30f, 0f);
+                    collider.size = new Vector3(0.60f, 0.70f, 0.60f);
+                }
+
+                if (changed)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+                    repaired.Add("Sprinkler body (mast, sight glass, rotating head)");
+                }
+                else preserved.Add("Sprinkler prefab");
+
+                var block = AssetDatabase.LoadAssetAtPath<BlockItem>($"{FarmBlocksFolder}/Block_Sprinkler.asset");
+                if (block != null)
+                {
+                    AppendIfMissing(block,
+                        "internal tank",
+                        " Holds its own water tank: fill it by hand with a Liquid Canister, or connect a pipe "
+                        + "for automatic refill. Draws about 20 W while it sprays.",
+                        repaired);
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        // ── Automatic Tree Farm ─────────────────────────────────────────────
+        private static void RepairAutoTreeFarm(ItemDefinition woodLog, ItemDefinition sapling,
+            ItemDefinition biomass, List<string> repaired, List<string> preserved)
+        {
+            const string prefabPath = FarmPrefabsFolder + "/AutoTreeFarm.prefab";
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null)
+            {
+                preserved.Add("Automatic Tree Farm prefab (not present yet - run the forestry content step first)");
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                var farm = contents.GetComponent<AutoTreeFarm>();
+                if (farm == null)
+                {
+                    preserved.Add("Automatic Tree Farm (component missing)");
+                    return;
+                }
+
+                if (woodLog != null) farm.woodLogItem = woodLog;
+                if (sapling != null) farm.saplingItem = sapling;
+                if (biomass != null) farm.biomassItem = biomass;
+
+                farm.EnsureContainers();
+                farm.EnsureTanks();
+                farm.RebuildVisuals();
+                AssignFarmMaterials(contents);
+
+                PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+                repaired.Add("Automatic Tree Farm body (machine fills the frame, hopper and output bin outside)");
+
+                var block = AssetDatabase.LoadAssetAtPath<BlockItem>($"{FarmBlocksFolder}/Block_AutoTreeFarm.asset");
+                if (block != null)
+                {
+                    AppendIfMissing(block,
+                        "hopper",
+                        " Saplings and fertilizer go into the intake hopper on one side; logs, saplings, biomass "
+                        + "and wood chips come out of the open bin on the other.",
+                        repaired);
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        // ── Icons ───────────────────────────────────────────────────────────
+        private enum IconKind { SmallBox, BigBox, LargeBed, AutoPlot, VerticalFarm, FarmBox }
+
+        /// <summary>
+        /// 18.4.0-dev step: the two grid farm plots are authored by the grid content step
+        /// inside the wizard; this step gives them their icons and makes sure their items
+        /// can survive a save. It never creates the prefabs - that is the grid step's job.
+        /// </summary>
+        public static void RunStep125()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+
+            const string gridIconRoot = AssetRoot + "/ItemIcons/Grid Blocks";
+            EnsureIcon("gitem_verticalfarm", IconKind.VerticalFarm, gridIconRoot);
+            EnsureIcon("gitem_farmbox", IconKind.FarmBox, gridIconRoot);
+
+            var vertical = AssetDatabase.LoadAssetAtPath<ItemDefinition>($"{AssetRoot}/Items/GItem_VerticalFarm.asset");
+            var farmBox = AssetDatabase.LoadAssetAtPath<ItemDefinition>($"{AssetRoot}/Items/GItem_FarmBox.asset");
+            EnsureCatalogEntry(vertical);
+            EnsureCatalogEntry(farmBox);
+
+            if (vertical == null || farmBox == null)
+            {
+                Debug.LogWarning("[Farm Overhaul] Grid farm items are missing - run the grid block content step first, then this step.");
+                return;
+            }
+
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Farm Overhaul] Grid farm plots: icons and save catalog ready.");
+        }
+
+        /// <summary>
+        /// Author a 128x128 block icon at the ItemIcons convention path, only when the file
+        /// is not there yet - the same rule the radar sticker follows. Hand-drawn art is
+        /// never overwritten; delete the PNG to regenerate it.
+        /// </summary>
+        private static void EnsureIcon(string itemId, IconKind kind, string iconRoot)
+        {
+            string path = $"{iconRoot}/{itemId}.png";
+            if (System.IO.File.Exists(path)) return;
+
+            EnsureFolderPath(iconRoot);
+
+            const int S = 128;
+            var px = new Color32[S * S];
+            for (int i = 0; i < px.Length; i++) px[i] = new Color32(0, 0, 0, 0);
+
+            Color32 soil = new Color32(74, 52, 30, 255);
+            Color32 soilDark = new Color32(52, 36, 21, 255);
+            Color32 timber = new Color32(108, 74, 42, 255);
+            Color32 leaf = new Color32(86, 156, 74, 255);
+            Color32 steel = new Color32(120, 128, 138, 255);
+            Color32 water = new Color32(58, 148, 214, 255);
+            Color32 glow = new Color32(132, 214, 96, 255);
+
+            if (kind == IconKind.VerticalFarm)
+            {
+                // Three stacked trays on a mast - a silhouette nothing else on the grid has.
+                for (int t = 0; t < 3; t++)
+                {
+                    int ty0 = 26 + t * 26;
+                    int ty1 = ty0 + 18;
+                    for (int y = ty0; y < ty1; y++)
+                    {
+                        for (int x = 20; x < 108; x++)
+                        {
+                            bool edge = x < 24 || x >= 104 || y == ty0 || y == ty1 - 1;
+                            px[y * S + x] = edge ? steel : (((x + y) / 5) % 2 == 0 ? leaf : soil);
+                        }
+                    }
+                    for (int x = 44; x < 84; x++) px[(ty0 - 1) * S + x] = water;
+                }
+                for (int y = 18; y < 112; y++)
+                {
+                    px[y * S + 24] = steel;
+                    px[y * S + 103] = steel;
+                }
+
+                var texV = new Texture2D(S, S, TextureFormat.RGBA32, false);
+                texV.SetPixels32(px);
+                texV.Apply();
+                System.IO.File.WriteAllBytes(path, texV.EncodeToPNG());
+                Object.DestroyImmediate(texV);
+                FinishIconImport(path, itemId);
+                return;
+            }
+
+            if (kind == IconKind.FarmBox)
+            {
+                // Nine cells with the tree socket picked out in leaf green, seen from above.
+                for (int y = 24; y < 104; y++)
+                {
+                    for (int x = 24; x < 104; x++)
+                    {
+                        bool edge = x < 30 || x >= 98 || y < 30 || y >= 98;
+                        if (edge) { px[y * S + x] = steel; continue; }
+                        int cx = (x - 30) / 23, cy = (y - 30) / 23;
+                        bool tree = cx == 2 && cy == 2;
+                        px[y * S + x] = tree ? leaf : (((cx + cy) % 2 == 0) ? soil : soilDark);
+                    }
+                }
+                for (int y = 44; y < 68; y++)
+                    for (int x = 56; x < 72; x++)
+                        px[y * S + x] = timber;
+
+                var texF = new Texture2D(S, S, TextureFormat.RGBA32, false);
+                texF.SetPixels32(px);
+                texF.Apply();
+                System.IO.File.WriteAllBytes(path, texF.EncodeToPNG());
+                Object.DestroyImmediate(texF);
+                FinishIconImport(path, itemId);
+                return;
+            }
+
+            // A tray seen at a slight angle: a base slab, a rim, then cells on top.
+            int cells = kind == IconKind.SmallBox ? 1 : kind == IconKind.BigBox ? 2 : 3;
+            bool auto = kind == IconKind.AutoPlot;
+
+            int left = 16, right = 112, top = 40, bottom = 104;
+            int span = right - left;
+            int cellSpan = span / Mathf.Max(1, cells);
+
+            for (int y = top; y < bottom; y++)
+            {
+                for (int x = left; x < right; x++)
+                {
+                    int cx = (x - left) / Mathf.Max(1, cellSpan);
+                    int cy = (y - top) / Mathf.Max(1, cellSpan);
+                    bool edge = x < left + 5 || x >= right - 5 || y < top + 5 || y >= bottom - 5;
+
+                    Color32 c;
+                    if (edge) c = timber;
+                    else
+                    {
+                        // Rapeseed-green crop rows on dark soil, one shade per cell so the
+                        // grid reads at inventory size.
+                        bool furrow = ((x + y) / 6) % 2 == 0;
+                        c = furrow ? leaf : soil;
+                        if ((cx + cy) % 2 == 1) c = furrow ? soil : soilDark;
+                    }
+                    px[y * S + x] = c;
+                }
+            }
+
+            // Steel band under the tray, and the automatic plot's port chute.
+            for (int y = bottom; y < Mathf.Min(S, bottom + 10); y++)
+                for (int x = left; x < right; x++)
+                    px[y * S + x] = steel;
+
+            if (auto)
+            {
+                for (int y = bottom - 26; y < bottom - 6; y++)
+                    for (int x = right - 6; x < Mathf.Min(S, right + 14); x++)
+                        px[y * S + x] = water;
+                for (int y = top + 6; y < top + 16; y++)
+                    for (int x = left + 10; x < left + 26; x++)
+                        px[y * S + x] = glow;
+            }
+
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+            tex.SetPixels32(px);
+            tex.Apply();
+
+            System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            FinishIconImport(path, itemId);
+        }
+
+        private static void FinishIconImport(string path, string itemId)
+        {
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.alphaIsTransparency = true;
+                importer.mipmapEnabled = false;
+                importer.maxTextureSize = 1024;
+                importer.SaveAndReimport();
+            }
+
+            // Bind the sprite to whichever item claims this id, so the icon shows up
+            // without a second pass through ItemIconSync.
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (sprite != null)
+            {
+                foreach (var guid in AssetDatabase.FindAssets("t:ItemDefinition"))
+                {
+                    var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (item == null || !string.Equals(item.itemId, itemId, System.StringComparison.OrdinalIgnoreCase)) continue;
+                    if (item.icon != null) continue;
+                    item.icon = sprite;
+                    EditorUtility.SetDirty(item);
+                }
+            }
+
+            Debug.Log("[Farm Overhaul] Authored farm icon at " + path + ".");
+        }
+
+        // ── Item, recipe and material plumbing ──────────────────────────────
+        private static BlockItem EnsureBlockItem(string path, string itemId, string displayName,
+            string description, Color tint, Vector3Int footprint, int maxHp, string category,
+            List<string> created, List<string> repaired, List<string> preserved)
+        {
+            var item = AssetDatabase.LoadAssetAtPath<BlockItem>(path);
+            bool isNew = item == null;
+            if (isNew)
+            {
+                EnsureFolderPath(System.IO.Path.GetDirectoryName(path).Replace('\\', '/'));
+                item = ScriptableObject.CreateInstance<BlockItem>();
+                AssetDatabase.CreateAsset(item, path);
+                created.Add(displayName);
+            }
+
+            if (string.IsNullOrEmpty(item.itemId)) { item.itemId = itemId; if (!isNew) repaired.Add($"{displayName} id"); }
+            if (string.IsNullOrEmpty(item.displayName)) { item.displayName = displayName; }
+            if (string.IsNullOrEmpty(item.description)) { item.description = description; if (!isNew) repaired.Add($"{displayName} description"); }
+            if (string.IsNullOrEmpty(item.category)) item.category = category;
+            if (item.gridSize == Vector3Int.zero) item.gridSize = footprint;
+            if (item.blockHealth <= 0) item.blockHealth = maxHp;
+            if (item.maxStack <= 0) item.maxStack = 50;
+
+            if (isNew)
+            {
+                item.iconTint = tint;
+                item.massPerUnit = 12f;
+                item.miningTier = 1;
+                item.allowStacking = true;
+            }
+            else preserved.Add($"{displayName} tuning");
+
+            EditorUtility.SetDirty(item);
+            EnsureCatalogEntry(item);
+            return item;
+        }
+
+        private static void EnsureRecipe(string assetName, string displayName, ItemDefinition output,
+            StationTier station, List<string> created, List<string> repaired, List<string> preserved,
+            params (ItemDefinition item, int count)[] inputs)
+        {
+            if (output == null) return;
+
+            string path = $"{FarmRecipesFolder}/{assetName}.asset";
+            var recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(path);
+            bool isNew = recipe == null;
+            if (isNew)
+            {
+                EnsureFolderPath(FarmRecipesFolder);
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                AssetDatabase.CreateAsset(recipe, path);
+                created.Add($"{displayName} recipe");
+            }
+
+            if (recipe.outputItem == null) recipe.outputItem = output;
+            if (recipe.outputCount <= 0) recipe.outputCount = 1;
+            if (recipe.requiredStation == StationTier.None && station != StationTier.None) recipe.requiredStation = station;
+            if (recipe.craftSeconds <= 0f && station != StationTier.None)
+                recipe.craftSeconds = CraftTimeDefaults.Suggest(station, recipe.inputs);
+            if (recipe.displayName == null) recipe.displayName = displayName;
+
+            if (isNew)
+            {
+                recipe.displayName = displayName;
+                recipe.requiredStation = station;
+                recipe.unlockedByDefault = true;
+                var valid = new List<RecipeIngredient>();
+                foreach (var (item, count) in inputs)
+                    if (item != null && count > 0) valid.Add(new RecipeIngredient { item = item, count = count });
+                recipe.inputs = valid.ToArray();
+                if (recipe.craftSeconds <= 0f && station != StationTier.None)
+                    recipe.craftSeconds = CraftTimeDefaults.Suggest(station, recipe.inputs);
+            }
+            else preserved.Add($"{displayName} recipe inputs");
+
+            EditorUtility.SetDirty(recipe);
+
+            var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(RecipeRegistryPath);
+            if (registry != null)
+            {
+                if (registry.recipes == null) registry.recipes = new List<RecipeDefinition>();
+                if (!registry.recipes.Contains(recipe))
+                {
+                    registry.recipes.Add(recipe);
+                    EditorUtility.SetDirty(registry);
+                    repaired.Add($"{displayName} RecipeRegistry link");
+                }
+            }
+        }
+
+        private static void EnsureCatalogEntry(ItemDefinition item)
+        {
+            if (item == null) return;
+
+            var catalog = AssetDatabase.LoadAssetAtPath<ItemPersistenceCatalog>(CatalogPath);
+            if (catalog == null)
+            {
+                EnsureFolderPath("Assets/Resources/VoxelEngine");
+                catalog = ScriptableObject.CreateInstance<ItemPersistenceCatalog>();
+                AssetDatabase.CreateAsset(catalog, CatalogPath);
+            }
+
+            if (catalog.items == null) catalog.items = new List<ItemDefinition>();
+            if (catalog.items.Contains(item)) return;
+
+            catalog.items.Add(item);
+            EditorUtility.SetDirty(catalog);
+        }
+
+        private static ItemDefinition FindItem(string assetFileName)
+        {
+            var direct = AssetDatabase.LoadAssetAtPath<ItemDefinition>($"{AssetRoot}/Items/{assetFileName}.asset");
+            if (direct != null) return direct;
+
+            foreach (var guid in AssetDatabase.FindAssets("t:ItemDefinition"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (System.IO.Path.GetFileNameWithoutExtension(path) == assetFileName)
+                    return AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Materials by part name. Same palette the forestry prefabs use, so a planting
+        /// box standing next to a Seed Planter looks like it belongs to the same kit.
+        /// </summary>
+        private static void AssignFarmMaterials(GameObject root)
+        {
+            if (root == null) return;
+
+            var darkSteel = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryDarkSteel.mat", new Color(0.20f, 0.23f, 0.26f));
+            var midSteel = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryMidSteel.mat", new Color(0.30f, 0.34f, 0.38f));
+            var timber = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryTimberWood.mat", new Color(0.42f, 0.27f, 0.14f));
+            var soil = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestrySoilLoam.mat", new Color(0.26f, 0.17f, 0.10f));
+            var leaf = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryCanopyLeaf.mat", new Color(0.18f, 0.54f, 0.22f));
+            var water = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryWaterBlue.mat", new Color(0.20f, 0.62f, 0.88f));
+            var glow = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryBiofuelGlow.mat", new Color(0.52f, 0.86f, 0.22f), emissive: true);
+            var brass = GetOrCreateMaterial($"{ForestryMats}/Mat_ForestryCopperPipe.mat", new Color(0.76f, 0.46f, 0.24f));
+
+            var renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (r == null) continue;
+                string n = r.gameObject.name;
+
+                if (n.Contains("Soil") || n.Contains("Mulch")) r.sharedMaterial = soil;
+                else if (n.Contains("Crop") || n.Contains("Leaf") || n.Contains("Canopy") || n.Contains("Sapling")) r.sharedMaterial = leaf;
+                else if (n.Contains("Curb") || n.Contains("Trellis") || n.Contains("Post")) r.sharedMaterial = timber;
+                else if (n.Contains("Water") || n.Contains("Gauge") || n.Contains("Irrig") || n.Contains("Nozzle")) r.sharedMaterial = water;
+                else if (n.Contains("Beacon") || n.Contains("Status") || n.Contains("Lamp")) r.sharedMaterial = glow;
+                else if (n.Contains("Head") || n.Contains("Base") || n.Contains("Housing") || n.Contains("Glass")) r.sharedMaterial = brass;
+                else if (n.Contains("Chute") || n.Contains("Port") || n.Contains("Output") || n.Contains("Hopper")
+                         || n.Contains("Bin") || n.Contains("Mast") || n.Contains("Frame")) r.sharedMaterial = midSteel;
+                else r.sharedMaterial = darkSteel;
+            }
+        }
+
+        private static Material GetOrCreateMaterial(string path, Color color, bool emissive = false)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+
+            EnsureFolderPath(System.IO.Path.GetDirectoryName(path).Replace('\\', '/'));
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Standard")
+                         ?? Shader.Find("Sprites/Default");
+            mat = new Material(shader) { name = System.IO.Path.GetFileNameWithoutExtension(path) };
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.30f);
+            if (emissive)
+            {
+                mat.EnableKeyword("_EMISSION");
+                if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", color * 1.25f);
+            }
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
+        }
+
+        private static void AppendIfMissing(ItemDefinition item, string marker, string sentence,
+            List<string> repaired)
+        {
+            if (item == null || string.IsNullOrEmpty(marker)) return;
+            if (!string.IsNullOrEmpty(item.description)
+                && item.description.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return;
+
+            item.description = string.IsNullOrEmpty(item.description)
+                ? sentence.TrimStart()
+                : item.description.TrimEnd() + sentence;
+            EditorUtility.SetDirty(item);
+            repaired.Add($"{item.displayName} description");
+        }
+
+        private static void AppendList(System.Text.StringBuilder sb, List<string> items)
+        {
+            if (items == null || items.Count == 0) { sb.AppendLine("  none"); return; }
+            for (int i = 0; i < items.Count; i++) sb.AppendLine("  - " + items[i]);
+        }
+
+        private static void EnsureFolders()
+        {
+            EnsureFolderPath(FarmPrefabsFolder);
+            EnsureFolderPath(FarmBlocksFolder);
+            EnsureFolderPath(FarmRecipesFolder);
+            EnsureFolderPath(IconRoot);
+        }
+
+        private static void EnsureFolderPath(string path)
+        {
+            if (string.IsNullOrEmpty(path) || AssetDatabase.IsValidFolder(path)) return;
+            string parent = System.IO.Path.GetDirectoryName(path)?.Replace('\\', '/');
+            string leaf = System.IO.Path.GetFileName(path);
+            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return;
+            EnsureFolderPath(parent);
+            AssetDatabase.CreateFolder(parent, leaf);
+        }
+    }
+}
+#endif

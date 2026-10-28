@@ -1921,6 +1921,7 @@ namespace VoxelEngine.GridSystem
 
                 string crop = empty ? bed.BedName : (string.IsNullOrEmpty(bed.CropName) ? bed.BedName : bed.CropName);
                 if (bed is CropPlanter ported && ported.autoDumpWhenRipe) crop += " \u00b7 PORT";
+                if (bed is PlantBox portedBox && portedBox.autoDumpWhenRipe) crop += " \u00b7 PORT";
                 canvas.TextClipped(nameX, row + 1,
                     (entry.vertical ? "VERT \u00b7 " : "FLAT \u00b7 ") + crop,
                     canvas.Columns - nameX, ScreenInk.Dim);
@@ -1948,6 +1949,18 @@ namespace VoxelEngine.GridSystem
         {
             if (bed is FarmPlot soil && soil.plantedCrop != null) return soil.plantedCrop.harvestItem;
             if (bed is CropPlanter planter && planter.plantedCrop != null) return planter.plantedCrop.harvestItem;
+            if (bed is PlantBox box)
+            {
+                var yield = box.PeekHarvest();
+                if (yield.item != null) return yield.item;
+                for (int i = 0; i < box.SlotCount; i++)
+                {
+                    var slot = box.slots[i];
+                    if (slot == null) continue;
+                    if (slot.crop != null) return slot.crop.harvestItem;
+                    if (slot.tree) return box.woodLogItem;
+                }
+            }
             if (bed is TreeFarmPlot tree) return tree.woodLogItem;
             return null;
         }
@@ -3021,6 +3034,9 @@ namespace VoxelEngine.GridSystem
 
             var planters = UnityEngine.Object.FindObjectsByType<CropPlanter>(FindObjectsInactive.Exclude);
             for (int i = 0; i < planters.Length; i++) AddFarmBed(planters[i], here, radiusSq);
+
+            var boxes = UnityEngine.Object.FindObjectsByType<PlantBox>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < boxes.Length; i++) AddFarmBed(boxes[i], here, radiusSq);
 
             var trees = UnityEngine.Object.FindObjectsByType<TreeFarmPlot>(FindObjectsInactive.Exclude);
             for (int i = 0; i < trees.Length; i++) AddFarmBed(trees[i], here, radiusSq);

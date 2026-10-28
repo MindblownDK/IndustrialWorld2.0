@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_FarmBox
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: gitem_farmbox
+  displayName: Large Farm Plot Box
+  description: Ship-mounted floor farm. A 3x3 bed in one hull cell, the only grid
+    plot that takes a tree sapling in its centre socket. Needs grid power, water
+    through a liquid port, and breathable air - a sealed breathable room or a breathable
+    world under the hull. Crops pause without air instead of dying, and ripe beds
+    are moved into connected grid cargo.
+  icon: {fileID: 21300000, guid: 8605a08df53a285409954603cdb1e099, type: 3}
+  iconTint: {r: 0.44, g: 0.78, b: 0.38, a: 1}
+  maxStack: 20
+  massPerUnit: 1
+  category: Grid Blocks
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
+  gridSize: 1
+  blockPrefab: {fileID: 7043086575472968804, guid: caefe9fb78ece4748b6291a0bd54b9d1, type: 3}
+  blockMass: 6240
+  blockHP: 620
+  supportsShapeVariants: 0

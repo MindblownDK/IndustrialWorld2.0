@@ -31,6 +31,25 @@ namespace VoxelEngine.Farming
         public float irrigationCheckRadius = 6f;
         public float irrigationCheckInterval = 2f;
 
+        [Header("Auto Farm Plot (18.3.0-dev)")]
+        [Tooltip("Powered plots harvest and transfer on their own. Tilled Soil leaves this off and stays a manual plot.")]
+        public bool automatic = false;
+        [Tooltip("Empty a ripe plot into a belt, chute, funnel or item pipe standing next to it.")]
+        public bool autoDumpWhenRipe = false;
+        [Tooltip("Keep one seed of each port harvest back and replant the plot, so a watered plot cycles by itself.")]
+        public bool replantAfterPortHarvest = true;
+        [Tooltip("How far the plot reaches for a route.")]
+        public float dumpRadius = 1.7f;
+        [Tooltip("Seconds between attempts to empty a ripe plot.")]
+        public float dumpIntervalSeconds = 1f;
+
+        [Header("Water (18.3.0-dev)")]
+        [Tooltip("Litres this plot holds when no sprinkler is feeding it. Zero on Tilled Soil keeps it sprinkler-only.")]
+        public float waterCapacity = 0f;
+        public float waterStored = 0f;
+        [Tooltip("Litres drunk per second by a growing crop from the plot's own tank.")]
+        public float litresPerSecond = 0.02f;
+
         // ── IFarmBed (17.36.0-dev) ───────────────────────────────────────────
         // Soil was the only bed a screen could see. It now reports through the
         // same interface as the planters, so one page lists all of them.
@@ -52,9 +71,19 @@ namespace VoxelEngine.Farming
                 if (plantedCrop == null) return 0f;
                 if (isDead) return 0f;
                 if (isIrrigated) return 1f;
+                if (waterCapacity > 0f) return Mathf.Clamp01(waterStored / waterCapacity);
                 float tolerance = Mathf.Max(1f, plantedCrop.droughtToleranceSec * 2f);
                 return Mathf.Clamp01(1f - timeSinceLastWater / tolerance);
             }
+        }
+
+        /// <summary>Pour water in by hand with a canister. Returns the litres accepted.</summary>
+        public float TryAddWater(float litres)
+        {
+            if (litres <= 0f || waterCapacity <= 0f) return 0f;
+            float added = Mathf.Min(Mathf.Max(0f, waterCapacity - waterStored), litres);
+            waterStored += added;
+            return added;
         }
 
         /// <summary>True when a harvest would succeed right now.</summary>
@@ -66,11 +95,12 @@ namespace VoxelEngine.Farming
         private MeshRenderer _cropRenderer;
         private int _lastStage = -1;
         private float _irrigCheckTimer;
+        private float _dumpTimer;
 
         private void Awake()
         {
             _soilRenderer = GetComponent<MeshRenderer>();
-            isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
+            isOxygenated = FarmEnvironment.HasBreathableAir(transform.position);
             UpdateSoilColor();
         }
 
@@ -82,7 +112,7 @@ namespace VoxelEngine.Farming
             {
                 _irrigCheckTimer = 0f;
                 CheckIrrigation();
-                isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
+                isOxygenated = FarmEnvironment.HasBreathableAir(transform.position);
             }
 
             if (plantedCrop == null) return;
@@ -113,8 +143,10 @@ namespace VoxelEngine.Farming
                 timeSinceLastWater = 0f;
             }
 
-            // Crop growth pauses until the bed has both its required water and a
-            // breathable enclosure; plants do not advance in a vacuum greenhouse.
+            // Crop growth pauses until the bed has both its required water and breathable
+            // air - a sealed room, or the world outside when the world has air. The same
+            // rule the planting boxes and the grid plots use, so a plot on Earth does not
+            // stop for want of an enclosure the planet is already providing.
             if (growthProgress < 1f && !NeedsOxygen)
             {
                 float speed = 1f / plantedCrop.growthTime;
@@ -129,6 +161,41 @@ namespace VoxelEngine.Farming
             }
 
             UpdateSoilColor();
+
+            if (automatic && autoDumpWhenRipe) TryDumpToPort();
+        }
+
+        /// <summary>
+        /// Empty a ripe plot into whatever stands next to it. The plot only releases a crop
+        /// once the route can take the whole load, and it keeps one seed back to replant
+        /// when <see cref="replantAfterPortHarvest"/> is on - the same two rules every other
+        /// automated bed follows.
+        /// </summary>
+        private void TryDumpToPort()
+        {
+            if (!CanHarvestNow) return;
+            if (VoxelEngine.Networking.NetworkSession.SimulationIsRemote) return;
+
+            _dumpTimer += Time.deltaTime;
+            if (_dumpTimer < Mathf.Max(0.1f, dumpIntervalSeconds)) return;
+            _dumpTimer = 0f;
+
+            var peek = PeekHarvest();
+            if (peek.IsEmpty) return;
+
+            bool selfReplant = replantAfterPortHarvest && peek.seedItem != null && peek.seedCount > 0;
+            int seedsLeaving = selfReplant ? peek.seedCount - 1 : peek.seedCount;
+
+            if (peek.item != null && !FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.item, peek.count)) return;
+            if (seedsLeaving > 0 && peek.seedItem != null
+                && !FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.seedItem, seedsLeaving)) return;
+
+            if (!TakeHarvest(selfReplant, out var harvest)) return;
+
+            if (harvest.item != null && harvest.count > 0)
+                FarmItemRouter.Push(transform, dumpRadius, harvest.item, harvest.count);
+            if (seedsLeaving > 0 && harvest.seedItem != null)
+                FarmItemRouter.Push(transform, dumpRadius, harvest.seedItem, seedsLeaving);
         }
 
         /// <summary>Plant a seed on this plot.</summary>
@@ -139,7 +206,7 @@ namespace VoxelEngine.Farming
             growthProgress = 0f;
             isDead = false;
             timeSinceLastWater = 0f;
-            isOxygenated = FarmEnvironment.HasBreathableEnclosure(transform.position);
+            isOxygenated = FarmEnvironment.HasBreathableAir(transform.position);
             _lastStage = -1;
             CreateCropVisual();
             return true;
@@ -248,6 +315,17 @@ namespace VoxelEngine.Farming
         private void CheckIrrigation()
         {
             isIrrigated = false;
+
+            // A plot that holds its own water is irrigated until the tank runs out, which
+            // is what makes a hand-watered Auto Farm Plot worth building before plumbing.
+            if (waterCapacity > 0f && waterStored > 0.005f)
+            {
+                if (plantedCrop != null)
+                    waterStored = Mathf.Max(0f, waterStored - litresPerSecond * Mathf.Max(1f, irrigationCheckInterval));
+                isIrrigated = true;
+                return;
+            }
+
 
             // Check for sprinklers in range.
             var sprinklers = FindObjectsByType<Sprinkler>(FindObjectsInactive.Exclude);

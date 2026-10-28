@@ -225,7 +225,9 @@ namespace VoxelEngine.EditorTools
 
             AddSetupGroup(parent, ref number, "Farming & Greenhouse",
                 "Crop beds, irrigation and the automation that keeps a farm running while the player is away.", false,
-                Setup("Author planter output ports and Harvester bed coverage (18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()));
+                Setup("Author planter output ports and Harvester bed coverage (18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()),
+                Setup("Author planting boxes, Auto Farm Plot, sprinkler mast and tree-farm body (18.3.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep124()),
+                Setup("Author icons and save entries for the two grid farm plots (18.4.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep125()));
 
             AddSetupGroup(parent, ref number, "Fluids, Atmosphere & Environment",
                 "Water, liquids, weather, pressure, thermal hazards and pollution. The duplicate spherical-water action was removed; one action now owns that setup.", false,
@@ -335,6 +337,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Repair known recipe input/output references", () => VoxelEngine.EditorTools.RecipeGraphRepairUtility.RepairMissingRecipeLinks()),
                 Setup("Audit and rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
                 Setup("Repair planter output ports and Harvester bed coverage (non-destructive, 18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()),
+                Setup("Repair planting boxes, Auto Farm Plot, sprinkler and tree-farm bodies (non-destructive, 18.3.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep124()),
                 Setup("Repair recipes gated with no research unlock (screens, camera, machine modules) (18.2.1-dev)", () => VoxelEngine.EditorTools.DisplayAndModuleUnlockSetup.RunStep123()),
                 Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
@@ -1410,6 +1413,11 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("bilgepump")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ChemicalPlant;
             if (n.Contains("helm")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Cockpit;
             if (n.Contains("hull_")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Armor;
+            // ── 18.4.0-dev: the two grid farm plots ──────────────────────
+            // Checked before the generic farm words so "VerticalFarm_Large" cannot fall
+            // through to a shape it was never drawn for.
+            if (n.Contains("verticalfarm")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.VerticalFarm;
+            if (n.Contains("farmbox")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.FarmBox;
             return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic;
         }
 
@@ -5197,7 +5205,17 @@ namespace VoxelEngine.EditorTools
                     var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
                     pc.wattsPerSecond = 20f; pc.connectRadius = 1.6f;
                     var s = root.AddComponent<VoxelEngine.Farming.Sprinkler>();
-                    s.radius = 8f; s.requiresWaterConnection = true; s.waterConsumption = 2f;
+                    // 18.3.0-dev: a mast with its own tank instead of a cube that asked the
+                    // pipe next to it for permission. ~20 W, 0.4 L/s while spraying, and a
+                    // canister can fill it by hand.
+                    s.radius = 8f;
+                    s.requiresWaterConnection = true;
+                    s.waterCapacity = 60f;
+                    s.waterStored = 60f;
+                    s.litresPerSecond = 0.4f;
+                    s.refillLitresPerSecond = 2f;
+                    s.wattsWhileSpraying = 20f;
+                    s.RebuildVisuals();
                 });
             var blockSprinkler = MakeBlk(FARM_BLOCKS, "Block_Sprinkler", "Sprinkler",
                 "Powered automatic irrigation. Irrigates every Tilled Soil within 8 m. ~20 W and needs water pipes connected.",
@@ -7064,6 +7082,39 @@ namespace VoxelEngine.EditorTools
             // Ensure gas + liquid ports so oxygen pipes can output and water pipes can input
             EnsureGridTankPorts(gridBiofarmPref, "Biofarm_GasPortMarker", new Color(0.35f, 0.85f, 0.55f, 1f), "Port_GasIO", includeBottom: true);
             EnsureGridTankPorts(gridBiofarmPref, "Biofarm_LiquidPortMarker", new Color(0.20f, 0.55f, 1.00f, 1f), "Port_LiquidIO", includeBottom: true);
+
+            // -- 0d) Grid farm plots (18.4.0-dev) --
+            // Two plots, two jobs. The vertical stack gives nine beds in half a hull cell
+            // and no trees; the floor box gives nine beds and one tree socket in a full
+            // cell. Both need power, water through a liquid port, and breathable air - from
+            // a sealed breathable room or from a breathable world under the hull.
+            var gridVerticalFarmPref = MakeGPref<VoxelEngine.GridSystem.GridVerticalFarm>("VerticalFarm_Large", new Color(0.34f, 0.68f, 0.40f), new Vector3(2.2f, 2.2f, 1.4f),
+                c =>
+                {
+                    c.blockName = "Vertical Farm Plot"; c.allowsTrees = false;
+                    c.powerDraw = 60f; c.idlePowerDraw = 6f;
+                    c.waterCapacity = 180f; c.waterStored = 110f;
+                    c.litresPerCellSecond = 0.02f; c.replantAfterHarvest = true;
+                });
+            var itemGridVerticalFarm = MakeGItem("GItem_VerticalFarm", "Vertical Farm Plot", new Color(0.38f, 0.80f, 0.46f), gridVerticalFarmPref, VoxelEngine.GridSystem.GridSize.Large, 620, 560);
+            itemGridVerticalFarm.description = "Ship-mounted vertical farm. Nine growing cells stacked in three trays, for a hull where floor space is the scarce thing. Needs grid power, water through a liquid port, and breathable air - a sealed breathable room or a breathable world under the hull. Crops pause without air instead of dying, and ripe beds are moved into connected grid cargo. No trees: a tray has no room for roots or canopy.";
+            EditorUtility.SetDirty(itemGridVerticalFarm);
+            AddGRecipe("Recipe_GVerticalFarm", "Vertical Farm Plot", itemGridVerticalFarm, (steelPlate, 8), (glass, 8), (circuit, 3), (copperWire, 10));
+            EnsureGridTankPorts(gridVerticalFarmPref, "VerticalFarm_LiquidPortMarker", new Color(0.20f, 0.55f, 1.00f, 1f), "Port_LiquidIO", includeBottom: true);
+
+            var gridFarmBoxPref = MakeGPref<VoxelEngine.GridSystem.GridFarmBox>("FarmBox_Large", new Color(0.40f, 0.66f, 0.34f), new Vector3(2.2f, 1.1f, 2.2f),
+                c =>
+                {
+                    c.blockName = "Large Farm Plot Box"; c.allowsTrees = true;
+                    c.powerDraw = 75f; c.idlePowerDraw = 7f;
+                    c.waterCapacity = 260f; c.waterStored = 160f;
+                    c.treeGrowthSeconds = 100f; c.replantAfterHarvest = true;
+                });
+            var itemGridFarmBox = MakeGItem("GItem_FarmBox", "Large Farm Plot Box", new Color(0.44f, 0.78f, 0.38f), gridFarmBoxPref, VoxelEngine.GridSystem.GridSize.Large, 780, 620);
+            itemGridFarmBox.description = "Ship-mounted floor farm. A 3x3 bed in one hull cell, the only grid plot that takes a tree sapling in its centre socket. Needs grid power, water through a liquid port, and breathable air - a sealed breathable room or a breathable world under the hull. Crops pause without air instead of dying, and ripe beds are moved into connected grid cargo.";
+            EditorUtility.SetDirty(itemGridFarmBox);
+            AddGRecipe("Recipe_GFarmBox", "Large Farm Plot Box", itemGridFarmBox, (steelPlate, 12), (glass, 10), (circuit, 4), (copperWire, 12));
+            EnsureGridTankPorts(gridFarmBoxPref, "FarmBox_LiquidPortMarker", new Color(0.20f, 0.55f, 1.00f, 1f), "Port_LiquidIO", includeBottom: true);
 
             // -- 1) Cockpits --
             //

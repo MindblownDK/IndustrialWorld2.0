@@ -1,0 +1,121 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &4702302209112922832
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3714333687998145582}
+  - component: {fileID: 2061847008893734135}
+  - component: {fileID: 6809928606357975574}
+  - component: {fileID: 5936617704984576854}
+  - component: {fileID: 3709726874412769492}
+  m_Layer: 0
+  m_Name: AutoFarmPlot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3714333687998145582
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4702302209112922832}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &2061847008893734135
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4702302209112922832}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.96, y: 0.34, z: 0.96}
+  m_Center: {x: 0, y: 0.16, z: 0}
+--- !u!114 &6809928606357975574
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4702302209112922832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
+  Item: {fileID: 11400000, guid: 60a8f5b0b26a1a046857adb691dbe174, type: 2}
+  Hp: 100
+  onGrid: 1
+  ownerId: 
+--- !u!114 &5936617704984576854
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4702302209112922832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
+  connectRadius: 2
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  wattsPerSecond: 8
+--- !u!114 &3709726874412769492
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4702302209112922832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b277e2e8b6069c94682b8b439030a7d3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Farming.FarmPlot
+  plantedCrop: {fileID: 0}
+  growthProgress: 0
+  isIrrigated: 0
+  isOxygenated: 0
+  timeSinceLastWater: 0
+  isDead: 0
+  irrigationCheckRadius: 6
+  irrigationCheckInterval: 2
+  automatic: 1
+  autoDumpWhenRipe: 1
+  replantAfterPortHarvest: 1
+  dumpRadius: 1.7
+  dumpIntervalSeconds: 1
+  waterCapacity: 40
+  waterStored: 40
+  litresPerSecond: 0.02

@@ -27,19 +27,38 @@ using VoxelEngine.Pressure;
 
 namespace VoxelEngine.Farming
 {
-    /// <summary>Shared greenhouse check for crops that require an oxygenated enclosure.
-    /// Open ambient air does not count; the bed must sit in a breathable sealed grid room
-    /// or pressure-rated station compartment.</summary>
+    /// <summary>Shared greenhouse and atmosphere checks for crops that require oxygen.</summary>
     public static class FarmEnvironment
     {
+        /// <summary>Sealed, breathable volume only: a charged grid room or a hammer-built
+        /// station compartment. Ambient planetary air does NOT count here - this is the
+        /// rule a greenhouse box on an airless moon has to satisfy.</summary>
         public static bool HasBreathableEnclosure(Vector3 worldPosition)
         {
-            // Ambient planetary air is not a greenhouse. Grid farms need a sealed,
-            // breathable pressure volume; hammer-built station rooms are accepted too.
             var gridRoom = RoomAtmosphereService.RoomAt(worldPosition);
             if (gridRoom != null && gridRoom.IsSealed)
                 return gridRoom.IsBreathable;
             return StationRoomSolver.IsBreathableAt(worldPosition);
+        }
+
+        /// <summary>
+        /// 18.3.0-dev: "has oxygen" for a crop, in the order that actually happens in play -
+        /// a sealed breathable room first, then the planet itself. An oxygen-atmosphere
+        /// world with real air density is breathable to a crop standing on its surface, so
+        /// a farm on Earth needs no enclosure while the same box on the Moon does. This is
+        /// the same authority the player's own life support uses, so crops and players
+        /// never disagree about whether it is safe to breathe.
+        /// </summary>
+        public static bool HasBreathableAir(Vector3 worldPosition)
+        {
+            if (HasBreathableEnclosure(worldPosition)) return true;
+
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null || body.settings == null) return false;
+            if (!body.settings.HasOxygen) return false;
+
+            var sample = VoxelEngine.GridSystem.AtmosphereManager.Sample(worldPosition);
+            return sample.AirDensity >= VoxelEngine.Player.PlayerEquipment.AtmosphereDensityThreshold;
         }
     }
 

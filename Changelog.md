@@ -1,9 +1,69 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.2.1-dev`
+**Current Version:** `18.4.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.4.1-dev] Fix the Missing Report List in the Farm Overhaul Setup Step
+
+**Type:** PATCH - one missing parameter in an editor-only file. No runtime code, asset, recipe or save field is touched.
+
+**GitHub title:** `[18.4.1-dev] Fix the missing preserved list in the farm overhaul setup step`
+
+#### Fixed
+
+- **`WorldFarmOverhaulSetup.EnsureRecipe` did not compile.** The method reported an already-authored recipe into a `preserved` list that was never among its parameters (`CS0103: The name 'preserved' does not exist in the current context`, line 660), so the whole editor assembly - and with it every Setup Wizard step - failed to build. `preserved` is now a parameter and all four recipe call sites (Small Plant Box, Big Plant Box, Large Plant Bed, Auto Farm Plot) pass it.
+- **A second-run message was wrong as a result.** Without the list, an existing recipe had no way to be recorded as preserved; now an unchanged recipe reports as preserved and only a genuine change reports as a repair, which is what the summary dialog claims.
+- **Verified by a scope scan of the file** - every method in `WorldFarmOverhaulSetup` that reads `created`, `repaired` or `preserved` now declares it (`RunStep124` declares all three locally; the six helpers take them as parameters), the argument counts of all three `EnsurePlantBox` calls match the signature, and the file's braces, parentheses and brackets balance. No adjacent string literals remain.
+
+### [18.4.0-dev] Ship the Vertical Farm Plot and the Large Farm Plot Box
+
+**Type:** MINOR - two new grid blocks. Nothing existing changes shape, no id moves and no recipe is rewritten; a world without these blocks loads exactly as it did on `18.3.0-dev`.
+
+**GitHub title:** `[18.4.0-dev] Add the Vertical Farm Plot and the Large Farm Plot Box as grid farm blocks`
+
+#### Added
+
+- **`GridFarmPlotBase` (`Scripts/GridSystem/GridFarmPlotBase.cs`).** One implementation of a grid-mounted bed: nine growing cells, its own water tank fed through `GridLiquidNetwork.DrawLiquidFor`, power drawn only while something is growing, per-crop oxygen gating, a harvest that only leaves the plot when a connected `GridCargoContainer` can take the whole payload, and `IMachineProcessState` persistence (crop asset name plus seed item id, growth, fertilizer, loss, tank level).
+- **Vertical Farm Plot (`GridVerticalFarm`).** Nine cells in three stacked trays in one grid cell, 60 W growing / 6 W idle, 180 L tank. Crops only, on purpose: a stacked tray has no room for roots or canopy.
+- **Large Farm Plot Box (`GridFarmBox`).** Nine cells in a 3x3 floor bed, 75 W growing / 7 W idle, 260 L tank, and the only grid plot that accepts a tree sapling - one cell becomes a tree and harvests logs, saplings and biomass together.
+- **Two `GridBlockMeshBuilder.Style` ids, `VerticalFarm` and `FarmBox`,** appended after `CockpitCab` so no existing style id moves. `GridStyleFor` maps `VerticalFarm_*` and `FarmBox_*` before the generic fallbacks.
+- **Setup Wizard authoring** of both blocks in the grid content step (`MakeGPref` / `MakeGItem` / `AddGRecipe` at the Assembler, plus a liquid port on each through `EnsureGridTankPorts`), and a new step "Author icons and save entries for the two grid farm plots (18.4.0-dev)" (`WorldFarmOverhaulSetup.RunStep125`) that authors both icons under `ItemIcons/Grid Blocks` and puts both items in `ItemPersistenceCatalog`.
+
+#### Design notes
+
+- **Oxygen comes from `FarmEnvironment.HasBreathableAir`,** the same authority the ground beds use: a sealed breathable room first, then a breathable world under the hull (`GravityProvider.ActiveBody.settings.HasOxygen` plus `AtmosphereManager` air density at or above the player's own threshold). A ship farm therefore works docked on a living world without an enclosure, and needs a sealed, charged room anywhere else. A crop that needs oxygen **pauses** without it; it never dies of it.
+- **A grid plot never eats a harvest.** Every cell is checked against the connected cargo before it is emptied, so a full hold parks the crop on the bed and the panel says `READY`. That is the same rule the Seed Planter port and the Harvester already follow.
+- **Water is a tank, not a sprinkler.** A dry tank slows growth to the crop's own dry rate instead of killing it, and refills at 2.5 L/s from any connected grid liquid tank.
+- **Trees stay where they fit.** `allowsTrees` is false on the vertical plot and true on the floor box, enforced inside the plot rather than in a panel.
+
+### [18.3.0-dev] Planting Boxes, a Sprinkler That Holds Water, and a Farm Plot That Empties Itself
+
+**Type:** MINOR - four new or rebuilt world-side farm blocks. Save-compatible with `18.2.1-dev`: no existing block, item, recipe or save field changes meaning, no system is removed, and Tilled Soil keeps its id, its cost and its manual behaviour.
+
+**GitHub title:** `[18.3.0-dev] Add small, big and large planting boxes, give the sprinkler a real tank, and turn the farm plot into an Auto Farm Plot`
+
+#### Added
+
+- **`PlantBox` (`Scripts/Farming/PlantBox.cs`) and three blocks built from it.** Small Plant Box = 1 cell (1x1), Big Plant Box = 4 cells (2x2), Large Plant Bed = 9 cells (3x3) with corner posts and a trellis. Each has its own tank (40 / 60 / 90 L), its own cells, its own output chute, and its own recipe (Crafting Bench, Crafting Bench, Assembler).
+- **Hand watering.** Right-click a box with a filled Liquid Canister and it takes 0.5 L per click, exactly the canister's own per-click volume. This is the whole no-plumbing path: a box works the day it is crafted, and a Sprinkler is an upgrade rather than a requirement.
+- **Trees on the Large Plant Bed only.** `AllowsTrees` is true on the 3x3 box and nowhere else, and a sapling offered to a Small or Big box answers "Trees only take root in a Large Plant Bed" instead of vanishing. A tree cell drinks and grows on `treeGrowthSeconds` (110 s, 2x when irrigated) and harvests logs, saplings and biomass together.
+- **`Auto Farm Plot`** - the renamed, powered farm plot: 8 W, its own 40 L tank, hand-waterable, and an output port (`autoDumpWhenRipe`, `dumpRadius` 1.7 m) that hands a harvest to a belt, chute, funnel or item pipe and keeps one seed back to replant. `automatic` and `autoDumpWhenRipe` are off in the component so **Tilled Soil stays the manual early-game block**; only the Auto Farm Plot prefab switches them on.
+- **Sprite `.meta` for `PlantBox.cs`,** and procedural icons for all four new items, authored by the setup step (`block_plant_box_small`, `block_plant_box_big`, `block_plant_bed_large`, `block_auto_farm_plot`), with the same importer settings the existing farming icons carry.
+
+#### Changed
+
+- **The Sprinkler is a machine now, not a blue cube.** Rewritten as a mast on a weighted base: an internal 60 L tank with a sight glass that visibly shortens as it empties, a rotating three-nozzle head that turns while it sprays, a status beacon (green spraying, amber refilling, red dry) and a dead-band `Status` line. It sprays 0.4 L/s from its own tank, refills at 2 L/s from any `FluidNode` within 3.5 m, can be filled by hand with a canister, and draws 20 W while it sprays. `IsActive` is still the one flag beds read, so nothing downstream changed.
+- **`Sprinkler`'s old `waterConsumption` field is gone** in favour of `litresPerSecond`, `waterCapacity`, `waterStored`, `refillLitresPerSecond` and `wattsWhileSpraying`. The Setup step migrates an old prefab by filling only the fields that were never authored.
+- **Crops read `FarmEnvironment.HasBreathableAir` on every bed type that was touched this round** (planting boxes, Auto Farm Plot and both grid plots). A crop on a world with air no longer pauses for want of an enclosure the planet is already providing; the sealed-room rule is unchanged, and `HasBreathableEnclosure` still means sealed-only for the greenhouse trays that depend on it.
+- **`FarmPlot` water.** A plot with `waterCapacity > 0` is irrigated while its tank holds water and drinks `litresPerSecond` per second; `Water01` reports the tank instead of the old drought estimate, so an Auto Farm Plot's moisture reading means what a Sprinkler-fed tray's reading already meant.
+- **Automatic Tree Farm body.** The frame no longer stands around an empty middle: roof trusses close the silhouette, framed glass walls enclose the bed without hiding it, and the machine's four input slots and eight output slots are now visible furniture - an intake hopper with a stack of saplings on the -X face and an open-topped log bin on the +X face, plus a water sight glass and a status beacon. A prefab built before this round is rebuilt the first time its scenes load (the body checks for `InputHopper` and rebuilds when it is missing), and the setup step rebuilds it eagerly.
+- **Harvester and Farm screens cover planting boxes.** `Harvester` gains `harvestPlantBoxes` and works boxes through `FarmHarvestService` like every other bed; the FARMS and PLOT STATUS pages list box cells and mark `PORT` when one is set to empty itself.
+
+#### Fixed
+
+- **`PlantBox` drought bookkeeping** never sized its per-cell timers when the cell count was restored from a save, which would have thrown on the first dry tick of a loaded box.
 
 ### [18.2.1-dev] Author the Missing Display and Machine-Module Research Unlocks, Fix a Setup Compile Error
 

@@ -982,6 +982,135 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Planting box: plant, harvest, clear a lost crop, fertilize or water.
+                // One block can hold nine crops, so the cell under the crosshair decides
+                // which one the player is talking to.
+                var plantBox = hit.collider.GetComponentInParent<VoxelEngine.Farming.PlantBox>();
+                if (plantBox != null)
+                {
+                    var heldBoxItem = inventory.ActiveStack;
+
+                    // 1) A filled canister waters the bed by hand - the no-plumbing path.
+                    if (!heldBoxItem.IsEmpty && heldBoxItem.item is VoxelEngine.Items.LiquidCanister)
+                    {
+                        var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(heldBoxItem);
+                        if (carried != null && carried.Value == VoxelEngine.Items.LiquidType.Water)
+                        {
+                            int wantedMl = Mathf.RoundToInt(VoxelEngine.Items.LiquidCanister.LitresPerClick * 1000f);
+                            if (VoxelEngine.Items.LiquidCanister.RemoveMl(heldBoxItem, wantedMl))
+                            {
+                                float added = plantBox.TryAddWater(wantedMl / 1000f);
+                                VoxelEngine.UI.BuildFeedbackHud.Show(
+                                    "Watered " + plantBox.BedName,
+                                    "+" + added.ToString("0.0") + " L - " + (plantBox.Water01 * 100f).ToString("0") + "% full",
+                                    heldBoxItem.item.icon,
+                                    new Color(0.30f, 0.68f, 0.92f));
+                                return;
+                            }
+                        }
+                    }
+
+                    // 2) A lost crop has to be cleared before anything else grows here.
+                    if (plantBox.DeadCount > 0
+                        && plantBox.TryClearDeadAt(hit.point, out string lostCrop))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Cleared Dead Crop",
+                            lostCrop + " - right-click with a seed to replant",
+                            null,
+                            new Color(0.78f, 0.52f, 0.30f));
+                        return;
+                    }
+
+                    // 3) Harvest whatever is ripe under the crosshair.
+                    if (plantBox.ReadyCount > 0
+                        && plantBox.TryHarvestAt(hit.point, inventory, out var boxHarvest))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Harvested",
+                            "+" + boxHarvest.count + " " + (boxHarvest.item != null ? boxHarvest.item.displayName : "crop"),
+                            boxHarvest.item != null ? boxHarvest.item.icon : null,
+                            new Color(0.40f, 0.80f, 0.30f));
+                        return;
+                    }
+
+                    // 4) Plant a seed or a sapling.
+                    if (!heldBoxItem.IsEmpty && heldBoxItem.item != null)
+                    {
+                        int planted = plantBox.TryPlantAt(hit.point, heldBoxItem.item);
+                        if (planted == -2)
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Needs a Large Bed",
+                                "Trees only take root in a Large Plant Bed",
+                                heldBoxItem.item.icon,
+                                new Color(0.86f, 0.58f, 0.26f));
+                            return;
+                        }
+                        if (planted >= 0)
+                        {
+                            inventory.container.Remove(heldBoxItem.item, 1);
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Planted",
+                                heldBoxItem.item.displayName + " - "
+                                    + (plantBox.IsIrrigated ? "Irrigated" : "Dry - water it or add a Sprinkler"),
+                                heldBoxItem.item.icon,
+                                new Color(0.40f, 0.75f, 0.30f));
+                            return;
+                        }
+
+                        // 5) Fertilize a cell that is already growing.
+                        if (plantBox.TryFertilizeAt(hit.point, heldBoxItem.item))
+                        {
+                            inventory.container.Remove(heldBoxItem.item, 1);
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Fertilized",
+                                "Faster growth, one extra unit at harvest",
+                                heldBoxItem.item.icon,
+                                new Color(0.45f, 0.85f, 0.30f));
+                            return;
+                        }
+                    }
+
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        plantBox.BedName,
+                        plantBox.IsEmpty
+                            ? "Right-click with a seed to plant"
+                            : plantBox.StateLabel + " - " + plantBox.CropName
+                              + " - water " + (plantBox.Water01 * 100f).ToString("0") + "%"
+                              + (plantBox.HasSprinkler ? " (sprinkler)" : ""),
+                        null,
+                        new Color(0.38f, 0.72f, 0.36f));
+                    return;
+                }
+
+                // Sprinkler: fill it by hand from a canister, or report its state.
+                var sprinkler = hit.collider.GetComponentInParent<VoxelEngine.Farming.Sprinkler>();
+                if (sprinkler != null)
+                {
+                    var heldCanister = inventory.ActiveStack;
+                    if (!heldCanister.IsEmpty && heldCanister.item is VoxelEngine.Items.LiquidCanister
+                        && sprinkler.TryFillFromCanister(heldCanister, out float poured))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Filled Sprinkler",
+                            "+" + poured.ToString("0.0") + " L - "
+                                + (sprinkler.WaterFill01 * 100f).ToString("0") + "% full",
+                            heldCanister.item.icon,
+                            new Color(0.30f, 0.68f, 0.92f));
+                        return;
+                    }
+
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        "Sprinkler",
+                        sprinkler.Status + " - water "
+                            + (sprinkler.WaterFill01 * 100f).ToString("0") + "%"
+                            + (sprinkler.HasWaterSource ? " - plumbed" : " - fill with a Liquid Canister"),
+                        null,
+                        sprinkler.IsActive ? new Color(0.36f, 0.86f, 0.44f) : new Color(0.86f, 0.66f, 0.30f));
+                    return;
+                }
+
                 // Farm plot: plant seed or harvest.
                 var farmPlot = hit.collider.GetComponentInParent<VoxelEngine.Farming.FarmPlot>();
                 if (farmPlot != null)
@@ -997,6 +1126,29 @@ namespace VoxelEngine.Player
                             null,
                             new Color(0.78f, 0.52f, 0.30f));
                         return;
+                    }
+
+                    // An Auto Farm Plot holds its own water, so a canister tops it up.
+                    var heldPlotWater = inventory.ActiveStack;
+                    if (farmPlot.waterCapacity > 0f && !heldPlotWater.IsEmpty
+                        && heldPlotWater.item is VoxelEngine.Items.LiquidCanister)
+                    {
+                        var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(heldPlotWater);
+                        if (carried != null && carried.Value == VoxelEngine.Items.LiquidType.Water)
+                        {
+                            int wantedMl = Mathf.RoundToInt(VoxelEngine.Items.LiquidCanister.LitresPerClick * 1000f);
+                            if (VoxelEngine.Items.LiquidCanister.RemoveMl(heldPlotWater, wantedMl))
+                            {
+                                float added = farmPlot.TryAddWater(wantedMl / 1000f);
+                                VoxelEngine.UI.BuildFeedbackHud.Show(
+                                    "Watered Auto Farm Plot",
+                                    "+" + added.ToString("0.0") + " L - "
+                                        + (farmPlot.Water01 * 100f).ToString("0") + "% full",
+                                    heldPlotWater.item.icon,
+                                    new Color(0.30f, 0.68f, 0.92f));
+                                return;
+                            }
+                        }
                     }
 
                     // Try harvest first.

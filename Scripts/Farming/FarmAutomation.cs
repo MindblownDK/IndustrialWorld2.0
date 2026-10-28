@@ -223,6 +223,8 @@ namespace VoxelEngine.Farming
         {
             switch (bed)
             {
+                case PlantBox box:
+                    return box.ClearAllDead() > 0;
                 case CropPlanter planter:
                     if (!planter.IsDead) return false;
                     planter.ClearCrop();
@@ -248,6 +250,9 @@ namespace VoxelEngine.Farming
         {
             switch (bed)
             {
+                case PlantBox box when box.CanHarvestNow:
+                    harvest = box.PeekHarvest();
+                    return true;
                 case CropPlanter planter when planter.CanHarvestNow:
                     harvest = planter.PeekHarvest();
                     return true;
@@ -264,6 +269,8 @@ namespace VoxelEngine.Farming
         {
             switch (bed)
             {
+                case PlantBox box:
+                    return box.TakeHarvest(replant, out harvest);
                 case CropPlanter planter:
                     return planter.TakeHarvest(replant, out harvest);
                 case FarmPlot plot:

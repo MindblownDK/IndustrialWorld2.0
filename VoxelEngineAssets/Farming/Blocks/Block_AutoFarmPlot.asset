@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_AutoFarmPlot
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_auto_farm_plot
+  displayName: Auto Farm Plot
+  description: Powered one-metre plot. Plant a seed, water it by hand with a Liquid
+    Canister, and it hands its harvest to a belt, chute, funnel or item pipe standing
+    next to it - replanting itself if you leave self re-seeding on. Draws a trickle
+    of power while it works. Tilled Soil stays the manual plot for the early game.
+  icon: {fileID: 21300000, guid: 7209cb7f85fbbf34d833e6781b8c98c1, type: 3}
+  iconTint: {r: 0.44, g: 0.62, b: 0.3, a: 1}
+  maxStack: 900
+  massPerUnit: 12
+  category: Misc
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
+  placedPrefab: {fileID: 4702302209112922832, guid: 5c662dfe19b10ba498eeed2553766a42, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 1
+  blockHealth: 100
+  softClearance: 0
+  miningTier: 1
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}
