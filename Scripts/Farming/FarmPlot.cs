@@ -100,8 +100,134 @@ namespace VoxelEngine.Farming
         private void Awake()
         {
             _soilRenderer = GetComponent<MeshRenderer>();
+            if (_soilRenderer == null)
+            {
+                // 18.5.0-dev: the Auto Farm Plot is a built prefab, not a plain cube, so its
+                // soil lives under Generated_FarmPlotVisuals. The moisture tint still has to
+                // land on the soil itself - that colour is the only cue a dry plot gives.
+                EnsureVisuals();
+                var soil = transform.Find("Generated_FarmPlotVisuals/Soil");
+                if (soil != null) _soilRenderer = soil.GetComponent<MeshRenderer>();
+            }
             isOxygenated = FarmEnvironment.HasBreathableAir(transform.position);
             UpdateSoilColor();
+            RefreshGauges();
+        }
+
+        // ── 18.5.0-dev: the plot's own body ──────────────────────────────────
+        // Tilled Soil stays a flat patch. The Auto Farm Plot is a machine, so it is drawn
+        // as one: a bordered tray with a real soil bed, an output chute on +X, a water
+        // sight glass on -X and a status lamp, so the powered plot is recognisable next to
+        // the manual one and its two failure states (dry, no route) are visible from
+        // outside without opening a panel.
+
+        /// <summary>Rebuild the generated body. Editor-time or on demand.</summary>
+        public void RebuildVisuals()
+        {
+            var existing = transform.Find("Generated_FarmPlotVisuals");
+            if (existing != null)
+            {
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
+            if (!Application.isPlaying) BuildVisuals();
+            var soil = transform.Find("Generated_FarmPlotVisuals/Soil");
+            if (soil != null) _soilRenderer = soil.GetComponent<MeshRenderer>();
+            RefreshGauges();
+        }
+
+        private void EnsureVisuals()
+        {
+            if (transform.Find("Generated_FarmPlotVisuals") != null) return;
+            BuildVisuals();
+        }
+
+        private void BuildVisuals()
+        {
+            var root = new GameObject("Generated_FarmPlotVisuals").transform;
+            root.SetParent(transform, false);
+            root.localPosition = Vector3.zero;
+            root.localRotation = Quaternion.identity;
+            root.localScale = Vector3.one;
+
+            Color steel = new Color(0.30f, 0.34f, 0.38f);
+            Color darkSteel = new Color(0.20f, 0.23f, 0.26f);
+            Color soilWet = new Color(0.25f, 0.18f, 0.10f);
+            Color waterBlue = new Color(0.20f, 0.62f, 0.88f);
+
+            MakePart(root, PrimitiveType.Cube, "Base", new Vector3(0f, 0.04f, 0f), new Vector3(0.96f, 0.08f, 0.96f), steel);
+            MakePart(root, PrimitiveType.Cube, "Soil", new Vector3(0f, 0.11f, 0f), new Vector3(0.82f, 0.10f, 0.82f), soilWet);
+            MakePart(root, PrimitiveType.Cube, "Curb_N", new Vector3(0f, 0.14f, 0.44f), new Vector3(0.96f, 0.14f, 0.08f), darkSteel);
+            MakePart(root, PrimitiveType.Cube, "Curb_S", new Vector3(0f, 0.14f, -0.44f), new Vector3(0.96f, 0.14f, 0.08f), darkSteel);
+            MakePart(root, PrimitiveType.Cube, "Curb_E", new Vector3(0.44f, 0.14f, 0f), new Vector3(0.08f, 0.14f, 0.80f), darkSteel);
+            MakePart(root, PrimitiveType.Cube, "Curb_W", new Vector3(-0.44f, 0.14f, 0f), new Vector3(0.08f, 0.14f, 0.80f), darkSteel);
+
+            // Output chute on +X: what a route plugs into.
+            MakePart(root, PrimitiveType.Cube, "OutputChute", new Vector3(0.50f, 0.12f, 0f), new Vector3(0.20f, 0.08f, 0.34f), steel);
+            MakePart(root, PrimitiveType.Cube, "OutputLip", new Vector3(0.58f, 0.10f, 0f), new Vector3(0.04f, 0.03f, 0.30f), waterBlue);
+
+            // Water sight glass on -X and the status lamp on +Z.
+            MakePart(root, PrimitiveType.Cube, "WaterGaugeHouse", new Vector3(-0.46f, 0.16f, 0f), new Vector3(0.06f, 0.26f, 0.16f), darkSteel);
+            MakePart(root, PrimitiveType.Cube, "WaterGauge", new Vector3(-0.50f, 0.16f, 0f), new Vector3(0.02f, 0.22f, 0.10f), waterBlue);
+            MakePart(root, PrimitiveType.Cube, "StatusBeacon", new Vector3(0f, 0.20f, 0.46f), new Vector3(0.12f, 0.05f, 0.05f), waterBlue);
+        }
+
+        /// <summary>Keep the sight glass and the lamp honest as the plot runs.</summary>
+        private void RefreshGauges()
+        {
+            var vis = transform.Find("Generated_FarmPlotVisuals");
+            if (vis == null) return;
+
+            var gauge = vis.Find("WaterGauge");
+            if (gauge != null)
+            {
+                float fill = waterCapacity > 0f ? Mathf.Clamp01(waterStored / waterCapacity) : 0f;
+                gauge.localScale = new Vector3(0.02f, Mathf.Max(0.02f, 0.22f * fill), 0.10f);
+                gauge.localPosition = new Vector3(-0.50f, 0.05f + 0.11f * fill, 0f);
+            }
+
+            var beacon = vis.Find("StatusBeacon");
+            if (beacon != null && _soilRenderer != null)
+            {
+                var mr = beacon.GetComponent<MeshRenderer>();
+                if (mr != null)
+                {
+                    Color tint = IsReady ? new Color(0.36f, 0.92f, 0.48f)
+                        : isDead ? new Color(0.88f, 0.42f, 0.24f)
+                        : isIrrigated ? new Color(0.32f, 0.72f, 0.92f)
+                        : new Color(0.86f, 0.72f, 0.24f);
+                    var mpb = new MaterialPropertyBlock();
+                    mr.GetPropertyBlock(mpb);
+                    mpb.SetColor(Shader.PropertyToID("_BaseColor"), tint);
+                    mpb.SetColor(Shader.PropertyToID("_Color"), tint);
+                    mr.SetPropertyBlock(mpb);
+                }
+            }
+        }
+
+        private static void MakePart(Transform parent, PrimitiveType type, string name,
+            Vector3 pos, Vector3 scale, Color color)
+        {
+            var go = GameObject.CreatePrimitive(type);
+            go.name = name;
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+            {
+                if (Application.isPlaying) Destroy(col);
+                else DestroyImmediate(col);
+            }
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localScale = scale;
+
+            var mr = go.GetComponent<MeshRenderer>();
+            if (mr != null && Application.isPlaying)
+            {
+                var mpb = new MaterialPropertyBlock();
+                mpb.SetColor(Shader.PropertyToID("_BaseColor"), color);
+                mpb.SetColor(Shader.PropertyToID("_Color"), color);
+                mr.SetPropertyBlock(mpb);
+            }
         }
 
         private void Update()
@@ -163,6 +289,7 @@ namespace VoxelEngine.Farming
             UpdateSoilColor();
 
             if (automatic && autoDumpWhenRipe) TryDumpToPort();
+            RefreshGauges();
         }
 
         /// <summary>

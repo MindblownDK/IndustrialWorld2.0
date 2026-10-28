@@ -3768,6 +3768,7 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridGasTank
                 || b is VoxelEngine.GridSystem.GridH2O2Generator
                 || b is VoxelEngine.GridSystem.GridBiofarm
+                || b is VoxelEngine.GridSystem.GridFarmPlotBase
                 || b is VoxelEngine.GridSystem.GridCryobed
                 || b is VoxelEngine.GridSystem.GridBattery
                 || b is VoxelEngine.GridSystem.GridCargoContainer

@@ -1,9 +1,32 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.4.1-dev`
+**Current Version:** `18.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.5.0-dev] Give the Grid Farm Plots a Panel, and Author the Sprinkler and Auto Farm Plot Properly
+
+**Type:** MINOR - a new machine panel, two containers on the grid plots, and an authoring repair. Save-compatible: the two plot containers join the existing `extraContainers` record, which older saves simply do not contain, and no runtime block changes behaviour for anyone who is not standing at one of these blocks.
+
+**GitHub title:** `[18.5.0-dev] Add the grid farm plot panel and fix the sprinkler and Auto Farm Plot setup authoring`
+
+#### Added
+
+- **`GridFarmPlotPanel` (`Scripts/GridSystem/UI/GridBlockUI.cs`).** Both grid plots now open a real machine page: status pill and run lamps, a water gauge, a beds gauge, power draw, water supply, breathable-air reading, ready count, a lost-crop count with a **Clear lost crops** button, one line per bed (crop, growth, "Lost crop", "Timber" or "Empty"), a seed bin, and a harvest bin. Registered as `case GridFarmPlotBase` so the Vertical Farm Plot and the Large Farm Plot Box share one panel.
+- **The plots can be clicked.** `GridBlockHasUI` in `PlayerInteractionTool` now accepts `GridFarmPlotBase`, which is the gate the interaction raycast uses before it opens a grid block - the panel existed but nothing could reach it.
+- **Two real containers on the plots:** `seedInput` (4 slots, filtered to anything plantable) and `harvestOutput` (9 slots). Seeds dropped in the bin are planted into free cells automatically, once a second, and a ripe cell is delivered to connected cargo first and to the harvest bin second. A ship with no cargo hold therefore collects its crop instead of waiting on a route that does not exist.
+- **Both bins are saved** through the shared multi-container path (`TryFindContainer` / `RestoreContainer` in `WorldStatePersistence`), so a stack of seeds and a waiting harvest both come back after a reload.
+
+#### Changed
+
+- **The Auto Farm Plot has a body.** It was authored with the plain cube the wizard's `MakePref` helper creates - the same geometry as Tilled Soil - so the powered plot looked exactly like the manual one. `FarmPlot` gained `RebuildVisuals()` / `EnsureVisuals()` and draws a bordered tray with a real soil bed, an output chute on +X with a lip, a water sight glass on -X that falls as the tank empties, and a status lamp on +Z (green ripe, amber dry, blue watered, red lost). The moisture tint still lands on the soil renderer, so the dry/wet cue survives. **Tilled Soil is untouched:** it keeps its root renderer and never builds generated visuals.
+
+#### Fixed
+
+- **The Sprinkler was often never created.** Its prefab, block item and recipe are authored by the big farming content step inside the wizard; the 18.3.0-dev step only *repaired* an existing sprinkler and reported "not present yet" instead of building one. That was the wrong call for a block the round claims: `RepairSprinkler` now calls a new `CreateSprinkler` when the prefab or its `Block_Sprinkler` asset is missing, authoring the prefab (mast body, `PowerConsumer` at 20 W, tank fields), the block item, the Crafting Bench recipe, the `RecipeRegistry` link and the catalog entry.
+- **The setup report no longer lies about what exists.** `RunStep124` now checks all fifteen paths it claims - five block items, five prefabs, five recipes - by `AssetDatabase.LoadMainAssetAtPath` after saving, prints `MISSING ON DISK` for any that are absent, and puts the count in the completion dialog. "I don't think it got made" is now answerable from the Console instead of from a folder hunt.
+- **`FarmPlot.Awake` finds its soil renderer on a built prefab.** It looked only for a renderer on the root, which the machine body does not have, so the wet/dry tint silently stopped working as soon as the plot became a built prefab.
 
 ### [18.4.1-dev] Fix the Missing Report List in the Farm Overhaul Setup Step
 

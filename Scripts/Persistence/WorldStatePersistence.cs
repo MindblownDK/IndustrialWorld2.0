@@ -1892,6 +1892,15 @@ namespace VoxelEngine.Persistence
                     armorUpgradeStation.ModuleSlot,
                     armorUpgradeStation.OutputSlot);
 
+            // 18.5.0-dev: the grid farm plots keep two containers - the seed bin and the
+            // harvest bin - so a stack of seeds and a waiting crop both survive a reload.
+            var farmPlot = go.GetComponentInChildren<VoxelEngine.GridSystem.GridFarmPlotBase>(true);
+            if (farmPlot != null)
+            {
+                farmPlot.EnsureContainers();
+                return SerializeMulti(farmPlot.seedInput, farmPlot.harvestOutput);
+            }
+
             var chest = go.GetComponentInChildren<Chest>();
             if (chest != null)
             {
@@ -5396,6 +5405,16 @@ namespace VoxelEngine.Persistence
                     armorUpgradeStation.ArmorSlot,
                     armorUpgradeStation.ModuleSlot,
                     armorUpgradeStation.OutputSlot);
+                return;
+            }
+
+            // 18.5.0-dev: mirror of TryFindContainer for the grid farm plots - the seed bin
+            // and the harvest bin both come back with their contents.
+            var farmPlotRestore = go.GetComponentInChildren<VoxelEngine.GridSystem.GridFarmPlotBase>(true);
+            if (farmPlotRestore != null)
+            {
+                farmPlotRestore.EnsureContainers();
+                DeserializeMulti(sc, farmPlotRestore.seedInput, farmPlotRestore.harvestOutput);
                 return;
             }
 

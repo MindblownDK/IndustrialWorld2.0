@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_Sprinkler
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_sprinkler
+  displayName: Sprinkler
+  description: 'Powered irrigation mast with its own water tank. Sprays about 0.4
+    L per second over an 8 m radius while it has power and water. Fill the tank by
+    hand with a Liquid Canister, or connect a pipe or tank within 3.5 m and it refills
+    itself. Every planting box, farm plot and sapling bed inside the radius counts
+    as irrigated. Holds its own water tank: fill it by hand with a Liquid Canister,
+    or connect a pipe for automatic refill. Draws about 20 W while it sprays. Holds
+    its own water tank: fill it by hand with a Liquid Canister, or connect a pipe
+    for automatic refill. Draws about 20 W while it sprays. Holds its own water tank:
+    fill it by hand with a Liquid Canister, or connect a pipe for automatic refill.
+    Draws about 20 W while it sprays.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.4, g: 0.65, b: 0.85, a: 1}
+  maxStack: 900
+  massPerUnit: 12
+  category: Misc
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
+  placedPrefab: {fileID: 2120965906647277424, guid: fd7df92eebdaf864bbbde82faf7c12e7, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 1
+  blockHealth: 100
+  softClearance: 0
+  miningTier: 1
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

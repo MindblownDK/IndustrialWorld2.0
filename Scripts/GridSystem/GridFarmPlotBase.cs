@@ -55,6 +55,15 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Whether a tree sapling may be planted here. Only the floor box allows it.")]
         public bool allowsTrees = false;
 
+        [Header("Containers")]
+        [Tooltip("Seeds and saplings waiting to go into a free cell. The plot plants from here on its own.")]
+        public ItemContainer seedInput;
+        [Tooltip("Produce taken off the beds, waiting for a route. The player can take it straight out of the panel.")]
+        public ItemContainer harvestOutput;
+
+        public const int SEED_SLOTS = 4;
+        public const int OUTPUT_SLOTS = 9;
+
         [Header("Power")]
         [Tooltip("Watts drawn while any cell is growing.")]
         public float powerDraw = 55f;
@@ -90,6 +99,23 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>Cells this plot owns. Fixed by the subclass, never by the save.</summary>
         public abstract int CellCount { get; }
+
+        /// <summary>The panel walks the beds by index; the array itself stays this class's business.</summary>
+        public int cellCount => cells != null ? cells.Length : 0;
+
+        /// <summary>One bed, or null when the index is outside the plot.</summary>
+        public GridFarmCell CellAt(int index)
+            => cells != null && index >= 0 && index < cells.Length ? cells[index] : null;
+
+        /// <summary>0..1 of the beds that carry a living crop - the "Beds" gauge.</summary>
+        public float CellsFill01
+        {
+            get
+            {
+                int total = cellCount;
+                return total > 0 ? Mathf.Clamp01(PlantedCount / (float)total) : 0f;
+            }
+        }
 
         /// <summary>One short word for the cell layout: "VERTICAL", "FLOOR".</summary>
         public abstract string PlotKind { get; }
@@ -186,11 +212,13 @@ namespace VoxelEngine.GridSystem
 
         private float _envTimer;
         private float _pullTimer;
+        private float _plantTimer;
 
         // ── Lifecycle ───────────────────────────────────────────────────────
         protected virtual void Awake()
         {
             EnsureCells();
+            EnsureContainers();
             ResolveTreeItems();
             HasAir = FarmEnvironment.HasBreathableAir(transform.position);
         }
@@ -199,6 +227,7 @@ namespace VoxelEngine.GridSystem
         {
             base.OnPlaced();
             EnsureCells();
+            EnsureContainers();
             ResolveTreeItems();
             HasAir = FarmEnvironment.HasBreathableAir(transform.position);
         }
@@ -237,6 +266,51 @@ namespace VoxelEngine.GridSystem
             if (biomassItem == null) biomassItem = Find("biomass", "Item_Biomass") ?? Find("item_biomass", "Item_Biomass");
         }
 
+        /// <summary>
+        /// Create or resize the two containers. Filters keep the seed bin honest: only
+        /// something that can actually be planted goes in, so the plot never spends a
+        /// cycle discovering that a rock is not a seed.
+        /// </summary>
+        public void EnsureContainers()
+        {
+            if (seedInput == null) seedInput = new ItemContainer("Seeds", SEED_SLOTS);
+            else if (seedInput.Size != SEED_SLOTS) seedInput.Resize(SEED_SLOTS);
+            seedInput.AcceptFilter = (item, wanted) => CanPlant(item) ? wanted : 0;
+
+            if (harvestOutput == null) harvestOutput = new ItemContainer("Harvest", OUTPUT_SLOTS);
+            else if (harvestOutput.Size != OUTPUT_SLOTS) harvestOutput.Resize(OUTPUT_SLOTS);
+        }
+
+        /// <summary>True when this plot would accept <paramref name="item"/> in a free cell.</summary>
+        public bool CanPlant(ItemDefinition item)
+        {
+            if (item == null) return false;
+            if (item is SeedItem seed)
+            {
+                if (seed.crop != null) return true;
+                return allowsTrees && TreeFarmPlot.IsSaplingOrTreeSeed(item);
+            }
+            return allowsTrees && TreeFarmPlot.IsSaplingOrTreeSeed(item);
+        }
+
+        /// <summary>Take one seed or sapling out of the seed bin into the first free cell.</summary>
+        private bool PlantFromSeedBin()
+        {
+            if (seedInput == null) return false;
+            int free = FirstFreeCell();
+            if (free < 0) return false;
+
+            for (int i = 0; i < seedInput.Size; i++)
+            {
+                var slot = seedInput.GetSlot(i);
+                if (slot == null || slot.IsEmpty || !CanPlant(slot.item)) continue;
+                if (TryPlant(slot.item) < 0) continue;
+                seedInput.Remove(slot.item, 1);
+                return true;
+            }
+            return false;
+        }
+
         // ── Simulation ──────────────────────────────────────────────────────
         private void FixedUpdate()
         {
@@ -254,6 +328,15 @@ namespace VoxelEngine.GridSystem
             PullWater(dt);
 
             bool powered = Grid.HasPower;
+
+            // A plot with seeds in its bin fills its own empty cells, so a farm can be
+            // set up once instead of walked every cycle.
+            _plantTimer += dt;
+            if (_plantTimer >= 1f)
+            {
+                _plantTimer = 0f;
+                while (PlantFromSeedBin()) { }
+            }
             IsProducing = powered && PlantedCount > 0;
 
             GrowCells(powered, dt);
@@ -331,16 +414,21 @@ namespace VoxelEngine.GridSystem
 
         // ── Harvest ─────────────────────────────────────────────────────────
         /// <summary>
-        /// Move every ripe cell into connected grid cargo. Each cell is only emptied once
-        /// the destination has room, so a full cargo hold parks the harvest on the plot
-        /// instead of deleting it.
+        /// Move every ripe cell out to a route or into the plot's own output bin. A cell is
+        /// only emptied once the whole payload has somewhere to go, so a full hold and an
+        /// empty hold both end with the crop still on the bed rather than gone.
         /// </summary>
         public int PushRipeToGrid()
         {
-            if (Grid == null || GridItemNetwork.Instance == null) return 0;
+            EnsureContainers();
 
-            var containers = GridItemNetwork.Instance.GetConnectedContainers(Grid);
-            if (containers == null || containers.Count == 0) return 0;
+            // A route is optional: with no cargo connected the harvest lands in the plot's
+            // own output bin, which the player empties from the panel. Nothing is ever
+            // destroyed because a ship has no hold yet.
+            var containers = Grid != null && GridItemNetwork.Instance != null
+                ? GridItemNetwork.Instance.GetConnectedContainers(Grid)
+                : null;
+            if (containers == null) containers = new List<GridCargoContainer>();
 
             int moved = 0;
             for (int i = 0; i < cells.Length; i++)
@@ -355,10 +443,10 @@ namespace VoxelEngine.GridSystem
                 if (cell.tree)
                 {
                     ResolveTreeItems();
-                    if (!HasRoomAnywhere(containers, woodLogItem, treeLogsPerHarvest)) continue;
-                    Give(containers, woodLogItem, treeLogsPerHarvest, ref moved);
-                    Give(containers, saplingItem, treeSaplingsPerHarvest, ref moved);
-                    Give(containers, biomassItem, treeBiomassPerHarvest, ref moved);
+                    if (!CanDeliver(containers, woodLogItem, treeLogsPerHarvest)) continue;
+                    Deliver(containers, woodLogItem, treeLogsPerHarvest, ref moved);
+                    Deliver(containers, saplingItem, treeSaplingsPerHarvest, ref moved);
+                    Deliver(containers, biomassItem, treeBiomassPerHarvest, ref moved);
                     cell.tree = false;
                     cell.growth = 0f;
                     continue;
@@ -367,12 +455,12 @@ namespace VoxelEngine.GridSystem
                 var crop = cell.crop;
                 int seedsToGive = Mathf.Max(0, crop.seedReturnAmount);
                 int seedsKept = canReplant && seedsToGive > 0 ? 1 : 0;
-                if (!HasRoomAnywhere(containers, crop.harvestItem, crop.harvestAmount)) continue;
+                if (!CanDeliver(containers, crop.harvestItem, crop.harvestAmount)) continue;
                 if (seedsToGive - seedsKept > 0
-                    && !HasRoomAnywhere(containers, crop.seedItem, seedsToGive - seedsKept)) continue;
+                    && !CanDeliver(containers, crop.seedItem, seedsToGive - seedsKept)) continue;
 
-                Give(containers, crop.harvestItem, crop.harvestAmount, ref moved);
-                Give(containers, crop.seedItem, seedsToGive - seedsKept, ref moved);
+                Deliver(containers, crop.harvestItem, crop.harvestAmount, ref moved);
+                Deliver(containers, crop.seedItem, seedsToGive - seedsKept, ref moved);
 
                 if (canReplant)
                 {
@@ -389,6 +477,28 @@ namespace VoxelEngine.GridSystem
             return moved;
         }
 
+        /// <summary>True when the route OR the plot's own bin can take the whole payload.</summary>
+        private bool CanDeliver(List<GridCargoContainer> containers, ItemDefinition item, int count)
+        {
+            if (item == null || count <= 0) return true;
+            if (HasRoomAnywhere(containers, item, count)) return true;
+            return harvestOutput != null && harvestOutput.HasSpace(item, count);
+        }
+
+        /// <summary>Hand a stack to the route first and to the plot's own bin second.</summary>
+        private void Deliver(List<GridCargoContainer> containers, ItemDefinition item, int count, ref int moved)
+        {
+            if (item == null || count <= 0) return;
+
+            int left = count - PushToCargo(containers, item, count);
+            moved += count - left;
+            if (left <= 0 || harvestOutput == null) return;
+
+            var leftover = harvestOutput.Insert(new ItemStack { item = item, count = left });
+            int stored = left - (leftover != null && !leftover.IsEmpty ? leftover.count : 0);
+            moved += stored;
+        }
+
         private static bool HasRoomAnywhere(List<GridCargoContainer> containers, ItemDefinition item, int count)
         {
             if (item == null || count <= 0) return true;
@@ -403,21 +513,19 @@ namespace VoxelEngine.GridSystem
             return false;
         }
 
-        private static void Give(List<GridCargoContainer> containers, ItemDefinition item, int count, ref int moved)
+        private static int PushToCargo(List<GridCargoContainer> containers, ItemDefinition item, int count)
         {
-            if (item == null || count <= 0) return;
+            if (item == null || count <= 0) return 0;
             int remaining = count;
             for (int i = 0; i < containers.Count && remaining > 0; i++)
             {
                 var c = containers[i];
                 if (c == null || c.container == null) continue;
-                int space = c.container.HasSpace(item, remaining) ? remaining : 0;
-                if (space <= 0) continue;
-                var leftover = c.container.Insert(new ItemStack { item = item, count = space });
-                int stored = space - (leftover != null && !leftover.IsEmpty ? leftover.count : 0);
-                remaining -= stored;
-                moved += stored;
+                if (!c.container.HasSpace(item, remaining)) continue;
+                var leftover = c.container.Insert(new ItemStack { item = item, count = remaining });
+                remaining = leftover != null && !leftover.IsEmpty ? leftover.count : 0;
             }
+            return count - remaining;
         }
 
         // ── Player / automation control ─────────────────────────────────────

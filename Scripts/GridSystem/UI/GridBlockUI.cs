@@ -63,6 +63,9 @@ namespace VoxelEngine.GridSystem.UI
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return MakeScrollable(OreDetectorPanel(od));
                 case GridBiofarm bio:      return MakeScrollable(BiofarmPanel(bio, slot));
+                // 18.5.0-dev: the two grid farm plots. Class before instance, so the
+                // vertical plot and the floor box share one page.
+                case GridFarmPlotBase plot: return MakeScrollable(GridFarmPlotPanel(plot, slot));
                 case GridCryobed cryo:      return MakeScrollable(CryobedPanel(cryo));
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Pressure.GridAirVent vent: return MakeScrollable(AirVentPanel(vent));
@@ -3357,6 +3360,111 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(grid);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Passive O₂: needs grid power + water tanks + biomass (wheat/corn/seeds). Slower than electrolyser but renewable and ideal for ships & cryobeds."));
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
+        /// <summary>
+        /// 18.5.0-dev: one panel for both grid farm plots - the vertical stack and the
+        /// floor box. It answers the four questions a farm asks: is it working, does it
+        /// have water, does it have air, and where are my seeds and my crop. The seed bin
+        /// and the harvest bin are real slots, so planting and collecting are drag-and-drop
+        /// exactly like every machine in the project.
+        /// </summary>
+        private static VisualElement GridFarmPlotPanel(GridFarmPlotBase plot, MachineUIs.SlotBuilder slot)
+        {
+            plot.EnsureContainers();
+
+            var p = T.MachinePanel();
+            Color statusColor = plot.Status.StartsWith("READY") ? T.AccentGreen
+                : plot.Status == "NO POWER" ? T.AccentRed
+                : plot.Status == "DRY" || plot.Status == "NO O2" ? T.AccentAmber
+                : plot.Status == "GROWING" ? T.AccentGreen
+                : T.TextMuted;
+
+            var (hdr, _, _, _) = T.HeaderRow($"🌿 {plot.blockName}", plot.Status, statusColor);
+            p.Add(hdr);
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(plot.IsProducing ? 2 : plot.Status == "NO POWER" ? 0 : 1));
+
+            // Beds and tanks first: the two things that change second to second.
+            var gauges = Row();
+            gauges.style.justifyContent = Justify.SpaceAround;
+            gauges.Add(T.TankGauge("Water", plot.WaterFill01, new Color(0.25f, 0.55f, 0.95f),
+                $"{plot.waterStored:0}/{plot.waterCapacity:0} L", 60, 100));
+            gauges.Add(T.TankGauge("Beds", plot.CellsFill01, new Color(0.40f, 0.80f, 0.35f),
+                $"{plot.PlantedCount}/{plot.cellCount} planted", 60, 100));
+            p.Add(gauges);
+            p.Add(T.Spacer(6));
+
+            p.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(plot.PowerDraw),
+                plot.IsProducing ? T.AccentGreen : T.TextMuted));
+            p.Add(T.StatRow("💧", "Water Supply",
+                plot.HasWaterSupply ? "Piped" : "No tank connected",
+                plot.HasWaterSupply ? T.AccentGreen : T.AccentAmber));
+            p.Add(T.StatRow("🌬", "Breathable Air",
+                plot.HasAir ? "OK" : "None - crops paused",
+                plot.HasAir ? T.AccentGreen : T.AccentRed));
+            p.Add(T.StatRow("🌾", "Ready", $"{plot.ReadyCount} of {plot.cellCount}", T.AccentCyan));
+            if (plot.DeadCount > 0)
+                p.Add(T.StatRow("☠", "Lost Crops", $"{plot.DeadCount}", T.AccentRed));
+            p.Add(T.Spacer(4));
+
+            if (plot.DeadCount > 0)
+            {
+                p.Add(T.SmallButton("☠  Clear lost crops", () =>
+                {
+                    plot.ClearDead();
+                    // The panel is rebuilt through the same hook every other machine UI
+                    // uses, so the cleared beds appear without closing and reopening.
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, T.AccentRed));
+                p.Add(T.Spacer(4));
+            }
+
+            // Cell list: nine short rows beat one unreadable blob, and a lost cell is
+            // named so the player knows what to clear.
+            p.Add(GridUIHelpers.SectionTitle("Beds"));
+            for (int i = 0; i < plot.cellCount; i++)
+            {
+                var cell = plot.CellAt(i);
+                string name = cell == null ? "-"
+                    : cell.dead ? "Lost crop"
+                    : cell.tree ? "Timber"
+                    : cell.crop != null ? cell.crop.cropName
+                    : "Empty";
+                float growth = cell != null ? Mathf.Clamp01(cell.growth) : 0f;
+                Color tint = cell == null || (cell.crop == null && !cell.tree) ? T.TextMuted
+                    : cell.dead ? T.AccentRed
+                    : growth >= 1f ? T.AccentGreen
+                    : T.AccentCyan;
+                p.Add(T.StatRow("#" + (i + 1), name,
+                    cell != null && (cell.crop != null || cell.tree) ? $"{growth * 100f:0}%" : "-", tint));
+            }
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Seeds (planted automatically)"));
+            if (plot.seedInput != null)
+            {
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(plot.seedInput), "Seeds"));
+                var seedGrid = T.SlotGrid(plot.seedInput.Size);
+                for (int i = 0; i < plot.seedInput.Size; i++)
+                    seedGrid.Add(slot(plot.seedInput, i, plot.seedInput.GetSlot(i), false, true));
+                p.Add(seedGrid);
+            }
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Harvest (also pushed to connected cargo)"));
+            if (plot.harvestOutput != null)
+            {
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(plot.harvestOutput), "Harvest"));
+                var outGrid = T.SlotGrid(plot.harvestOutput.Size);
+                for (int i = 0; i < plot.harvestOutput.Size; i++)
+                    outGrid.Add(slot(plot.harvestOutput, i, plot.harvestOutput.GetSlot(i), false, true));
+                p.Add(outGrid);
+            }
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Drop seeds in the seed bin and the beds fill themselves. Water comes from a grid liquid tank through a liquid port. Oxygen comes from a sealed breathable room, or from a breathable world under the hull."));
             IndustrialTheme.Frame(p);
             return p;
         }

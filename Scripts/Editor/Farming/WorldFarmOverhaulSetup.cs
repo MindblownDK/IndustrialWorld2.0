@@ -111,7 +111,7 @@ namespace VoxelEngine.EditorTools
                 created, repaired, preserved, ((ItemDefinition)ironPlate, 2), ((ItemDefinition)clay, 2), ((ItemDefinition)copperWire, 2));
 
             // ── 3) Sprinkler rebuild ────────────────────────────────────────
-            RepairSprinkler(repaired, preserved);
+            RepairSprinkler(ironPlate, copperWire, glass, created, repaired, preserved);
 
             // ── 4) Automatic Tree Farm restyle ──────────────────────────────
             RepairAutoTreeFarm(woodLog, sapling, biomass, repaired, preserved);
@@ -125,6 +125,31 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
+            // 18.5.0-dev: report what is on disk, not just what the step believes it did.
+            // "I don't think it got made" is unanswerable from a count, so every asset the
+            // round claims is checked here by path and named MISSING when it is not there.
+            var missing = new List<string>();
+            string[] required =
+            {
+                FarmBlocksFolder + "/Block_PlantBoxSmall.asset",
+                FarmBlocksFolder + "/Block_PlantBoxBig.asset",
+                FarmBlocksFolder + "/Block_PlantBedLarge.asset",
+                FarmBlocksFolder + "/Block_AutoFarmPlot.asset",
+                FarmBlocksFolder + "/Block_Sprinkler.asset",
+                FarmPrefabsFolder + "/PlantBoxSmall.prefab",
+                FarmPrefabsFolder + "/PlantBoxBig.prefab",
+                FarmPrefabsFolder + "/PlantBedLarge.prefab",
+                FarmPrefabsFolder + "/AutoFarmPlot.prefab",
+                FarmPrefabsFolder + "/Sprinkler.prefab",
+                FarmRecipesFolder + "/Recipe_PlantBoxSmall.asset",
+                FarmRecipesFolder + "/Recipe_PlantBoxBig.asset",
+                FarmRecipesFolder + "/Recipe_PlantBedLarge.asset",
+                FarmRecipesFolder + "/Recipe_AutoFarmPlot.asset",
+                FarmRecipesFolder + "/Recipe_Sprinkler.asset",
+            };
+            for (int i = 0; i < required.Length; i++)
+                if (AssetDatabase.LoadMainAssetAtPath(required[i]) == null) missing.Add(required[i]);
+
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("Farm overhaul (18.3.0-dev)");
             sb.AppendLine();
@@ -137,14 +162,23 @@ namespace VoxelEngine.EditorTools
             sb.AppendLine($"Preserved: {preserved.Count}");
             AppendList(sb, preserved);
             sb.AppendLine();
+            sb.AppendLine(missing.Count == 0
+                ? "On disk: all 15 new blocks, prefabs and recipes are present."
+                : "MISSING ON DISK (" + missing.Count + "):");
+            for (int i = 0; i < missing.Count; i++) sb.AppendLine("  ! " + missing[i]);
+            sb.AppendLine();
             sb.AppendLine("Plant boxes: Small = 1 crop, Big = 4, Large = 9 (trees only on Large).");
             sb.AppendLine("Sprinkler: fill by hand with a Liquid Canister, or connect a pipe for automatic refill.");
 
             Debug.Log("[Farm Overhaul] " + sb.ToString().Replace("\n", "\n[Farm Overhaul] "));
             EditorUtility.DisplayDialog("Farm Overhaul Complete",
-                $"Created {created.Count}, repaired {repaired.Count}, preserved {preserved.Count}.\n\n"
-                + "Small/Big Plant Box and the Large Plant Bed are in the Farming tab. "
-                + "The Auto Farm Plot replaces the manual plot once you have power.", "OK");
+                $"Created {created.Count}, repaired {repaired.Count}, preserved {preserved.Count}.\n"
+                + (missing.Count == 0
+                    ? "All new blocks, prefabs and recipes are on disk.\n\n"
+                    : $"{missing.Count} asset(s) are MISSING - see the Console.\n\n")
+                + "All five blocks are in the Farming category of the crafting screen; "
+                + "the three planting boxes are craftable at a Crafting Bench, the Auto Farm Plot "
+                + "and the Large Plant Bed at the Assembler.", "OK");
         }
 
         // ── Planting boxes ──────────────────────────────────────────────────
@@ -234,6 +268,9 @@ namespace VoxelEngine.EditorTools
                 power.wattsPerSecond = 8f;
                 power.connectRadius = 2f;
 
+                // 18.5.0-dev: the plot is drawn as a machine - a bordered tray with soil,
+                // an output chute, a water sight glass and a status lamp - instead of being
+                // left as the plain cube Tilled Soil uses. Tilled Soil itself is untouched.
                 var plot = root.AddComponent<FarmPlot>();
                 plot.automatic = true;
                 plot.autoDumpWhenRipe = true;
@@ -242,6 +279,7 @@ namespace VoxelEngine.EditorTools
                 plot.waterStored = 40f;
                 plot.dumpRadius = 1.7f;
                 plot.dumpIntervalSeconds = 1f;
+                plot.RebuildVisuals();
                 AssignFarmMaterials(root);
 
                 var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
@@ -260,13 +298,20 @@ namespace VoxelEngine.EditorTools
         }
 
         // ── Sprinkler ───────────────────────────────────────────────────────
-        private static void RepairSprinkler(List<string> repaired, List<string> preserved)
+        private static void RepairSprinkler(ItemDefinition ironPlate, ItemDefinition copperWire,
+            ItemDefinition glass, List<string> created, List<string> repaired, List<string> preserved)
         {
             const string prefabPath = FarmPrefabsFolder + "/Sprinkler.prefab";
-            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null)
+            const string blockPath = FarmBlocksFolder + "/Block_Sprinkler.asset";
+
+            // 18.5.0-dev: a project that never ran the farming content step, or that lost
+            // the asset to a bad import, gets a sprinkler built for it rather than a line in
+            // a report. Nothing existing is replaced - CreateSprinkler only runs when the
+            // prefab or its block item is genuinely missing.
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null
+                || AssetDatabase.LoadAssetAtPath<BlockItem>(blockPath) == null)
             {
-                preserved.Add("Sprinkler prefab (not present yet - run the farming content step first)");
-                return;
+                CreateSprinkler(ironPlate, copperWire, glass, created, repaired);
             }
 
             var contents = PrefabUtility.LoadPrefabContents(prefabPath);
@@ -333,6 +378,68 @@ namespace VoxelEngine.EditorTools
             {
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+        }
+
+        /// <summary>
+        /// Build a sprinkler from nothing: prefab, block item, recipe and registry entry,
+        /// so "the sprinkler was never made" is answered by the setup step instead of by a
+        /// hunt through folders. Runs only when the prefab or block item is missing.
+        /// </summary>
+        private static void CreateSprinkler(ItemDefinition ironPlate, ItemDefinition copperWire,
+            ItemDefinition glass, List<string> created, List<string> repaired)
+        {
+            EnsureFolderPath(FarmPrefabsFolder);
+            EnsureFolderPath(FarmBlocksFolder);
+
+            var block = EnsureBlockItem($"{FarmBlocksFolder}/Block_Sprinkler.asset",
+                "block_sprinkler", "Sprinkler",
+                "Powered irrigation mast with its own water tank. Sprays about 0.4 L per second over an 8 m radius "
+                + "while it has power and water. Fill the tank by hand with a Liquid Canister, or connect a pipe or "
+                + "tank within 3.5 m and it refills itself. Every planting box, farm plot and sapling bed inside the "
+                + "radius counts as irrigated.",
+                new Color(0.40f, 0.65f, 0.85f), new Vector3Int(1, 1, 1), maxHp: 200,
+                category: "Farming", created, repaired, new List<string>());
+
+            const string prefabPath = FarmPrefabsFolder + "/Sprinkler.prefab";
+            var root = new GameObject("Sprinkler");
+            try
+            {
+                var box = root.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.32f, 0f);
+                box.size = new Vector3(0.62f, 0.72f, 0.62f);
+
+                var pb = root.AddComponent<PlacedBlock>();
+                pb.Item = block;
+                pb.Hp = block.blockHealth;
+
+                var power = root.AddComponent<PowerConsumer>();
+                power.wattsPerSecond = 20f;
+                power.connectRadius = 2f;
+
+                var sprinkler = root.AddComponent<Sprinkler>();
+                sprinkler.radius = 8f;
+                sprinkler.requiresWaterConnection = true;
+                sprinkler.waterCapacity = 60f;
+                sprinkler.waterStored = 60f;
+                sprinkler.litresPerSecond = 0.4f;
+                sprinkler.refillLitresPerSecond = 2f;
+                sprinkler.wattsWhileSpraying = 20f;
+                sprinkler.RebuildVisuals();
+                AssignFarmMaterials(root);
+
+                var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                block.placedPrefab = saved;
+                EditorUtility.SetDirty(block);
+                created.Add("Sprinkler prefab");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+
+            EnsureRecipe("Recipe_Sprinkler", "Sprinkler", block, StationTier.CraftingBench,
+                created, repaired, new List<string>(),
+                ((ItemDefinition)ironPlate, 2), ((ItemDefinition)copperWire, 4));
         }
 
         // ── Automatic Tree Farm ─────────────────────────────────────────────
