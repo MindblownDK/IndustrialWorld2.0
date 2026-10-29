@@ -227,7 +227,8 @@ namespace VoxelEngine.EditorTools
                 "Crop beds, irrigation and the automation that keeps a farm running while the player is away.", false,
                 Setup("Author planter output ports and Harvester bed coverage (18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()),
                 Setup("Author planting boxes, Auto Farm Plot, sprinkler mast and tree-farm body (18.3.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep124()),
-                Setup("Author icons and save entries for the two grid farm plots (18.4.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep125()));
+                Setup("Author icons and save entries for the two grid farm plots (18.4.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep125()),
+                Setup("Repair farm item icons (planting boxes, farm plots, grid plots) (18.6.1-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunIconRepair()));
 
             AddSetupGroup(parent, ref number, "Fluids, Atmosphere & Environment",
                 "Water, liquids, weather, pressure, thermal hazards and pollution. The duplicate spherical-water action was removed; one action now owns that setup.", false,
@@ -338,6 +339,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Audit and rebind missing generated item icons", () => VoxelEngine.EditorTools.ItemIconSync.Sync(auto: false)),
                 Setup("Repair planter output ports and Harvester bed coverage (non-destructive, 18.2.0-dev)", () => VoxelEngine.EditorTools.PlanterAutomationSetup.RunStep122()),
                 Setup("Repair planting boxes, Auto Farm Plot, sprinkler and tree-farm bodies (non-destructive, 18.3.0-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunStep124()),
+                Setup("Repair farm item icons (non-destructive, 18.6.1-dev)", () => VoxelEngine.EditorTools.WorldFarmOverhaulSetup.RunIconRepair()),
                 Setup("Repair recipes gated with no research unlock (screens, camera, machine modules) (18.2.1-dev)", () => VoxelEngine.EditorTools.DisplayAndModuleUnlockSetup.RunStep123()),
                 Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),

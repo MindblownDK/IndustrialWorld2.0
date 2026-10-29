@@ -60,6 +60,12 @@ namespace VoxelEngine.EditorTools
 
             EnsureFolders();
 
+            // Icons first, deliberately. They depend on nothing but the folder and the item
+            // ids, so if anything later in this step throws, the art the player sees is
+            // already on disk. 18.6.1-dev moved this above the block authoring for exactly
+            // that reason: a compile error in this file had meant no icon was ever written.
+            EnsureFarmIcons(created, repaired);
+
             var woodLog = FindItem("Item_WoodLog");
             var clay = FindItem("Item_Clay");
             var ironPlate = FindItem("Item_IronPlate");
@@ -116,12 +122,9 @@ namespace VoxelEngine.EditorTools
             RepairAutoTreeFarm(woodLog, sapling, biomass, repaired, preserved);
 
             // ── 5) Icons ────────────────────────────────────────────────────
-            EnsureIcon("block_plant_box_small", IconKind.SmallBox, IconRoot);
-            EnsureIcon("block_plant_box_big", IconKind.BigBox, IconRoot);
-            EnsureIcon("block_plant_bed_large", IconKind.LargeBed, IconRoot);
-            EnsureIcon("block_auto_farm_plot", IconKind.AutoPlot, IconRoot);
-            EnsureIcon("block_auto_farm_plot_medium", IconKind.AutoPlotMedium, IconRoot);
-            EnsureIcon("block_auto_farm_plot_large", IconKind.AutoPlotLarge, IconRoot);
+            // A second chance: the pass at the top of this step is the one that matters, but
+            // an icon deleted between then and now is simply re-authored.
+            EnsureFarmIcons(created, repaired);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -153,6 +156,12 @@ namespace VoxelEngine.EditorTools
                 FarmRecipesFolder + "/Recipe_AutoFarmPlotMedium.asset",
                 FarmRecipesFolder + "/Recipe_AutoFarmPlotLarge.asset",
                 FarmRecipesFolder + "/Recipe_Sprinkler.asset",
+                IconRoot + "/block_plant_box_small.png",
+                IconRoot + "/block_plant_box_big.png",
+                IconRoot + "/block_plant_bed_large.png",
+                IconRoot + "/block_auto_farm_plot.png",
+                IconRoot + "/block_auto_farm_plot_medium.png",
+                IconRoot + "/block_auto_farm_plot_large.png",
             };
             for (int i = 0; i < required.Length; i++)
                 if (AssetDatabase.LoadMainAssetAtPath(required[i]) == null) missing.Add(required[i]);
@@ -353,6 +362,94 @@ namespace VoxelEngine.EditorTools
             }
         }
 
+        // ── Sprinkler ───────────────────────────────────────────────────────
+        /// <summary>
+        /// Repair or create the sprinkler. A project that already has one keeps its authored
+        /// numbers: only fields that were never set are filled, and the body is rebuilt so an
+        /// old cube becomes the 18.3.0 mast. A project with no sprinkler at all gets one built
+        /// from nothing, because "the sprinkler was never made" is a defect in this step, not
+        /// a message in a report.
+        /// </summary>
+        private static void RepairSprinkler(ItemDefinition ironPlate, ItemDefinition copperWire,
+            ItemDefinition glass, List<string> created, List<string> repaired, List<string> preserved)
+        {
+            const string prefabPath = FarmPrefabsFolder + "/Sprinkler.prefab";
+            const string blockPath = FarmBlocksFolder + "/Block_Sprinkler.asset";
+
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null
+                || AssetDatabase.LoadAssetAtPath<BlockItem>(blockPath) == null)
+            {
+                CreateSprinkler(ironPlate, copperWire, glass, created, repaired);
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                bool changed = false;
+
+                var power = contents.GetComponent<PowerConsumer>();
+                if (power == null)
+                {
+                    power = contents.AddComponent<PowerConsumer>();
+                    power.wattsPerSecond = 20f;
+                    power.connectRadius = 2f;
+                    changed = true;
+                    repaired.Add("Sprinkler power draw");
+                }
+
+                var sprinkler = contents.GetComponent<Sprinkler>();
+                if (sprinkler == null)
+                {
+                    sprinkler = contents.AddComponent<Sprinkler>();
+                    changed = true;
+                    repaired.Add("Sprinkler component");
+                }
+
+                // Only fill in what has never been authored; a tuned sprinkler keeps its numbers.
+                if (sprinkler.waterCapacity <= 0f) { sprinkler.waterCapacity = 60f; sprinkler.waterStored = 60f; changed = true; }
+                if (sprinkler.waterStored <= 0f) { sprinkler.waterStored = sprinkler.waterCapacity; changed = true; }
+                if (sprinkler.litresPerSecond <= 0f) { sprinkler.litresPerSecond = 0.4f; changed = true; }
+                if (sprinkler.refillLitresPerSecond <= 0f) { sprinkler.refillLitresPerSecond = 2f; changed = true; }
+                if (sprinkler.radius <= 0f) { sprinkler.radius = 8f; changed = true; }
+                if (sprinkler.wattsWhileSpraying <= 0f) { sprinkler.wattsWhileSpraying = 20f; changed = true; }
+
+                // The old body was a single blue cube; the new one is a mast with a sight
+                // glass, so an old prefab is rebuilt rather than left as it is.
+                sprinkler.RebuildVisuals();
+                AssignFarmMaterials(contents);
+                changed = true;
+
+                var collider = contents.GetComponent<BoxCollider>();
+                if (collider != null)
+                {
+                    collider.center = new Vector3(0f, 0.30f, 0f);
+                    collider.size = new Vector3(0.60f, 0.70f, 0.60f);
+                }
+
+                if (changed)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+                    repaired.Add("Sprinkler body (mast, sight glass, rotating head)");
+                }
+                else preserved.Add("Sprinkler prefab");
+
+                var block = AssetDatabase.LoadAssetAtPath<BlockItem>(blockPath);
+                if (block != null)
+                {
+                    AppendIfMissing(block,
+                        "internal tank",
+                        " Holds its own water tank: fill it by hand with a Liquid Canister, or connect a pipe "
+                        + "for automatic refill. Draws about 20 W while it sprays.",
+                        repaired);
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
         /// <summary>
         /// Build a sprinkler from nothing: prefab, block item, recipe and registry entry,
         /// so "the sprinkler was never made" is answered by the setup step instead of by a
@@ -500,6 +597,105 @@ namespace VoxelEngine.EditorTools
         /// is not there yet - the same rule the radar sticker follows. Hand-drawn art is
         /// never overwritten; delete the PNG to regenerate it.
         /// </summary>
+        /// <summary>
+        /// Author and bind every farm icon this round owns. Safe to call repeatedly and safe
+        /// to call on its own: an existing PNG is never overwritten, and an item that already
+        /// has the right sprite is left alone.
+        /// </summary>
+        public static void EnsureFarmIcons(List<string> created, List<string> repaired)
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+
+            EnsureFolderPath(IconRoot);
+
+            var wanted = new (string itemId, IconKind kind)[]
+            {
+                ("block_plant_box_small",       IconKind.SmallBox),
+                ("block_plant_box_big",         IconKind.BigBox),
+                ("block_plant_bed_large",       IconKind.LargeBed),
+                ("block_auto_farm_plot",        IconKind.AutoPlot),
+                ("block_auto_farm_plot_medium", IconKind.AutoPlotMedium),
+                ("block_auto_farm_plot_large",  IconKind.AutoPlotLarge),
+            };
+
+            for (int i = 0; i < wanted.Length; i++)
+            {
+                string path = $"{IconRoot}/{wanted[i].itemId}.png";
+                bool existed = System.IO.File.Exists(path);
+                EnsureIcon(wanted[i].itemId, wanted[i].kind, IconRoot);
+
+                if (!existed && System.IO.File.Exists(path))
+                {
+                    created?.Add($"{wanted[i].itemId} icon");
+                    continue;
+                }
+
+                // The PNG was already there but the item may still have lost its binding -
+                // a re-import drops the reference and the slot goes blank. Rebind in place.
+                if (BindIcon(path, wanted[i].itemId)) repaired?.Add($"{wanted[i].itemId} icon binding");
+            }
+
+            AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>Give every item claiming this id the sprite at <paramref name="path"/>.</summary>
+        private static bool BindIcon(string path, string itemId)
+        {
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (sprite == null) return false;
+
+            bool rebound = false;
+            foreach (var guid in AssetDatabase.FindAssets("t:ItemDefinition"))
+            {
+                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                if (item == null) continue;
+                if (!string.Equals(item.itemId, itemId, System.StringComparison.OrdinalIgnoreCase)) continue;
+                if (item.icon == sprite) continue;
+                item.icon = sprite;
+                EditorUtility.SetDirty(item);
+                rebound = true;
+            }
+            return rebound;
+        }
+
+        /// <summary>
+        /// Standalone entry point so the icons can be repaired without touching a single
+        /// prefab or recipe: "Repair farm item icons" in the Farming &amp; Greenhouse group.
+        /// </summary>
+        public static void RunIconRepair()
+        {
+            var created = new List<string>();
+            var repaired = new List<string>();
+            EnsureFarmIcons(created, repaired);
+
+            // The two grid plots live in their own icon folder and their own step.
+            const string gridIconRoot = AssetRoot + "/ItemIcons/Grid Blocks";
+            EnsureFolderPath(gridIconRoot);
+            var gridIcons = new (string itemId, IconKind kind)[]
+            {
+                ("gitem_verticalfarm", IconKind.VerticalFarm),
+                ("gitem_farmbox",      IconKind.FarmBox),
+            };
+            for (int i = 0; i < gridIcons.Length; i++)
+            {
+                string path = $"{gridIconRoot}/{gridIcons[i].itemId}.png";
+                bool existed = System.IO.File.Exists(path);
+                EnsureIcon(gridIcons[i].itemId, gridIcons[i].kind, gridIconRoot);
+                if (!existed && System.IO.File.Exists(path)) created.Add($"{gridIcons[i].itemId} icon");
+                else if (BindIcon(path, gridIcons[i].itemId)) repaired.Add($"{gridIcons[i].itemId} icon binding");
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            string summary = $"Farm icons: {created.Count} authored, {repaired.Count} rebound.";
+            Debug.Log("[Farm Overhaul] " + summary);
+            EditorUtility.DisplayDialog("Farm Icons",
+                summary + "\n\n" + IconRoot + "\n" + gridIconRoot
+                + "\n\nIf a slot is still blank the item is drawing its iconTint instead: "
+                + "select the item asset and check that Icon is set.", "OK");
+        }
+
         private static void EnsureIcon(string itemId, IconKind kind, string iconRoot)
         {
             string path = $"{iconRoot}/{itemId}.png";

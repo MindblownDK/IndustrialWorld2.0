@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.6.0-dev`
-**Roadmap Version:** `18.6.0-dev`
+**Current Version:** `18.6.1-dev`
+**Roadmap Version:** `18.6.1-dev`
 **Date:** 2026-10-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.6.1-dev - Sprinkler Repair Restored, Icons Authored First
+- `WorldFarmOverhaulSetup.RepairSprinkler` is back (18.6.0-dev had deleted it with the old plot block), so the editor assembly compiles again
+- `EnsureFarmIcons` runs before any prefab work and again at the end, authors the six farm icons and rebinds any whose sprite reference was dropped by a re-import
+- `RunIconRepair` gives the icons their own non-destructive Setup button that touches no prefab, recipe or block
+
 ### 18.6.0-dev - Plot Sizes, Visible Growth
 - The Auto Farm Plot is a family of three - 1, 4 and 9 cells at 8, 10 and 14 W - all on `PlantBox`, which now supports a power draw and a per-bed tree permission
 - Both grid plots draw one growing pod per cell on the bed itself, coloured by the crop's own stages and collapsed brown when the cell is lost
@@ -43,16 +48,6 @@
 - `WorldFarmOverhaulSetup.EnsureRecipe` receives the `preserved` list it reports into, so the editor assembly compiles again
 - Every method in that file that reads `created`, `repaired` or `preserved` now declares it; a second setup run now reports an unchanged recipe as preserved instead of skipping it without a word
 - No runtime code, asset, recipe or save field changed
-
-### 18.4.0-dev - Grid Farm Plots
-- `GridFarmPlotBase` gives both grid plots one implementation: nine cells, a piped tank, power only while growing, oxygen from a sealed room or a breathable world, and a harvest that waits for cargo room
-- Vertical Farm Plot (9 cells in three trays, no trees) and Large Farm Plot Box (3x3, one tree socket) ship with appended mesh styles, liquid ports and recipes
-- Both items get generated `ItemIcons/Grid Blocks` icons and catalog entries through "Author icons and save entries for the two grid farm plots (18.4.0-dev)"
-
-### 18.3.0-dev - Planting Boxes, Sprinkler Mast, Auto Farm Plot
-- `PlantBox` ships as three blocks - 1, 4 and 9 cells - with hand watering from a Liquid Canister, drought loss, an output chute and a self re-seed toggle that defaults on; trees only plant on the 3x3 Large Plant Bed
-- The Sprinkler is a mast with a 60 L tank, a sight glass, a rotating head and a 20 W spray draw, refilling from a `FluidNode` or from a canister by hand, and `IsActive` stays the only flag beds read
-- `FarmPlot` gains an automatic powered form (Auto Farm Plot, 8 W, own tank, port) while Tilled Soil keeps its manual behaviour; the Automatic Tree Farm body now fills its frame with its hopper and output bin outside it
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -71,6 +66,7 @@
 - **Grid farm plot runtime acceptance (18.4.0-dev / 18.5.0-dev):** Unity compilation, a Setup Wizard run of the grid content step and `RunStep125`, both plots mounting to a grid and opening their panel on right-click, the tank filling from a liquid pipe, growth pausing in an unbreathable room and resuming in a sealed one, crops pausing on a breathable world without an enclosure, seeds dropped in the seed bin filling empty beds, harvests landing in connected cargo and in the plot's bin when there is no cargo, `Clear lost crops`, and both blocks surviving save/load with their bins remain pending.
 - **Farm authoring acceptance (18.5.0-dev):** confirm in Unity that `RunStep124` reports "all 15 new blocks, prefabs and recipes are present", that the Sprinkler exists on a project that never ran the farming content step, that the Auto Farm Plot in hand looks like a bordered tray rather than a dirt cube, and that Tilled Soil is unchanged.
 - **Auto Farm Plot family and growth pace acceptance (18.6.0-dev):** Unity compilation, a Setup Wizard run of `RunStep124` reporting "all 17 new blocks, prefabs and recipes are present", all three plot sizes crafting and placing with the right cell count, a plot pausing when its power is cut, crop pods climbing visibly on both grid plots and on the three plot sizes, the Slower 0.5 growth pace feeling right in play, and tree saplings refused by every Auto Farm Plot but accepted by the Large Plant Bed and the Large Farm Plot Box remain pending.
+- **Farm icon acceptance (18.6.1-dev):** confirm in Unity that `RunIconRepair` reports six authored icons on a project that never made them, that all six planting-box and plot slots draw their PNG rather than a tint, that the two grid plot icons land under `ItemIcons/Grid Blocks`, and that running it twice reports "0 authored" and does not duplicate or overwrite art.
 - ~~**Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.~~ *(17.43.0-dev)*
 - **Screen engine runtime acceptance (17.42.0-dev):** the page remaster is code-complete and statically checked but untested in Unity - fit resolution on every screen size, per-page palettes, the 12 graph series against live grids, icon placement on glass, split-pane outlines, and the typing/Escape input fixes all need in-game verification.
 - **Restored-grid clearance acceptance (17.40.0-dev):** the low-hull probe and bounded correction are implemented, but flat-ground, slope, small-grid and large-grid save/load checks have not run in Unity.

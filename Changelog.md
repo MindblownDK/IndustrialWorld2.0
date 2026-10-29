@@ -1,9 +1,26 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.6.0-dev`
+**Current Version:** `18.6.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.6.1-dev] Restore the Sprinkler Repair Pass and Make the Farm Icons Their Own Step
+
+**Type:** PATCH - one restore and one authoring fix in an editor-only file. No runtime code, asset, recipe or save field changes.
+
+**GitHub title:** `[18.6.1-dev] Restore the sprinkler repair pass and author the farm item icons`
+
+#### Fixed
+
+- **`WorldFarmOverhaulSetup` did not compile: `CS0103: The name 'RepairSprinkler' does not exist`.** When 18.6.0-dev replaced the single Auto Farm Plot block with the three-size family, the replaced span swallowed `RepairSprinkler` along with it - the call site at line 113 survived but the method below it did not. It is restored in full: fill only the fields a prefab never authored, rebuild the old cube body into the 18.3.0 mast, reset the collider, append the tank sentence to the block description, and hand off to `CreateSprinkler` when the prefab or its block item is missing entirely.
+- **The farm item icons were never authored.** Icon authoring was the *last* thing the step did, so while the file did not compile - and any earlier failure in the same run - not one PNG was written or bound. Six icons (Small/Big Plant Box, Large Plant Bed, Auto Farm Plot, Medium and Large Auto Farm Plot) had no art. Icon authoring is now its own method, `EnsureFarmIcons`, called at the **top** of the step before any prefab work, so the art is on disk even if something later throws, and called again at the end as a second chance.
+
+#### Added
+
+- **`BindIcon`, and rebinding for icons that already exist.** A generated PNG can sit on disk with a blank slot in game when a re-import drops the sprite reference. `EnsureFarmIcons` now rebinds any item whose `icon` does not point at its PNG, instead of only ever binding at creation time.
+- **`RunIconRepair` and a standalone Setup button** - "Repair farm item icons (planting boxes, farm plots, grid plots) (18.6.1-dev)" in the Farming & Greenhouse group, and in the repair group. It touches no prefab, no recipe and no block: it authors or rebinds the eight farm icons and reports `N authored, N rebound`.
+- **The on-disk check covers six icon paths** in addition to the seventeen block, prefab and recipe paths, so a missing PNG is named in the completion dialog and the Console rather than discovered in the crafting screen.
 
 ### [18.6.0-dev] Three Auto Farm Plot Sizes, Crops That Visibly Grow, and a Slower Crop Cycle
 
