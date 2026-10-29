@@ -1,35 +1,33 @@
 // Assets/Scripts/VoxelEngine/UI/PlacementWheel.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║          PLACEMENT WHEEL — the build wheel for blocks            ║
+// ║          PLACEMENT WHEEL — the placement-type dial (V)           ║
 // ║                                                                  ║
-// ║  Grid blocks, pipes, conveyors and the building hammer each own  ║
-// ║  a wheel that answers "which variant". A crate, a foundation, a  ║
-// ║  furnace and a chest have no variants - so before this wheel     ║
-// ║  existed, holding the build key did NOTHING for them.            ║
-// ║                                                                  ║
-// ║  Now it opens the placement wheel: pattern first (SINGLE, SPAN,  ║
-// ║  PILLAR, DECK), and Ctrl + scroll turns the same dial to the     ║
-// ║  lattice step. It only ever appears for items that can actually  ║
-// ║  use a run, and it yields the key to any wheel with a stronger   ║
-// ║  claim (a conveyor's shape wheel, a pipe's variant wheel).       ║
+// ║  18.9.1-dev: Block/shape variants live on B (BuildWheel), while  ║
+// ║  placement type (SINGLE, SPAN, PILLAR, DECK, WALL + Ctrl+scroll  ║
+// ║  for lattice step and run seating on static blocks) lives on V   ║
+// ║  (PlacementWheel), so holding B on blocks with variants never    ║
+// ║  opens placement type instead of the variants.                   ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Building;
+using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
 
 namespace VoxelEngine.UI
 {
-    /// <summary>The placement ring for plain static blocks, on the shared build key.</summary>
+    /// <summary>The placement-pattern ring (SINGLE, SPAN, PILLAR, DECK, WALL) on the dedicated PlacementWheel key (V by default).</summary>
     public sealed class PlacementWheel : MonoBehaviour
     {
         private readonly RadialWheelController _wheel = new();
         private PlacementModeRing _ring;
+        private bool _hasRingMode;
+        private bool _ringIncludeStep;
 
         private Inventory _inventory;
         private VisualElement _host;
@@ -46,7 +44,7 @@ namespace VoxelEngine.UI
             // A tap here means "leave the pattern alone": it must close, never pin, or the
             // world stays blocked with no hologram and no obvious reason why.
             _wheel.AllowTapPin = false;
-            _ring = new PlacementModeRing(_wheel, "BUILD PATTERN", home: true);
+            EnsureRing(includeStep: true);
         }
 
         private void Start()
@@ -66,17 +64,39 @@ namespace VoxelEngine.UI
                 if (_inventory == null) { _wheel.HidePrompt(); return; }
             }
 
-            bool holding = TryGetHeldPlainBlock(out _);
+            bool holding = TryGetPlacementContext(out bool includeStep, out bool hasVariantWheelOnB);
+            if (holding) EnsureRing(includeStep);
 
-            _ring.Tick();
-            _wheel.Tick(InputAction.BuildWheel, holding);
+            _ring?.Tick();
+            _wheel.Tick(InputAction.PlacementWheel, holding);
 
-            if (holding && !_wheel.IsOpen && !UIState.IsBlocking)
-                _wheel.ShowPrompt(
-                    "[" + GameSettings.GetKey(InputAction.BuildWheel) + "]  BUILD PATTERN  ·  " +
-                    PlacementModeRing.PromptTail() + "   ·   " + PlacementModeRing.CtrlHint());
+            if (holding && !hasVariantWheelOnB && !RadialWheelController.AnyOpen && !UIState.IsBlocking)
+            {
+                string prompt = includeStep
+                    ? "[" + GameSettings.GetKey(InputAction.PlacementWheel) + "]  BUILD PATTERN  ·  "
+                      + PlacementModeRing.PromptTail() + "   ·   " + PlacementModeRing.CtrlHint()
+                    : "[" + GameSettings.GetKey(InputAction.PlacementWheel) + "]  BUILD PATTERN  ·  "
+                      + PlacementOptions.PatternName(PlacementOptions.Pattern);
+                _wheel.ShowPrompt(prompt);
+            }
             else
+            {
                 _wheel.HidePrompt();
+            }
+        }
+
+        private void EnsureRing(bool includeStep)
+        {
+            if (_hasRingMode && _ringIncludeStep == includeStep && _ring != null) return;
+            _hasRingMode = true;
+            _ringIncludeStep = includeStep;
+            _ring = new PlacementModeRing(
+                _wheel,
+                "BUILD PATTERN",
+                home: true,
+                includeStep: includeStep,
+                patternOnly: !includeStep);
+            _wheel.Invalidate();
         }
 
         private VisualElement ResolveHost()
@@ -91,43 +111,56 @@ namespace VoxelEngine.UI
         private void FillOptions(List<RadialOption> options)
         {
             if (options == null) return;
-            if (!TryGetHeldPlainBlock(out _)) return;
-            _ring.TryFill(options);
+            if (!TryGetPlacementContext(out _, out _)) return;
+            _ring?.TryFill(options);
         }
 
-        private bool Confirm(int index) => _ring.TryConfirm(index);
+        private bool Confirm(int index) => _ring != null && _ring.TryConfirm(index);
 
-        /// <summary>
-        /// The item this wheel answers for: a placeable block that can lay runs AND that no
-        /// other wheel already claims. A conveyor keeps its shape wheel; a pipe keeps its
-        /// variant wheel; everything else comes here.
-        /// </summary>
-        private bool TryGetHeldPlainBlock(out BlockItem block)
+        private bool TryGetPlacementContext(out bool includeStep, out bool hasVariantWheelOnB)
         {
-            block = null;
+            includeStep = true;
+            hasVariantWheelOnB = false;
             if (_inventory == null) return false;
             var stack = _inventory.ActiveStack;
-            if (stack == null || stack.IsEmpty) return false;
-            if (stack.item is not BlockItem candidate) return false;
-            if (!PlacementOptions.IsPatternEligible(candidate)) return false;
-            if (ClaimedByAnotherWheel(candidate)) return false;
-            block = candidate;
-            return true;
+            if (stack == null || stack.IsEmpty || stack.item == null) return false;
+
+            if (stack.item is VoxelEngine.Building.Tiered.Hammer)
+            {
+                includeStep = false;
+                hasVariantWheelOnB = true;
+                return true;
+            }
+
+            if (stack.item is GridBlockItem gridBlock)
+            {
+                includeStep = false;
+                hasVariantWheelOnB = gridBlock.SupportsShapeVariants
+                    || (gridBlock.blockPrefab != null
+                        && (gridBlock.blockPrefab.GetComponent<GridCockpit>() != null
+                            || gridBlock.blockPrefab.GetComponent<GridWindowBlock>() != null));
+                return true;
+            }
+
+            if (stack.item is BlockItem candidate && PlacementOptions.IsPatternEligible(candidate))
+            {
+                includeStep = true;
+                hasVariantWheelOnB = HasStaticVariantWheelOnB(candidate);
+                return true;
+            }
+
+            return false;
         }
 
-        private static bool ClaimedByAnotherWheel(BlockItem block)
+        private static bool HasStaticVariantWheelOnB(BlockItem block)
         {
             var prefab = block != null ? block.placedPrefab : null;
-            if (prefab == null) return true;
+            if (prefab == null) return false;
 
-            // The conveyor wheel owns a belt that can auto-shape.
             var belt = prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (belt != null && belt.autoShape && belt.shape == VoxelEngine.Simulation.ConveyorShape.Straight)
                 return true;
 
-            // Energy and data pipes have their own wheels and their own snap contracts.
-            if (prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null) return true;
-            if (prefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null) return true;
             return false;
         }
     }

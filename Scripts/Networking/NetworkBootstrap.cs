@@ -1081,8 +1081,18 @@ namespace VoxelEngine.Networking
 
         private void OnDestroy()
         {
-            if (Instance == this) Instance = null;
+            bool wasActiveInstance = Instance == this;
+            if (wasActiveInstance)
+            {
+                LanDiscovery.StopResponder();
+                Instance = null;
+            }
             if (_networkManager == null) return;
+            if (wasActiveInstance)
+            {
+                try { _networkManager.ClientManager?.StopConnection(); } catch { }
+                try { _networkManager.ServerManager?.StopConnection(false); } catch { }
+            }
             _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
             _networkManager.ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
             _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
@@ -1222,13 +1232,158 @@ namespace VoxelEngine.Networking
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
 
+        private const ushort DefaultHostPort = 7770;
+        private const int MaxPortFallbackSpan = 30;
+        private ushort _activeServerPort = DefaultHostPort;
+
         /// <summary>Open this world as a listen server and join it as a player.</summary>
         public void StartHost()
         {
             if (IsOnline) return;
+            if (_networkManager == null) return;
+
             _statusLine = "Starting host...";
-            _networkManager.ServerManager.StartConnection();
+
+            // Clean up any half-started client/server socket from an earlier failed attempt
+            // so ClientSocket's ephemeral port never confuses Tugboat.GetPort() or collides.
+            try { _networkManager.ClientManager.StopConnection(); } catch { }
+            try { _networkManager.ServerManager.StopConnection(false); } catch { }
+
+            var transport = _networkManager.TransportManager != null
+                ? _networkManager.TransportManager.Transport : null;
+
+            ushort chosenPort = FindAvailableUdpPort(DefaultHostPort);
+            bool started = TryStartServerOnPort(transport, chosenPort);
+
+            if (!started)
+            {
+                for (int offset = 1; offset <= MaxPortFallbackSpan && !started; offset++)
+                {
+                    ushort candidate = (ushort)(DefaultHostPort + offset);
+                    if (candidate == chosenPort || !CanBindUdpPort(candidate)) continue;
+                    chosenPort = candidate;
+                    started = TryStartServerOnPort(transport, chosenPort);
+                }
+            }
+
+            if (!started)
+            {
+                ushort ephemeral = ReserveEphemeralUdpPort();
+                if (ephemeral > 0 && ephemeral != chosenPort)
+                {
+                    chosenPort = ephemeral;
+                    started = TryStartServerOnPort(transport, chosenPort);
+                }
+            }
+
+            if (!started || !_serverStarted)
+            {
+                try { _networkManager.ClientManager.StopConnection(); } catch { }
+                _statusLine = $"Host failed (UDP port {chosenPort} unavailable)";
+                Debug.LogWarning($"[NetworkBootstrap] Could not bind a UDP host port starting at {DefaultHostPort}.");
+                return;
+            }
+
+            _activeServerPort = chosenPort;
+            if (transport != null) transport.SetPort(chosenPort);
+            _statusLine = chosenPort == DefaultHostPort ? "Hosting" : $"Hosting (port {chosenPort})";
+            if (chosenPort != DefaultHostPort)
+                Debug.Log($"[NetworkBootstrap] UDP {DefaultHostPort} was busy; hosting on UDP {chosenPort} instead.");
+
             _networkManager.ClientManager.StartConnection("localhost");
+        }
+
+        private bool TryStartServerOnPort(FishNet.Transporting.Transport transport, ushort port)
+        {
+            if (transport != null && port > 0)
+                transport.SetPort(port);
+            _activeServerPort = port > 0 ? port : DefaultHostPort;
+            bool ok = _networkManager.ServerManager.StartConnection();
+            return ok && _serverStarted;
+        }
+
+        private static ushort FindAvailableUdpPort(ushort preferredPort)
+        {
+            ushort start = preferredPort > 0 ? preferredPort : DefaultHostPort;
+            for (int offset = 0; offset <= MaxPortFallbackSpan; offset++)
+            {
+                ushort port = (ushort)(start + offset);
+                if (CanBindUdpPort(port)) return port;
+            }
+            ushort osPort = ReserveEphemeralUdpPort();
+            return osPort > 0 ? osPort : start;
+        }
+
+        private static bool CanBindUdpPort(ushort port)
+        {
+            if (port == 0) return false;
+            System.Net.Sockets.Socket v4 = null;
+            System.Net.Sockets.Socket v6 = null;
+            try
+            {
+                v4 = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.InterNetwork,
+                    System.Net.Sockets.SocketType.Dgram,
+                    System.Net.Sockets.ProtocolType.Udp);
+                v4.ExclusiveAddressUse = true;
+                v4.SetSocketOption(
+                    System.Net.Sockets.SocketOptionLevel.Socket,
+                    System.Net.Sockets.SocketOptionName.ReuseAddress,
+                    false);
+                v4.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Any, port));
+
+                if (System.Net.Sockets.Socket.OSSupportsIPv6)
+                {
+                    try
+                    {
+                        v6 = new System.Net.Sockets.Socket(
+                            System.Net.Sockets.AddressFamily.InterNetworkV6,
+                            System.Net.Sockets.SocketType.Dgram,
+                            System.Net.Sockets.ProtocolType.Udp);
+                        v6.ExclusiveAddressUse = true;
+                        v6.SetSocketOption(
+                            System.Net.Sockets.SocketOptionLevel.Socket,
+                            System.Net.Sockets.SocketOptionName.ReuseAddress,
+                            false);
+                        v6.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.IPv6Any, port));
+                    }
+                    catch
+                    {
+                        // LiteNetLib tolerates IPv6 bind failure as long as IPv4 binds cleanly.
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { v6?.Close(); } catch { }
+                try { v4?.Close(); } catch { }
+            }
+        }
+
+        private static ushort ReserveEphemeralUdpPort()
+        {
+            System.Net.Sockets.Socket v4 = null;
+            try
+            {
+                v4 = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.InterNetwork,
+                    System.Net.Sockets.SocketType.Dgram,
+                    System.Net.Sockets.ProtocolType.Udp);
+                v4.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Any, 0));
+                if (v4.LocalEndPoint is System.Net.IPEndPoint ep && ep.Port > 0 && ep.Port <= ushort.MaxValue)
+                    return (ushort)ep.Port;
+            }
+            catch { }
+            finally
+            {
+                try { v4?.Close(); } catch { }
+            }
+            return 0;
         }
 
         /// <summary>Open this world as a headless dedicated server (14.45.0,
@@ -1241,9 +1396,12 @@ namespace VoxelEngine.Networking
             _statusLine = "Starting dedicated server...";
             var transport = _networkManager.TransportManager != null
                 ? _networkManager.TransportManager.Transport : null;
+            ushort desired = port > 0 ? port : DefaultHostPort;
+            ushort chosenPort = CanBindUdpPort(desired) ? desired : FindAvailableUdpPort(desired);
+            _activeServerPort = chosenPort;
             if (transport != null)
             {
-                if (port > 0) transport.SetPort(port);
+                transport.SetPort(chosenPort);
                 transport.SetMaximumClients(Mathf.Clamp(maxPlayers, 1, 64));
             }
             _networkManager.ServerManager.StartConnection();
@@ -1429,8 +1587,8 @@ namespace VoxelEngine.Networking
             // Last word before hanging up: leaving with a pickaxe swing
             // unreported is a bug the player would blame on the save.
             UploadLocalPlayerState();
-            if (_clientStarted) _networkManager.ClientManager.StopConnection();
-            if (_serverStarted) _networkManager.ServerManager.StopConnection(true);
+            try { _networkManager.ClientManager.StopConnection(); } catch { }
+            try { _networkManager.ServerManager.StopConnection(true); } catch { }
         }
 
         // ─────────────────────────── connection state ───────────────────────────
@@ -1441,7 +1599,9 @@ namespace VoxelEngine.Networking
             {
                 _serverStarted = true;
                 NetworkSession.SetMode(SessionMode.Host);
-                _statusLine = "Hosting";
+                _statusLine = _activeServerPort == DefaultHostPort || _activeServerPort == 0
+                    ? "Hosting"
+                    : $"Hosting (port {_activeServerPort})";
 
                 // 14.48.0 - every hosting machine answers LAN probes so the
                 // server browser's scan can find it; the payload refreshes on

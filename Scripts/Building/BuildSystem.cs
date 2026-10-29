@@ -345,7 +345,9 @@ namespace VoxelEngine.Building
             if (shootCamera == null) shootCamera = Camera.main;
             if (inventory == null) inventory = GetComponentInParent<Inventory>();
 
-            bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
+            bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel)
+                || GameSettings.IsHeld(InputAction.PlacementWheel)
+                || VoxelEngine.UI.RadialWheelController.AnyOpen;
             if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld)
             {
                 HoldingBlock = false;

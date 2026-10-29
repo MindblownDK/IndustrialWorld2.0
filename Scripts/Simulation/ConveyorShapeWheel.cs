@@ -54,9 +54,6 @@ namespace VoxelEngine.Simulation
         };
 
         private readonly RadialWheelController _wheel = new();
-        // 17.44.0-dev: Ctrl + scroll turns this dial over to the build pattern and the
-        // lattice step, so a belt run is laid in one gesture instead of ten.
-        private VoxelEngine.UI.PlacementModeRing _ring;
         private Inventory _inventory;
         private VisualElement _host;
         private ConveyorSpeed _activeTier;
@@ -76,7 +73,6 @@ namespace VoxelEngine.Simulation
             _wheel.IdleTitle = "KEEP CURRENT";
             _wheel.IdleDescription = "Release in the centre to leave the shape as it is";
             _wheel.IdleIcon = MachineShapeIcons.Cancel;
-            _ring = new VoxelEngine.UI.PlacementModeRing(_wheel, "CONVEYOR SHAPE", home: false);
         }
 
         private void Start()
@@ -94,13 +90,13 @@ namespace VoxelEngine.Simulation
             bool holding = TryGetHeldConveyor(out var belt);
             if (holding) _activeTier = belt.speed;
 
-            _ring.Tick();
             _wheel.Tick(InputAction.BuildWheel, holding);
 
-            if (holding && !_wheel.IsOpen && !UIState.IsBlocking)
+            if (holding && !RadialWheelController.AnyOpen && !UIState.IsBlocking)
                 _wheel.ShowPrompt($"[{GameSettings.GetKey(InputAction.BuildWheel)}]  CONVEYOR SHAPE  ·  " +
                                   GetMode(_activeTier).ToString().ToUpperInvariant() +
-                                  "   ·   " + VoxelEngine.UI.PlacementModeRing.PromptTail());
+                                  $"   ·   [{GameSettings.GetKey(InputAction.PlacementWheel)}]  BUILD PATTERN  ·  " +
+                                  VoxelEngine.UI.PlacementModeRing.PromptTail());
             else
                 _wheel.HidePrompt();
         }
@@ -116,7 +112,6 @@ namespace VoxelEngine.Simulation
 
         private void FillOptions(List<RadialOption> options)
         {
-            if (_ring != null && _ring.TryFill(options)) return;
             var current = GetMode(_activeTier);
             for (int i = 0; i < Modes.Length; i++)
             {
@@ -134,7 +129,6 @@ namespace VoxelEngine.Simulation
 
         private bool Confirm(int index)
         {
-            if (_ring != null && _ring.TryConfirm(index)) return true;
             if (index < 0 || index >= Modes.Length) return true;
             SetMode(_activeTier, Modes[index]);
             BuildFeedbackHud.Show("Conveyor Shape", Modes[index].ToString(), null, UITheme.AccentCyan);

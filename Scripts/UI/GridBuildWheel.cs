@@ -77,12 +77,14 @@ namespace VoxelEngine.UI
 
             _wheel.Tick(InputAction.BuildWheel, context);
 
-            if (context && !_wheel.IsOpen && !UIState.IsBlocking)
+            if (context && !RadialWheelController.AnyOpen && !UIState.IsBlocking)
             {
                 string label = _variantKind == VariantKind.Cockpit
                     ? "COCKPIT SHELL"
                     : _windowMode == WindowWheelMode.Shape ? "WINDOW SHAPE" : "WINDOW GLASS";
-                _wheel.ShowPrompt("[" + GameSettings.GetKey(InputAction.BuildWheel) + "]  " + label);
+                string patternTail = $"   ·   [{GameSettings.GetKey(InputAction.PlacementWheel)}]  BUILD PATTERN  ·  "
+                    + VoxelEngine.Building.PlacementOptions.PatternName(VoxelEngine.Building.PlacementOptions.Pattern);
+                _wheel.ShowPrompt("[" + GameSettings.GetKey(InputAction.BuildWheel) + "]  " + label + patternTail);
             }
             else _wheel.HidePrompt();
         }

@@ -1,9 +1,24 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.9.0-dev`
+**Current Version:** `18.9.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.9.1-dev] Placement Pattern Wheel Keybind (V) and Multiplayer Host Port Recovery
+
+**Type:** PATCH - separates the placement-pattern wheel (`SINGLE`, `SPAN`, `PILLAR`, `DECK`, `WALL`) onto its own keybind (`InputAction.PlacementWheel`, default `V`) so `B` (`InputAction.BuildWheel`) is dedicated exclusively to block/shape/family variants, and fixes listen-server startup (`NetworkBootstrap.StartHost`) when UDP port `7770` is busy or held by an earlier socket.
+
+**GitHub title:** `[18.9.1-dev] Move placement pattern wheel to V (keeping B for block variants) and fix host UDP port binding`
+
+#### Changed
+
+- **Dedicated `PlacementWheel` Keybind (`V`) vs `BuildWheel` (`B`) (`GameSettings`, `PlacementWheel`, `GridShapeWheel`, `GridBuildWheel`, `ConveyorShapeWheel`, `HammerBuildWheel`, `BuildSystem`, `BuildSystemV2`, `GridBuilder`, `BlockRotationHud`, `BuildWheelSetup`).** Added `InputAction.PlacementWheel` (default `V`, with `InputAction.BuildLock` migrated from `V` to `X` in settings version `29`). Holding `B` now opens only block/shape/family variant wheels (`GridShapeWheel` for armour shapes, `GridBuildWheel` for cockpit shells and window shapes/glass, `ConveyorShapeWheel` for belt shapes, `EnergyPipeShapeWheel`, `DataPipeShapeWheel`, `RoadSurfaceWheel`, `HammerBuildWheel`, and `BombHud`), while holding `V` opens `PlacementWheel` (`SINGLE`, `SPAN`, `PILLAR`, `DECK`, `WALL`, plus `Ctrl+Scroll` for lattice step and run seating on static blocks) across static blocks, conveyors, grid blocks, and the building hammer.
+
+#### Fixed
+
+- **Grid Variant Wheel Hijacked by Build Pattern on `B` (`GridShapeWheel`, `GridBuildWheel`).** `GridShapeWheel` previously ticked on `InputAction.BuildWheel` (`B`) for all `GridBlockItem`s and switched to a `BUILD PATTERN` ring whenever `SupportsShapeVariants` was `false`, which claimed `UIState.PushBlock()` before `GridBuildWheel` could open Cockpit Shell or Grid Window variants on `B`. `GridShapeWheel` now activates only when `SupportsShapeVariants` is `true`.
+- **Listen-Server Host Startup Port Bind Failure and Client Ephemeral Port Loop (`NetworkBootstrap`).** When UDP port `7770` was unavailable on the host machine, `StartHost()` previously called `ClientManager.StartConnection("localhost")` even after `ServerManager.StartConnection()` failed; `ClientSocket` bound an ephemeral port (e.g. `63083`) and stayed in `Starting` state, causing `Tugboat.GetPort()` to report the client's ephemeral port while subsequent `StartHost()` calls kept failing on `7770` and resetting to `"Multiplayer: offline"`. `StartHost()` now stops any lingering sockets first, probes for a free UDP port starting at `7770` (`7770..7799` with an OS ephemeral fallback), sets the resolved port on the transport before starting the server, starts the local client only after `_serverStarted` succeeds, and closes active transport sockets + `LanDiscovery` in `OnDestroy()`.
 
 ### [18.9.0-dev] Teams and Shared Ownership (Milestone 11 Completion)
 

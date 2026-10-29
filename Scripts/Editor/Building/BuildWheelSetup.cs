@@ -246,6 +246,7 @@ namespace VoxelEngine.EditorTools
             created += EnsureComponent<VoxelEngine.Simulation.RoadSurfaceWheel>(player, "Road surface wheel", ref present);
             created += EnsureComponent<VoxelEngine.GridSystem.JumpDriveWheel>(player, "Jump drive destination wheel", ref present);
             created += EnsureComponent<VoxelEngine.UI.GridBuildWheel>(player, "Grid build wheel", ref present);
+            created += EnsureComponent<VoxelEngine.UI.PlacementWheel>(player, "Placement pattern wheel", ref present);
 
             EditorUtility.SetDirty(player);
             UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(player.scene);

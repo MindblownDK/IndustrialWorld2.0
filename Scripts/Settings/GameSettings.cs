@@ -37,7 +37,8 @@ namespace VoxelEngine.Settings
         Dampeners,      // personal inertia dampeners; Ctrl+key locks a relative target (14.62.0-dev)
         WindLines,      // surface wind-line visuals; read WITH the Ctrl modifier - Ctrl+B by default (17.20.0-dev)
         BuildLock,      // freeze the placement hologram in the world, then nudge it (17.44.0-dev)
-        HammerTier      // the Building Hammer's upgrade-tier wheel (17.45.0-dev)
+        HammerTier,     // the Building Hammer's upgrade-tier wheel (17.45.0-dev)
+        PlacementWheel  // the placement-type / build-pattern wheel (18.9.1-dev): V by default, keeping B for block variants
     }
 
     /// <summary>How the microphone decides it is your turn to speak.
@@ -86,7 +87,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 28;   // v28: HammerTier (U) - the upgrade-tier wheel
+        private const int    CURRENT_VERSION = 29;   // v29: PlacementWheel (V) separated from BuildWheel (B); BuildLock moves to X
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -419,13 +420,15 @@ namespace VoxelEngine.Settings
             // a different key keeps the Ctrl contract. Plain B stays the build
             // wheel; the wheel ignores its open edge while Ctrl is held.
             InputAction.WindLines       => "Ctrl+B",
-            // 17.44.0-dev: V is the last free letter beside the build cluster. B, G,
-            // R, T and H are all spoken for, so freeze-the-hologram takes V.
-            InputAction.BuildLock       => "V",
+            // 18.9.1-dev: V opens the placement-pattern wheel (SINGLE, SPAN, PILLAR, DECK,
+            // WALL) while B stays dedicated to block/shape variants; freeze-the-hologram
+            // moves beside it to X.
+            InputAction.BuildLock       => "X",
             // 17.45.0-dev: U, as asked for. Warp Drive also sits on U, and deliberately so:
             // one is a hammer wheel on foot and the other is a cockpit key, so the two never
             // share a context. Either can be rebound in Settings - Keybinds.
             InputAction.HammerTier      => "U",
+            InputAction.PlacementWheel  => "V",
             _ => "None"
         };
 
@@ -515,6 +518,15 @@ namespace VoxelEngine.Settings
             // v27: BuildLock is new; the generic pass above already gave an unset
             // profile its default V, so only a deliberately rebound key is preserved.
             // v28: the hammer's upgrade-tier wheel is new; the generic pass above gives it U.
+            // v29: PlacementWheel takes V so B stays dedicated to block variants; migrate
+            // profiles still sitting on the old V default for BuildLock over to X.
+            string buildLock = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.BuildLock, "");
+            if (string.IsNullOrEmpty(buildLock) || buildLock == "V")
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.BuildLock, DefaultKey(InputAction.BuildLock));
+            string placementWheel = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.PlacementWheel, "");
+            if (string.IsNullOrEmpty(placementWheel) || placementWheel == "None")
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.PlacementWheel, DefaultKey(InputAction.PlacementWheel));
+
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);

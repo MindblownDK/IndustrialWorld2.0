@@ -133,7 +133,9 @@ namespace VoxelEngine.Building.Tiered
 
         private void Update()
         {
-            bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
+            bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel)
+                || GameSettings.IsHeld(InputAction.PlacementWheel)
+                || VoxelEngine.UI.RadialWheelController.AnyOpen;
             if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld)
             {
                 HideGhost();

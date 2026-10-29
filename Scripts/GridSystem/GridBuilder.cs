@@ -204,7 +204,8 @@ namespace VoxelEngine.GridSystem
                 || PlacementOptions.Pattern != _gridPatternMode
                 || _rotSteps != _gridPatternRotationSteps
                 || VoxelEngine.UI.GridShapeWheel.CurrentShape != _gridPatternShape
-                || GameSettings.IsHeld(InputAction.BuildWheel)))
+                || GameSettings.IsHeld(InputAction.BuildWheel)
+                || GameSettings.IsHeld(InputAction.PlacementWheel)))
                 CancelGridPattern();
 
             HoldingGridBlock = true;
@@ -228,6 +229,7 @@ namespace VoxelEngine.GridSystem
                     _gridPatternReason = "Aim at a matching native-size grid";
             }
             if (!_gridPatternActive && !GameSettings.IsHeld(InputAction.BuildWheel)
+                && !GameSettings.IsHeld(InputAction.PlacementWheel)
                 && !VoxelEngine.UI.RadialWheelController.AnyOpen)
                 HandleRotationInput();
 

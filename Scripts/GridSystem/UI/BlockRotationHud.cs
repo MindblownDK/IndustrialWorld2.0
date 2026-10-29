@@ -563,6 +563,7 @@ namespace VoxelEngine.GridSystem.UI
             string turnKey = GameSettings.GetKey(InputAction.BuildRotate);
             string lockKey = GameSettings.GetKey(InputAction.BuildLock);
             string wheelKey = GameSettings.GetKey(InputAction.BuildWheel);
+            string patternKey = GameSettings.GetKey(InputAction.PlacementWheel);
             string gridKey = GameSettings.GetKey(InputAction.BuildToggleGrid);
 
             string primary, secondary;
@@ -583,7 +584,7 @@ namespace VoxelEngine.GridSystem.UI
                 primary = gridBuilder.GridPatternBuildHeld
                     ? "RELEASE RIGHT CLICK  ·  PLACE " + gridBuilder.GridPatternClearCount + " CELLS"
                     : "RIGHT CLICK TO PLACE THE PLAN";
-                secondary = lockKey + "  FREEZE PLAN  ·  " + wheelKey + "  opens options";
+                secondary = lockKey + "  FREEZE PLAN  ·  " + patternKey + "  pattern";
             }
             else if (gridBlock && pattern != PlacementPattern.Single)
             {
@@ -591,13 +592,13 @@ namespace VoxelEngine.GridSystem.UI
                     ? "HOLD RIGHT CLICK + DRAG  ·  " + patternText
                     : "RIGHT CLICK TO PLACE A BLOCK";
                 secondary = gridBuilder != null && gridBuilder.GridPatternContextSupported
-                    ? wheelKey + "  pattern wheel  ·  CTRL+SCROLL  modes  ·  " + turnKey + "  rotate"
+                    ? patternKey + "  pattern wheel  ·  " + wheelKey + "  variants  ·  " + turnKey + "  rotate"
                     : "SINGLE ONLY  ·  " + (gridBuilder != null ? gridBuilder.GridPatternReason : "grid builder unavailable");
             }
             else if (gridBlock)
             {
                 primary = "RIGHT CLICK TO PLACE A BLOCK";
-                secondary = wheelKey + "  pattern / armour options  ·  " + turnKey + "  rotate";
+                secondary = patternKey + "  pattern  ·  " + wheelKey + "  variants  ·  " + turnKey + "  rotate";
             }
             else if (runCells > 1)
             {
@@ -607,7 +608,7 @@ namespace VoxelEngine.GridSystem.UI
             else
             {
                 primary = turnKey + "  turn 90°   ·   SHIFT+" + turnKey + "  turn back   ·   CTRL+" + turnKey + "  reset";
-                secondary = "CTRL  line up  ·  " + wheelKey + "  pattern  ·  " + gridKey + "  lattice  ·  "
+                secondary = "CTRL  line up  ·  " + patternKey + "  pattern  ·  " + gridKey + "  lattice  ·  "
                             + lockKey + "  freeze";
             }
 

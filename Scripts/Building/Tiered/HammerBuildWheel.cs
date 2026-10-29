@@ -110,7 +110,6 @@ namespace VoxelEngine.Building.Tiered
         private readonly RadialWheelController _tierWheel = new();
         private readonly List<string> _detailScratch = new(4);
         private readonly List<bool> _detailOkScratch = new(4);
-        private VoxelEngine.UI.PlacementModeRing _placementRing;
         private UIDocument _document;
 
         /// <summary>
@@ -172,12 +171,6 @@ namespace VoxelEngine.Building.Tiered
             _tierWheel.IdleTitleColor = T.AccentGold;
             // A tap here means "never mind" - a pinned dial leaves the world unclickable.
             _tierWheel.AllowTapPin = false;
-
-            // 17.51.0-dev: Ctrl + scroll gives the hammer the same shared placement
-            // pattern face used by static building. The family wheel is the base face;
-            // the ring owns pattern and lattice-step selection without another keybind.
-            _placementRing = new VoxelEngine.UI.PlacementModeRing(_wheel, "HAMMER",
-                home: false, includeStep: false);
         }
 
         private void Start() => ResolveDependencies();
@@ -232,12 +225,6 @@ namespace VoxelEngine.Building.Tiered
             string groupHint = "TAB / SCROLL  ·  " + GroupLabelOf(NextGroup());
             _wheel.GroupLabel = groupLabel;
             _wheel.SwapHint = groupHint;
-            _placementRing?.Tick();
-            if (_placementRing == null || !_placementRing.ShowingOwnOptions)
-            {
-                _wheel.GroupLabel = groupLabel;
-                _wheel.SwapHint = groupHint;
-            }
 
             // One hammer dial at a time: each one pushes a UIState block and owns the
             // cursor, so two of them up together would fight over both.
@@ -247,31 +234,30 @@ namespace VoxelEngine.Building.Tiered
             // changeable whether or not a family is armed.
             _tierWheel.Tick(InputAction.HammerTier, holdingHammer && !_wheel.IsOpen);
 
-            if (holdingHammer && !_wheel.IsOpen && !_tierWheel.IsOpen
+            if (holdingHammer && !VoxelEngine.UI.RadialWheelController.AnyOpen
                 && !VoxelEngine.UI.UIState.IsBlocking)
             {
+                string patternKey = GameSettings.GetKey(InputAction.PlacementWheel);
                 string hint = "[" + GameSettings.GetKey(InputAction.BuildWheel) + "]  HAMMER";
                 if (ActiveFamily.HasValue)
                 {
                     var pattern = VoxelEngine.Building.PlacementOptions.Pattern;
                     if (pattern == VoxelEngine.Building.PlacementPattern.Single)
-                        hint += "  ·  SINGLE · CLICK TO BUILD";
+                        hint += $"  ·  [{patternKey}]  PATTERN · SINGLE · CLICK TO BUILD";
                     else if (BuildSystemV2.SupportsHammerPattern(ActiveFamily.Value, pattern))
-                        hint += "  ·  " + VoxelEngine.Building.PlacementOptions.PatternName(pattern)
-                             + " · PRESS + DRAG · CTRL+SCROLL PATTERN";
+                        hint += $"  ·  [{patternKey}]  PATTERN · " + VoxelEngine.Building.PlacementOptions.PatternName(pattern)
+                             + " · PRESS + DRAG";
                     else
                         hint += "  ·  SINGLE · " + BuildSystemV2.HammerPatternFallbackReason(
                             ActiveFamily.Value, pattern);
                 }
-                else hint += "  ·  CHOOSE A FAMILY";
+                else hint += $"  ·  CHOOSE A FAMILY  ·  [{patternKey}]  PATTERN";
                 _wheel.ShowPrompt(hint);
             }
             else _wheel.HidePrompt();
 
             // The centre of the family wheel says what an upgrade click will actually do.
-            _wheel.IdleDescription = _placementRing != null && _placementRing.ShowingOwnOptions
-                ? "Choose a placement pattern; Ctrl-scroll returns to the family wheel."
-                : "Left-click centre: upgrade pieces to "
+            _wheel.IdleDescription = "Left-click centre: upgrade pieces to "
                     + HammerTierSelection.Name(HammerTierSelection.Selected)
                     + " · Right-click centre: repair mode";
         }
@@ -282,7 +268,6 @@ namespace VoxelEngine.Building.Tiered
 
         private void FillOptions(List<RadialOption> options)
         {
-            if (_placementRing != null && _placementRing.TryFill(options)) return;
             var families = Families;
             for (int i = 0; i < families.Length; i++)
             {
@@ -451,7 +436,6 @@ namespace VoxelEngine.Building.Tiered
 
         private bool ConfirmFamily(int index)
         {
-            if (_placementRing != null && _placementRing.TryConfirm(index)) return true;
             var families = Families;
             if (index < 0 || index >= families.Length) return true;
             var family = families[index];
