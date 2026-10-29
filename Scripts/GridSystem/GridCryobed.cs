@@ -15,6 +15,17 @@ namespace VoxelEngine.GridSystem
         public bool poweredRequired = true;
         public float idleWatts = 35f;
         public bool claimedByLocalPlayer;
+        public string ownerId = "";
+
+        public string ResolvedOwnerId
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(ownerId)) return ownerId;
+                if (Grid != null && !string.IsNullOrEmpty(Grid.ownerId)) return Grid.ownerId;
+                return claimedByLocalPlayer ? VoxelEngine.Networking.NetworkSession.LocalPlayerId : "";
+            }
+        }
         public float oxygenCapacity = 120f;
         public float oxygenStored;
         public float offlineOxygenPerHour = 12f;
@@ -105,9 +116,16 @@ namespace VoxelEngine.GridSystem
 
         public void ClaimAsSpawn()
         {
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+            if (!VoxelEngine.Networking.SharedOwnership.AllowsOwnerOrTeam(ResolvedOwnerId, me))
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(blockName, ResolvedOwnerId, VoxelEngine.Networking.AccessShareMode.Team);
+                return;
+            }
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session == null) return;
             claimedByLocalPlayer = true;
+            ownerId = me ?? "";
             session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
             session.bedSpawnIsOrdinaryBed = false;
@@ -118,6 +136,16 @@ namespace VoxelEngine.GridSystem
             session.SaveSpawnSidecar();
             VoxelEngine.UI.BuildFeedbackHud.Show("Cryobed Linked", "Respawn/offline safety point updated", null, new Color(0.45f, 0.85f, 1f));
             Debug.Log($"[GridCryobed] Spawn point set to {session.bedSpawnPoint}");
+        }
+
+        public bool TransferToTeammate()
+        {
+            string cur = ResolvedOwnerId;
+            if (!VoxelEngine.Networking.SharedOwnership.TryCycleTeammateTransfer(ref cur, blockName))
+                return false;
+            ownerId = cur;
+            claimedByLocalPlayer = (cur == VoxelEngine.Networking.NetworkSession.LocalPlayerId);
+            return true;
         }
 
         public string SourceName => blockName;

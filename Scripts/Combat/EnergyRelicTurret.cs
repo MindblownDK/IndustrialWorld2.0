@@ -241,15 +241,20 @@ namespace VoxelEngine.Combat
             if ((filter & TargetFilter.Players) != 0)
             {
                 var ps = PlayerStats.Instance;
-                if (ps != null && ps.Health > 0)
+                if (VoxelEngine.Networking.SharedOwnership.IsLocalPlayerHostileToDefense(this, ps))
                 {
                     float s = (ps.transform.position - transform.position).sqrMagnitude;
                     Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ps.transform.position);
                     Vector3 tp = ps.transform.position + up * 0.5f;
                     if (s <= EngagementRange * EngagementRange && s < bestSqr && HasLOS(from, tp, ps))
                     {
+                        bestSqr = s;
                         _targetT = ps.transform; _targetD = null; _targetP = ps;
                     }
+                }
+                if (VoxelEngine.Networking.SharedOwnership.TryFindHostileAvatarTarget(this, from, bestSqr, out var avatarT, out _, out _))
+                {
+                    _targetT = avatarT; _targetD = null; _targetP = null;
                 }
             }
         }

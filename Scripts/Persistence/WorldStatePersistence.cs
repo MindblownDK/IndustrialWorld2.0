@@ -986,6 +986,8 @@ namespace VoxelEngine.Persistence
                     rotY = pb.transform.eulerAngles.y,
                     hp = pb.Hp,
                     ownerId = pb.ownerId ?? "",
+                    accessMode = pb.accessMode,
+                    hasAccessMode = true,
                     container = TryFindContainer(pb.gameObject)
                 };
                 var cryobed = pb.GetComponentInChildren<VoxelEngine.Building.Cryobed>(true);
@@ -1746,7 +1748,7 @@ namespace VoxelEngine.Persistence
                     savedPiece.hasCodeLock       = true;
                     savedPiece.lockCode          = codeLock.code;
                     savedPiece.lockLocked        = codeLock.isLocked;
-                    savedPiece.lockAuthorizedIds = new List<string>(codeLock.authorizedIds);
+                    savedPiece.lockAuthorizedIds = codeLock.BuildWireAuthorizedList();
                 }
                 save.placedTiered.Add(savedPiece);
             }
@@ -2503,6 +2505,9 @@ namespace VoxelEngine.Persistence
                 pos = grid.Body != null ? grid.Body.position : grid.transform.position,
                 rot = grid.Body != null ? grid.Body.rotation : grid.transform.rotation,
                 netId = VoxelEngine.Networking.GridSync.IdOf(grid),
+                ownerId = grid.ownerId ?? "",
+                accessMode = grid.accessMode,
+                hasAccessMode = true,
                 gridSize = (int)grid.gridSize,
                 gravityScale = grid.gravityScale,
                 dampenersOn = grid.DampenersOn,
@@ -3206,6 +3211,10 @@ namespace VoxelEngine.Persistence
             grid.name = "Grid (restored)";
             // Claim the saved identity before anything else can mint a fresh one.
             VoxelEngine.Networking.GridSync.Adopt(grid, savedGrid.netId);
+            grid.ownerId = savedGrid.ownerId ?? "";
+            grid.accessMode = savedGrid.hasAccessMode
+                ? (int)VoxelEngine.Networking.SharedOwnership.ClampMode(savedGrid.accessMode)
+                : (int)VoxelEngine.Networking.AccessShareMode.Team;
             grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
             grid.DampenersOn = savedGrid.dampenersOn;
             grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
@@ -4262,6 +4271,9 @@ namespace VoxelEngine.Persistence
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
                 pb.ownerId = sb.ownerId ?? "";
+                pb.accessMode = sb.hasAccessMode
+                    ? (int)VoxelEngine.Networking.SharedOwnership.ClampMode(sb.accessMode)
+                    : (int)VoxelEngine.Networking.AccessShareMode.Team;
                 if (!cosmosSettledNow && sb.hasBodyAnchor)
                     _placedPoseCorrectionQueue.Add(
                         new KeyValuePair<PlacedBlock, SavedPlacedBlock>(pb, sb));
@@ -5272,9 +5284,7 @@ namespace VoxelEngine.Persistence
                         // it becomes a salted hash the moment it is loaded.
                         codeLock.code     = VoxelEngine.Building.Tiered.LockCodes.Canonicalize(ps.lockCode ?? "");
                         codeLock.isLocked = ps.lockLocked;
-                        codeLock.authorizedIds = ps.lockAuthorizedIds != null
-                            ? new List<string>(ps.lockAuthorizedIds)
-                            : new List<string>();
+                        codeLock.ApplyWireAuthorizedList(ps.lockAuthorizedIds);
                         codeLock.RefreshLed();
                     }
                 }
@@ -5921,6 +5931,9 @@ namespace VoxelEngine.Persistence
             // stays valid while the ship is moving. Empty on pre-14.25.0 saves; the host
             // mints one on load.
             public string netId = "";
+            public string ownerId = "";         // 18.9.0 — grid owner playerId
+            public int accessMode = 1;          // 18.9.0 — 0 Private, 1 Team, 2 Global
+            public bool hasAccessMode;
             public string controlBar = "";      // 14.65.0 — Grid Control toolbar
             public string terminalGroups = "";  // 14.65.0 — player-made groups
             public Vector3 pos;
@@ -6216,6 +6229,9 @@ namespace VoxelEngine.Persistence
             // Additive 14.69.0: stable placer identity for map ownership telemetry.
             // Empty in legacy saves is intentionally displayed as legacy/unowned.
             public string ownerId = "";
+            // Additive 18.9.0: static block access mode (0 Private, 1 Team, 2 Global).
+            public int accessMode = 1;
+            public bool hasAccessMode;
             // Additive 14.30.0: beacon identity and sharing (milestone 10). One
             // payload serves both beacon blocks - the grid Beacon rides it inside
             // SavedGridBlock.runtime, the stationary radar tower rides it here

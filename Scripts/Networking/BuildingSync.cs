@@ -107,7 +107,7 @@ namespace VoxelEngine.Networking
             if (pb == null || pb.definition == null) return;
             NetworkBootstrap.Instance.SendLockState(pb.definition.family.ToString(),
                 pb.transform.position, codeLock.HasCode, LockCodes.SaltOf(codeLock.code),
-                codeLock.isLocked, new List<string>(codeLock.authorizedIds));
+                codeLock.isLocked, codeLock.BuildWireAuthorizedList());
         }
 
         public static void AnnounceLockRemoved(CodeLock codeLock)
@@ -252,7 +252,7 @@ namespace VoxelEngine.Networking
                     // form: the joining guest gets the salt, never the hash.
                     snap.LockCode = LockCodes.PublicForm(codeLock.code);
                     snap.LockLocked = codeLock.isLocked;
-                    snap.LockAuthorized = new List<string>(codeLock.authorizedIds);
+                    snap.LockAuthorized = codeLock.BuildWireAuthorizedList();
                 }
                 yield return snap;
             }
@@ -443,8 +443,7 @@ namespace VoxelEngine.Networking
                 if (codeLock == null) return;
                 codeLock.code = code ?? "";
                 codeLock.isLocked = locked;
-                codeLock.authorizedIds = authorizedIds != null
-                    ? new List<string>(authorizedIds) : new List<string>();
+                codeLock.ApplyWireAuthorizedList(authorizedIds);
                 codeLock.RefreshLed();
             }
             finally { IsApplyingRemote = false; }

@@ -252,7 +252,7 @@ public bool preferAerialOnly = true; // when true, ignore grounded fodder if any
             if ((filter & TargetFilter.Players) != 0)
             {
                 var ps = PlayerStats.Instance;
-                if (ps != null && ps.Health > 0)
+                if (VoxelEngine.Networking.SharedOwnership.IsLocalPlayerHostileToDefense(this, ps))
                 {
                     float dist = (ps.transform.position - transform.position).magnitude;
                     Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ps.transform.position);
@@ -262,6 +262,10 @@ public bool preferAerialOnly = true; // when true, ignore grounded fodder if any
                         // Player is not aerial unless jetpacking high — treat as ground.
                         candidates.Add((ps.transform, null, ps, dist + 35f, false));
                     }
+                }
+                if (VoxelEngine.Networking.SharedOwnership.TryFindHostileAvatarTarget(this, from, range * range, out var avatarT, out _, out float avatarSqr))
+                {
+                    candidates.Add((avatarT, null, null, Mathf.Sqrt(avatarSqr) + 35f, false));
                 }
             }
 

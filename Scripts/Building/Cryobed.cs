@@ -19,6 +19,18 @@ namespace VoxelEngine.Building
         public bool poweredRequired = true;
         public float idleWatts = 35f;
         public bool claimedByLocalPlayer;
+        public string ownerId = "";
+
+        public string ResolvedOwnerId
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(ownerId)) return ownerId;
+                var pb = GetComponentInParent<PlacedBlock>();
+                if (pb != null && !string.IsNullOrEmpty(pb.ownerId)) return pb.ownerId;
+                return claimedByLocalPlayer ? VoxelEngine.Networking.NetworkSession.LocalPlayerId : "";
+            }
+        }
 
         public bool IsPowered
         {
@@ -73,9 +85,18 @@ namespace VoxelEngine.Building
 
         public void ClaimAsSpawn()
         {
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+            if (!VoxelEngine.Networking.SharedOwnership.AllowsOwnerOrTeam(ResolvedOwnerId, me))
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(displayName, ResolvedOwnerId, VoxelEngine.Networking.AccessShareMode.Team);
+                return;
+            }
             var session = Menu.WorldSession.Instance;
             if (session == null) return;
             claimedByLocalPlayer = true;
+            ownerId = me ?? "";
+            var pb = GetComponentInParent<PlacedBlock>();
+            if (pb != null && string.IsNullOrEmpty(pb.ownerId)) pb.ownerId = ownerId;
             session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
             session.bedSpawnIsOrdinaryBed = false;
@@ -86,6 +107,22 @@ namespace VoxelEngine.Building
             session.SaveSpawnSidecar();
             VoxelEngine.UI.BuildFeedbackHud.Show("Cryobed Linked", "Respawn/offline safety point updated", null, new Color(0.45f, 0.85f, 1f));
             Debug.Log($"[Cryobed] Spawn point set to {session.bedSpawnPoint}");
+        }
+
+        public bool TransferToTeammate()
+        {
+            string cur = ResolvedOwnerId;
+            if (!VoxelEngine.Networking.SharedOwnership.TryCycleTeammateTransfer(ref cur, displayName))
+                return false;
+            ownerId = cur;
+            claimedByLocalPlayer = (cur == VoxelEngine.Networking.NetworkSession.LocalPlayerId);
+            var pb = GetComponentInParent<PlacedBlock>();
+            if (pb != null)
+            {
+                pb.ownerId = cur;
+                VoxelEngine.Networking.BlockSync.AnnouncePlaced(pb);
+            }
+            return true;
         }
 
         // Shared oxygen-rich check used by cryobed and offline service

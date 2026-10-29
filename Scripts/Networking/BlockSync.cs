@@ -46,6 +46,8 @@ namespace VoxelEngine.Networking
         public int SecurityMode;       // 0 Private, 1 Team, 2 Global
         public bool IsSecurity;        // distinguishes "no guard" from "unowned guard"
         public bool SecurityWirelessShare; // 14.40.0 - owner shares wireless access with team
+        public int AccessMode;         // 18.9.0 - 0 Private, 1 Team (default), 2 Global
+        public bool HasAccessMode;
     }
 
     public static class BlockSync
@@ -95,7 +97,13 @@ namespace VoxelEngine.Networking
 
         public static void ApplyPlaced(BlockSnapshot snap)
         {
-            if (FindBlockAt(snap.ItemId, snap.Position) != null) return;   // duplicate-safe
+            var existing = FindBlockAt(snap.ItemId, snap.Position);
+            if (existing != null)
+            {
+                if (!string.IsNullOrEmpty(snap.OwnerId)) existing.ownerId = snap.OwnerId;
+                if (snap.HasAccessMode) existing.accessMode = snap.AccessMode;
+                return;
+            }
             SpawnRemote(snap, playSound: true);
         }
 
@@ -125,6 +133,8 @@ namespace VoxelEngine.Networking
                 var existing = FindBlockAt(snap.ItemId, snap.Position);
                 if (existing != null)
                 {
+                    if (!string.IsNullOrEmpty(snap.OwnerId)) existing.ownerId = snap.OwnerId;
+                    if (snap.HasAccessMode) existing.accessMode = snap.AccessMode;
                     if (snap.Hp > 0 && snap.Hp != existing.Hp)
                     {
                         existing.Hp = snap.Hp;
@@ -164,6 +174,8 @@ namespace VoxelEngine.Networking
                 Rotation = block.transform.rotation,
                 Hp = block.Hp,
                 OwnerId = block.ownerId ?? "",
+                AccessMode = block.accessMode,
+                HasAccessMode = true,
                 ConveyorShape = -1,
                 CableVariant = -1
             };
@@ -226,6 +238,7 @@ namespace VoxelEngine.Networking
                 block.Item = item;
                 block.Hp = snap.Hp > 0 ? snap.Hp : item.blockHealth;
                 block.ownerId = snap.OwnerId ?? "";
+                block.accessMode = snap.HasAccessMode ? snap.AccessMode : 1;
                 VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(block, block.Damage01);
 
                 // Placement-time cosmetic choices travel with the block.

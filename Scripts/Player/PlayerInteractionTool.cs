@@ -422,6 +422,11 @@ namespace VoxelEngine.Player
                     {
                         if (hasHit)
                         {
+                            if (!CanModifyHitOwnership(hit.collider))
+                            {
+                                _nextHit = Time.time + 0.2f;
+                                return;
+                            }
                             var host = hit.collider.GetComponentInParent<Component>();
                             VoxelEngine.Building.BlockPaint.TryPaint(host, VoxelEngine.Building.PaintFinishId.None);
                         }
@@ -438,6 +443,11 @@ namespace VoxelEngine.Player
 
                 if (mineDown && hasHit && Time.time >= _nextHit)
                 {
+                    if (!CanModifyHitOwnership(hit.collider))
+                    {
+                        _nextHit = Time.time + 0.25f;
+                        return;
+                    }
                     PaintToolItem.EnsureSelected();
                     var host = hit.collider.GetComponentInParent<Component>();
                     bool ok = VoxelEngine.Building.BlockPaint.TryPaint(host, PaintToolItem.SelectedFinish);
@@ -946,6 +956,14 @@ namespace VoxelEngine.Player
                     }
                     else
                     {
+                        var lockPiece = lockHost.GetComponent<PlacedTieredBlock>();
+                        if (lockPiece != null && !lockPiece.AllowsHammerAction())
+                        {
+                            VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                                "Code Lock Blocked", lockPiece.ownerId, VoxelEngine.Networking.AccessShareMode.Team);
+                            _nextHit = Time.time + 0.3f;
+                            return;
+                        }
                         var fitted = VoxelEngine.Building.Tiered.CodeLock.Attach(lockHost);
                         inventory.container.Remove(stackCodeLock.item, 1);
                         VoxelEngine.UI.BuildFeedbackHud.Show("Code Lock", "Lock fitted",
@@ -981,6 +999,10 @@ namespace VoxelEngine.Player
                     }
                     return;
                 }
+
+                // 18.9.0-dev — Milestone 11: Grid & Static Block interaction permissions.
+                if (!CheckHitInteractionPermission(hit.collider))
+                    return;
 
                 // Planting box: plant, harvest, clear a lost crop, fertilize or water.
                 // One block can hold nine crops, so the cell under the crosshair decides
@@ -2110,6 +2132,95 @@ namespace VoxelEngine.Player
             }
             // Whether the pose was valid or not, a selected block owns the click.
             // This prevents an interaction panel from opening behind an attempted build.
+            return true;
+        }
+
+        private bool CanModifyHitOwnership(Collider col)
+        {
+            if (col == null) return true;
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+
+            var grid = col.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
+            if (grid != null && !grid.AllowsAccess(me))
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                    "Paint Blocked", grid.ownerId, grid.AccessShare);
+                return false;
+            }
+
+            var tiered = col.GetComponentInParent<PlacedTieredBlock>();
+            if (tiered != null && !tiered.AllowsHammerAction(me))
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                    "Paint Blocked", tiered.ownerId, VoxelEngine.Networking.AccessShareMode.Team);
+                return false;
+            }
+
+            var placed = col.GetComponentInParent<PlacedBlock>();
+            if (placed != null && !placed.AllowsAccess(me))
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                    "Paint Blocked", placed.ownerId, placed.AccessShare);
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool CheckHitInteractionPermission(Collider col)
+        {
+            if (col == null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Items.DroppedItem>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Items.DeathLootBag>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Exploration.RuinChest>() != null) return true;
+
+            // Code locks, doors, gates, and hatches have their own keypad + team-bypass flow.
+            if (col.GetComponentInParent<VoxelEngine.Building.Tiered.CodeLock>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>() != null) return true;
+
+            // SecurityBlock opens read-only for visitors; storage network blocks are gated
+            // by SecurityBlock (with raidable power) when connected to a rack.
+            if (col.GetComponentInParent<VoxelEngine.Storage.SecurityBlock>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Storage.StorageTerminal>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Storage.ServerRack>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Storage.PatternTerminal>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Storage.CraftingTerminal>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Storage.NASBlock>() != null) return true;
+            if (col.GetComponentInParent<VoxelEngine.Storage.ExternalStorageBlock>() != null) return true;
+
+            // Beds have their own teammate message inside Bed.ClaimAsSpawn.
+            if (col.GetComponentInParent<VoxelEngine.Building.Bed>() != null) return true;
+
+            string me = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+
+            if (!IsHoldingGridBlock())
+            {
+                var hitGrid = col.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
+                if (hitGrid != null && !hitGrid.AllowsAccess(me))
+                {
+                    var hitBlock = col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                    string label = hitBlock != null && !string.IsNullOrEmpty(hitBlock.blockName)
+                        ? hitBlock.blockName
+                        : "Grid Vessel";
+                    VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                        label, hitGrid.ownerId, hitGrid.AccessShare);
+                    return false;
+                }
+            }
+
+            var placed = col.GetComponentInParent<PlacedBlock>();
+            if (placed != null && !placed.AllowsAccess(me))
+            {
+                string label = placed.Item != null && !string.IsNullOrEmpty(placed.Item.displayName)
+                    ? placed.Item.displayName
+                    : "Block Locked";
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                    label, placed.ownerId, placed.AccessShare);
+                return false;
+            }
+
             return true;
         }
 
@@ -3548,6 +3659,18 @@ namespace VoxelEngine.Player
         private void HandleGrind(VoxelEngine.GridSystem.GridBlock block,
             VoxelEngine.GridSystem.GrinderTool grinder, RaycastHit hit)
         {
+            if (block != null && block.Grid != null
+                && !block.Grid.AllowsAccess(VoxelEngine.Networking.NetworkSession.LocalPlayerId))
+            {
+                _grindProgress = 0f;
+                _grindTarget = null;
+                GrindProgress01 = 0f;
+                IsGrinding = false;
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast(
+                    "Grinder Blocked", block.Grid.ownerId, block.Grid.AccessShare);
+                _nextHit = Time.time + 0.35f;
+                return;
+            }
             if (_grindTarget != block) { _grindTarget = block; _grindProgress = 0f; }
             float grindTime = Mathf.Max(grinder.minGrindTime, grinder.baseGrindTime);
             _grindProgress += Time.deltaTime;

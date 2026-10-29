@@ -136,7 +136,7 @@ namespace VoxelEngine.Combat
             if ((filter & TargetFilter.Players) != 0)
             {
                 var ps = VoxelEngine.Player.PlayerStats.Instance;
-                if (ps != null && ps.Health > 0)
+                if (VoxelEngine.Networking.SharedOwnership.IsLocalPlayerHostileToDefense(this, ps))
                 {
                     float s = (ps.transform.position - transform.position).sqrMagnitude;
                     Vector3 to = ps.transform.position + up * 0.5f;
@@ -145,8 +145,14 @@ namespace VoxelEngine.Combat
                         (!Physics.Raycast(from, dir.normalized, out var hit2, dir.magnitude, ~0, QueryTriggerInteraction.Ignore)
                          || hit2.collider.GetComponentInParent<VoxelEngine.Player.PlayerStats>() == ps))
                     {
+                        bestSqr = s;
                         best = ps.transform;
                     }
+                }
+                if (VoxelEngine.Networking.SharedOwnership.TryFindHostileAvatarTarget(this, from, bestSqr, out var avatarT, out _, out float avatarSqr))
+                {
+                    bestSqr = avatarSqr;
+                    best = avatarT;
                 }
             }
             return best;

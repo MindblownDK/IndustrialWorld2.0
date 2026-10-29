@@ -36,6 +36,7 @@ namespace VoxelEngine.UI
         private static Label _display;
         private static Label _menuStatus;
         private static Label _menuLockButton;
+        private static Label _menuTeamBypassButton;
 
         private static VoxelEngine.Building.Tiered.CodeLock _target;
         private static VoxelEngine.Player.PlayerStats _stats;
@@ -294,10 +295,18 @@ namespace VoxelEngine.UI
         private static void RefreshMenu()
         {
             bool locked = _target != null && _target.isLocked;
+            bool bypass = _target == null || _target.teamBypass;
             _menuStatus.text = locked ? "STATUS: LOCKED" : "STATUS: UNLOCKED";
             _menuStatus.style.color = locked
                 ? new Color(0.95f, 0.45f, 0.35f) : new Color(0.60f, 0.85f, 0.45f);
             _menuLockButton.text = locked ? "UNLOCK" : "LOCK";
+            if (_menuTeamBypassButton != null)
+            {
+                _menuTeamBypassButton.text = bypass ? "TEAM BYPASS: ON" : "TEAM BYPASS: OFF";
+                _menuTeamBypassButton.style.color = bypass
+                    ? new Color(0.55f, 0.88f, 0.65f)
+                    : new Color(0.95f, 0.65f, 0.30f);
+            }
         }
 
         // ─────────────────────────── construction ───────────────────────────
@@ -384,6 +393,18 @@ namespace VoxelEngine.UI
                 RefreshMenu();
             });
             _menuPanel.Add(Center(_menuLockButton));
+
+            _menuTeamBypassButton = MakeButton("TEAM BYPASS: ON", 220f, 42f, () =>
+            {
+                if (_target == null) { Hide(); return; }
+                _target.SetTeamBypass(!_target.teamBypass);
+                RefreshMenu();
+                BuildFeedbackHud.Show("Code Lock",
+                    _target.teamBypass ? "Teammates bypass keypad" : "Teammates must enter PIN",
+                    null, _target.teamBypass ? new Color(0.45f, 0.85f, 0.55f) : new Color(0.95f, 0.62f, 0.20f));
+            });
+            _menuTeamBypassButton.style.fontSize = 16;
+            _menuPanel.Add(Center(_menuTeamBypassButton));
 
             _menuPanel.Add(Center(MakeButton("CHANGE CODE", 220f, 42f, () =>
             {

@@ -27,6 +27,27 @@ namespace VoxelEngine.GridSystem
         [Header("Grid")]
         public GridSize gridSize = GridSize.Large;
 
+        [Header("Ownership & Access (18.9.0)")]
+        [Tooltip("Stable player ID of the grid owner. Empty = legacy/unclaimed.")]
+        public string ownerId = "";
+        [Tooltip("0 = Private, 1 = Team (default), 2 = Global.")]
+        public int accessMode = 1;
+
+        public VoxelEngine.Networking.AccessShareMode AccessShare =>
+            VoxelEngine.Networking.SharedOwnership.ClampMode(accessMode);
+
+        public bool IsOwner(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.IsOwner(ownerId, playerId);
+
+        public bool AllowsAccess(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.AllowsAccess(ownerId, accessMode, playerId);
+
+        public void SetAccessMode(VoxelEngine.Networking.AccessShareMode mode)
+        {
+            accessMode = (int)mode;
+            VoxelEngine.Networking.GridControlSync.Announce(this);
+        }
+
         [Header("Physics")]
         [Tooltip("Extra gravity scale for grid physics. Ships are large/heavy objects and need a slightly stronger fall to feel grounded at game scale.")]
         public float gravityScale = 1.35f;
@@ -1132,6 +1153,8 @@ namespace VoxelEngine.GridSystem
             float cellSize = gridSize.CellSize();
             var island = Create(transform.TransformPoint((Vector3)baseCell * cellSize), gridSize);
             island.transform.rotation = transform.rotation;
+            island.ownerId = ownerId ?? "";
+            island.accessMode = accessMode;
 
             int moved = 0;
             for (int i = 0; i < cells.Count; i++)

@@ -3284,7 +3284,12 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(StarshipTheme.HullDivider(new Color(0.45f, 0.85f, 1f)));
             p.Add(T.StatRow("⚡", "Power", cryo.PowerEstimateText, T.AccentGold));
             p.Add(T.StatRow("◉", "Oxygen", cryo.OxygenEstimateText, T.AccentCyan));
-            p.Add(T.StatRow("⌂", "Ownership", cryo.claimedByLocalPlayer ? "Owned by you" : "Unclaimed", T.AccentTeal));
+            string ownerSummary = cryo.claimedByLocalPlayer
+                ? "Owned by you"
+                : !string.IsNullOrEmpty(cryo.ResolvedOwnerId)
+                    ? "Owned by " + VoxelEngine.Networking.SharedOwnership.FormatOwnerDisplay(cryo.ResolvedOwnerId)
+                    : "Unclaimed";
+            p.Add(T.StatRow("⌂", "Ownership", ownerSummary, T.AccentTeal));
             p.Add(T.Spacer(6));
 
             // Themed + focus-guarded (14.32.0): the plain TextField rendered its
@@ -3308,6 +3313,7 @@ namespace VoxelEngine.GridSystem.UI
             row.Add(T.SmallButton("Remove", () =>
             {
                 cryo.claimedByLocalPlayer = false;
+                cryo.ownerId = "";
                 var session = VoxelEngine.Menu.WorldSession.Instance;
                 if (session != null && session.hasBedSpawn && (session.bedSpawnPoint - cryo.SpawnPoint).sqrMagnitude < 1.5f)
                 {
@@ -3318,7 +3324,10 @@ namespace VoxelEngine.GridSystem.UI
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, T.AccentAmber));
             row.Add(T.SmallButton("Transfer", () =>
-                VoxelEngine.UI.BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), T.AccentDim));
+            {
+                if (cryo.TransferToTeammate())
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.AccentCyan));
             p.Add(row);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Gas pipes can install a variable oxygen port on the hull. Pump oxygen from H2/O2 generators into the cryobed for offline reserve."));

@@ -247,7 +247,7 @@ namespace VoxelEngine.UI
             // Ownership
             var ownRow = new VisualElement(); ownRow.style.flexDirection = FlexDirection.Row; ownRow.style.marginBottom = 5;
             var ownLeft = new Label("Ownership"); ownLeft.style.width = 110; ownLeft.style.color = new Color(0.62f,0.70f,0.78f); ownLeft.style.fontSize = 11; ownRow.Add(ownLeft);
-            var ownRight = new Label(IsOwned() ? (IsActiveSpawn() ? "Owned by you · active spawn" : "Owned by you") : "Unclaimed");
+            var ownRight = new Label(OwnershipSummaryText());
             _ownershipLabel = ownRight;
             ownRight.style.flexGrow = 1; ownRight.style.color = Color.white; ownRight.style.fontSize = 11;
             ownRow.Add(ownRight);
@@ -263,7 +263,11 @@ namespace VoxelEngine.UI
             var claimButton = MakeButton(IsOwned() ? (IsActiveSpawn() ? "Active Spawn" : "Claimed") : "Claim", () => { Claim(); Rebuild(); }, online ? T.AccentCyan : Color.gray);
             buttons.Add(claimButton);
             buttons.Add(MakeButton("Remove", () => { RemoveOwnership(); Rebuild(); }, new Color(0.95f,0.62f,0.18f)));
-            buttons.Add(MakeButton("Transfer", () => BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), new Color(0.55f,0.58f,0.66f)));
+            buttons.Add(MakeButton("Transfer", () =>
+            {
+                bool changed = _gridBed != null ? _gridBed.TransferToTeammate() : _staticBed != null && _staticBed.TransferToTeammate();
+                if (changed) Rebuild();
+            }, new Color(0.35f,0.62f,0.82f)));
             buttons.Add(MakeButton("Close", Close, new Color(0.18f,0.22f,0.28f)));
             panel.Add(buttons);
             StarshipTheme.Frame(panel, online ? T.AccentGreen : T.AccentAmber);
@@ -288,7 +292,7 @@ namespace VoxelEngine.UI
 
             if (_powerLabel != null) _powerLabel.text = PowerText();
             if (_oxygenLabel != null) _oxygenLabel.text = OxygenText();
-            if (_ownershipLabel != null) _ownershipLabel.text = IsOwned() ? (IsActiveSpawn() ? "Owned by you · active spawn" : "Owned by you") : "Unclaimed";
+            if (_ownershipLabel != null) _ownershipLabel.text = OwnershipSummaryText();
 
             // Oxygen tank fill
             float pct = 0f;
@@ -353,10 +357,20 @@ namespace VoxelEngine.UI
             return Vector3.zero;
         }
         private static void Claim() { if (_gridBed != null) _gridBed.ClaimAsSpawn(); else _staticBed?.ClaimAsSpawn(); }
+        private static string OwnershipSummaryText()
+        {
+            string resolvedOwner = _gridBed != null ? _gridBed.ResolvedOwnerId : _staticBed != null ? _staticBed.ResolvedOwnerId : "";
+            if (IsOwned())
+                return IsActiveSpawn() ? "Owned by you · active spawn" : "Owned by you";
+            if (!string.IsNullOrEmpty(resolvedOwner))
+                return "Owned by " + VoxelEngine.Networking.SharedOwnership.FormatOwnerDisplay(resolvedOwner);
+            return "Unclaimed";
+        }
+
         private static void RemoveOwnership()
         {
-            if (_gridBed != null) _gridBed.claimedByLocalPlayer = false;
-            if (_staticBed != null) _staticBed.claimedByLocalPlayer = false;
+            if (_gridBed != null) { _gridBed.claimedByLocalPlayer = false; _gridBed.ownerId = ""; }
+            if (_staticBed != null) { _staticBed.claimedByLocalPlayer = false; _staticBed.ownerId = ""; }
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session != null && IsActiveSpawn())
             {

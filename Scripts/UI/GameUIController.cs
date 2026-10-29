@@ -1765,6 +1765,7 @@ namespace VoxelEngine.UI
                 else if (_openStation  != null) BuildRightStationCrafting(_contentLayer, _openStation);
 
                 AppendOpenMachinePollutionTelemetry(_contentLayer);
+                AppendOpenBlockOwnershipCard(_contentLayer);
             }
             else
             {
@@ -1907,6 +1908,163 @@ namespace VoxelEngine.UI
             // Older compact panels did not; wrapping their ordinary content prevents an
             // expanded emissions foldout from flex-shrinking every row into an unreadable
             // stack. Decorative bezel/frame children stay fixed above the scrolling body.
+            var panel = content[content.childCount - 1];
+            ScrollView scroll = panel.Q<ScrollView>();
+            if (scroll == null) scroll = WrapMachinePanelInScrollView(panel);
+            else if (string.IsNullOrEmpty(scroll.name)) scroll.name = "MachinePanelTelemetryScroll";
+            scroll.Add(card);
+        }
+
+        private Component ResolveCurrentlyOpenRightComponent()
+        {
+            if (_openChest != null) return _openChest;
+            if (_openFurnace != null) return _openFurnace;
+            if (_openElectric != null) return _openElectric;
+            if (_openCoalGen != null) return _openCoalGen;
+            if (_openQuarry != null) return _openQuarry;
+            if (_openReactor != null) return _openReactor;
+            if (_openTurbine != null) return _openTurbine;
+            if (_openPortReactor != null) return _openPortReactor;
+            if (_openProcessor != null) return _openProcessor;
+            if (_openReprocessor != null) return _openReprocessor;
+            if (_openElectrolyser != null) return _openElectrolyser;
+            if (_openHydroEngine != null) return _openHydroEngine;
+            if (_openGasTank != null) return _openGasTank;
+            if (_openRefuelPad != null) return _openRefuelPad;
+            if (_openWaterPump != null) return _openWaterPump;
+            if (_openBiofarm != null) return _openBiofarm;
+            if (_openPlantBox != null) return _openPlantBox;
+            if (_openWindTurbine != null) return _openWindTurbine;
+            if (_openDronePort != null) return _openDronePort;
+            if (_openStorageDrawer != null) return _openStorageDrawer;
+            if (_openDrawerController != null) return _openDrawerController;
+            if (_openItemDisplay != null) return _openItemDisplay;
+            if (_openPortalController != null) return _openPortalController;
+            if (_openOilRefinery != null) return _openOilRefinery;
+            if (_openDistillationPlant != null) return _openDistillationPlant;
+            if (_openCatalyticCracker != null) return _openCatalyticCracker;
+            if (_openFlareStack != null) return _openFlareStack;
+            if (_openWaterTower != null) return _openWaterTower;
+            if (_openRailStation != null) return _openRailStation;
+            if (_openRailSwitch != null) return _openRailSwitch;
+            if (_openPumpjack != null) return _openPumpjack;
+            if (_openChemPlant != null) return _openChemPlant;
+            if (_openCarbonHarvester != null) return _openCarbonHarvester;
+            if (_openCrusher != null) return _openCrusher;
+            if (_openOreWasher != null) return _openOreWasher;
+            if (_openFoundry != null) return _openFoundry;
+            if (_openAssembler != null) return _openAssembler;
+            if (_openFunnel != null) return _openFunnel;
+            if (_openReceivingChute != null) return _openReceivingChute;
+            if (_openBiomassPress != null) return _openBiomassPress;
+            if (_openAutoTreeFarm != null) return _openAutoTreeFarm;
+            if (_openSplitter != null) return _openSplitter;
+            if (_openDefense != null) return _openDefense;
+            if (_openPowerBattery != null) return _openPowerBattery;
+            if (_openArmorUpgradeStation != null) return _openArmorUpgradeStation;
+            if (_openStation != null) return _openStation;
+            return null;
+        }
+
+        private void AppendOpenBlockOwnershipCard(VisualElement content)
+        {
+            if (content == null || content.childCount == 0) return;
+            Component source = ResolveCurrentlyOpenRightComponent();
+            if (source == null) return;
+
+            var placed = source.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+            if (placed == null) return;
+            if (placed.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) return;
+
+            string localId = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+            bool unowned = string.IsNullOrEmpty(placed.ownerId);
+            bool isOwner = !unowned && placed.IsOwner(localId);
+            var mode = placed.AccessShare;
+
+            var card = new VisualElement { name = "BlockOwnershipCard" };
+            card.style.marginTop = 8;
+            card.style.marginLeft = 10;
+            card.style.marginRight = 10;
+            card.style.marginBottom = 8;
+            card.style.paddingTop = 6;
+            card.style.paddingBottom = 6;
+            card.style.paddingLeft = 9;
+            card.style.paddingRight = 9;
+            card.style.backgroundColor = new StyleColor(new Color(0.08f, 0.12f, 0.16f, 0.92f));
+            card.style.borderLeftWidth = 2;
+            card.style.borderLeftColor = new StyleColor(new Color(0.28f, 0.78f, 0.92f));
+            UITheme.Radius(card, 4);
+
+            var topRow = new VisualElement();
+            topRow.style.flexDirection = FlexDirection.Row;
+            topRow.style.justifyContent = Justify.SpaceBetween;
+            topRow.style.alignItems = Align.Center;
+
+            var ownerLabel = new Label("OWNER: " + VoxelEngine.Networking.SharedOwnership.FormatOwnerDisplay(placed.ownerId));
+            ownerLabel.style.fontSize = 10;
+            ownerLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            ownerLabel.style.color = new StyleColor(new Color(0.86f, 0.92f, 0.96f));
+            topRow.Add(ownerLabel);
+
+            var modeBadge = new Label("ACCESS: " + VoxelEngine.Networking.SharedOwnership.FormatModeLabel(mode));
+            modeBadge.style.fontSize = 10;
+            modeBadge.style.unityFontStyleAndWeight = FontStyle.Bold;
+            modeBadge.style.color = new StyleColor(
+                mode == VoxelEngine.Networking.AccessShareMode.Team ? UITheme.AccentCyan
+                : mode == VoxelEngine.Networking.AccessShareMode.Global ? UITheme.AccentGreen
+                : UITheme.AccentAmber);
+            topRow.Add(modeBadge);
+            card.Add(topRow);
+
+            if (unowned || isOwner)
+            {
+                var btnRow = new VisualElement();
+                btnRow.style.flexDirection = FlexDirection.Row;
+                btnRow.style.flexWrap = Wrap.Wrap;
+                btnRow.style.marginTop = 5;
+
+                if (unowned)
+                {
+                    btnRow.Add(UITheme.SmallButton("CLAIM BLOCK", () =>
+                    {
+                        placed.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
+                        placed.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Team);
+                        Refresh();
+                    }, UITheme.AccentCyan));
+                }
+                else
+                {
+                    btnRow.Add(UITheme.SmallButton("PRIVATE", () =>
+                    {
+                        placed.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Private);
+                        Refresh();
+                    }, mode == VoxelEngine.Networking.AccessShareMode.Private ? UITheme.AccentAmber : UITheme.BgSlot));
+
+                    btnRow.Add(UITheme.SmallButton("TEAM", () =>
+                    {
+                        placed.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Team);
+                        Refresh();
+                    }, mode == VoxelEngine.Networking.AccessShareMode.Team ? UITheme.AccentCyan : UITheme.BgSlot));
+
+                    btnRow.Add(UITheme.SmallButton("GLOBAL", () =>
+                    {
+                        placed.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Global);
+                        Refresh();
+                    }, mode == VoxelEngine.Networking.AccessShareMode.Global ? UITheme.AccentGreen : UITheme.BgSlot));
+
+                    btnRow.Add(UITheme.SmallButton("TRANSFER", () =>
+                    {
+                        if (VoxelEngine.Networking.SharedOwnership.TryCycleTeammateTransfer(ref placed.ownerId,
+                            placed.Item != null ? placed.Item.displayName : "Block Ownership"))
+                        {
+                            placed.SetAccessMode(placed.AccessShare);
+                            Refresh();
+                        }
+                    }, UITheme.AccentGold));
+                }
+                card.Add(btnRow);
+            }
+
             var panel = content[content.childCount - 1];
             ScrollView scroll = panel.Q<ScrollView>();
             if (scroll == null) scroll = WrapMachinePanelInScrollView(panel);

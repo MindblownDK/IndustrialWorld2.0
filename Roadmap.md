@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.8.0-dev`
-**Roadmap Version:** `18.8.0-dev`
+**Current Version:** `18.9.0-dev`
+**Roadmap Version:** `18.9.0-dev`
 **Date:** 2026-10-29
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.9.0-dev - Teams & Shared Ownership (Milestone 11)
+- `SharedOwnership` resolves `Private` / `Team` / `Global` access across `GridEntity`, `PlacedBlock`, `PlacedTieredBlock`, `CodeLock` (`teamBypass`), `Cryobed`, and `GridCryobed` through `TeamRegistry.SameTeam`
+- `GridMasterTerminal` and `GameUIController` expose live `OWNER` and `ACCESS` (`PRIVATE` / `TEAM` / `GLOBAL` / `TRANSFER`) controls, while `PlayerInteractionTool`, `GridBuilder`, and `BuildSystemV2` gate piloting, panels, building, grinding, hammer upgrades, and painting
+- All seven automated defense turrets (`Turret`, `Artillery`, `GiantShellTurret`, `FlamethrowerTurret`, `AntiAirTurret`, `EnergyRelicTurret`, `MortarTurret`) respect owner/team IFF under `TargetFilter.Players` and acquire hostile remote `PlayerAvatar` targets
+
 ### 18.8.0-dev - Grid Farming Parity, Grid Seed Planter & Grid Auto Tree Farm
 - `GridFarmPlotBase` (`GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`) matches `PlantBox`: 0 L dry start, per-cell `cellInput` bins, whole-bed `treeBed`/`treeCell` locking, bushy crop/fruit and 3D tree visuals, `IFarmBed` screen telemetry, and a 10 Hz live panel
 - `GridSeedPlanter` (1-cell low-power hydroponic tray) and `GridAutoTreeFarm` (continuous self-reseeding timber gantry with fertilizer boost and 2 upgrade slots) ship with liquid ports, recipes, icons and save persistence
@@ -48,11 +53,6 @@
 - The farm page writes its growth, water, per-cell percentages and state in place every frame (`PlantBoxPanel.Tick`), so nothing on it is a snapshot any more
 - The page is one scrolling body of level bars, stat rows, switches, two action buttons and a three-by-three chip grid, and the tank level is read from litres rather than the irrigated flag
 - Conduit continuation snaps only to a **free** end - the "Cell already built" refusal is gone - and a ground click within 1.6 m past a free end continues that run at its own height
-
-### 18.7.0-dev - Farm Panels, Real Footprints, Tree Beds
-- Every planting block opens `PlantBoxPanel` - water, beds, power, cells, a four-slot seed bin, a nine-slot harvest bin and the self re-seed switch - reached by right-clicking a bed with an empty hand
-- `PlantBox.BuildVisuals` is derived from `cellsPerSide`, so Small, Big and Large are 1, 2 and 3 metres of furniture; the Large bed's orphan trellis bar is replaced by corner posts carrying the rails
-- A sapling on the Large bed claims the whole bed (`treeBed` / `treeGrowth`), hides the crop cells, and comes down as logs, saplings and biomass
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -300,7 +300,7 @@
 
 ### Teams, Beacons & Shared Ownership - Rules That Bind (milestones 10-11)
 
-- **Teams are the grouping everything else hangs off.** Friendly fire, team beacons, map markers, storage security and base permissions all resolve through team membership rather than each inventing their own list of players. *(Friendly fire shipped 14.34.0 exactly this way: a WORLD setting resolved through SameTeam, never a per-team choice. Storage security shipped 14.39.0 the same way: the Security Block's TEAM mode resolves through SameTeam.)*
+- **Teams are the grouping everything else hangs off.** Friendly fire, team beacons, map markers, storage security and base permissions all resolve through team membership rather than each inventing their own list of players. *(Friendly fire shipped 14.34.0; Storage security shipped 14.39.0; Grid, static block, Code Lock, Cryobed, and automated turret permissions shipped 18.9.0-dev via SharedOwnership + SameTeam.)*
 - **Keyed by stable player id**, never by name or connection - a team survives a rename, a reconnect and a reload (MP-readiness checklist).
 - **Invite and accept, never auto-join.** A player is only ever added to a team by their own confirmation.
 - **The limits are host settings, not constants.** Max members per team and max teams per session live in the multiplayer / server settings, editable by the host.
@@ -2438,11 +2438,11 @@ Discover bottleneck → Optimize → Unlock next tier → Repeat
 - **6.27.2-dev:** Enforced pipe-only water for biofarm (removed adjacent-tank cheat + voxel water fallback, now requires nearby `WaterPipe` whose network has a `WaterTank`), fixed diagonal pipe connections on grid and land by switching `PipeAdjacency` to Euclidean `sqrt(other1²+other2²)` checks for all axes (prevents diagonal with both offsets 0.5), and fixed grid ghost port not committing (added `GridBiofarm` to `TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` in both `BuildSystem` and `GridBuilder`, ensured `EnsureGridTankPorts` creates gas+liquid fixed ports and variable `Port_*_V` ports persist via `WorldStatePersistence`).
 
 ### 9.6 Multiplayer — SUPERSEDED BY SECTION 1 — 🚧 IN PROGRESS
-- Live plan, status and open scope: **section 1, Multiplayer Strategy**. Milestones 1-10 are shipped; milestones 11-12 (teams, dedicated server) are open.
+- Live plan, status and open scope: **section 1, Multiplayer Strategy**. Milestones 1-11 are shipped; milestone 12 (dedicated server) is open.
 - This is the final roadmap milestone after all single-player systems are complete.
 - Support self-hosted server creation on Windows and Linux.
 - Support LAN discovery/connection and direct connection to self-hosted servers.
-- Add player teams with invitations and team-only interaction permissions for Grid blocks and static blocks.
+- ~~Add player teams with invitations and team-only interaction permissions for Grid blocks and static blocks.~~ *(14.33.0-dev & 18.9.0-dev - `TeamRegistry` + `TeamsPanel` + `SharedOwnership` across grids, static blocks, tiered base pieces, Code Locks, Cryobeds, and turrets)*
 - Add pirate and merchant NPC roles.
 
 ### 9.7 World Management, Autosaves & Item Limits — ✅ COMPLETED

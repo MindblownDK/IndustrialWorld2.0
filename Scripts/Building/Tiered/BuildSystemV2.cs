@@ -2213,6 +2213,11 @@ namespace VoxelEngine.Building.Tiered
 
         public bool TryRepair(PlacedTieredBlock target)
         {
+            if (target != null && !target.AllowsHammerAction())
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast("Repair Blocked", target.ownerId, VoxelEngine.Networking.AccessShareMode.Team);
+                return false;
+            }
             if (!TryGetTieredRepairCost(target, out var cost, out int amount)
                 || inventory == null || inventory.container == null || !CanAfford(cost))
                 return false;
@@ -2222,6 +2227,11 @@ namespace VoxelEngine.Building.Tiered
 
         public bool TryRepair(PlacedBlock target)
         {
+            if (target != null && !VoxelEngine.Networking.SharedOwnership.AllowsOwnerOrTeam(target.ownerId))
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast("Repair Blocked", target.ownerId, VoxelEngine.Networking.AccessShareMode.Team);
+                return false;
+            }
             if (!TryGetBlockRepairCost(target, out var cost, out int amount)
                 || inventory == null || inventory.container == null || !CanAfford(cost))
                 return false;
@@ -2263,6 +2273,11 @@ namespace VoxelEngine.Building.Tiered
         public bool TryUpgradeTo(PlacedTieredBlock target, BuildTier destination)
         {
             if (target == null || target.definition == null) return false;
+            if (!target.AllowsHammerAction())
+            {
+                VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast("Upgrade Blocked", target.ownerId, VoxelEngine.Networking.AccessShareMode.Team);
+                return false;
+            }
             if (destination <= target.tier) return false;
             if (destination > BuildTier.Steel) destination = BuildTier.Steel;
             if (target.definition.GetPrefab(destination) == null) return false;
@@ -2287,6 +2302,7 @@ namespace VoxelEngine.Building.Tiered
             bool oldPillarAudit = oldLoad != null && oldLoad.armed && oldLoad.pillarPiece;
             PlacedTieredBlock oldHost = oldFitting ? oldLoad.hostPiece : null;
             string oldOwnerId = target.ownerId ?? "";
+            int oldAccessMode = target.accessMode;
 
             // Upgrading a frame rebuilds its GameObject; any fitting armed against
             // the old object must be re-pointed at the replacement or it would
@@ -2309,6 +2325,7 @@ namespace VoxelEngine.Building.Tiered
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, destination);
             pb.ownerId = oldOwnerId;
+            pb.accessMode = oldAccessMode;
             var newLoad = go.GetComponent<StructuralLoadState>();
             if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan, oldAnchor);
             else if (oldVertical)

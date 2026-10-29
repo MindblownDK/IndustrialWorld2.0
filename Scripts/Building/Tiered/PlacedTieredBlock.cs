@@ -15,6 +15,20 @@ namespace VoxelEngine.Building.Tiered
         public int       hp;
         /// <summary>Stable placer identity. Empty means a legacy/unowned piece.</summary>
         public string    ownerId = "";
+        /// <summary>18.9.0 — 0 = Private, 1 = Team (default), 2 = Global.</summary>
+        public int       accessMode = 1;
+
+        public VoxelEngine.Networking.AccessShareMode AccessShare =>
+            VoxelEngine.Networking.SharedOwnership.ClampMode(accessMode);
+
+        public bool IsOwner(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.IsOwner(ownerId, playerId);
+
+        public bool AllowsAccess(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.AllowsAccess(ownerId, accessMode, playerId);
+
+        public bool AllowsHammerAction(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.AllowsOwnerOrTeam(ownerId, playerId);
 
         public void Initialize(TieredBlockDefinition def, BuildTier t)
         {

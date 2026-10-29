@@ -223,7 +223,7 @@ namespace VoxelEngine.Combat
             if ((filter & TargetFilter.Players) != 0)
             {
                 var ps = PlayerStats.Instance;
-                if (ps != null && ps.Health > 0)
+                if (VoxelEngine.Networking.SharedOwnership.IsLocalPlayerHostileToDefense(this, ps))
                 {
                     float dist = (ps.transform.position - transform.position).magnitude;
                     Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ps.transform.position);
@@ -233,8 +233,17 @@ namespace VoxelEngine.Combat
                         float score = dist * 0.15f + 2f; // players are mid priority
                         if (_targetT == null || score < bestScore)
                         {
+                            bestScore = score;
                             _targetT = ps.transform; _targetD = null; _targetP = ps;
                         }
+                    }
+                }
+                if (VoxelEngine.Networking.SharedOwnership.TryFindHostileAvatarTarget(this, from, range * range, out var avatarT, out _, out float avatarSqr))
+                {
+                    float score = Mathf.Sqrt(avatarSqr) * 0.15f + 2f;
+                    if (_targetT == null || score < bestScore)
+                    {
+                        _targetT = avatarT; _targetD = null; _targetP = null;
                     }
                 }
             }

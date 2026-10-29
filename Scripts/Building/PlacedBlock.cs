@@ -18,6 +18,23 @@ namespace VoxelEngine.Building
         public bool      onGrid = true;
         /// <summary>Stable placer identity. Empty means a legacy/unowned block.</summary>
         public string    ownerId = "";
+        /// <summary>18.9.0 — 0 = Private, 1 = Team (default), 2 = Global.</summary>
+        public int       accessMode = 1;
+
+        public VoxelEngine.Networking.AccessShareMode AccessShare =>
+            VoxelEngine.Networking.SharedOwnership.ClampMode(accessMode);
+
+        public bool IsOwner(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.IsOwner(ownerId, playerId);
+
+        public bool AllowsAccess(string playerId = null) =>
+            VoxelEngine.Networking.SharedOwnership.AllowsAccess(ownerId, accessMode, playerId);
+
+        public void SetAccessMode(VoxelEngine.Networking.AccessShareMode mode)
+        {
+            accessMode = (int)mode;
+            VoxelEngine.Networking.BlockSync.AnnouncePlaced(this);
+        }
 
         /// <summary>0..1 structural loss derived from the authored block health.</summary>
         public float Damage01

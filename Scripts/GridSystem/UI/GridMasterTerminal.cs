@@ -128,7 +128,10 @@ namespace VoxelEngine.GridSystem.UI
             display.Add(commands);
 
             if (grid != null)
+            {
                 display.Add(BuildStatusStrip(grid, state));
+                display.Add(BuildOwnershipStrip(grid));
+            }
 
             var body = new VisualElement { name = "ShipControlWorkArea" };
             body.style.flexDirection = FlexDirection.Row;
@@ -188,6 +191,9 @@ namespace VoxelEngine.GridSystem.UI
         private class SavedGroups
         {
             public List<SavedGroupRec> groups = new();
+            public bool hasOwnership;
+            public string ownerId = "";
+            public int accessMode = 1;
         }
 
         /// <summary>This grid's player-made groups as JSON, or "" when none.</summary>
@@ -195,8 +201,14 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (grid == null) return "";
             var state = GetState(grid);
-            if (state.groups.Count == 0) return "";
-            var payload = new SavedGroups();
+            bool hasOwner = !string.IsNullOrEmpty(grid.ownerId) || grid.accessMode != 1;
+            if (state.groups.Count == 0 && !hasOwner) return "";
+            var payload = new SavedGroups
+            {
+                hasOwnership = true,
+                ownerId = grid.ownerId ?? "",
+                accessMode = grid.accessMode
+            };
             foreach (var group in state.groups)
             {
                 var rec = new SavedGroupRec { name = group.name, hidden = group.hidden };
@@ -205,7 +217,7 @@ namespace VoxelEngine.GridSystem.UI
                         rec.cells.Add($"{b.GridPos.x},{b.GridPos.y},{b.GridPos.z}");
                 if (rec.cells.Count > 0) payload.groups.Add(rec);
             }
-            return payload.groups.Count == 0 ? "" : JsonUtility.ToJson(payload);
+            return payload.groups.Count == 0 && !hasOwner ? "" : JsonUtility.ToJson(payload);
         }
 
         /// <summary>Restore groups from ExportGroups JSON (whole-state replace).
@@ -224,7 +236,13 @@ namespace VoxelEngine.GridSystem.UI
             SavedGroups payload = null;
             try { payload = JsonUtility.FromJson<SavedGroups>(json); }
             catch { return; }
-            if (payload == null || payload.groups == null) return;
+            if (payload == null) return;
+            if (payload.hasOwnership)
+            {
+                grid.ownerId = payload.ownerId ?? "";
+                grid.accessMode = (int)VoxelEngine.Networking.SharedOwnership.ClampMode(payload.accessMode);
+            }
+            if (payload.groups == null) return;
 
             state.groups.Clear();
             foreach (var rec in payload.groups)
@@ -314,6 +332,75 @@ namespace VoxelEngine.GridSystem.UI
             strip.Add(Stat("O2", $"{grid.OxygenStored:0} L", T.AccentGreen));
             strip.Add(Stat("SPEED", $"{speed:0.0} m/s", T.AccentGold));
             strip.Add(Stat("BLOCKS", blockCount.ToString(), new Color(0.8f, 0.84f, 0.9f)));
+            return strip;
+        }
+
+        private static VisualElement BuildOwnershipStrip(GridEntity grid)
+        {
+            var strip = new VisualElement { name = "ShipControlOwnershipStrip" };
+            strip.style.flexDirection = FlexDirection.Row;
+            strip.style.flexWrap = Wrap.Wrap;
+            strip.style.alignItems = Align.Center;
+            strip.style.flexShrink = 0;
+            strip.style.marginBottom = 6;
+            strip.style.paddingTop = 4;
+            strip.style.paddingBottom = 4;
+            strip.style.paddingLeft = 6;
+            strip.style.paddingRight = 6;
+            LcdHudTheme.ApplyDataCard(strip, LcdHudTheme.Bezel);
+
+            string localId = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+            bool unowned = string.IsNullOrEmpty(grid.ownerId);
+            bool isOwner = !unowned && grid.IsOwner(localId);
+            var mode = grid.AccessShare;
+
+            strip.Add(Stat("OWNER", VoxelEngine.Networking.SharedOwnership.FormatOwnerDisplay(grid.ownerId),
+                isOwner ? LcdHudTheme.Phosphor : T.AccentCyan));
+            strip.Add(Stat("ACCESS", VoxelEngine.Networking.SharedOwnership.FormatModeLabel(mode),
+                mode == VoxelEngine.Networking.AccessShareMode.Team ? T.AccentCyan
+                : mode == VoxelEngine.Networking.AccessShareMode.Global ? T.AccentGreen
+                : T.AccentAmber));
+
+            if (unowned)
+            {
+                strip.Add(LcdHudTheme.CommandButton("CLAIM GRID", () =>
+                {
+                    grid.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
+                    grid.accessMode = (int)VoxelEngine.Networking.AccessShareMode.Team;
+                    AnnounceShared(grid);
+                    RefreshTerminal();
+                }, LcdHudTheme.Phosphor));
+            }
+            else if (isOwner)
+            {
+                strip.Add(LcdHudTheme.CommandButton("PRIVATE", () =>
+                {
+                    grid.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Private);
+                    RefreshTerminal();
+                }, mode == VoxelEngine.Networking.AccessShareMode.Private ? T.AccentAmber : LcdHudTheme.PhosphorDim));
+
+                strip.Add(LcdHudTheme.CommandButton("TEAM", () =>
+                {
+                    grid.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Team);
+                    RefreshTerminal();
+                }, mode == VoxelEngine.Networking.AccessShareMode.Team ? T.AccentCyan : LcdHudTheme.PhosphorDim));
+
+                strip.Add(LcdHudTheme.CommandButton("GLOBAL", () =>
+                {
+                    grid.SetAccessMode(VoxelEngine.Networking.AccessShareMode.Global);
+                    RefreshTerminal();
+                }, mode == VoxelEngine.Networking.AccessShareMode.Global ? T.AccentGreen : LcdHudTheme.PhosphorDim));
+
+                strip.Add(LcdHudTheme.CommandButton("TRANSFER", () =>
+                {
+                    if (VoxelEngine.Networking.SharedOwnership.TryCycleTeammateTransfer(ref grid.ownerId, "Grid Ownership"))
+                    {
+                        AnnounceShared(grid);
+                        RefreshTerminal();
+                    }
+                }, T.AccentGold));
+            }
+
             return strip;
         }
 

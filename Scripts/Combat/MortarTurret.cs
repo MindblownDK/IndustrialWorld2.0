@@ -227,13 +227,19 @@ namespace VoxelEngine.Combat
             if ((filter & TargetFilter.Players) != 0)
             {
                 var ps = PlayerStats.Instance;
-                if (ps != null && ps.Health > 0)
+                if (VoxelEngine.Networking.SharedOwnership.IsLocalPlayerHostileToDefense(this, ps))
                 {
                     float s = (ps.transform.position - transform.position).sqrMagnitude;
                     if (s >= minSqr && s <= EngagementRange * EngagementRange && (_targetT == null || s < bestSqr))
                     {
+                        bestSqr = s;
                         _targetT = ps.transform; _targetD = null; _targetP = ps;
                     }
+                }
+                if (VoxelEngine.Networking.SharedOwnership.TryFindHostileAvatarTarget(this, transform.position, bestSqr, out var avatarT, out _, out float avatarSqr)
+                    && avatarSqr >= minSqr)
+                {
+                    _targetT = avatarT; _targetD = null; _targetP = null;
                 }
             }
         }

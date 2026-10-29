@@ -1588,6 +1588,14 @@ namespace VoxelEngine.GridSystem
         private void HandlePrecisionAttachment(GridBlockItem item, GridEntity grid, RaycastHit hit, Ray ray)
         {
             if (item == null || grid == null) return;
+            if (!grid.AllowsAccess(VoxelEngine.Networking.NetworkSession.LocalPlayerId))
+            {
+                HideGhost();
+                HideGhostPortRing();
+                if (GameSettings.WasPressed(InputAction.Build))
+                    VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast("Grid Build Blocked", grid.ownerId, grid.AccessShare);
+                return;
+            }
 
             // ── Variable port path for pipes on engines ─────────────
             if (IsPipeItem(item, out var family))
@@ -2173,6 +2181,12 @@ namespace VoxelEngine.GridSystem
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos,
             Quaternion rotation, bool keepExactAttachmentPose, bool showFeedback = true)
         {
+            if (grid != null && !grid.AllowsAccess(VoxelEngine.Networking.NetworkSession.LocalPlayerId))
+            {
+                if (showFeedback)
+                    VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast("Grid Build Blocked", grid.ownerId, grid.AccessShare);
+                return false;
+            }
             if (grid != null && item != null && item.gridSize == GridSize.Large && !keepExactAttachmentPose)
             {
                 Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
@@ -2225,6 +2239,8 @@ namespace VoxelEngine.GridSystem
             {
                 grid = GridEntity.Create(worldPos, GridSize.Large);
                 grid.transform.rotation = rotation;
+                grid.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
+                grid.accessMode = (int)VoxelEngine.Networking.AccessShareMode.Team;
                 if (grid.Body != null) grid.Body.isKinematic = true;
                 createdNewGrid = true;
                 gridPos = Vector3Int.zero;
@@ -2417,6 +2433,11 @@ namespace VoxelEngine.GridSystem
                 if (grid == null)
                 {
                     VoxelEngine.UI.BuildFeedbackHud.Show("LED Strip", "Aim at an existing grid to select first corner.", item.icon, item.iconTint);
+                    return false;
+                }
+                if (!grid.AllowsAccess(VoxelEngine.Networking.NetworkSession.LocalPlayerId))
+                {
+                    VoxelEngine.Networking.SharedOwnership.ShowAccessDeniedToast("Grid Build Blocked", grid.ownerId, grid.AccessShare);
                     return false;
                 }
 

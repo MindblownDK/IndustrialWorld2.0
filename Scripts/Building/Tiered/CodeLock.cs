@@ -14,6 +14,7 @@ namespace VoxelEngine.Building.Tiered
     public sealed class CodeLock : MonoBehaviour
     {
         public const string ItemId = "code_lock";
+        public const string NoTeamBypassSentinel = "__no_team_bypass__";
 
         /// <summary>14.56.0 - no longer the plain combination. Stores the
         /// LockCodes packed form: "sha256:salt:hash" on authority machines
@@ -22,6 +23,9 @@ namespace VoxelEngine.Building.Tiered
         /// are canonicalized to a salted hash on load.</summary>
         public string code = "";
         public bool isLocked;
+        /// <summary>18.9.0 - when true (default), teammates of the host piece's
+        /// owner may operate the door/hatch without entering the combination.</summary>
+        public bool teamBypass = true;
         /// <summary>Player ids allowed through. Keyed per player (MP-readiness
         /// rule: never a single flag meaning "the player"). 14.0.0-dev.</summary>
         public List<string> authorizedIds = new();
@@ -31,13 +35,84 @@ namespace VoxelEngine.Building.Tiered
 
         public bool HasCode => !string.IsNullOrEmpty(code);
 
+        public string OwnerId
+        {
+            get
+            {
+                var ptb = GetComponentInParent<PlacedTieredBlock>();
+                if (ptb != null && !string.IsNullOrEmpty(ptb.ownerId))
+                    return ptb.ownerId;
+                if (authorizedIds != null)
+                {
+                    for (int i = 0; i < authorizedIds.Count; i++)
+                    {
+                        string id = authorizedIds[i];
+                        if (!string.IsNullOrEmpty(id) && id != NoTeamBypassSentinel)
+                            return id;
+                    }
+                }
+                return "";
+            }
+        }
+
+        public bool IsTeamAuthorized(string playerId)
+        {
+            if (!teamBypass || string.IsNullOrEmpty(playerId)) return false;
+            string owner = OwnerId;
+            if (string.IsNullOrEmpty(owner)) return false;
+            return owner == playerId || VoxelEngine.Networking.TeamRegistry.SameTeam(owner, playerId);
+        }
+
         public bool IsAuthorized(string playerId)
-            => !string.IsNullOrEmpty(playerId) && authorizedIds.Contains(playerId);
+            => !string.IsNullOrEmpty(playerId) && (authorizedIds.Contains(playerId) || IsTeamAuthorized(playerId));
 
         /// <summary>True when the guarded piece may be operated by this player
         /// without the keypad.</summary>
         public bool AllowsUse(string playerId)
             => !HasCode || !isLocked || IsAuthorized(playerId);
+
+        public void SetTeamBypass(bool enabled)
+        {
+            teamBypass = enabled;
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client)
+                VoxelEngine.Networking.BuildingSync.RequestLockToggle(this, isLocked,
+                    VoxelEngine.Networking.PlayerIdentity.LocalId);
+            else
+                VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
+        }
+
+        public List<string> BuildWireAuthorizedList()
+        {
+            var list = new List<string>();
+            if (authorizedIds != null)
+            {
+                for (int i = 0; i < authorizedIds.Count; i++)
+                {
+                    string id = authorizedIds[i];
+                    if (!string.IsNullOrEmpty(id) && id != NoTeamBypassSentinel)
+                        list.Add(id);
+                }
+            }
+            if (!teamBypass)
+                list.Add(NoTeamBypassSentinel);
+            return list;
+        }
+
+        public void ApplyWireAuthorizedList(List<string> wireIds)
+        {
+            authorizedIds.Clear();
+            bool bypass = true;
+            if (wireIds != null)
+            {
+                for (int i = 0; i < wireIds.Count; i++)
+                {
+                    string id = wireIds[i];
+                    if (id == NoTeamBypassSentinel) bypass = false;
+                    else if (!string.IsNullOrEmpty(id)) authorizedIds.Add(id);
+                }
+            }
+            teamBypass = bypass;
+        }
 
         /// <summary>Sets (or replaces) the combination. The plain code is
         /// hashed HERE, on the machine it was typed on - it never travels and

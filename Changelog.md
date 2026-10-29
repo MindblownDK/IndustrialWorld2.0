@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.8.0-dev`
+**Current Version:** `18.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.9.0-dev] Teams and Shared Ownership (Milestone 11 Completion)
+
+**Type:** MINOR - completes Milestone 11 (`Teams & Shared Ownership`) across Grid vessels/stations, static blocks, tiered base pieces, Code Locks, Cryobeds, and automated defense turrets, resolving all base and vessel permissions live through `TeamRegistry.SameTeam(ownerId, playerId)`. Fully save-compatible: legacy/unowned grids and blocks (`ownerId == ""`) remain open to everyone, while new `accessMode` and `hasAccessMode` fields on `SavedGrid` and `SavedPlacedBlock` default to `Team` (`1`).
+
+**GitHub title:** `[18.9.0-dev] Complete Milestone 11 shared ownership and team permissions for grids, blocks, locks, and turrets`
+
+#### Added
+
+- **`SharedOwnership` (`Scripts/Networking/SharedOwnership.cs`).** Central permission and identity helper defining `AccessShareMode` (`Private = 0`, `Team = 1` default, `Global = 2`), `AllowsAccess`, `AllowsOwnerOrTeam`, `FormatOwnerDisplay`, `TryCycleTeammateTransfer`, `ShowAccessDeniedToast`, `IsLocalPlayerHostileToDefense`, and `TryFindHostileAvatarTarget`.
+- **Grid Ownership and Access Mode (`GridEntity`, `GridMasterTerminal`, `GridBuilder`, `WorldStatePersistence`).** `GridEntity` now carries `ownerId` and `accessMode` (`Private` / `Team` / `Global`), stamped automatically when a player starts a new grid in `GridBuilder`, inherited across hull splits (`SplitIslandIntoGrid`), persisted in `SavedGrid`, and synced live via `GridControlSync` / `GridSync`. `GridMasterTerminal` adds a `ShipControlOwnershipStrip` showing the current owner and access mode with `CLAIM GRID`, `PRIVATE`, `TEAM`, `GLOBAL`, and `TRANSFER` controls for the owner.
+- **Static Block Ownership Card and Access Mode (`PlacedBlock`, `GameUIController`, `BlockSync`, `WorldStatePersistence`).** `PlacedBlock` adds `accessMode` (`Private` / `Team` / `Global`), persisted in `SavedPlacedBlock` and replicated in `BlockSync.BlockSnapshot`. Opening any static machine, container, farm bed, or defense block appends a compact `BlockOwnershipCard` (`OWNER`, `ACCESS` badge, and owner controls for `PRIVATE`, `TEAM`, `GLOBAL`, `CLAIM BLOCK`, and `TRANSFER`).
+- **Code Lock Team Bypass (`CodeLock`, `CodeLockHud`, `BuildingSync`, `WorldStatePersistence`).** `CodeLock` adds `teamBypass = true` (default on) and resolves `OwnerId` from its host `PlacedTieredBlock`. When `TEAM BYPASS: ON` is active in `CodeLockHud`'s owner menu, teammates of the door/hatch owner bypass the 4-digit keypad automatically; toggling `TEAM BYPASS: OFF` requires teammates to enter the PIN. Replicated wire-compatibly through `BuildingSync` and persisted in `SavedPlacedTiered`.
+- **Cryobed Ownership and Teammate Transfer (`Cryobed`, `GridCryobed`, `CryobedConfigHud`, `GridBlockUI`).** Replaces the placeholder transfer toast on static and grid Cryobeds with live `ownerId` tracking, team-gated claiming, and one-click ownership transfer to teammates.
+
+#### Changed
+
+- **Grid and Static Block Interaction, Build, Grinder, Hammer, and Paint Enforcement (`PlayerInteractionTool`, `GridBuilder`, `BuildSystemV2`).** Piloting (`GridCockpit`, `GridHelm`, `GridShipConsole`), opening `GridMasterTerminal` or `GridBlock` panels, placing blocks or precision pipes/ports onto a grid (`GridBuilder`), grinding blocks on a grid (`HandleGrind`), painting grids or bases (`PaintToolItem`), fitting a `CodeLock`, and Hammer repair/upgrade on `PlacedTieredBlock` / `PlacedBlock` now enforce `AllowsAccess` / `AllowsOwnerOrTeam` and display a clear owner/team denial toast. Combat damage from weapons and explosives remains unrestricted so enemy ships and bases can always be raided.
+- **Automated Defense Turret Team IFF (`Turret`, `Artillery`, `GiantShellTurret`, `FlamethrowerTurret`, `AntiAirTurret`, `EnergyRelicTurret`, `MortarTurret`).** All seven automated defense turrets now check `SharedOwnership.IsLocalPlayerHostileToDefense` and `SharedOwnership.TryFindHostileAvatarTarget` when `TargetFilter.Players` is active so owned turrets never target their own owner or teammates and engage hostile remote player avatars in multiplayer.
 
 ### [18.8.0-dev] Grid Farming Parity, Grid Seed Planter, and Grid Automatic Tree Farm
 
