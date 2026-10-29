@@ -5588,17 +5588,58 @@ namespace VoxelEngine.Building
         /// reads as the local player's own (green/red) ghost.</summary>
         public static GameObject CreateRemoteGhost(string itemId)
         {
-            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
-            if (persistence == null || string.IsNullOrEmpty(itemId)) return null;
-            var block = persistence.FindItemById(itemId) as BlockItem;
-            if (block == null || block.placedPrefab == null) return null;
+            if (string.IsNullOrEmpty(itemId)) return null;
+            GameObject prefab = null;
+            float fallbackCubeScale = 0f;
+
+            if (itemId.StartsWith("tiered:", System.StringComparison.Ordinal))
+            {
+                if (System.Enum.TryParse<VoxelEngine.Building.Tiered.BuildFamily>(
+                    itemId.Substring(7), out var fam))
+                {
+                    var reg = VoxelEngine.Building.Tiered.BuildSystemV2.Instance != null
+                        ? VoxelEngine.Building.Tiered.BuildSystemV2.Instance.registry
+                        : null;
+                    if (reg == null)
+                        reg = Resources.Load<VoxelEngine.Building.Tiered.TieredBlockRegistry>("TieredBlockRegistry");
+                    var def = reg != null ? reg.Get(fam) : null;
+                    if (def != null)
+                        prefab = def.GetPrefab(VoxelEngine.Building.Tiered.BuildTier.Wood);
+                }
+            }
+            else
+            {
+                var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+                var item = persistence != null ? persistence.FindItemById(itemId) : null;
+                if (item is BlockItem block && block.placedPrefab != null)
+                {
+                    prefab = block.placedPrefab;
+                }
+                else if (item is VoxelEngine.GridSystem.GridBlockItem gridBlock)
+                {
+                    if (gridBlock.blockPrefab != null)
+                        prefab = gridBlock.blockPrefab;
+                    else
+                        fallbackCubeScale = gridBlock.gridSize == VoxelEngine.GridSystem.GridSize.Small ? 0.5f : 2.5f;
+                }
+            }
+
+            if (prefab == null && fallbackCubeScale <= 0f) return null;
             if (_remoteGhostMaterial == null)
                 _remoteGhostMaterial = MakeGhostMaterial(new Color(0.35f, 0.75f, 0.95f, 0.32f));
             GameObject ghost;
             try
             {
                 IsCreatingGhost = true;
-                ghost = Instantiate(block.placedPrefab);
+                if (prefab != null)
+                {
+                    ghost = Instantiate(prefab);
+                }
+                else
+                {
+                    ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    ghost.transform.localScale = Vector3.one * fallbackCubeScale;
+                }
             }
             finally { IsCreatingGhost = false; }
             ghost.name = "RemoteBuildGhost";
@@ -5611,12 +5652,21 @@ namespace VoxelEngine.Building
         public bool TryGetGhostState(out string itemId, out Vector3 position, out Quaternion rotation)
         {
             itemId = null; position = default; rotation = default;
-            if (_ghost == null || _ghostItem == null || !_ghost.activeSelf) return false;
-            itemId = _ghostItem.itemId;
-            var t = _ghost.transform;
-            position = t.position;
-            rotation = t.rotation;
-            return true;
+            if (_ghost != null && _ghostItem != null && _ghost.activeSelf)
+            {
+                itemId = _ghostItem.itemId;
+                var t = _ghost.transform;
+                position = t.position;
+                rotation = t.rotation;
+                return true;
+            }
+            var gridBuilder = VoxelEngine.GridSystem.GridBuilder.Instance;
+            if (gridBuilder != null && gridBuilder.TryGetGhostState(out itemId, out position, out rotation))
+                return true;
+            var v2 = VoxelEngine.Building.Tiered.BuildSystemV2.Instance;
+            if (v2 != null && v2.TryGetGhostState(out itemId, out position, out rotation))
+                return true;
+            return false;
         }
 
         // ---------- Ghost material helpers ----------
@@ -5785,10 +5835,19 @@ namespace VoxelEngine.Building
                     mb is VoxelEngine.Fluids.FluidNode ||
                     mb is VoxelEngine.Networks.PipeVisualBuilder ||
                     mb is VoxelEngine.GridSystem.IBeaconSource ||
+                    mb is VoxelEngine.GridSystem.GridBlock ||
+                    mb is VoxelEngine.Building.Tiered.PlacedTieredBlock ||
+                    mb is VoxelEngine.Building.Tiered.BuildSocket ||
                     mb.GetType().Namespace == "VoxelEngine.Simulation")
                 {
                     mb.enabled = false;
                 }
+            }
+            foreach (var tm in root.GetComponentsInChildren<TextMesh>(true))
+            {
+                if (tm == null) continue;
+                var mr = tm.GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
             }
 
             // 17.45.0-dev: A PREVIEW IS NOT A PLACEMENT. Combat behaviours were never

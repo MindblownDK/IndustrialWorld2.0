@@ -1,9 +1,22 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.9.1-dev`
+**Current Version:** `18.9.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.9.2-dev] Multiplayer Client Scatter, Host Avatar & Ghost Sync, Grid Block Replication, and Depth-Tested Chest Text
+
+**Type:** PATCH - fixes four multiplayer client regressions: (1) missing terrain scatter, animals, and enemies on the client, (2) the host player's avatar and building ghost not spawning/syncing to clients, (3) grid blocks and grid/tiered building ghosts not appearing on clients, and (4) player chest text and nameplates rendering through walls.
+
+**GitHub title:** `[18.9.2-dev] Fix multiplayer client scatter, host avatar and ghost sync, grid block replication, and depth-tested chest text`
+
+#### Fixed
+
+- **Host Local Client Skipped on `StartHost()`, Blocking Host `PlayerAvatar`, Host Ghosts, Animals, and Enemies (`NetworkBootstrap`).** In `18.9.1-dev`, `TryStartServerOnPort` checked `ok && _serverStarted` synchronously after `ServerManager.StartConnection()`. Because Fish-Net's Tugboat transport transitions to `LocalConnectionState.Starting` synchronously and dispatches `LocalConnectionState.Started` on the next `IterateIncoming` tick, `StartHost()` returned before calling `ClientManager.StartConnection("localhost")`, leaving the host with `_serverStarted == true` and `_clientStarted == false`. As a result, the host never authenticated its local client (`OnIdentityReceived` never spawned the host's `PlayerAvatar` or ghost `SyncVar`s) and all host `Send*` methods gated on `if (!_clientStarted) return;` (`SendAnimal*`, `SendEnemy*`, `SendPiece*`, `SendBlock*`, `SendDrop*`, `SendBag*`) silently dropped their broadcasts. `TryStartServerOnPort` now returns `ServerManager.StartConnection()` directly, `OnServerConnectionState(Started)` guarantees the host's local client connects, `OnIdentityReceived` spawns the host avatar at `PlayerStats.Instance.transform` and binds the connection to the active scene, and host-originated `Send*` calls now broadcast directly via `SendOrRelay` (`BroadcastToClients`) whenever `_serverStarted` is `true`.
+- **Client Terrain Scatter Blocked Forever and 15s Spawn Stall on Remote Join (`WorldStatePersistence`, `SphereWorld`, `AnimalSync`, `HostileSync`).** `SphereWorld.ProcessDeferredScatter()` gated chunk scatter on `WorldStatePersistence.Instance.LoadCompleted`, while `WorldStatePersistence.Start()` returned early on `session.IsRemoteJoin` without setting `_loaded = true` (`LoadCompleted`) or `CosmicClockSettled = true`. Remote clients therefore never ran `ProcessDeferredScatter()` (producing barren planets with zero flora, rocks, or ruins) and waited out the 15-second `cosmosDeadline` in `PlayerSpawner`. `WorldStatePersistence.Start()` now marks `_loaded = true` and `CosmicClockSettled = true` on remote joins, and `AnimalSync` / `HostileSync` now run `EnsureSceneRegistered()` and pump every frame via `NetworkBootstrap.LateUpdate()` so scatter-born and pre-existing fauna and hostiles always replicate to clients.
+- **Grid Block Ghosts, Tiered Building Ghosts, and Host-Placed Grid Blocks Missing on Clients (`PlayerAvatar`, `BuildSystem`, `GridBuilder`, `BuildSystemV2`, `GridSync`, `GridBuildSync`).** `BuildSystem.TryGetGhostState` and `BuildSystem.CreateRemoteGhost` previously only handled `BlockItem`, ignoring `GridBuilder` (`GridBlockItem`) and `BuildSystemV2` (`TieredBlockDefinition`). Both methods (and `PlayerAvatar.MirrorGhost`) now replicate ghosts across all three build systems. In addition, `GridBuildSync.NotifyLocalPlaced` / `NotifyLocalRemoved` now queue host-side grid edits for end-of-frame `GridSync.AnnounceStructure` + `SendGridPose` flush, `GridSync.CollectTags` ensures all live host `GridEntity` hulls carry a `GridNetTag`, and `GridSyncManager.LateUpdate` seeds `_structureSeeded = true` even when a session begins with zero grids so the first grid built is broadcast immediately.
+- **Player Chest Text (`ChestInk`) and Nameplate Visible Through Walls (`CrusaderModel`, `PlayerAvatar`).** `CrusaderModel.BuildTattoos` and `SetCrest` created/updated the `ChestInk` `TextMesh` without applying `VoxelEngine.Rendering.WorldTextMaterial`, leaving it on Unity's default `GUI/Text Shader` (`ZTest Always`). Both `ChestInk` and `PlayerAvatar.nameplate` now apply `WorldTextMaterial.Apply` and `WorldTextMaterial.SyncAtlas` (`VoxelEngine/WorldText` shader with `ZTest LEqual`), and `PlayerAvatar.PollCrest` keeps all renderers disabled on the owner's local puppet.
 
 ### [18.9.1-dev] Placement Pattern Wheel Keybind (V) and Multiplayer Host Port Recovery
 

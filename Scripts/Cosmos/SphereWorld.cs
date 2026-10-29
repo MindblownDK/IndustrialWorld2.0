@@ -1535,7 +1535,10 @@ namespace VoxelEngine.Cosmos
             if (!enableScatter || body == null) return;
             if (_biomeRegistry == null) _biomeRegistry = ResolveBiomeRegistry();
             if (_biomeRegistry == null || viewer == null) return;
-            if (VoxelEngine.Persistence.WorldStatePersistence.Instance != null
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            bool needLocalLoad = session == null || !session.IsRemoteJoin;
+            if (needLocalLoad
+                && VoxelEngine.Persistence.WorldStatePersistence.Instance != null
                 && !VoxelEngine.Persistence.WorldStatePersistence.Instance.LoadCompleted)
                 return;
 

@@ -405,9 +405,29 @@ namespace VoxelEngine.Networking
 
         // ─────────────────── the pump (driver: EnemySpawner.Update) ───────────────────
 
+        private static int _lastPumpFrame = -1;
+
+        /// <summary>Ensure any live non-replica hostile in the scene is registered in
+        /// the host table (e.g. enemies spawned before hosting started or after GoOffline).</summary>
+        public static void EnsureSceneRegistered()
+        {
+            if (NetworkSession.Mode == SessionMode.Client) return;
+            var all = Object.FindObjectsByType<Damageable>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                var d = all[i];
+                if (d == null || KindOf(d) < 0 || _idOf.ContainsKey(d) || _replicaIdOf.ContainsKey(d)) continue;
+                OnHostileAwake(d);
+            }
+        }
+
         public static void Pump()
         {
+            if (_lastPumpFrame == Time.frameCount) return;
+            _lastPumpFrame = Time.frameCount;
+
             if (NetworkSession.Mode == SessionMode.Client) { PumpReplicas(); return; }
+            if (_hostEnemies.Count == 0 && HostOnline) EnsureSceneRegistered();
             HostileSleepManager.Pump(_hostEnemies.Values);
             if (!HostOnline) return;
 
@@ -438,6 +458,7 @@ namespace VoxelEngine.Networking
             if (now >= _nextReannounceAt)
             {
                 _nextReannounceAt = now + ReannounceInterval;
+                EnsureSceneRegistered();
                 foreach (var pair in _hostEnemies)
                     if (pair.Value != null) AnnounceSpawn(pair.Key, pair.Value);
             }
@@ -609,6 +630,8 @@ namespace VoxelEngine.Networking
         /// the scene; the registries must not outlive them.</summary>
         public static void ResetSession()
         {
+            foreach (var pair in _replicas)
+                if (pair.Value?.Enemy != null) Object.Destroy(pair.Value.Enemy.gameObject);
             _hostEnemies.Clear();
             _idOf.Clear();
             _lastSentHealth.Clear();

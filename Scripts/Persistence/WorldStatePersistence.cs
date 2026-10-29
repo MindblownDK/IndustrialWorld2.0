@@ -162,6 +162,8 @@ namespace VoxelEngine.Persistence
             if (session != null && session.IsRemoteJoin)
             {
                 CacheLoadedResearchRanks(null);
+                _loaded = true;
+                CosmicClockSettled = true;
                 Debug.Log("[WorldStatePersistence] Remote join - world state comes from the host, skipping LoadAll.");
                 return;
             }

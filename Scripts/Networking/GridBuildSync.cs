@@ -55,9 +55,15 @@ namespace VoxelEngine.Networking
 
         // Blocks the local player attached this frame, flushed in LateUpdate.
         private static readonly List<(GridEntity Grid, GridBlock Block)> _placed = new();
+        private static readonly HashSet<GridEntity> _hostDirtyGrids = new();
 
         private static bool CanSend =>
             NetworkSession.Mode == SessionMode.Client
+            && NetworkBootstrap.Instance != null
+            && !NetworkBootstrap.Instance.WorldMismatch;
+
+        private static bool CanSendHost =>
+            NetworkSession.Mode == SessionMode.Host
             && NetworkBootstrap.Instance != null
             && !NetworkBootstrap.Instance.WorldMismatch;
 
@@ -69,8 +75,13 @@ namespace VoxelEngine.Networking
         /// all pass through here without a sound.</summary>
         public static void NotifyLocalPlaced(GridEntity grid, GridBlock block)
         {
-            if (grid == null || block == null) return;
-            if (!CanSend || GridSync.IsApplyingRemote) return;
+            if (grid == null || block == null || GridSync.IsApplyingRemote) return;
+            if (CanSendHost)
+            {
+                _hostDirtyGrids.Add(grid);
+                return;
+            }
+            if (!CanSend) return;
             _placed.Add((grid, block));
         }
 
@@ -80,8 +91,13 @@ namespace VoxelEngine.Networking
         public static void NotifyLocalRemoved(GridEntity grid, Vector3Int cell,
             bool precision, Vector3Int precisionCell)
         {
-            if (grid == null) return;
-            if (!CanSend || GridSync.IsApplyingRemote) return;
+            if (grid == null || GridSync.IsApplyingRemote) return;
+            if (CanSendHost)
+            {
+                _hostDirtyGrids.Add(grid);
+                return;
+            }
+            if (!CanSend) return;
             var tag = grid.GetComponent<GridNetTag>();
             if (tag == null || string.IsNullOrEmpty(tag.Id)) return;
             NetworkBootstrap.Instance.RequestGridBuild(tag.Id, cell, precision, precisionCell, false, "");
@@ -100,6 +116,24 @@ namespace VoxelEngine.Networking
         /// entries for it are skipped); one per-block message for everything else.</summary>
         internal static void FlushPlacements()
         {
+            if (_hostDirtyGrids.Count > 0)
+            {
+                if (CanSendHost && !GridSync.IsApplyingRemote)
+                {
+                    foreach (var grid in _hostDirtyGrids)
+                    {
+                        if (grid == null || grid.BlockCount == 0) continue;
+                        GridSync.IdOf(grid);
+                        GridSyncManager.Instance?.RecordShape(grid);
+                        GridSync.AnnounceStructure(grid);
+                        var tag = grid.GetComponent<GridNetTag>();
+                        if (tag != null && NetworkBootstrap.Instance != null)
+                            NetworkBootstrap.Instance.SendGridPose(tag.CapturePose());
+                    }
+                }
+                _hostDirtyGrids.Clear();
+            }
+
             if (_placed.Count == 0) return;
             if (!CanSend || GridSync.IsApplyingRemote) { _placed.Clear(); return; }
 
@@ -186,6 +220,7 @@ namespace VoxelEngine.Networking
         {
             _clientBorn.Clear();
             _placed.Clear();
+            _hostDirtyGrids.Clear();
         }
     }
 

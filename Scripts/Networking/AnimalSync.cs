@@ -113,12 +113,33 @@ namespace VoxelEngine.Networking
 
         // ─────────────────── the pump (one caller: the spawner) ───────────────────
 
-        /// <summary>Called every frame by PassiveAnimalSpawner. Hosts stream
+        private static int _lastPumpFrame = -1;
+
+        /// <summary>Ensure any live non-replica PassiveAnimal in the scene is registered
+        /// in the host table (e.g. animals spawned before hosting started or after GoOffline).</summary>
+        public static void EnsureSceneRegistered()
+        {
+            if (NetworkSession.Mode == SessionMode.Client) return;
+            var all = Object.FindObjectsByType<PassiveAnimal>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                var a = all[i];
+                if (a == null || _idOf.ContainsKey(a) || _replicaIdOf.ContainsKey(a)) continue;
+                Register(a);
+            }
+        }
+
+        /// <summary>Called every frame by PassiveAnimalSpawner (and NetworkBootstrap). Hosts stream
         /// state on their intervals; guests ease replicas and cull stale ones.</summary>
         public static void Pump()
         {
+            if (_lastPumpFrame == Time.frameCount) return;
+            _lastPumpFrame = Time.frameCount;
+
             if (NetworkSession.Mode == SessionMode.Client) { PumpReplicas(); return; }
             if (!HostOnline) return;
+
+            if (_hostAnimals.Count == 0) EnsureSceneRegistered();
 
             // Remote-ridden animals glue under their rider's avatar every
             // frame - the avatar is the authoritative pose while mounted.
@@ -155,6 +176,7 @@ namespace VoxelEngine.Networking
             if (now >= _nextReannounceAt)
             {
                 _nextReannounceAt = now + ReannounceInterval;
+                EnsureSceneRegistered();
                 foreach (var pair in _hostAnimals)
                     if (pair.Value != null) AnnounceSpawn(pair.Key, pair.Value);
             }
@@ -378,6 +400,8 @@ namespace VoxelEngine.Networking
         /// the scene; the registries must not outlive them.</summary>
         public static void ResetSession()
         {
+            foreach (var pair in _replicas)
+                if (pair.Value?.Animal != null) Object.Destroy(pair.Value.Animal.gameObject);
             _hostAnimals.Clear();
             _idOf.Clear();
             _lastSentHealth.Clear();

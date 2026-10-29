@@ -28,6 +28,18 @@ namespace VoxelEngine.Building.Tiered
 
         public static BuildSystemV2 Instance { get; private set; }
         public bool HammerPatternActive { get; private set; }
+
+        /// <summary>What the local tiered-block ghost shows right now - for the network mirror.</summary>
+        public bool TryGetGhostState(out string itemId, out Vector3 position, out Quaternion rotation)
+        {
+            itemId = null; position = default; rotation = default;
+            if (_ghost == null || _ghostDef == null || !_ghost.activeSelf) return false;
+            itemId = "tiered:" + _ghostDef.family;
+            var t = _ghost.transform;
+            position = t.position;
+            rotation = t.rotation;
+            return true;
+        }
         public int HammerPatternPreviewCount { get; private set; }
         public int HammerPatternValidCount { get; private set; }
         public int HammerPatternAffordableCount { get; private set; }

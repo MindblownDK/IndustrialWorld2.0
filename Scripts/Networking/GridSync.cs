@@ -368,6 +368,21 @@ namespace VoxelEngine.Networking
         /// has been destroyed are dropped as they are found.</summary>
         internal static void CollectTags(List<GridNetTag> into)
         {
+            if (NetworkSession.Mode == SessionMode.Host)
+            {
+                var allGrids = Object.FindObjectsByType<GridEntity>();
+                for (int i = 0; i < allGrids.Length; i++)
+                {
+                    var g = allGrids[i];
+                    if (g == null || g.BlockCount == 0) continue;
+                    var tag = g.GetComponent<GridNetTag>();
+                    if (tag == null || string.IsNullOrEmpty(tag.Id))
+                        IdOf(g);
+                    else if (!_byId.ContainsKey(tag.Id))
+                        _byId[tag.Id] = tag;
+                }
+            }
+
             into.Clear();
             List<string> dead = null;
             foreach (var kv in _byId)
@@ -984,7 +999,11 @@ namespace VoxelEngine.Networking
             if (NetworkBootstrap.Instance == null || NetworkBootstrap.Instance.WorldMismatch) return;
 
             GridSync.CollectTags(_tags);
-            if (_tags.Count == 0) return;
+            if (_tags.Count == 0)
+            {
+                _structureSeeded = true;
+                return;
+            }
 
             if (Time.time >= _nextPoseAt)
             {

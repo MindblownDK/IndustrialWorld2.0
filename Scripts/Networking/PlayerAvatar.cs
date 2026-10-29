@@ -80,6 +80,9 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<string> _frameBodyName = new SyncVar<string>("");
         private readonly SyncVar<Vector3> _frameBodyScene = new SyncVar<Vector3>(Vector3.zero);
         private readonly SyncVar<bool> _ownerIsHost = new SyncVar<bool>(false);
+        private readonly SyncVar<Vector3> _posePos = new SyncVar<Vector3>(Vector3.zero);
+        private readonly SyncVar<Quaternion> _poseRot = new SyncVar<Quaternion>(Quaternion.identity);
+        private readonly SyncVar<bool> _poseValid = new SyncVar<bool>(false);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -309,6 +312,8 @@ namespace VoxelEngine.Networking
                 ApplyBackGear(_equipFlags.Value);
                 ApplyGhost(_ghostItemId.Value);
                 ApplyMotion(_motionFlags.Value);
+                if (_poseValid.Value)
+                    transform.SetPositionAndRotation(_posePos.Value, _poseRot.Value);
                 _attackPrimed = true;   // initial state consumed - every change from here is a real swing
             }
         }
@@ -330,6 +335,12 @@ namespace VoxelEngine.Networking
             // their scene frame to the HOST player's avatar only (one authority,
             // no client-to-client alignment cycles).
             _ownerIsHost.Value = base.Owner != null && base.Owner.IsLocalClient;
+            if (transform.position.sqrMagnitude > 0.01f)
+            {
+                _posePos.Value = transform.position;
+                _poseRot.Value = transform.rotation;
+                _poseValid.Value = true;
+            }
             TryRegister();
         }
 
@@ -341,9 +352,18 @@ namespace VoxelEngine.Networking
 
         // ─────────────────────────── per-frame ───────────────────────────
 
+        private float _nextScenePoseSend;
+        private Vector3 _sentScenePos;
+        private Quaternion _sentSceneRot = Quaternion.identity;
+
         private void Update()
         {
-            if (!IsOwner) { MaybeAlignFrameToOwner(); return; }
+            if (!IsOwner)
+            {
+                SyncScenePoseFromOwner();
+                MaybeAlignFrameToOwner();
+                return;
+            }
             var stats = VoxelEngine.Player.PlayerStats.Instance;
             if (stats == null) return;
             var rig = stats.transform;
@@ -355,9 +375,51 @@ namespace VoxelEngine.Networking
                 || Quaternion.Angle(rig.rotation, transform.rotation) > 0.4f)
                 transform.SetPositionAndRotation(rig.position, rig.rotation);
 
+            if (Time.unscaledTime >= _nextScenePoseSend
+                && ((rig.position - _sentScenePos).sqrMagnitude > 0.001f
+                    || Quaternion.Angle(rig.rotation, _sentSceneRot) > 1f
+                    || !_poseValid.Value))
+            {
+                _sentScenePos = rig.position;
+                _sentSceneRot = rig.rotation;
+                _nextScenePoseSend = Time.unscaledTime + 0.06f;
+                RpcReportScenePose(rig.position, rig.rotation);
+            }
+
             MirrorPose(stats);
             MirrorGhost();
             MirrorCosmic();
+        }
+
+        [ServerRpc]
+        private void RpcReportScenePose(Vector3 pos, Quaternion rot)
+        {
+            _posePos.Value = pos;
+            _poseRot.Value = rot;
+            _poseValid.Value = true;
+            if (!IsOwner)
+                transform.SetPositionAndRotation(pos, rot);
+        }
+
+        private void SyncScenePoseFromOwner()
+        {
+            if (!_poseValid.Value) return;
+            Vector3 targetPos = _posePos.Value;
+            Quaternion targetRot = _poseRot.Value;
+            float distSq = (transform.position - targetPos).sqrMagnitude;
+            if (distSq > 9f)
+            {
+                // Immediate snap if NetworkTransform has not yet applied initial state
+                // or after a floating-origin / teleporter jump.
+                transform.SetPositionAndRotation(targetPos, targetRot);
+            }
+            else if (distSq > 0.0001f || Quaternion.Angle(transform.rotation, targetRot) > 0.25f)
+            {
+                float t = Mathf.Clamp01(Time.deltaTime * 16f);
+                transform.SetPositionAndRotation(
+                    Vector3.Lerp(transform.position, targetPos, t),
+                    Quaternion.Slerp(transform.rotation, targetRot, t));
+            }
         }
 
         // ── cosmic-position mirror (14.60.4) ─────────────────────────────
@@ -554,7 +616,20 @@ namespace VoxelEngine.Networking
             string id = "";
             Vector3 pos = default;
             Quaternion rot = Quaternion.identity;
-            if (bs != null && bs.TryGetGhostState(out var gid, out pos, out rot)) id = gid ?? "";
+            if (bs != null && bs.TryGetGhostState(out var gid, out pos, out rot))
+            {
+                id = gid ?? "";
+            }
+            else if (VoxelEngine.GridSystem.GridBuilder.Instance != null
+                && VoxelEngine.GridSystem.GridBuilder.Instance.TryGetGhostState(out gid, out pos, out rot))
+            {
+                id = gid ?? "";
+            }
+            else if (VoxelEngine.Building.Tiered.BuildSystemV2.Instance != null
+                && VoxelEngine.Building.Tiered.BuildSystemV2.Instance.TryGetGhostState(out gid, out pos, out rot))
+            {
+                id = gid ?? "";
+            }
 
             bool idChanged = id != _sentGhostId;
             if (!idChanged && id.Length == 0) return;
@@ -636,6 +711,11 @@ namespace VoxelEngine.Networking
             CrusaderModel.SetCrest(transform,
                 PlayerCosmeticsRegistry.TextureOf(id),
                 PlayerCosmeticsRegistry.ChestTextOf(id));
+            if (IsOwner)
+            {
+                foreach (var r in GetComponentsInChildren<Renderer>(true))
+                    r.enabled = false;
+            }
         }
 
         // ─────────────────────────── presence ───────────────────────────
@@ -717,6 +797,13 @@ namespace VoxelEngine.Networking
 
             string name = PlayerName;   // SyncVar or announce fallback
             nameplate.text = string.IsNullOrEmpty(name) ? "..." : name;
+            VoxelEngine.Rendering.WorldTextMaterial.Apply(nameplate);
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(nameplate);
+            if (IsOwner)
+            {
+                var r = nameplate.GetComponent<Renderer>();
+                if (r != null) r.enabled = false;
+            }
         }
 
         // ─────────────────────────── pose visuals ───────────────────────────

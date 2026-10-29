@@ -155,7 +155,11 @@ namespace VoxelEngine.Networking
             {
                 var ink = inkT.GetComponent<TextMesh>();
                 if (ink != null)
+                {
+                    EnsureDepthTestedInkFont(ink);
                     ink.text = string.IsNullOrEmpty(chestText) ? DefaultChestInk : chestText;
+                    VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(ink);
+                }
             }
 
             // ── default symbols step aside while a custom icon is worn ──
@@ -676,6 +680,21 @@ namespace VoxelEngine.Networking
         /// this same ink, so one constant is the single source of truth).</summary>
         public const string DefaultChestInk = "The lion with little pecker\ndevelops big roar\n- CalleTheLion";
 
+        private static void EnsureDepthTestedInkFont(TextMesh ink)
+        {
+            if (ink == null) return;
+            if (ink.font == null)
+            {
+                try
+                {
+                    var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                    if (font != null) ink.font = font;
+                }
+                catch { }
+            }
+            VoxelEngine.Rendering.WorldTextMaterial.Apply(ink);
+        }
+
         private static void BuildTattoos(Transform root, Material runeRed,
             Vector3 chestInkPos, Vector3 runePos, Quaternion runeRot)
         {
@@ -687,12 +706,14 @@ namespace VoxelEngine.Networking
             inkGo.transform.localPosition = chestInkPos;
             inkGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             var ink = inkGo.AddComponent<TextMesh>();
+            EnsureDepthTestedInkFont(ink);
             ink.text = DefaultChestInk;
             ink.characterSize = 0.010f;
             ink.fontSize = 30;
             ink.anchor = TextAnchor.MiddleCenter;
             ink.alignment = TextAlignment.Center;
             ink.color = new Color(0.16f, 0.12f, 0.10f, 0.95f);
+            VoxelEngine.Rendering.WorldTextMaterial.SyncAtlas(ink);
 
             // Brand rune in faded red, drawn from strokes: a vertical staff with
             // branch tips, the crossing X, and foot hooks.

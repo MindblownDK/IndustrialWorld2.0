@@ -1235,6 +1235,7 @@ namespace VoxelEngine.Networking
         private const ushort DefaultHostPort = 7770;
         private const int MaxPortFallbackSpan = 30;
         private ushort _activeServerPort = DefaultHostPort;
+        private bool _wantsLocalHostClient;
 
         /// <summary>Open this world as a listen server and join it as a player.</summary>
         public void StartHost()
@@ -1243,6 +1244,7 @@ namespace VoxelEngine.Networking
             if (_networkManager == null) return;
 
             _statusLine = "Starting host...";
+            _wantsLocalHostClient = true;
 
             // Clean up any half-started client/server socket from an earlier failed attempt
             // so ClientSocket's ephemeral port never confuses Tugboat.GetPort() or collides.
@@ -1276,8 +1278,9 @@ namespace VoxelEngine.Networking
                 }
             }
 
-            if (!started || !_serverStarted)
+            if (!started)
             {
+                _wantsLocalHostClient = false;
                 try { _networkManager.ClientManager.StopConnection(); } catch { }
                 _statusLine = $"Host failed (UDP port {chosenPort} unavailable)";
                 Debug.LogWarning($"[NetworkBootstrap] Could not bind a UDP host port starting at {DefaultHostPort}.");
@@ -1298,8 +1301,11 @@ namespace VoxelEngine.Networking
             if (transport != null && port > 0)
                 transport.SetPort(port);
             _activeServerPort = port > 0 ? port : DefaultHostPort;
-            bool ok = _networkManager.ServerManager.StartConnection();
-            return ok && _serverStarted;
+            // Tugboat transitions to LocalConnectionState.Starting synchronously inside
+            // StartConnection() and queues LocalConnectionState.Started on its socket
+            // thread for the next IterateIncoming tick; do NOT require _serverStarted
+            // to be true synchronously here.
+            return _networkManager.ServerManager.StartConnection();
         }
 
         private static ushort FindAvailableUdpPort(ushort preferredPort)
@@ -1393,6 +1399,7 @@ namespace VoxelEngine.Networking
         public void StartDedicated(ushort port, int maxPlayers)
         {
             if (IsOnline) return;
+            _wantsLocalHostClient = false;
             _statusLine = "Starting dedicated server...";
             var transport = _networkManager.TransportManager != null
                 ? _networkManager.TransportManager.Transport : null;
@@ -1411,6 +1418,7 @@ namespace VoxelEngine.Networking
         public void StartClient(string address)
         {
             if (IsOnline) return;
+            _wantsLocalHostClient = false;
             address = string.IsNullOrWhiteSpace(address) ? "localhost" : address.Trim();
 
             // 14.48.0 - an optional ":port" suffix. LAN scan results and
@@ -1499,6 +1507,8 @@ namespace VoxelEngine.Networking
         {
             PollWeatherBroadcast();   // server-side no-op costs one bool test
             PollPollutionBroadcast(); // same authority/keepalive pattern, sparse JSON payload
+            AnimalSync.Pump();
+            HostileSync.Pump();
 
             // 14.46.1 - invite expiry is the HOST's call now (clients stopped
             // judging it with their own clocks), so the host sweeps every few
@@ -1584,6 +1594,7 @@ namespace VoxelEngine.Networking
         /// <summary>Leave the session (client) or shut it down (host).</summary>
         public void StopSession()
         {
+            _wantsLocalHostClient = false;
             // Last word before hanging up: leaving with a pickaxe swing
             // unreported is a bug the player would blame on the save.
             UploadLocalPlayerState();
@@ -1603,6 +1614,12 @@ namespace VoxelEngine.Networking
                     ? "Hosting"
                     : $"Hosting (port {_activeServerPort})";
 
+                AnimalSync.EnsureSceneRegistered();
+                HostileSync.EnsureSceneRegistered();
+
+                if (_wantsLocalHostClient && !_clientStarted && !NetworkSession.IsDedicated)
+                    _networkManager.ClientManager.StartConnection("localhost");
+
                 // 14.48.0 - every hosting machine answers LAN probes so the
                 // server browser's scan can find it; the payload refreshes on
                 // a slow tick in LateUpdate as players come and go.
@@ -1613,6 +1630,7 @@ namespace VoxelEngine.Networking
             {
                 LanDiscovery.StopResponder();
                 _serverStarted = false;
+                _wantsLocalHostClient = false;
                 _avatarsByConnection.Clear();
                 _playerIdByConnection.Clear();
                 _beaconSignatureByConnection.Clear();
@@ -1798,7 +1816,17 @@ namespace VoxelEngine.Networking
             _playerIdByConnection[connection.ClientId] = playerId;
 
             NetworkObject nob = Instantiate(avatarPrefab);
-            _networkManager.ServerManager.Spawn(nob, connection);
+            if (connection.IsLocalClient && VoxelEngine.Player.PlayerStats.Instance != null)
+            {
+                var hostRig = VoxelEngine.Player.PlayerStats.Instance.transform;
+                nob.transform.SetPositionAndRotation(hostRig.position, hostRig.rotation);
+            }
+            if (_networkManager.SceneManager != null && gameObject.scene.IsValid())
+            {
+                try { _networkManager.SceneManager.AddConnectionToScene(connection, gameObject.scene); }
+                catch { }
+            }
+            _networkManager.ServerManager.Spawn(nob, connection, gameObject.scene);
             _avatarsByConnection[connection.ClientId] = nob;
 
             // Identity is applied AFTER Spawn: set post-spawn, SyncVars
@@ -1914,14 +1942,24 @@ namespace VoxelEngine.Networking
         }
 
         // ─────────────────────────── building sync wire (14.4.0) ───────────────────────────
-        // One uniform path: every machine (host included) SENDS as a client;
-        // the server applies remote edits locally and relays to everyone else.
+        // One uniform path: clients send to the server; the server broadcasts directly
+        // to remote clients (even before/without its local client loopback).
+
+        private void SendOrRelay<T>(T msg, Channel channel = Channel.Reliable) where T : struct, IBroadcast
+        {
+            if (_serverStarted)
+            {
+                BroadcastToClients(msg, channel);
+                return;
+            }
+            if (_clientStarted && _networkManager != null)
+                _networkManager.ClientManager.Broadcast(msg, channel: channel);
+        }
 
         public void SendPiecePlaced(string family, int tier, Vector3 pos, Quaternion rot,
             float railingRise, float pillarHeight, string ownerId)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new PiecePlacedBroadcast
+            SendOrRelay(new PiecePlacedBroadcast
             {
                 Family = family, Tier = tier, Position = pos, Rotation = rot,
                 RailingRise = railingRise, PillarHeight = pillarHeight,
@@ -1931,22 +1969,19 @@ namespace VoxelEngine.Networking
 
         public void SendPieceRemoved(string family, Vector3 pos)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new PieceRemovedBroadcast
+            SendOrRelay(new PieceRemovedBroadcast
             { Family = family, Position = pos });
         }
 
         public void SendPieceDamaged(string family, Vector3 pos, int hp)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new PieceDamagedBroadcast
+            SendOrRelay(new PieceDamagedBroadcast
             { Family = family, Position = pos, Hp = hp });
         }
 
         public void SendPieceUpgraded(string family, Vector3 pos, int newTier)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new PieceUpgradedBroadcast
+            SendOrRelay(new PieceUpgradedBroadcast
             { Family = family, Position = pos, NewTier = newTier });
         }
 
@@ -1970,24 +2005,21 @@ namespace VoxelEngine.Networking
 
         public void SendDoorState(string family, Vector3 pos, bool open, float side)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new DoorStateBroadcast
+            SendOrRelay(new DoorStateBroadcast
             { Family = family, Position = pos, Open = open, Side = side });
         }
 
         public void SendLockState(string family, Vector3 pos, bool hasCode, string salt,
             bool locked, List<string> ids)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new LockStateBroadcast
+            SendOrRelay(new LockStateBroadcast
             { Family = family, Position = pos, HasCode = hasCode, Salt = salt ?? "",
               Locked = locked, AuthorizedIds = ids });
         }
 
         public void SendLockRemoved(string family, Vector3 pos, string playerId)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new LockRemovedBroadcast
+            SendOrRelay(new LockRemovedBroadcast
             { Family = family, Position = pos, PlayerId = playerId });
         }
 
@@ -2016,16 +2048,14 @@ namespace VoxelEngine.Networking
 
         public void SendLockEnterResult(Vector3 pos, string playerId, bool granted)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new LockEnterResultBroadcast
+            SendOrRelay(new LockEnterResultBroadcast
             { Position = pos, PlayerId = playerId, Granted = granted });
         }
 
         public void SendTerrainBrush(string body, Vector3Int center, float radius,
             float strength, bool subtract, byte fill)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new TerrainBrushBroadcast
+            SendOrRelay(new TerrainBrushBroadcast
             {
                 Body = body, X = center.x, Y = center.y, Z = center.z,
                 Radius = radius, Strength = strength, Subtract = subtract, Fill = fill
@@ -2035,8 +2065,7 @@ namespace VoxelEngine.Networking
         public void SendExplosion(string body, Vector3 position, float radius,
             Vector3Int craterCenter, int craterRadius)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new ExplosionBroadcast
+            SendOrRelay(new ExplosionBroadcast
             {
                 Body = body, Position = position, Radius = radius,
                 CraterX = craterCenter.x, CraterY = craterCenter.y, CraterZ = craterCenter.z,
@@ -3339,21 +3368,18 @@ namespace VoxelEngine.Networking
 
         public void SendBlockPlaced(BlockSnapshot snap)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new BlockPlacedBroadcast { Snap = snap });
+            SendOrRelay(new BlockPlacedBroadcast { Snap = snap });
         }
 
         public void SendBlockDamaged(string itemId, Vector3 pos, int hp)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new BlockDamagedBroadcast
+            SendOrRelay(new BlockDamagedBroadcast
             { ItemId = itemId, Position = pos, Hp = hp });
         }
 
         public void SendBlockRemoved(string itemId, Vector3 pos)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new BlockRemovedBroadcast
+            SendOrRelay(new BlockRemovedBroadcast
             { ItemId = itemId, Position = pos });
         }
 
@@ -3459,8 +3485,7 @@ namespace VoxelEngine.Networking
 
         public void SendContainerState(string itemId, Vector3 pos, string json)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new ContainerStateBroadcast
+            SendOrRelay(new ContainerStateBroadcast
             { ItemId = itemId, Position = pos, Json = json });
         }
 
@@ -3540,8 +3565,7 @@ namespace VoxelEngine.Networking
 
         public void SendMachineState(string itemId, Vector3 pos, string json)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new MachineStateBroadcast
+            SendOrRelay(new MachineStateBroadcast
             { ItemId = itemId, Position = pos, Json = json });
         }
 
@@ -4161,29 +4185,25 @@ namespace VoxelEngine.Networking
 
         public void SendDropSpawned(string id, string stackJson, Vector3 pos, Vector3 toss)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new DropSpawnedBroadcast
+            SendOrRelay(new DropSpawnedBroadcast
             { Id = id, StackJson = stackJson, Position = pos, Toss = toss });
         }
 
         public void SendDropSettled(string id, Vector3 pos)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new DropSettledBroadcast
+            SendOrRelay(new DropSettledBroadcast
             { Id = id, Position = pos });
         }
 
         public void SendDropUpdated(string id, int count)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new DropUpdatedBroadcast
+            SendOrRelay(new DropUpdatedBroadcast
             { Id = id, Count = count });
         }
 
         public void SendDropRemoved(string id)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new DropRemovedBroadcast { Id = id });
+            SendOrRelay(new DropRemovedBroadcast { Id = id });
         }
 
         // ── livestock (14.54.0) ──
@@ -4191,28 +4211,24 @@ namespace VoxelEngine.Networking
         public void SendAnimalSpawn(int id, byte species, bool rideable,
             Vector3 pos, Quaternion rot, float health)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new AnimalSpawnBroadcast
+            SendOrRelay(new AnimalSpawnBroadcast
             { Id = id, Species = species, Rideable = rideable, Position = pos, Rotation = rot, Health = health });
         }
 
         public void SendAnimalPose(int id, Vector3 pos, Quaternion rot)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new AnimalPoseBroadcast
+            SendOrRelay(new AnimalPoseBroadcast
             { Id = id, Position = pos, Rotation = rot });
         }
 
         public void SendAnimalHealth(int id, float health)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new AnimalHealthBroadcast { Id = id, Health = health });
+            SendOrRelay(new AnimalHealthBroadcast { Id = id, Health = health });
         }
 
         public void SendAnimalRemoved(int id, bool died)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new AnimalRemovedBroadcast { Id = id, Died = died });
+            SendOrRelay(new AnimalRemovedBroadcast { Id = id, Died = died });
         }
 
         public void SendAnimalHit(int id, float amount, Vector3 point, Vector3 direction)
@@ -4224,8 +4240,7 @@ namespace VoxelEngine.Networking
 
         public void SendAnimalMount(int id, string riderId, bool mounted, Vector3 pos, Quaternion rot)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new AnimalMountBroadcast
+            SendOrRelay(new AnimalMountBroadcast
             { Id = id, RiderId = riderId, Mounted = mounted, Position = pos, Rotation = rot });
         }
 
@@ -4233,28 +4248,24 @@ namespace VoxelEngine.Networking
 
         public void SendEnemySpawn(int id, byte kind, Vector3 pos, Quaternion rot, float health, float maxHealth, byte variant = 0)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new EnemySpawnBroadcast
+            SendOrRelay(new EnemySpawnBroadcast
             { Id = id, Kind = kind, Position = pos, Rotation = rot, Health = health, MaxHealth = maxHealth, Variant = variant });
         }
 
         public void SendEnemyPose(int id, Vector3 pos, Quaternion rot)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new EnemyPoseBroadcast
+            SendOrRelay(new EnemyPoseBroadcast
             { Id = id, Position = pos, Rotation = rot });
         }
 
         public void SendEnemyHealth(int id, float health)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new EnemyHealthBroadcast { Id = id, Health = health });
+            SendOrRelay(new EnemyHealthBroadcast { Id = id, Health = health });
         }
 
         public void SendEnemyRemoved(int id, bool died)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new EnemyRemovedBroadcast { Id = id, Died = died });
+            SendOrRelay(new EnemyRemovedBroadcast { Id = id, Died = died });
         }
 
         public void SendEnemyHit(int id, float amount, Vector3 point, Vector3 direction, string hitterId)
@@ -4266,15 +4277,13 @@ namespace VoxelEngine.Networking
 
         public void SendEnemyStrike(string victimId, float amount, string source, byte effect, float a, float b)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new EnemyStrikeBroadcast
+            SendOrRelay(new EnemyStrikeBroadcast
             { VictimId = victimId, Amount = amount, Source = source, Effect = effect, EffectA = a, EffectB = b });
         }
 
         public void SendEnemyCast(int id, byte kind, Vector3 from, Vector3 dir)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new EnemyCastBroadcast
+            SendOrRelay(new EnemyCastBroadcast
             { Id = id, Kind = kind, From = from, Direction = dir });
         }
 
@@ -4500,27 +4509,23 @@ namespace VoxelEngine.Networking
 
         public void SendBagSpawned(string id, string ownerId, string ownerName, Vector3 pos, string json)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new BagSpawnedBroadcast
+            SendOrRelay(new BagSpawnedBroadcast
             { Id = id, OwnerId = ownerId, OwnerName = ownerName, Position = pos, Json = json });
         }
 
         public void SendBagUpdated(string id, string json)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new BagUpdatedBroadcast { Id = id, Json = json });
+            SendOrRelay(new BagUpdatedBroadcast { Id = id, Json = json });
         }
 
         public void SendBagRemoved(string id)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new BagRemovedBroadcast { Id = id });
+            SendOrRelay(new BagRemovedBroadcast { Id = id });
         }
 
         public void SendGridControlBar(string netId, string bar, string groups)
         {
-            if (!_clientStarted) return;
-            _networkManager.ClientManager.Broadcast(new GridControlBarBroadcast
+            SendOrRelay(new GridControlBarBroadcast
             {
                 NetId = netId,
                 Bar = bar ?? string.Empty,

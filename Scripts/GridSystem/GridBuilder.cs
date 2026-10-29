@@ -127,6 +127,18 @@ namespace VoxelEngine.GridSystem
         public static string HeldBlockName { get; private set; } = "";
         public static Vector3Int RotationSteps { get; private set; }
 
+        /// <summary>What the local grid-block ghost shows right now - for the network mirror.</summary>
+        public bool TryGetGhostState(out string itemId, out Vector3 position, out Quaternion rotation)
+        {
+            itemId = null; position = default; rotation = default;
+            if (_ghost == null || _ghostItem == null || !_ghost.activeSelf) return false;
+            itemId = _ghostItem.itemId;
+            var t = _ghost.transform;
+            position = t.position;
+            rotation = t.rotation;
+            return true;
+        }
+
         private static bool IsShapeVariantItem(GridBlockItem item)
         {
             return item != null && item.SupportsShapeVariants;
