@@ -115,11 +115,21 @@ namespace VoxelEngine.Farming
         [Tooltip("0..1 growth of the tree on a tree bed. Unused when no tree is planted.")]
         [Range(0f, 1f)] public float treeGrowth = 0f;
 
+        /// <summary>Which cell the tree stands in, -1 when the bed holds no tree (18.7.3-dev).
+        /// The tree still fills the whole bed visually; the cell is what the panel points at
+        /// and what the other cells are locked against.</summary>
+        public int treeCell = -1;
+
         [Header("Containers")]
         [Tooltip("Seeds and saplings waiting for a free cell. The bed plants from here on its own.")]
         public ItemContainer seedInput;
         [Tooltip("Produce taken off the bed, waiting for a route. Also readable and collectable from the panel.")]
         public ItemContainer harvestOutput;
+
+        /// <summary>One one-slot bin per cell (18.7.3-dev). Dragging a seed into a cell's slot
+        /// plants that cell and nothing else, which is what "put items into the cells" means
+        /// when a bed has nine of them. Transient: a queued seed is planted immediately.</summary>
+        public ItemContainer[] cellInput = new ItemContainer[0];
 
         public const int SEED_SLOTS = 4;
         public const int OUTPUT_SLOTS = 9;
@@ -333,6 +343,9 @@ namespace VoxelEngine.Farming
         private VoxelEngine.Power.PowerConsumer _power;
         private Transform[] _cellRoots = Array.Empty<Transform>();
         private MeshRenderer[][] _cellRenderers = Array.Empty<MeshRenderer[]>();
+        private MeshRenderer[][] _cellLeafRenderers = Array.Empty<MeshRenderer[]>();
+        private MeshRenderer[][] _cellStemRenderers = Array.Empty<MeshRenderer[]>();
+        private MeshRenderer[][] _cellFruitRenderers = Array.Empty<MeshRenderer[]>();
         private MeshRenderer[] _soilRenderers = Array.Empty<MeshRenderer>();
         private MeshRenderer _waterGauge;
         private int[] _lastStage = Array.Empty<int>();
@@ -381,6 +394,7 @@ namespace VoxelEngine.Farming
                 _plantTimer = 0f;
                 int guard = 0;
                 while (PlantFromSeedBin() && guard++ < 9) { }
+                PlantFromCellInputs();
             }
 
             TryDumpToPort();
@@ -400,6 +414,64 @@ namespace VoxelEngine.Farming
 
             if (harvestOutput == null) harvestOutput = new ItemContainer("Harvest", OUTPUT_SLOTS);
             else if (harvestOutput.Size != OUTPUT_SLOTS) harvestOutput.Resize(OUTPUT_SLOTS);
+
+            EnsureCellInputs();
+        }
+
+        /// <summary>Create or resize the one-slot bin that stands in front of each cell.</summary>
+        public void EnsureCellInputs()
+        {
+            EnsureSlots();
+            int cells = slots.Length;
+            if (cellInput == null || cellInput.Length != cells)
+            {
+                var resized = new ItemContainer[cells];
+                for (int i = 0; i < cells; i++)
+                    resized[i] = cellInput != null && i < cellInput.Length ? cellInput[i] : null;
+                cellInput = resized;
+            }
+
+            for (int i = 0; i < cells; i++)
+            {
+                if (cellInput[i] == null) cellInput[i] = new ItemContainer("Cell " + (i + 1), 1);
+                else if (cellInput[i].Size != 1) cellInput[i].Resize(1);
+
+                int cell = i;
+                // The bin only ever accepts what THAT cell would take right now, so a locked
+                // cell refuses the drag instead of silently swallowing a seed.
+                cellInput[i].AcceptFilter = (item, wanted) => CanPlantInCell(cell, item) ? wanted : 0;
+            }
+        }
+
+        /// <summary>The one-slot bin for one cell, created on demand for the panel.</summary>
+        public ItemContainer CellInput(int index)
+        {
+            EnsureCellInputs();
+            return index >= 0 && index < cellInput.Length ? cellInput[index] : null;
+        }
+
+        /// <summary>
+        /// Drain the per-cell bins, one plant per bin. Runs on the same one-second beat as the
+        /// seed bin, and reports how many cells it filled.
+        /// </summary>
+        private int PlantFromCellInputs()
+        {
+            if (cellInput == null) return 0;
+            int planted = 0;
+            for (int i = 0; i < cellInput.Length && i < slots.Length; i++)
+            {
+                var bin = cellInput[i];
+                if (bin == null || bin.Size <= 0) continue;
+                var stack = bin.GetSlot(0);
+                if (stack == null || stack.IsEmpty || stack.item == null) continue;
+                if (!CanPlantInCell(i, stack.item)) continue;
+
+                int result = PlantInCell(i, stack.item);
+                if (result < 0) continue;
+                bin.Remove(stack.item, 1);
+                planted++;
+            }
+            return planted;
         }
 
         /// <summary>True when this bed would accept <paramref name="item"/> right now.</summary>
@@ -650,35 +722,85 @@ namespace VoxelEngine.Farming
             if (item == null) return -1;
             EnsureSlots();
 
-            bool isTree = item is SeedItem seedItem && seedItem.crop == null
-                          && TreeFarmPlot.IsSaplingOrTreeSeed(item);
-            var crop = item is SeedItem si ? si.crop : null;
-            if (!isTree && crop == null) return -1;
+            bool isTree = IsTreeSeed(item);
+            if (!isTree && CropOf(item) == null) return -1;
             if (isTree && !AllowsTrees) return -2;   // caller reports "needs a Large bed"
-            if (treeBed) return -3;                  // a tree owns this bed right now
 
-            if (isTree)
+            int wanted = SlotAt(worldPoint);
+            int index = !IsCellLocked(wanted) && IsFree(wanted) ? wanted : FirstFreeIndex();
+            if (index < 0) return treeBed ? -3 : -1;
+            return PlantInCell(index, item);
+        }
+
+        /// <summary>
+        /// Plant into one specific cell. The panel's per-cell slot calls this, so a player can
+        /// choose which square of a bed a seed goes in instead of taking whatever was nearest
+        /// the crosshair (18.7.3-dev).
+        /// </summary>
+        public int TryPlantAtCell(int index, ItemDefinition item)
+        {
+            if (item == null) return -1;
+            EnsureSlots();
+            if (index < 0 || index >= slots.Length) return -1;
+
+            bool isTree = IsTreeSeed(item);
+            if (!isTree && CropOf(item) == null) return -1;
+            if (isTree && !AllowsTrees) return -2;
+            if (IsCellLocked(index)) return -3;
+
+            return PlantInCell(index, item);
+        }
+
+        /// <summary>True when this cell cannot take a seed right now - a tree owns the bed.</summary>
+        public bool IsCellLocked(int index) => treeBed && index != treeCell;
+
+        /// <summary>True when the cell is free, unlocked and able to take this item.</summary>
+        public bool CanPlantInCell(int index, ItemDefinition item)
+        {
+            if (item == null || index < 0 || index >= slots.Length) return false;
+            if (IsCellLocked(index)) return false;
+            bool isTree = IsTreeSeed(item);
+            if (isTree) return AllowsTrees;
+            return CropOf(item) != null && IsFree(index);
+        }
+
+        private static bool IsTreeSeed(ItemDefinition item)
+            => item is SeedItem seed && seed.crop == null && TreeFarmPlot.IsSaplingOrTreeSeed(item);
+
+        private static CropDefinition CropOf(ItemDefinition item)
+            => item is SeedItem seed ? seed.crop : null;
+
+        /// <summary>
+        /// Put one seed or sapling into one cell. A sapling claims the bed: the tree stands in
+        /// the chosen cell and fills the plot, so every other cell is cleared into the harvest
+        /// bin and locked until the tree is felled (18.7.3-dev).
+        /// </summary>
+        private int PlantInCell(int index, ItemDefinition item)
+        {
+            if (IsCellLocked(index)) return -3;
+
+            if (IsTreeSeed(item))
             {
-                // 18.7.0-dev: a tree takes the bed, not a cell. Nine cells of maize and a
-                // mature tree in the tenth never made sense, so a sapling on a Large bed
-                // claims the whole plot and the crop cells wait their turn.
-                if (PlantedCount > 0) return -3;        // the caller reports "bed is in use"
+                if (!AllowsTrees) return -2;
+                if (treeBed) return -3;
+                ClearCropsForTree();
                 treeBed = true;
+                treeCell = index;
                 treeGrowth = 0f;
-                for (int i = 0; i < slots.Length; i++) ResetSlot(i);
+                ResetSlot(index);
                 RefreshTreeVisual();
                 HideCropPods();
                 RefreshWaterGauge();
-                return 0;
+                return index;
             }
 
-            int wanted = SlotAt(worldPoint);
-            int index = IsFree(wanted) ? wanted : FirstFreeIndex();
-            if (index < 0) return -1;
+            var crop = CropOf(item);
+            if (crop == null) return -1;
+            if (!IsFree(index)) return -1;
 
             var slot = slots[index];
-            slot.tree = isTree;
-            slot.crop = isTree ? null : crop;
+            slot.tree = false;
+            slot.crop = crop;
             slot.growth = 0f;
             slot.fertilized = false;
             slot.dead = false;
@@ -687,6 +809,35 @@ namespace VoxelEngine.Farming
             RefreshCellVisual(index, force: true);
             RefreshWaterGauge();
             return index;
+        }
+
+        /// <summary>
+        /// Empty the rest of the bed when a tree takes it: anything growing is harvested into
+        /// the box's own output bin first, because a player who plants a sapling next to a
+        /// half-grown crop should not simply lose it.
+        /// </summary>
+        private void ClearCropsForTree()
+        {
+            EnsureContainers();
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var slot = slots[i];
+                if (slot == null || (slot.crop == null && !slot.tree)) continue;
+
+                if (!slot.dead && slot.growth >= 0.999f)
+                {
+                    var yield = PeekSlotHarvest(i);
+                    if (!yield.IsEmpty && harvestOutput != null && harvestOutput.HasSpace(yield.item, yield.count))
+                    {
+                        InsertBin(yield.item, yield.count);
+                        if (replantAfterPortHarvest) InsertBin(yield.seedItem, Mathf.Max(0, yield.seedCount - 1));
+                        else InsertBin(yield.seedItem, yield.seedCount);
+                    }
+                }
+
+                ResetSlot(i);
+                RefreshCellVisual(i, force: true);
+            }
         }
 
         /// <summary>Harvest one ready cell into a container, with the box's own replant rule.</summary>
@@ -719,6 +870,7 @@ namespace VoxelEngine.Farming
                 else
                 {
                     treeBed = false;
+                    treeCell = -1;
                     treeGrowth = 0f;
                 }
                 RefreshTreeVisual();
@@ -798,7 +950,8 @@ namespace VoxelEngine.Farming
 
         private int FirstFreeIndex()
         {
-            for (int i = 0; i < slots.Length; i++) if (IsFree(i)) return i;
+            for (int i = 0; i < slots.Length; i++)
+                if (!IsCellLocked(i) && IsFree(i)) return i;
             return -1;
         }
 
@@ -891,6 +1044,7 @@ namespace VoxelEngine.Farming
                 else
                 {
                     treeBed = false;
+                    treeCell = -1;
                     treeGrowth = 0f;
                     RefreshTreeVisual();
                 }
@@ -1028,6 +1182,7 @@ namespace VoxelEngine.Farming
                 else
                 {
                     treeBed = false;
+                    treeCell = -1;
                     treeGrowth = 0f;
                 }
             }
@@ -1090,6 +1245,7 @@ namespace VoxelEngine.Farming
             state.SetExtra("water", Mathf.Max(0f, waterStored));
             state.SetExtra("treeBed", treeBed ? 1f : 0f);
             state.SetExtra("treeGrowth", Mathf.Clamp01(treeGrowth));
+            state.SetExtra("treeCell", treeCell);
 
             for (int i = 0; i < slots.Length; i++)
             {
@@ -1118,6 +1274,8 @@ namespace VoxelEngine.Farming
 
             treeBed = state.GetExtra("treeBed", treeBed ? 1f : 0f) >= 0.5f;
             treeGrowth = MachineProcessPersistence.ClampOr(state.GetExtra("treeGrowth", treeGrowth), 0f, 1f, 0f);
+            treeCell = Mathf.Clamp((int)state.GetExtra("treeCell", treeBed ? 0f : -1f), -1, Mathf.Max(0, slots.Length - 1));
+            if (!treeBed) treeCell = -1;
 
             for (int i = 0; i < slots.Length; i++)
             {
@@ -1197,7 +1355,6 @@ namespace VoxelEngine.Farming
             Color curbTimber = new Color(0.42f, 0.28f, 0.16f);
             Color richSoil = new Color(0.26f, 0.17f, 0.10f);
             Color waterChannel = new Color(0.20f, 0.62f, 0.88f);
-            Color cropGreen = new Color(0.30f, 0.66f, 0.28f);
             Color timberBark = new Color(0.40f, 0.26f, 0.14f);
             Color timberLeaf = new Color(0.22f, 0.54f, 0.24f);
 
@@ -1224,15 +1381,7 @@ namespace VoxelEngine.Farming
                 cell.SetParent(root, false);
                 cell.localPosition = new Vector3(x, 0.215f, z);
                 cell.localRotation = Quaternion.identity;
-
-                MakePart(cell, PrimitiveType.Cylinder, "Stalk",
-                    new Vector3(0f, 0.14f, 0f), new Vector3(0.05f, 0.14f, 0.05f), new Color(0.34f, 0.52f, 0.22f));
-                MakePart(cell, PrimitiveType.Cube, "Leaf_A",
-                    new Vector3(0.07f, 0.20f, 0.02f), new Vector3(0.18f, 0.03f, 0.09f), cropGreen, new Vector3(0f, 0f, 22f));
-                MakePart(cell, PrimitiveType.Cube, "Leaf_B",
-                    new Vector3(-0.07f, 0.26f, -0.01f), new Vector3(0.17f, 0.03f, 0.09f), cropGreen, new Vector3(0f, 0f, -20f));
-                MakePart(cell, PrimitiveType.Cube, "Leaf_C",
-                    new Vector3(0.01f, 0.31f, 0.06f), new Vector3(0.13f, 0.03f, 0.08f), cropGreen, new Vector3(12f, 30f, 0f));
+                BuildCropPlant(cell, index);
             }
 
             // Irrigation strip along the inside of the back curb.
@@ -1300,6 +1449,63 @@ namespace VoxelEngine.Farming
                 new Vector3(half - 0.18f, 0.28f, half - 0.18f), new Vector3(0.07f, 0.06f, 0.07f), new Color(0.52f, 0.86f, 0.22f));
         }
 
+        /// <summary>
+        /// The plant that stands in one cell. 18.7.3-dev: the old pod was a stalk and
+        /// three flat cards, all of which were then tinted the same stage colour, so every
+        /// crop read as a dark spike. This is a small bush instead: a woody stem in two
+        /// tapering sections, six rounded leaves fanned around it at rising heights, and a
+        /// fruit cluster that appears once the crop is nearly ripe. The parts keep their
+        /// own materials - leaf, stem and fruit are tinted separately - so a ripe crop is
+        /// a green plant with fruit on it rather than one silhouette colour.
+        /// </summary>
+        private void BuildCropPlant(Transform cell, int index)
+        {
+            Color leafBase = new Color(0.36f, 0.72f, 0.30f);
+            Color stemBase = new Color(0.38f, 0.36f, 0.20f);
+            Color fruitBase = new Color(0.92f, 0.52f, 0.16f);
+            Color moundBase = new Color(0.28f, 0.20f, 0.12f);
+
+            // A little mound so the plant grows out of the soil instead of standing on it.
+            MakePart(cell, PrimitiveType.Sphere, "Mound",
+                new Vector3(0f, -0.02f, 0f), new Vector3(0.34f, 0.10f, 0.34f), moundBase);
+
+            MakePart(cell, PrimitiveType.Cylinder, "Stem_Low",
+                new Vector3(0f, 0.16f, 0f), new Vector3(0.055f, 0.17f, 0.055f), stemBase);
+            MakePart(cell, PrimitiveType.Cylinder, "Stem_Top",
+                new Vector3(0f, 0.44f, 0f), new Vector3(0.040f, 0.14f, 0.040f), stemBase);
+
+            // Six leaves: two per level, each pair turned a third of a turn, so the bush
+            // reads as foliage from any angle instead of a fan that vanishes side-on.
+            float[] leafHeights = { 0.20f, 0.32f, 0.46f, 0.58f };
+            float[] leafLengths = { 0.30f, 0.34f, 0.28f, 0.22f };
+            for (int i = 0; i < leafHeights.Length; i++)
+            {
+                float yaw = index * 47f + i * 74f;
+                float tilt = 16f + i * 6f;
+                Quaternion spin = Quaternion.Euler(0f, yaw, 0f);
+
+                Vector3 offset = spin * new Vector3(leafLengths[i] * 0.42f, 0f, 0f);
+                MakePart(cell, PrimitiveType.Sphere, "Leaf_" + i,
+                    new Vector3(offset.x, leafHeights[i], offset.z),
+                    new Vector3(leafLengths[i], 0.055f, leafLengths[i] * 0.62f),
+                    leafBase, new Vector3(0f, yaw, -tilt));
+
+                Vector3 offset2 = spin * new Vector3(-leafLengths[i] * 0.42f, 0f, 0f);
+                MakePart(cell, PrimitiveType.Sphere, "LeafB_" + i,
+                    new Vector3(offset2.x, leafHeights[i] + 0.06f, offset2.z),
+                    new Vector3(leafLengths[i] * 0.86f, 0.05f, leafLengths[i] * 0.55f),
+                    leafBase, new Vector3(0f, yaw, tilt));
+            }
+
+            // Fruit only shows once the crop is nearly ripe; RefreshCellVisual toggles it.
+            for (int i = 0; i < 3; i++)
+            {
+                float angle = (index * 61f + i * 120f) * Mathf.Deg2Rad;
+                var at = new Vector3(Mathf.Cos(angle) * 0.13f, 0.50f + i * 0.075f, Mathf.Sin(angle) * 0.13f);
+                MakePart(cell, PrimitiveType.Sphere, "Fruit_" + i, at, Vector3.one * 0.15f, fruitBase);
+            }
+        }
+
         /// <summary>Hide every crop pod - used while a tree owns the bed.</summary>
         private void HideCropPods()
         {
@@ -1341,6 +1547,9 @@ namespace VoxelEngine.Farming
 
             _cellRoots = new Transform[slots.Length];
             _cellRenderers = new MeshRenderer[slots.Length][];
+            _cellLeafRenderers = new MeshRenderer[slots.Length][];
+            _cellStemRenderers = new MeshRenderer[slots.Length][];
+            _cellFruitRenderers = new MeshRenderer[slots.Length][];
             for (int i = 0; i < slots.Length; i++)
             {
                 var cell = vis != null ? vis.Find("Crop_" + i) : null;
@@ -1348,6 +1557,28 @@ namespace VoxelEngine.Farming
                 _cellRenderers[i] = cell != null
                     ? cell.GetComponentsInChildren<MeshRenderer>(true)
                     : Array.Empty<MeshRenderer>();
+
+                // 18.7.3-dev: leaves, stem and fruit are tinted separately, so a ripe crop
+                // is a green plant with fruit on it rather than one silhouette colour.
+                var leaves = new List<MeshRenderer>();
+                var stems = new List<MeshRenderer>();
+                var fruits = new List<MeshRenderer>();
+                if (cell != null)
+                {
+                    var renderers = _cellRenderers[i];
+                    for (int r = 0; r < renderers.Length; r++)
+                    {
+                        var mr = renderers[r];
+                        if (mr == null) continue;
+                        string partName = mr.gameObject.name;
+                        if (partName.StartsWith("Leaf", System.StringComparison.Ordinal)) leaves.Add(mr);
+                        else if (partName.StartsWith("Fruit", System.StringComparison.Ordinal)) fruits.Add(mr);
+                        else stems.Add(mr);
+                    }
+                }
+                _cellLeafRenderers[i] = leaves.ToArray();
+                _cellStemRenderers[i] = stems.ToArray();
+                _cellFruitRenderers[i] = fruits.ToArray();
             }
 
             var soil = new List<MeshRenderer>();
@@ -1381,6 +1612,15 @@ namespace VoxelEngine.Farming
             if (root == null) return;
 
             var slot = slots[index];
+            // A tree stands in one cell but is drawn as the bed-wide tree, so the cell itself
+            // shows nothing (18.7.3-dev).
+            if (treeBed && index == treeCell)
+            {
+                root.gameObject.SetActive(false);
+                if (index < _lastStage.Length) _lastStage[index] = -1;
+                return;
+            }
+
             bool planted = slot != null && (slot.crop != null || slot.tree);
             if (!planted)
             {
@@ -1396,6 +1636,7 @@ namespace VoxelEngine.Farming
                 if (!force && _lastStage[index] == -2) return;
                 _lastStage[index] = -2;
                 root.localScale = new Vector3(0.7f, 0.42f, 0.7f);
+                ShowFruit(index, false);
                 Tint(index, DeadTint);
                 return;
             }
@@ -1429,27 +1670,94 @@ namespace VoxelEngine.Farming
 
             if (slot.tree)
             {
+                ShowFruit(index, false);
                 Tint(index, new Color(0.22f, 0.42f, 0.18f));
                 return;
             }
+
+            // Fruit appears on the last quarter of the cycle, so "nearly ready" is visible
+            // from across the farm instead of only readable as a percentage.
+            ShowFruit(index, slot.growth >= 0.72f);
+
             if (slot.crop.stageColors != null && slot.crop.stageColors.Length > 0)
                 Tint(index, slot.crop.stageColors[Mathf.Clamp(stage, 0, slot.crop.stageColors.Length - 1)]);
+            else
+                Tint(index, new Color(0.36f, 0.72f, 0.30f));
         }
 
+        /// <summary>
+        /// Tint one plant. Leaves take the crop's stage colour lifted towards daylight so a
+        /// maturing crop never reads as a dark spike, the stem keeps a woody tone, and the
+        /// fruit takes a warm ripening colour (18.7.3-dev).
+        /// </summary>
         private void Tint(int index, Color color)
         {
             if (index < 0 || index >= _cellRenderers.Length) return;
-            var block = new MaterialPropertyBlock();
+
+            Color leaf = Color.Lerp(color, new Color(0.62f, 0.92f, 0.42f), 0.34f);
+            leaf = new Color(leaf.r * 1.12f, leaf.g * 1.12f, leaf.b * 1.05f, 1f);
+            Color stem = Color.Lerp(color, new Color(0.42f, 0.40f, 0.22f), 0.62f);
+            Color fruit = Color.Lerp(color, new Color(0.95f, 0.52f, 0.16f), 0.55f);
+
+            ApplyColor(_cellLeafRenderers != null && index < _cellLeafRenderers.Length
+                ? _cellLeafRenderers[index] : null, leaf);
+            ApplyColor(_cellStemRenderers != null && index < _cellStemRenderers.Length
+                ? _cellStemRenderers[index] : null, stem);
+            ApplyColor(_cellFruitRenderers != null && index < _cellFruitRenderers.Length
+                ? _cellFruitRenderers[index] : null, fruit);
+
+            // Anything that was not classified (an older prefab body, a tree cell) still
+            // gets the flat tint so nothing is left at its authoring colour.
             var set = _cellRenderers[index];
             for (int i = 0; i < set.Length; i++)
             {
                 var r = set[i];
                 if (r == null) continue;
-                r.GetPropertyBlock(block);
-                block.SetColor(BaseColorId, color);
-                block.SetColor(ColorId, color);
-                r.SetPropertyBlock(block);
+                if (IsClassified(index, r)) continue;
+                Write(r, color);
             }
+        }
+
+        private bool IsClassified(int index, MeshRenderer renderer)
+        {
+            return Contains(_cellLeafRenderers, index, renderer)
+                || Contains(_cellStemRenderers, index, renderer)
+                || Contains(_cellFruitRenderers, index, renderer);
+        }
+
+        private static bool Contains(MeshRenderer[][] sets, int index, MeshRenderer renderer)
+        {
+            if (sets == null || index < 0 || index >= sets.Length || sets[index] == null) return false;
+            var set = sets[index];
+            for (int i = 0; i < set.Length; i++) if (set[i] == renderer) return true;
+            return false;
+        }
+
+        private static void ApplyColor(MeshRenderer[] set, Color color)
+        {
+            if (set == null) return;
+            for (int i = 0; i < set.Length; i++) Write(set[i], color);
+        }
+
+        private static void Write(MeshRenderer renderer, Color color)
+        {
+            if (renderer == null) return;
+            var block = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(block);
+            block.SetColor(BaseColorId, color);
+            block.SetColor(ColorId, color);
+            renderer.SetPropertyBlock(block);
+        }
+
+        /// <summary>Show or hide the fruit cluster on one plant.</summary>
+        private void ShowFruit(int index, bool show)
+        {
+            if (_cellFruitRenderers == null || index < 0 || index >= _cellFruitRenderers.Length) return;
+            var set = _cellFruitRenderers[index];
+            if (set == null) return;
+            for (int i = 0; i < set.Length; i++)
+                if (set[i] != null && set[i].gameObject.activeSelf != show)
+                    set[i].gameObject.SetActive(show);
         }
 
         private void RefreshSoil()

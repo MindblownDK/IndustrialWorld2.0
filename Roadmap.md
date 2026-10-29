@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.7.2-dev`
-**Roadmap Version:** `18.7.2-dev`
+**Current Version:** `18.7.3-dev`
+**Roadmap Version:** `18.7.3-dev`
 **Date:** 2026-10-29
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.7.3-dev - Per-Cell Planting, Dry Beds, Better Crops
+- Every bed page carries a one-slot bin per cell, so a seed is planted into the square it was dropped in (`TryPlantAtCell` / `CanPlantInCell` / `IsCellLocked`)
+- A sapling takes a cell and owns the bed: `treeCell` is saved, the other cells lock, and anything already growing there is harvested into the bin first
+- Beds, plots and new sprinklers start at 0 L, and the crop pod is rebuilt as a leafy bush with separately tinted leaf, stem and fruit
+
 ### 18.7.2-dev - Conduit Joints Join
 - The conduit duplicate guard compares footprint and heading instead of root distance, so butting a pipe onto the end of another is a joint and not "Cell already built"
 - A joint's two collars are forgiven by the placement probe, and a pipe with no free end falls through to the ground magnet instead of giving up
@@ -49,7 +54,6 @@
 - `EnsureFarmIcons` runs before any prefab work and again at the end, authors the six farm icons and rebinds any whose sprite reference was dropped by a re-import
 - `RunIconRepair` gives the icons their own non-destructive Setup button that touches no prefab, recipe or block
 
-### 18.6.0-dev - Plot Sizes, Visible Growth
 - The Auto Farm Plot is a family of three - 1, 4 and 9 cells at 8, 10 and 14 W - all on `PlantBox`, which now supports a power draw and a per-bed tree permission
 - Both grid plots draw one growing pod per cell on the bed itself, coloured by the crop's own stages and collapsed brown when the cell is lost
 - Every automated bed grows at `growthSpeedMultiplier = 0.5` and the planting-box pods interpolate inside their stage, so a crop climbs slowly and continuously instead of jumping
@@ -72,6 +76,7 @@
 - **Farm authoring acceptance (18.5.0-dev):** confirm in Unity that `RunStep124` reports "all 15 new blocks, prefabs and recipes are present", that the Sprinkler exists on a project that never ran the farming content step, that the Auto Farm Plot in hand looks like a bordered tray rather than a dirt cube, and that Tilled Soil is unchanged.
 - **Auto Farm Plot family and growth pace acceptance (18.6.0-dev):** Unity compilation, a Setup Wizard run of `RunStep124` reporting "all 17 new blocks, prefabs and recipes are present", all three plot sizes crafting and placing with the right cell count, a plot pausing when its power is cut, crop pods climbing visibly on both grid plots and on the three plot sizes, the Slower 0.5 growth pace feeling right in play, and tree saplings refused by every Auto Farm Plot but accepted by the Large Plant Bed and the Large Farm Plot Box remain pending.
 - **Farm icon acceptance (18.6.1-dev):** confirm in Unity that `RunIconRepair` reports six authored icons on a project that never made them, that all six planting-box and plot slots draw their PNG rather than a tint, that the two grid plot icons land under `ItemIcons/Grid Blocks`, and that running it twice reports "0 authored" and does not duplicate or overwrite art.
+- **Per-cell planting and crop visual acceptance (18.7.3-dev):** confirm in Unity that a seed dropped into one cell's slot plants only that cell, that a locked cell refuses the drag while a tree stands, that a tree planted beside growing crops harvests them into the bin and unlocks on felling, that a freshly crafted bed reads 0 L, and that a maturing crop reads as a leafy plant that gains fruit on its last quarter.
 - **Conduit continuation acceptance (18.7.2-dev):** confirm in Unity that a straight energy pipe butts onto the end of another without "Cell already built", that a plate of pipes laid end to end stays one line at one height, that a second pipe cannot be laid on top of an existing one, and that an elbow placed against a run still meets it at the corner.
 - **Live farm page and conduit joint acceptance (18.7.1-dev):** confirm in Unity that an open plant-bed page climbs its growth percentage and falls its water level without being reopened, that its body scrolls while the header stays put, that continuing an energy pipe or a data pipe from a free end places flush instead of reporting "Cell already built", and that a run built by clicking the ground next to the previous segment stays at one height.
 - **Farm panel, footprint and tree bed acceptance (18.7.0-dev):** confirm in Unity that all six planting blocks open `PlantBoxPanel` on a right-click with an empty hand, that the seed bin fills the bed and the harvest bin collects from it, that a Small, a Big and a Large bed stand 1 m, 2 m and 3 m across beside each other, that the Large bed has no floating geometry, that a sapling is accepted only on the Large bed and then hides the nine crop cells until it is felled, and that a tree bed survives save/load with its growth intact.
@@ -231,6 +236,9 @@
 - **The Auto Farm Plot is a family of three sizes** (18.6.0-dev): 1, 4 and 9 cells at 8, 10 and 14 W, all on `PlantBox` with `powerDraw`/`requiresPower`. `allowTrees` is false on all three - trees belong to the Large Plant Bed and the Large Farm Plot Box.
 - **Trees are a Large Plant Bed privilege.** `AllowsTrees` is false on the 1x1 and 2x2 boxes, and the interaction answers with the reason rather than swallowing the sapling. A tree cell grows on `treeGrowthSeconds` (110 s, 2x when irrigated) and yields logs, saplings and biomass in one harvest.
 - **A tree on the Large bed is the bed, not a cell** (18.7.0-dev): `treeBed` / `treeGrowth` put a sapling in charge of the whole plot, hide the nine crop cells while it grows, and report `TIMBER` off the same readouts the crop beds use. Self re-seeding keeps a sapling back and starts the next tree.
+- **The tree is planted into a cell and locks the rest** (18.7.3-dev): `treeCell` names the square it stands in, the other cells are locked by `IsCellLocked`, anything already growing there is harvested into the bin first, and felling unlocks them. A bed never shares a crop and a tree.
+- **A cell takes one item from one slot** (18.7.3-dev): each cell has its own one-slot bin (`cellInput`), filtered by `CanPlantInCell`, so a seed is planted into the square it was dropped in. The seed bin remains the fill-the-bed shortcut, not the only way in.
+- **A new bed starts dry** (18.7.3-dev): `waterStored = 0` at authoring. A plot that spawns full hides the entire water system behind a free-looking loop.
 - **A planting block is a machine and opens a machine page** (18.7.0-dev): `PlantBoxPanel` is the one surface for all six blocks, with a 4-slot seed bin in, a 9-slot harvest bin out, a row per cell, water, power and the re-seed switch. A block a player cannot open is a defect, the same standard the grid plots met in 18.5.0.
 - **A farm page is a live page** (18.7.1-dev): `PlantBoxPanel.Tick` writes growth, water, per-cell percentages and state into stored element handles every frame. A page rebuilt on a timer resets its scroll and eats clicks; a page built once and never written reads as broken.
 - **Geometry follows the footprint** (18.7.0-dev): every measurement in `PlantBox.BuildVisuals` comes from `cellsPerSide`, so a 2 m or 3 m block is 2 m or 3 m of bed. A tray sized for the smallest box inside a large block reads as one block with more cells - the 18.7.0 playtest report.

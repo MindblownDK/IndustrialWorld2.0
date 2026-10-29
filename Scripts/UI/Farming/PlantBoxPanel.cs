@@ -164,12 +164,16 @@ namespace VoxelEngine.UI
             body.Add(GridUIHelpers.SectionTitle(box.TreeBed ? "Tree Bed" : "Cells"));
             if (box.TreeBed)
             {
-                body.Add(T.Muted("A tree claims the whole bed. No crop cells are used while it grows, and it comes down as timber, saplings and biomass in one harvest."));
+                body.Add(T.StatRow("🌳", "Standing in",
+                    box.treeCell >= 0 ? $"Cell #{box.treeCell + 1} - every other cell locked" : "Cell #1",
+                    T.AccentAmber));
+                body.Add(T.Muted("A tree fills the whole bed from its own square, so the other cells are locked until it is felled. Anything already growing in them was harvested into the bin. It comes down as timber, saplings and biomass in one harvest."));
                 body.Add(T.Spacer(4));
             }
             else
             {
                 int cells = box.CellCount;
+                box.EnsureCellInputs();
                 var chips = Row();
                 chips.style.flexWrap = Wrap.Wrap;
                 live.CellName = new Label[cells];
@@ -181,9 +185,35 @@ namespace VoxelEngine.UI
                     live.CellChip[i] = chip;
                     live.CellName[i] = nameLabel;
                     live.CellPercent[i] = percentLabel;
+
+                    // One one-slot bin per cell: drop a seed here and it is planted in THIS
+                    // square. A cell locked by a tree shows a tag instead of a slot, so an
+                    // offer that cannot be accepted is never presented as one.
+                    if (box.IsCellLocked(i))
+                    {
+                        var locked = new Label("LOCKED");
+                        locked.style.color = new StyleColor(T.AccentAmber);
+                        locked.style.fontSize = 8;
+                        locked.style.unityFontStyleAndWeight = FontStyle.Bold;
+                        locked.style.marginTop = 3;
+                        locked.pickingMode = PickingMode.Ignore;
+                        chip.Add(locked);
+                    }
+                    else
+                    {
+                        var cellBin = box.CellInput(i);
+                        if (cellBin != null)
+                        {
+                            var cellSlot = slot(cellBin, 0, cellBin.GetSlot(0), false, true);
+                            cellSlot.style.marginTop = 3;
+                            chip.Add(cellSlot);
+                        }
+                    }
                     chips.Add(chip);
                 }
                 body.Add(chips);
+                body.Add(T.Spacer(2));
+                body.Add(T.Muted("Drop a seed into a cell's slot to plant that square, or fill the seed bin below and let the bed fill itself."));
                 body.Add(T.Spacer(4));
             }
 

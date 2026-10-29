@@ -228,7 +228,9 @@ namespace VoxelEngine.EditorTools
                 plant.boxSize = size;
                 plant.cellsPerSide = side;
                 plant.waterCapacity = waterCapacity;
-                plant.waterStored = waterCapacity;
+                // 18.7.3-dev: a fresh bed arrives DRY. A plot that spawned full looked like a
+                // free irrigation loop and hid the whole water system from the player.
+                plant.waterStored = 0f;
                 plant.woodLogItem = woodLog;
                 plant.saplingItem = sapling;
                 plant.biomassItem = biomass;
@@ -341,7 +343,7 @@ namespace VoxelEngine.EditorTools
                 plot.boxSize = size;
                 plot.cellsPerSide = side;
                 plot.waterCapacity = waterCapacity;
-                plot.waterStored = waterCapacity;
+                plot.waterStored = 0f;   // 18.7.3-dev: plots arrive dry like the boxes
                 plot.powerDraw = watts;
                 plot.requiresPower = true;
                 plot.allowTrees = false;      // trees are the Large Plant Bed's job
@@ -499,7 +501,7 @@ namespace VoxelEngine.EditorTools
                 sprinkler.radius = 8f;
                 sprinkler.requiresWaterConnection = true;
                 sprinkler.waterCapacity = 60f;
-                sprinkler.waterStored = 60f;
+                sprinkler.waterStored = 0f;   // 18.7.3-dev: a new sprinkler is empty too
                 sprinkler.litresPerSecond = 0.4f;
                 sprinkler.refillLitresPerSecond = 2f;
                 sprinkler.wattsWhileSpraying = 20f;

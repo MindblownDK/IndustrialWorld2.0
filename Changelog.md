@@ -1,9 +1,29 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.7.2-dev`
+**Current Version:** `18.7.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.7.3-dev] Per-Cell Planting, Beds That Arrive Dry, and Crops Worth Looking At
+
+**Type:** MINOR - one new per-cell input bin, a tree-cell model, a water default change and a rebuilt plant model. Save-compatible: `treeCell` is an additive `IMachineProcessState` key that an older save loads as "the first cell", the per-cell bins are transient and never serialized, and no block id, recipe, item or crop asset changes.
+
+**GitHub title:** `[18.7.3-dev] Plant into individual cells, start beds dry, and rebuild the crop model`
+
+#### Added
+
+- **One input slot per cell.** Every planting bed's page now shows a one-slot bin under each cell chip: drop a seed in it and that square is planted, and only that square. One item per cell, which is what a bed's cells have always been - the seed bin stays as the "fill the whole bed" option. The per-cell bins are transient `ItemContainer`s (`cellInput`, one slot each) filtered by `CanPlantInCell`, so a cell that cannot take the seed refuses the drag instead of swallowing it.
+- **`TryPlantAtCell`, `CanPlantInCell`, `IsCellLocked` and `CellInput`** on `PlantBox` - the block now has a public per-cell surface, so the panel and any future machine (a Seed Planter, a drone) can address one square rather than "wherever the crosshair pointed".
+
+#### Changed
+
+- **A tree stands in a cell but still owns the bed.** When a sapling is planted into a cell, `treeBed` is set together with `treeCell`: the tree fills the plot from that square, every other cell is **locked** against planting, and anything already growing in them is **harvested into the harvest bin** first rather than simply destroyed. Felling the tree unlocks all nine cells again. `treeCell` is saved, so a reloaded bed still knows where its tree is standing.
+- **New beds and new plots are empty.** `WorldFarmOverhaulSetup` wrote `waterStored = waterCapacity` on the three planting boxes and the three Auto Farm Plots, so every bed a player built arrived full of water - which read as a free irrigation loop and hid the whole water system. Beds, plots and a newly created sprinkler now start at **0 L**.
+
+#### Fixed
+
+- **The crops looked like dark spikes.** Each pod was a thin stalk and three flat cards, and `Tint` then painted every renderer in it the same stage colour, so a growing crop was a single dark silhouette. The plant is now a small bush - a soil mound, a two-section woody stem, eight rounded leaves fanned around it at rising heights and turned per cell so a bed of nine is not nine clones, plus a fruit cluster that appears on the last quarter of the cycle so "nearly ready" is visible from across the farm. Leaves, stem and fruit are tinted **separately** (stage colour lifted towards daylight for foliage, a woody tone for the stem, a ripening colour for fruit), and a lost crop shows no fruit at all.
 
 ### [18.7.2-dev] Conduit Joints That Actually Join
 
