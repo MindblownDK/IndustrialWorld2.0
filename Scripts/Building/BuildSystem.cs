@@ -96,6 +96,11 @@ namespace VoxelEngine.Building
         private static readonly Collider[] s_conduitMagnetProbe = new Collider[64];
         private const float ConduitMagnetRadius = 1.6f;
         private const float ConduitJointRadius = 0.16f;
+        // 18.7.2-dev: set while the pose came from a conduit joint, so the placement probe
+        // forgives the two collars that necessarily share the joint point. Without it a
+        // flush joint is refused for touching its neighbour, which is what a joint IS.
+        private bool _conduitJointActive;
+        private Vector3 _conduitJointPoint;
         private static readonly Collider[] s_wallSnapProbe = new Collider[128];
         private static readonly RaycastHit[] s_wallDeckSupportProbe = new RaycastHit[32];
         private readonly System.Collections.Generic.List<Collider> _staticSnapColliders = new(8);
@@ -3183,6 +3188,7 @@ namespace VoxelEngine.Building
             _surfaceAttachmentHost = null;
             _deckSnapHost = null;
             _surfaceLatticePose = default;
+            _conduitJointActive = false;
 
             if (TryGetStaticPipeSnapPose(hit, block, out pos, out rot))
                 return;
@@ -4462,15 +4468,19 @@ namespace VoxelEngine.Building
                 // pipe on it, and snapping the next one onto that shared point laid it
                 // straight through its neighbour - which the placement check then refused
                 // as "cell already built", the exact report from the Dev branch.
-                if (!TryGetFreeConduitEndpoint(targetPipe.transform, targetPipe.variant,
+                // No free end left on this pipe means it is fully plugged. Fall through so
+                // the ground magnet below can still continue a run that ends nearby.
+                if (TryGetFreeConduitEndpoint(targetPipe.transform, targetPipe.variant,
                         targetPipe.straightLength, hit.point, out var freeEnd))
-                    return false;
-
-                pos = BuildConduitAttachPose(freeEnd,
-                    VoxelEngine.Power.EnergyPipeSelection.Variant,
-                    VoxelEngine.Power.EnergyPipeSelection.StraightLength,
-                    _rotSteps, out rot);
-                return true;
+                {
+                    pos = BuildConduitAttachPose(freeEnd,
+                        VoxelEngine.Power.EnergyPipeSelection.Variant,
+                        VoxelEngine.Power.EnergyPipeSelection.StraightLength,
+                        _rotSteps, out rot);
+                    _conduitJointActive = true;
+                    _conduitJointPoint = freeEnd.Position;
+                    return true;
+                }
             }
 
             // Data pipe → data pipe (14.41.0): identical endpoint snap, driven
@@ -4478,15 +4488,17 @@ namespace VoxelEngine.Building
             var targetDataPipe = hit.collider.GetComponentInParent<VoxelEngine.Networks.DataCable>();
             if (placingDataPipe && targetDataPipe != null)
             {
-                if (!TryGetFreeConduitEndpoint(targetDataPipe.transform, targetDataPipe.variant,
+                if (TryGetFreeConduitEndpoint(targetDataPipe.transform, targetDataPipe.variant,
                         targetDataPipe.straightLength, hit.point, out var freeDataEnd))
-                    return false;
-
-                pos = BuildConduitAttachPose(freeDataEnd,
-                    VoxelEngine.Networks.DataPipeSelection.Variant,
-                    VoxelEngine.Networks.DataPipeSelection.StraightLength,
-                    _rotSteps, out rot);
-                return true;
+                {
+                    pos = BuildConduitAttachPose(freeDataEnd,
+                        VoxelEngine.Networks.DataPipeSelection.Variant,
+                        VoxelEngine.Networks.DataPipeSelection.StraightLength,
+                        _rotSteps, out rot);
+                    _conduitJointActive = true;
+                    _conduitJointPoint = freeDataEnd.Position;
+                    return true;
+                }
             }
 
             // 18.7.1-dev: a pipe run is built by clicking the ground next to the pipe you
@@ -4542,6 +4554,43 @@ namespace VoxelEngine.Building
                 found = true;
             }
             return found;
+        }
+
+        /// <summary>
+        /// True when the held conduit would be laid on top of another conduit running the
+        /// same way - the same fitting placed twice - as opposed to joining one. Distance
+        /// alone cannot tell those apart, because a straight continuation is deliberately
+        /// rooted on the socket it plugs into.
+        /// </summary>
+        private static bool ConduitWouldDuplicate(Vector3 pos, Quaternion rot, bool energy)
+        {
+            Vector3 heading = rot * Vector3.forward;
+            int count = Physics.OverlapSphereNonAlloc(pos, 0.30f, s_placementOverlapProbe,
+                ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var col = s_placementOverlapProbe[i];
+                s_placementOverlapProbe[i] = null;
+                if (col == null || col.isTrigger) continue;
+
+                Transform other = null;
+                if (energy)
+                {
+                    var cable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+                    if (cable != null) other = cable.transform;
+                }
+                else
+                {
+                    var data = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
+                    if (data != null) other = data.transform;
+                }
+                if (other == null) continue;
+                if ((other.position - pos).sqrMagnitude >= 0.25f * 0.25f) continue;
+                // Same spot and same heading: the same pipe, twice. Anything else that
+                // meets us here is a joint.
+                if (Vector3.Dot(heading, other.forward) > 0.9f) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -4614,8 +4663,17 @@ namespace VoxelEngine.Building
             int count = Physics.OverlapSphereNonAlloc(hit.point, ConduitMagnetRadius, s_conduitMagnetProbe,
                 ~0, QueryTriggerInteraction.Ignore);
             ConduitEndpoint bestEndpoint = default;
-            float bestDist = ConduitMagnetRadius * ConduitMagnetRadius;
+            float bestDist = float.MaxValue;
+            bool bestBeyond = false;
             bool found = false;
+
+            // Two candidates are good enough to continue a run: an end the crosshair is
+            // aimed PAST (a clean extension), and an end the crosshair is basically ON
+            // (within a fitting's width) - a player standing over a joint and clicking the
+            // ground next to it means "carry on from here". A clean extension always beats
+            // an accidental neighbour, and distance breaks the tie, so a parallel line laid
+            // a metre to the side is still its own line.
+            const float OnTheEnd = 0.6f;
 
             for (int i = 0; i < count; i++)
             {
@@ -4623,34 +4681,47 @@ namespace VoxelEngine.Building
                 s_conduitMagnetProbe[i] = null;
                 if (col == null) continue;
 
+                Transform owner;
+                VoxelEngine.Power.EnergyPipeVariant variant;
+                int length;
                 if (heldEnergy != null)
                 {
                     var cable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
                     if (cable == null) continue;
-                    if (!TryGetFreeConduitEndpoint(cable.transform, cable.variant, cable.straightLength,
-                            hit.point, out var candidate)) continue;
-                    // Only continue the line: the aim has to be BEYOND the free end, not
-                    // beside it, so a parallel run one metre away is still its own run.
-                    if (!AimsBeyondConduitEnd(candidate, hit.point)) continue;
-                    float d = (candidate.Position - hit.point).sqrMagnitude;
-                    if (d >= bestDist) continue;
-                    bestDist = d;
-                    bestEndpoint = candidate;
-                    found = true;
+                    owner = cable.transform;
+                    variant = cable.variant;
+                    length = cable.straightLength;
                 }
                 else
                 {
                     var dataCable = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
                     if (dataCable == null) continue;
-                    if (!TryGetFreeConduitEndpoint(dataCable.transform, dataCable.variant, dataCable.straightLength,
-                            hit.point, out var candidate)) continue;
-                    if (!AimsBeyondConduitEnd(candidate, hit.point)) continue;
-                    float d = (candidate.Position - hit.point).sqrMagnitude;
-                    if (d >= bestDist) continue;
-                    bestDist = d;
-                    bestEndpoint = candidate;
-                    found = true;
+                    owner = dataCable.transform;
+                    variant = dataCable.variant;
+                    length = dataCable.straightLength;
                 }
+
+                if (!TryGetFreeConduitEndpoint(owner, variant, length, hit.point, out var candidate)) continue;
+
+                bool beyond = AimsBeyondConduitEnd(candidate, hit.point);
+                float d = (candidate.Position - hit.point).sqrMagnitude;
+                if (!beyond && d > OnTheEnd * OnTheEnd) continue;
+
+                if (found)
+                {
+                    if (bestBeyond != beyond)
+                    {
+                        // Keep the clean extension over a neighbour that merely happens
+                        // to be within reach of the crosshair.
+                        if (bestBeyond) continue;
+                    }
+                    else if (d >= bestDist) continue;
+                }
+
+                bestDist = d;
+                bestBeyond = beyond;
+                bestEndpoint = candidate;
+                found = true;
             }
 
             if (!found) return false;
@@ -4660,6 +4731,8 @@ namespace VoxelEngine.Building
                     VoxelEngine.Power.EnergyPipeSelection.StraightLength, _rotSteps, out rot)
                 : BuildConduitAttachPose(bestEndpoint, VoxelEngine.Networks.DataPipeSelection.Variant,
                     VoxelEngine.Networks.DataPipeSelection.StraightLength, _rotSteps, out rot);
+            _conduitJointActive = true;
+            _conduitJointPoint = bestEndpoint.Position;
             return true;
         }
 
@@ -5200,48 +5273,22 @@ namespace VoxelEngine.Building
                 return false;
             }
 
-            // Prevent Energy Pipes from being placed overlapping or occupying the exact same position as an existing conduit
-            if (isThin && block != null && block.placedPrefab != null && block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null)
+            // 18.7.2-dev: CONDUIT DUPLICATE GUARD, judged by overlap rather than by root
+            // distance. Two pipes butted end to end SHARE a joint, so the new pipe's root
+            // lands exactly on the old pipe's root - and the old "roots closer than 25 cm"
+            // test therefore refused every single continuation with "Cell already built".
+            // A conduit is only a duplicate when it sits on the same spot AND runs the same
+            // way; a fitting butted on backwards, or an elbow meeting it at a corner, is a
+            // joint and is allowed.
+            if (isThin && block != null && block.placedPrefab != null)
             {
-                int count = Physics.OverlapSphereNonAlloc(pos, 0.25f, s_placementOverlapProbe, ~0, QueryTriggerInteraction.Ignore);
-                for (int i = 0; i < count; i++)
+                bool heldEnergyCable = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
+                bool heldDataCable = !heldEnergyCable
+                    && block.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null;
+                if ((heldEnergyCable || heldDataCable) && ConduitWouldDuplicate(pos, rot, heldEnergyCable))
                 {
-                    var col = s_placementOverlapProbe[i];
-                    s_placementOverlapProbe[i] = null;
-                    if (col != null && !col.isTrigger)
-                    {
-                        var targetCable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
-                        if (targetCable != null)
-                        {
-                            // If centers are too close (< 0.25m), it is an illegal duplicate/overlapping pipe placement
-                            if ((targetCable.transform.position - pos).sqrMagnitude < 0.25f * 0.25f)
-                            {
-                                refusal = PlacementRefusal.AlreadyThere;
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Same duplicate guard for Data Pipes (14.41.0).
-            if (isThin && block != null && block.placedPrefab != null && block.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null)
-            {
-                int count = Physics.OverlapSphereNonAlloc(pos, 0.25f, s_placementOverlapProbe, ~0, QueryTriggerInteraction.Ignore);
-                for (int i = 0; i < count; i++)
-                {
-                    var col = s_placementOverlapProbe[i];
-                    s_placementOverlapProbe[i] = null;
-                    if (col != null && !col.isTrigger)
-                    {
-                        var targetData = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
-                        if (targetData != null
-                            && (targetData.transform.position - pos).sqrMagnitude < 0.25f * 0.25f)
-                        {
-                            refusal = PlacementRefusal.AlreadyThere;
-                            return false;
-                        }
-                    }
+                    refusal = PlacementRefusal.AlreadyThere;
+                    return false;
                 }
             }
 
@@ -5379,6 +5426,12 @@ namespace VoxelEngine.Building
             VoxelEngine.Building.Tiered.PlacedTieredBlock deckSnapHost, bool allowAdjacentCoplanarDecks)
         {
             if (collider == null || collider.isTrigger) return true;
+            // 18.7.2-dev: a conduit joint is two fittings on one socket. The collars overlap
+            // there by design, so they are not an obstacle to each other.
+            if (_conduitJointActive && collider.bounds.SqrDistance(_conduitJointPoint) < 0.01f
+                && (collider.GetComponentInParent<VoxelEngine.Power.PowerCable>() != null
+                    || collider.GetComponentInParent<VoxelEngine.Networks.DataCable>() != null))
+                return true;
             var tiered = collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
             // A deck-snapped item may span several flush floor pieces. Their coplanar
             // deck volumes are one support surface, not obstacles; higher/angled decks

@@ -1,9 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.7.1-dev`
+**Current Version:** `18.7.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.7.2-dev] Conduit Joints That Actually Join
+
+**Type:** PATCH - one placement rule rewritten in `BuildSystem`. No new blocks, recipes, items or save fields.
+
+**GitHub title:** `[18.7.2-dev] Allow conduit continuations: judge duplicates by overlap, not by root distance`
+
+#### Fixed
+
+- **Energy Pipes and Data Pipes still refused every continuation with "Cell already built".** 18.7.1-dev made the pipe-to-pipe snap look only for a *free* end, which was necessary but not sufficient. The refusal came from somewhere else: `IsPlacementValid` refused any conduit whose ROOT was within 25 cm of another conduit's root - and a pipe butted onto the end of another pipe is *rooted on the same socket*, so a legitimate joint was indistinguishable from a duplicate. That guard now compares footprints instead of roots: another conduit only blocks the placement when it sits on the same spot **and runs the same way** (`ConduitWouldDuplicate`). A fitting butted on backwards, or an elbow meeting a run at a corner, is a joint and is allowed; the same pipe laid twice is still refused.
+- **A joint no longer collides with itself.** The two collars that meet at a socket overlap by design, so the placement probe now forgives conduit colliders that sit on the joint point (`_conduitJointPoint`), and nothing else.
+- **A fully plugged pipe no longer swallowed the click.** When the aimed pipe had no free end left, the snap gave up entirely and the click fell through to the raw ground pose - which happened to land on top of the neighbour and then got refused. It now falls through to the ground magnet instead, so a run can always be continued from the cell beside it.
+
+#### Changed
+
+- **The ground magnet is friendlier about what counts as "continue".** It used to require the crosshair to be aimed *past* a free end, which meant clicking the ground right beside a joint did nothing. A free end now also qualifies when the crosshair is within 0.6 m of it, and a clean extension always outranks a neighbour that merely happens to be in reach - so continuing a line is easy while a parallel line laid a metre to the side is still its own line.
 
 ### [18.7.1-dev] A Farm Page That Updates Itself, and Pipe Runs That Join
 
