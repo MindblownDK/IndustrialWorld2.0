@@ -90,6 +90,12 @@ namespace VoxelEngine.Building
         private static readonly RaycastHit[] s_buildRaycastProbe = new RaycastHit[64];
         private static readonly Collider[] s_staticAnchorProbe = new Collider[32];
         private static readonly Collider[] s_placementOverlapProbe = new Collider[64];
+        // 18.7.1-dev: conduit end joints. One probe answers "is this plug already taken"
+        // and the other is the magnet that pulls a fresh pipe onto a nearby free end.
+        private static readonly Collider[] s_pipeEndpointProbe = new Collider[16];
+        private static readonly Collider[] s_conduitMagnetProbe = new Collider[64];
+        private const float ConduitMagnetRadius = 1.6f;
+        private const float ConduitJointRadius = 0.16f;
         private static readonly Collider[] s_wallSnapProbe = new Collider[128];
         private static readonly RaycastHit[] s_wallDeckSupportProbe = new RaycastHit[32];
         private readonly System.Collections.Generic.List<Collider> _staticSnapColliders = new(8);
@@ -4452,33 +4458,18 @@ namespace VoxelEngine.Building
             var targetPipe = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerCable>();
             if (placingPowerPipe && targetPipe != null)
             {
-                var targetEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(targetPipe.variant, targetPipe.straightLength);
-                VoxelEngine.Power.EnergyPipeMeshBuilder.EndpointInfo bestTargetEp = default;
-                float bestDist = float.MaxValue;
-                for (int i = 0; i < targetEndpoints.Count; i++)
-                {
-                    var ep = targetEndpoints[i];
-                    Vector3 epWorld = targetPipe.transform.TransformPoint(ep.Position);
-                    float d = (epWorld - hit.point).sqrMagnitude;
-                    if (d < bestDist)
-                    {
-                        bestDist = d;
-                        bestTargetEp = ep;
-                    }
-                }
+                // 18.7.1-dev: only a FREE end is a target. Every joined end already has a
+                // pipe on it, and snapping the next one onto that shared point laid it
+                // straight through its neighbour - which the placement check then refused
+                // as "cell already built", the exact report from the Dev branch.
+                if (!TryGetFreeConduitEndpoint(targetPipe.transform, targetPipe.variant,
+                        targetPipe.straightLength, hit.point, out var freeEnd))
+                    return false;
 
-                Vector3 targetEpWorldPos = targetPipe.transform.TransformPoint(bestTargetEp.Position);
-                Vector3 targetEpWorldNormal = targetPipe.transform.TransformDirection(bestTargetEp.Normal).normalized;
-                Vector3 targetEpWorldUp = targetPipe.transform.TransformDirection(bestTargetEp.Up).normalized;
-
-                Quaternion alignRot = Quaternion.LookRotation(targetEpWorldNormal, targetEpWorldUp);
-                rot = alignRot * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
-
-                var heldEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
-                    VoxelEngine.Power.EnergyPipeSelection.Variant, VoxelEngine.Power.EnergyPipeSelection.StraightLength);
-                Vector3 heldEntryLocal = heldEndpoints.Count > 0 ? heldEndpoints[0].Position : Vector3.zero;
-
-                pos = targetEpWorldPos - rot * heldEntryLocal;
+                pos = BuildConduitAttachPose(freeEnd,
+                    VoxelEngine.Power.EnergyPipeSelection.Variant,
+                    VoxelEngine.Power.EnergyPipeSelection.StraightLength,
+                    _rotSteps, out rot);
                 return true;
             }
 
@@ -4487,38 +4478,189 @@ namespace VoxelEngine.Building
             var targetDataPipe = hit.collider.GetComponentInParent<VoxelEngine.Networks.DataCable>();
             if (placingDataPipe && targetDataPipe != null)
             {
-                var targetEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
-                    targetDataPipe.variant, targetDataPipe.straightLength);
-                VoxelEngine.Power.EnergyPipeMeshBuilder.EndpointInfo bestTargetEp = default;
-                float bestDist = float.MaxValue;
-                for (int i = 0; i < targetEndpoints.Count; i++)
-                {
-                    var ep = targetEndpoints[i];
-                    Vector3 epWorld = targetDataPipe.transform.TransformPoint(ep.Position);
-                    float d = (epWorld - hit.point).sqrMagnitude;
-                    if (d < bestDist)
-                    {
-                        bestDist = d;
-                        bestTargetEp = ep;
-                    }
-                }
+                if (!TryGetFreeConduitEndpoint(targetDataPipe.transform, targetDataPipe.variant,
+                        targetDataPipe.straightLength, hit.point, out var freeDataEnd))
+                    return false;
 
-                Vector3 targetEpWorldPos = targetDataPipe.transform.TransformPoint(bestTargetEp.Position);
-                Vector3 targetEpWorldNormal = targetDataPipe.transform.TransformDirection(bestTargetEp.Normal).normalized;
-                Vector3 targetEpWorldUp = targetDataPipe.transform.TransformDirection(bestTargetEp.Up).normalized;
-
-                Quaternion alignRot = Quaternion.LookRotation(targetEpWorldNormal, targetEpWorldUp);
-                rot = alignRot * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
-
-                var heldEps = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
-                    VoxelEngine.Networks.DataPipeSelection.Variant, VoxelEngine.Networks.DataPipeSelection.StraightLength);
-                Vector3 heldEntry = heldEps.Count > 0 ? heldEps[0].Position : Vector3.zero;
-
-                pos = targetEpWorldPos - rot * heldEntry;
+                pos = BuildConduitAttachPose(freeDataEnd,
+                    VoxelEngine.Networks.DataPipeSelection.Variant,
+                    VoxelEngine.Networks.DataPipeSelection.StraightLength,
+                    _rotSteps, out rot);
                 return true;
             }
 
+            // 18.7.1-dev: a pipe run is built by clicking the ground next to the pipe you
+            // just laid, not by hitting a 6 cm cable with the crosshair. Without this the
+            // ground click took the raw terrain hit point, so each segment in a run sat at
+            // its own height. A nearby free end now wins over the ground.
+            if (TryGetNearbyConduitEndpointPose(hit, block, out pos, out rot))
+                return true;
+
             return false;
+        }
+
+        /// <summary>One conduit socket in world space, ready to hang the next fitting on.</summary>
+        private readonly struct ConduitEndpoint
+        {
+            public readonly Vector3 Position;
+            public readonly Vector3 Normal;
+            public readonly Vector3 Up;
+
+            public ConduitEndpoint(Vector3 position, Vector3 normal, Vector3 up)
+            {
+                Position = position;
+                Normal = normal;
+                Up = up;
+            }
+        }
+
+        /// <summary>
+        /// The nearest socket of <paramref name="owner"/> that nothing is plugged into yet.
+        /// An end that already carries a fitting is skipped, so a run grows outwards instead
+        /// of laying a second pipe over the first.
+        /// </summary>
+        private static bool TryGetFreeConduitEndpoint(Transform owner, VoxelEngine.Power.EnergyPipeVariant variant,
+            int straightLength, Vector3 aimPoint, out ConduitEndpoint endpoint)
+        {
+            endpoint = default;
+            if (owner == null) return false;
+
+            var local = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < local.Count; i++)
+            {
+                Vector3 world = owner.TransformPoint(local[i].Position);
+                if (ConduitEndpointIsClaimed(world, owner)) continue;
+                float d = (world - aimPoint).sqrMagnitude;
+                if (d >= best) continue;
+                best = d;
+                endpoint = new ConduitEndpoint(
+                    world,
+                    owner.TransformDirection(local[i].Normal).normalized,
+                    owner.TransformDirection(local[i].Up).normalized);
+                found = true;
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// True when the aim point sits past the free end rather than beside it. This is what
+        /// makes the ground magnet mean "continue this run" and nothing else.
+        /// </summary>
+        private static bool AimsBeyondConduitEnd(in ConduitEndpoint endpoint, Vector3 aimPoint)
+        {
+            Vector3 toAim = aimPoint - endpoint.Position;
+            if (toAim.sqrMagnitude < 0.0001f) return true;
+            return Vector3.Dot(toAim.normalized, endpoint.Normal) >= 0.15f;
+        }
+
+        /// <summary>True when a conduit other than <paramref name="owner"/> already occupies this socket.</summary>
+        private static bool ConduitEndpointIsClaimed(Vector3 worldPoint, Transform owner)
+        {
+            int count = Physics.OverlapSphereNonAlloc(worldPoint, ConduitJointRadius, s_pipeEndpointProbe,
+                ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var col = s_pipeEndpointProbe[i];
+                s_pipeEndpointProbe[i] = null;
+                if (col == null) continue;
+
+                var energy = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+                if (energy != null && energy.transform != owner) return true;
+
+                var data = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
+                if (data != null && data.transform != owner) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Pose for a held conduit whose entry socket is seated on <paramref name="endpoint"/>.
+        /// Shared by both conduit families so an energy pipe and a data pipe can never drift
+        /// apart on how a joint is built.
+        /// </summary>
+        private static Vector3 BuildConduitAttachPose(in ConduitEndpoint endpoint,
+            VoxelEngine.Power.EnergyPipeVariant heldVariant, int heldLength, Vector3 rotSteps, out Quaternion rot)
+        {
+            Quaternion alignRot = Quaternion.LookRotation(endpoint.Normal, endpoint.Up);
+            rot = alignRot * Quaternion.Euler(rotSteps.x * 90f, rotSteps.y * 90f, rotSteps.z * 90f);
+
+            var heldEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(heldVariant, heldLength);
+            Vector3 heldEntryLocal = heldEndpoints.Count > 0 ? heldEndpoints[0].Position : Vector3.zero;
+            return endpoint.Position - rot * heldEntryLocal;
+        }
+
+        /// <summary>
+        /// Continuation magnet for conduits laid on natural ground. Aiming at the ground near
+        /// an existing pipe's free end snaps to that end, so a run stays one flush line at one
+        /// height instead of a staircase of segments each seated at its own terrain hit point.
+        /// Decks, walls, machines and placed blocks are excluded - they own their own lattice
+        /// and reach this code through the surface-attachment and deck snaps above.
+        /// </summary>
+        private bool TryGetNearbyConduitEndpointPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
+        {
+            pos = default;
+            rot = default;
+            if (block == null || block.placedPrefab == null || hit.collider == null) return false;
+            if (HasStaticPlacementLatticeHost(hit.collider)) return false;
+
+            var heldEnergy = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true);
+            var heldData = heldEnergy == null
+                ? block.placedPrefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true)
+                : null;
+            if (heldEnergy == null && heldData == null) return false;
+
+            int count = Physics.OverlapSphereNonAlloc(hit.point, ConduitMagnetRadius, s_conduitMagnetProbe,
+                ~0, QueryTriggerInteraction.Ignore);
+            ConduitEndpoint bestEndpoint = default;
+            float bestDist = ConduitMagnetRadius * ConduitMagnetRadius;
+            bool found = false;
+
+            for (int i = 0; i < count; i++)
+            {
+                var col = s_conduitMagnetProbe[i];
+                s_conduitMagnetProbe[i] = null;
+                if (col == null) continue;
+
+                if (heldEnergy != null)
+                {
+                    var cable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+                    if (cable == null) continue;
+                    if (!TryGetFreeConduitEndpoint(cable.transform, cable.variant, cable.straightLength,
+                            hit.point, out var candidate)) continue;
+                    // Only continue the line: the aim has to be BEYOND the free end, not
+                    // beside it, so a parallel run one metre away is still its own run.
+                    if (!AimsBeyondConduitEnd(candidate, hit.point)) continue;
+                    float d = (candidate.Position - hit.point).sqrMagnitude;
+                    if (d >= bestDist) continue;
+                    bestDist = d;
+                    bestEndpoint = candidate;
+                    found = true;
+                }
+                else
+                {
+                    var dataCable = col.GetComponentInParent<VoxelEngine.Networks.DataCable>();
+                    if (dataCable == null) continue;
+                    if (!TryGetFreeConduitEndpoint(dataCable.transform, dataCable.variant, dataCable.straightLength,
+                            hit.point, out var candidate)) continue;
+                    if (!AimsBeyondConduitEnd(candidate, hit.point)) continue;
+                    float d = (candidate.Position - hit.point).sqrMagnitude;
+                    if (d >= bestDist) continue;
+                    bestDist = d;
+                    bestEndpoint = candidate;
+                    found = true;
+                }
+            }
+
+            if (!found) return false;
+
+            pos = heldEnergy != null
+                ? BuildConduitAttachPose(bestEndpoint, VoxelEngine.Power.EnergyPipeSelection.Variant,
+                    VoxelEngine.Power.EnergyPipeSelection.StraightLength, _rotSteps, out rot)
+                : BuildConduitAttachPose(bestEndpoint, VoxelEngine.Networks.DataPipeSelection.Variant,
+                    VoxelEngine.Networks.DataPipeSelection.StraightLength, _rotSteps, out rot);
+            return true;
         }
 
         /// <summary>

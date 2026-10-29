@@ -95,6 +95,11 @@ namespace VoxelEngine.UI
         /// <summary>The planting box, Plant Bed or Auto Farm Plot that owns the right pane (18.7.0-dev).
         /// All of them are the same PlantBox component, so one field covers every size.</summary>
         private VoxelEngine.Farming.PlantBox _openPlantBox;
+        /// <summary>Live handles for the open planting-box page, so growth, water and the
+        /// per-cell percentages are written in place instead of rebuilding the page
+        /// (18.7.1-dev - the reported "not live updating anywhere in the plots").</summary>
+        private PlantBoxPanelLive _plantBoxLive;
+        private float _plantBoxTickAccum;
         private VoxelEngine.Power.Wind.WindTurbineController _openWindTurbine;
         private VoxelEngine.GridSystem.GridBlock _openGridBlock;
         private VoxelEngine.Building.PortalControllerBlock _openPortalController;
@@ -441,6 +446,18 @@ namespace VoxelEngine.UI
             // depletes while the panel is open, so temperature / catalyst / efficiency and
             // the four tank gauges are written in place.
             TickCrackerLiveUI();
+            // 10 Hz, not 60: the readouts are text, and a label write allocates. Ten writes a
+            // second reads as continuous while the bed is growing visibly.
+            if (_openPlantBox != null)
+            {
+                _plantBoxTickAccum += Time.unscaledDeltaTime;
+                if (_plantBoxTickAccum >= 0.1f)
+                {
+                    _plantBoxTickAccum = 0f;
+                    PlantBoxPanel.Tick(_openPlantBox, _plantBoxLive);
+                }
+            }
+            else { _plantBoxLive = null; _plantBoxTickAccum = 0f; }
             PlayerHud.Tick();
             BombHud.Tick(inventory);
             PaintHud.Tick(inventory);
@@ -1656,7 +1673,11 @@ namespace VoxelEngine.UI
                 else if (_openRefuelPad != null) _contentLayer.Add(VoxelEngine.Navigation.StaticRefuelPadUI.BuildPanel(_openRefuelPad));
                 else if (_openWaterPump != null) _contentLayer.Add(VoxelEngine.UI.FluidPumpUI.BuildPanel(_openWaterPump));
                 else if (_openBiofarm != null) { var mp = MachineUIs.BiofarmPanel(_openBiofarm, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openBiofarm); }
-                else if (_openPlantBox != null) _contentLayer.Add(PlantBoxPanel.BuildPanel(_openPlantBox, BuildSlot));
+                else if (_openPlantBox != null)
+                {
+                    var mp = PlantBoxPanel.BuildPanel(_openPlantBox, BuildSlot, out _plantBoxLive);
+                    _contentLayer.Add(mp);
+                }
                 else if (_openWindTurbine != null) _contentLayer.Add(VoxelEngine.Power.Wind.WindTurbineUI.BuildPanel(_openWindTurbine, inventory));
                 else if (_openStorageTerminal  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildTerminalPanel(_openStorageTerminal, BuildSlot, inventory));
                 else if (_openServerRack       != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildServerPanel(_openServerRack, BuildSlot));

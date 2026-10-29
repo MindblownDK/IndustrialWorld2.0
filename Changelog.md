@@ -1,9 +1,23 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.7.0-dev`
+**Current Version:** `18.7.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.7.1-dev] A Farm Page That Updates Itself, and Pipe Runs That Join
+
+**Type:** PATCH - a live-update path, a layout rewrite of the new farm page, and two placement fixes for conduits. No new blocks, recipes, items or save fields.
+
+**GitHub title:** `[18.7.1-dev] Make the farm page live and tidy, and fix conduit continuation and ground alignment`
+
+#### Fixed
+
+- **The farm page did not update.** `PlantBoxPanel` was a snapshot: the page was built once when the block was opened and every number in it - growth, water, per-cell percentages, ready count, power state - stayed at whatever it was at that moment. It now rides the same live-page discipline as the Distillation Plant and the Catalytic Cracker: `BuildPanel` hands back a `PlantBoxPanelLive` of element handles and `PlantBoxPanel.Tick` writes them in place every frame. A crop's percentage climbs on screen, the water level falls on screen, and the page is never rebuilt under the player's cursor to achieve it.
+- **The farm page was cluttered.** The two tank gauges sat over the header divider and their value labels landed on the first stat rows; nine identical cell rows filled the middle of the page; the seeded figure was printed twice; and the page had no scrolling body, so it simply ran past the panel's bottom edge. It is rebuilt around a scrolling body: two thin level bars (water and growth, each with its value on the right), one compact card of stat rows, the two switches, two always-present action buttons, a three-by-three grid of cell chips, and then the two bins. Nine chips read as a bed at a glance where nine full-width rows read as a spreadsheet.
+- **The water row contradicted its own gauge.** The row printed `Water01`, which answers "is this bed irrigated" and is therefore 100% for any tank with water in it, while the gauge printed the litres. The tank level is now read from `waterStored / waterCapacity` everywhere on the page, and the sprinkler-or-canister question is its own line.
+- **Conduits refused to continue a run - "Cell already built".** The pipe-to-pipe snap searched every endpoint of the aimed pipe and took the nearest one, including the end that already had a pipe joined to it. Snapping there placed the new fitting exactly on top of its neighbour, and `IsPlacementValid` then refused the click as a duplicate. Both conduit families now search only **free** ends (`TryGetFreeConduitEndpoint` / `ConduitEndpointIsClaimed`), so a run grows outwards and the refusal is gone.
+- **Conduits laid on the ground stepped up and down between segments.** A ground click used the raw terrain hit point, so every segment in a run sat at its own height. A nearby free end within 1.6 m now wins over the ground, and only when the aim sits *past* that end (`AimsBeyondConduitEnd`) - so continuing a line is a snap, while a parallel line one metre away is still its own line. Energy Pipes and Data Pipes share the one code path instead of two copies that could drift apart.
 
 ### [18.7.0-dev] A Panel for Every Planting Block, Beds That Match Their Footprint, and a Tree That Owns the Large Bed
 
