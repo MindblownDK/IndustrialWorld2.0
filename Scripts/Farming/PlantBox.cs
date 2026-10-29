@@ -108,6 +108,22 @@ namespace VoxelEngine.Farming
         [Tooltip("Growth multiplier for a tree while the bed is watered.")]
         public float treeIrrigatedSpeedMultiplier = 2f;
 
+        [Header("Tree Bed")]
+        [Tooltip("True when a tree owns this whole bed. Only a Large bed can be a tree bed: a tree takes the plot, " +
+                 "so its nine cells are not shared with crops while it grows.")]
+        public bool treeBed = false;
+        [Tooltip("0..1 growth of the tree on a tree bed. Unused when no tree is planted.")]
+        [Range(0f, 1f)] public float treeGrowth = 0f;
+
+        [Header("Containers")]
+        [Tooltip("Seeds and saplings waiting for a free cell. The bed plants from here on its own.")]
+        public ItemContainer seedInput;
+        [Tooltip("Produce taken off the bed, waiting for a route. Also readable and collectable from the panel.")]
+        public ItemContainer harvestOutput;
+
+        public const int SEED_SLOTS = 4;
+        public const int OUTPUT_SLOTS = 9;
+
         [Header("Output Port")]
         [Tooltip("Empty ripe cells into a belt, chute, funnel or item pipe standing next to the box.")]
         public bool autoDumpWhenRipe = true;
@@ -137,6 +153,7 @@ namespace VoxelEngine.Farming
         {
             get
             {
+                if (treeBed) return "Timber";
                 int planted = PlantedCount;
                 if (planted == 0) return string.Empty;
                 if (planted == 1)
@@ -158,6 +175,7 @@ namespace VoxelEngine.Farming
         {
             get
             {
+                if (treeBed) return Mathf.Clamp01(treeGrowth);
                 float total = 0f;
                 int count = 0;
                 for (int i = 0; i < slots.Length; i++)
@@ -173,7 +191,7 @@ namespace VoxelEngine.Farming
         }
 
         public bool IsReady { get { return ReadyCount > 0; } }
-        public bool IsEmpty { get { return PlantedCount == 0; } }
+        public bool IsEmpty { get { return !treeBed && PlantedCount == 0; } }
         public bool NeedsWater { get { return AnyThirsty && !IsIrrigated; } }
         public bool NeedsOxygen { get { return !hasOxygen && AnyNeedsOxygen; } }
         public bool IsDead { get { return DeadCount > 0; } }
@@ -198,6 +216,7 @@ namespace VoxelEngine.Farming
         {
             get
             {
+                if (treeBed) return 1;
                 int n = 0;
                 for (int i = 0; i < slots.Length; i++)
                 {
@@ -212,6 +231,7 @@ namespace VoxelEngine.Farming
         {
             get
             {
+                if (treeBed) return treeGrowth >= 1f ? 1 : 0;
                 int n = 0;
                 for (int i = 0; i < slots.Length; i++)
                 {
@@ -226,6 +246,7 @@ namespace VoxelEngine.Farming
         {
             get
             {
+                if (treeBed) return 0;   // a tree does not dry out into a lost crop
                 int n = 0;
                 for (int i = 0; i < slots.Length; i++)
                     if (slots[i] != null && slots[i].dead) n++;
@@ -268,12 +289,24 @@ namespace VoxelEngine.Farming
 
         public bool AllowsTrees => allowTrees && boxSize == PlantBoxSize.Large;
 
+        // ── Panel surface (18.7.0-dev) ──────────────────────────────────────
+        // The bed's own panel reads these instead of poking at slots and private
+        // flags, so the UI has one door into the block like every other machine.
+        public bool TreeBed => treeBed;
+        public float TreeGrowth01 => Mathf.Clamp01(treeGrowth);
+        public bool HasAir => hasOxygen;
+        public int CellCount => SlotCount;
+        public float CellsFill01 => SlotCount <= 0 ? 0f : Mathf.Clamp01((float)PlantedCount / SlotCount);
+        public Slot CellAt(int index)
+            => slots != null && index >= 0 && index < slots.Length ? slots[index] : null;
+
         /// <summary>"Growing", "Ripe", "Dry", "Empty" - the word a prompt prints.</summary>
         public string StateLabel
         {
             get
             {
                 if (IsEmpty) return "EMPTY";
+                if (treeBed) return ReadyCount > 0 ? "TIMBER READY" : (treeGrowth * 100f).ToString("0") + "%";
                 if (DeadCount > 0 && DeadCount == PlantedCount) return "DEAD";
                 if (ReadyCount > 0) return ReadyCount + " READY";
                 if (PowerMissing) return "NO POWER";
@@ -305,6 +338,7 @@ namespace VoxelEngine.Farming
         private int[] _lastStage = Array.Empty<int>();
         private float _envTimer;
         private float _dumpTimer;
+        private float _plantTimer;
         private bool sprinklerFeeding;
         private bool hasOxygen;
 
@@ -319,10 +353,12 @@ namespace VoxelEngine.Farming
         {
             _power = GetComponent<VoxelEngine.Power.PowerConsumer>();
             EnsureSlots();
+            EnsureContainers();
             ResolveTreeItems();
             hasOxygen = FarmEnvironment.HasBreathableAir(transform.position);
             CacheVisuals();
             RefreshAllVisuals(force: true);
+            RefreshTreeVisual();
         }
 
         private void Update()
@@ -337,12 +373,62 @@ namespace VoxelEngine.Farming
 
             TickGrowth();
             TickWater();
+
+            // A bed with seeds in its bin fills itself, so a farm can be set up once.
+            _plantTimer += Time.deltaTime;
+            if (_plantTimer >= 1f)
+            {
+                _plantTimer = 0f;
+                int guard = 0;
+                while (PlantFromSeedBin() && guard++ < 9) { }
+            }
+
             TryDumpToPort();
             RefreshWaterGauge();
         }
 
+        /// <summary>
+        /// Create or resize the two containers. The seed bin is filtered to what this bed can
+        /// actually grow - which is how a Small box refuses a sapling before the player has
+        /// walked over with one.
+        /// </summary>
+        public void EnsureContainers()
+        {
+            if (seedInput == null) seedInput = new ItemContainer("Seeds", SEED_SLOTS);
+            else if (seedInput.Size != SEED_SLOTS) seedInput.Resize(SEED_SLOTS);
+            seedInput.AcceptFilter = (item, wanted) => CanPlant(item) ? wanted : 0;
+
+            if (harvestOutput == null) harvestOutput = new ItemContainer("Harvest", OUTPUT_SLOTS);
+            else if (harvestOutput.Size != OUTPUT_SLOTS) harvestOutput.Resize(OUTPUT_SLOTS);
+        }
+
+        /// <summary>True when this bed would accept <paramref name="item"/> right now.</summary>
+        public bool CanPlant(ItemDefinition item)
+        {
+            if (item == null) return false;
+            bool isTree = item is SeedItem seed && seed.crop == null && TreeFarmPlot.IsSaplingOrTreeSeed(item);
+            if (isTree) return AllowsTrees;
+            return item is SeedItem si && si.crop != null;
+        }
+
+        /// <summary>Take one seed or sapling out of the bin into a free cell, or claim the bed with a tree.</summary>
+        private bool PlantFromSeedBin()
+        {
+            if (seedInput == null || treeBed) return false;
+            for (int i = 0; i < seedInput.Size; i++)
+            {
+                var slot = seedInput.GetSlot(i);
+                if (slot == null || slot.IsEmpty || !CanPlant(slot.item)) continue;
+                int planted = TryPlantAt(transform.position, slot.item);
+                if (planted < 0) continue;
+                seedInput.Remove(slot.item, 1);
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Keep the slot array the size the footprint says it is.</summary>
-        private void EnsureSlots()
+        public void EnsureSlots()
         {
             int side = Mathf.Clamp(cellsPerSide <= 0 ? SideForSize(boxSize) : cellsPerSide, 1, 4);
             int wanted = side * side;
@@ -424,6 +510,23 @@ namespace VoxelEngine.Farming
 
             float scale = Mathf.Max(0f, growthSpeedMultiplier);
 
+            if (treeBed)
+            {
+                // A tree owns the bed: it grows on its own clock, drinks like one cell, and
+                // the nine crop cells are not used while it is there. It does not pause for
+                // room air - an indoor tree gets its carbon from the room's own cycle, and a
+                // tree bed that stalled on a technicality reads as a bug.
+                if (treeGrowth < 1f)
+                {
+                    float treeSpeed = (1f / Mathf.Max(1f, treeGrowthSeconds)) * scale;
+                    if (irrigated) treeSpeed *= Mathf.Max(1f, treeIrrigatedSpeedMultiplier);
+                    treeGrowth = Mathf.Clamp01(treeGrowth + treeSpeed * dt);
+                    RefreshTreeVisual();
+                    HideCropPods();
+                }
+                return;
+            }
+
             for (int i = 0; i < slots.Length; i++)
             {
                 var slot = slots[i];
@@ -463,8 +566,8 @@ namespace VoxelEngine.Farming
             if (sprinklerFeeding) return;
 
             float dt = Time.deltaTime;
-            int drinking = 0;
-            for (int i = 0; i < slots.Length; i++)
+            int drinking = treeBed ? 1 : 0;
+            for (int i = 0; i < slots.Length && !treeBed; i++)
             {
                 var s = slots[i];
                 if (s == null || s.dead) continue;
@@ -552,6 +655,22 @@ namespace VoxelEngine.Farming
             var crop = item is SeedItem si ? si.crop : null;
             if (!isTree && crop == null) return -1;
             if (isTree && !AllowsTrees) return -2;   // caller reports "needs a Large bed"
+            if (treeBed) return -3;                  // a tree owns this bed right now
+
+            if (isTree)
+            {
+                // 18.7.0-dev: a tree takes the bed, not a cell. Nine cells of maize and a
+                // mature tree in the tenth never made sense, so a sapling on a Large bed
+                // claims the whole plot and the crop cells wait their turn.
+                if (PlantedCount > 0) return -3;        // the caller reports "bed is in use"
+                treeBed = true;
+                treeGrowth = 0f;
+                for (int i = 0; i < slots.Length; i++) ResetSlot(i);
+                RefreshTreeVisual();
+                HideCropPods();
+                RefreshWaterGauge();
+                return 0;
+            }
 
             int wanted = SlotAt(worldPoint);
             int index = IsFree(wanted) ? wanted : FirstFreeIndex();
@@ -577,6 +696,34 @@ namespace VoxelEngine.Farming
             int index = SlotAt(worldPoint);
             if (!IsReadyIndex(index)) index = FirstReadyIndex();
             if (index < 0) return false;
+
+            if (treeBed)
+            {
+                // Felling by hand gives the same load as the automated route: logs,
+                // saplings, biomass. Self re-seeding leaves the stump and starts the
+                // next tree, which is what the switch promises.
+                harvest = PeekSlotHarvest(0);
+                if (harvest.IsEmpty) return false;
+                if (inventory != null)
+                {
+                    if (harvest.item != null && harvest.count > 0) inventory.Add(harvest.item, harvest.count);
+                    if (harvest.seedItem != null && harvest.seedCount > 0) inventory.Add(harvest.seedItem, harvest.seedCount);
+                    ResolveTreeItems();
+                    if (biomassItem != null && treeBiomassPerHarvest > 0)
+                        inventory.Add(biomassItem, treeBiomassPerHarvest);
+                }
+                if (replantAfterPortHarvest && saplingItem != null && treeSaplingsPerHarvest > 1)
+                {
+                    treeGrowth = 0f;
+                }
+                else
+                {
+                    treeBed = false;
+                    treeGrowth = 0f;
+                }
+                RefreshTreeVisual();
+                return true;
+            }
 
             var slot = slots[index];
             var crop = slot.crop;
@@ -669,6 +816,7 @@ namespace VoxelEngine.Farming
 
         private int FirstReadyIndex()
         {
+            if (treeBed) return treeGrowth >= 1f ? 0 : -1;
             for (int i = 0; i < slots.Length; i++) if (IsReadyIndex(i)) return i;
             return -1;
         }
@@ -695,6 +843,15 @@ namespace VoxelEngine.Farming
         /// <summary>What one cell would give up right now.</summary>
         public FarmHarvestYield PeekSlotHarvest(int index)
         {
+            if (treeBed)
+            {
+                if (treeGrowth < 1f) return default;
+                ResolveTreeItems();
+                return FarmHarvestYield.Crop(
+                    woodLogItem, treeLogsPerHarvest,
+                    saplingItem, treeSaplingsPerHarvest);
+            }
+
             if (!IsReadyIndex(index)) return default;
             var slot = slots[index];
 
@@ -724,6 +881,22 @@ namespace VoxelEngine.Farming
             if (index < 0) return false;
 
             harvest = PeekSlotHarvest(index);
+
+            if (treeBed)
+            {
+                // Self re-seeding keeps one sapling back, so a tree bed can cycle on its own
+                // felled timber instead of being replanted by hand every time.
+                if (replant && saplingItem != null && treeSaplingsPerHarvest > 1)
+                    treeGrowth = 0f;
+                else
+                {
+                    treeBed = false;
+                    treeGrowth = 0f;
+                    RefreshTreeVisual();
+                }
+                return true;
+            }
+
             var slot = slots[index];
 
             if (replant && !slot.tree)
@@ -746,6 +919,56 @@ namespace VoxelEngine.Farming
 
         /// <summary>What the box would give up right now: its first ripe cell.</summary>
         public FarmHarvestYield PeekHarvest() => PeekSlotHarvest(FirstReadyIndex());
+
+        /// <summary>
+        /// Harvest everything that is ready into the box's own output bin. The panel calls
+        /// this so a player can empty nine cells with one click; the route push still runs
+        /// first, so a plot with a belt behaves exactly as before.
+        /// </summary>
+        public int HarvestAllToOutput()
+        {
+            EnsureContainers();
+            int moved = 0;
+
+            if (treeBed)
+            {
+                if (treeGrowth < 1f || harvestOutput == null) return 0;
+                var treeYield = PeekSlotHarvest(0);
+                if (!harvestOutput.HasSpace(treeYield.item, treeYield.count)) return 0;
+                if (!TakeHarvest(false, out var taken)) return 0;
+                InsertBin(taken.item, taken.count);
+                InsertBin(taken.seedItem, taken.seedCount);
+                ResolveTreeItems();
+                InsertBin(biomassItem, treeBiomassPerHarvest);
+                RefreshTreeVisual();
+                return 1;
+            }
+
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (!IsReadyIndex(i)) continue;
+                var peek = PeekSlotHarvest(i);
+                if (peek.IsEmpty) continue;
+                if (harvestOutput != null && !harvestOutput.HasSpace(peek.item, peek.count)) break;
+
+                var harvest = peek;
+                slots[i].growth = 0f;
+                if (!replantAfterPortHarvest) ResetSlot(i);
+                else slots[i].fertilized = false;
+                RefreshCellVisual(i, force: true);
+
+                InsertBin(harvest.item, harvest.count);
+                InsertBin(harvest.seedItem, harvest.seedCount - (replantAfterPortHarvest ? 1 : 0));
+                moved++;
+            }
+            return moved;
+        }
+
+        private void InsertBin(ItemDefinition item, int count)
+        {
+            if (item == null || count <= 0 || harvestOutput == null) return;
+            harvestOutput.Insert(new ItemStack { item = item, count = count });
+        }
 
         /// <summary>Clear every lost cell in the box. Used by a Harvester.</summary>
         public int ClearAllDead()
@@ -777,39 +1000,83 @@ namespace VoxelEngine.Farming
             var peek = PeekSlotHarvest(index);
             if (peek.IsEmpty) return;
 
-            bool selfReplant = replantAfterPortHarvest && !slots[index].tree
+            bool selfReplant = replantAfterPortHarvest && !treeBed
+                && slots[index] != null && !slots[index].tree
                 && peek.seedItem != null && peek.seedCount > 0;
             int seedsLeaving = selfReplant ? peek.seedCount - 1 : peek.seedCount;
 
-            if (peek.item != null && !FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.item, peek.count)) return;
-            if (seedsLeaving > 0 && peek.seedItem != null
-                && !FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.seedItem, seedsLeaving)) return;
+            // A route is optional: with a belt the harvest goes on the belt, without one it
+            // lands in the box's own output bin and the player collects it from the panel.
+            EnsureContainers();
+            bool routeOk = (peek.item == null || FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.item, peek.count))
+                && (seedsLeaving <= 0 || peek.seedItem == null
+                    || FarmItemRouter.HasRoomFor(transform, dumpRadius, peek.seedItem, seedsLeaving));
+            bool binOk = harvestOutput != null
+                && (peek.item == null || harvestOutput.HasSpace(peek.item, peek.count));
+            if (!routeOk && !binOk) return;
 
             var harvest = peek;
-            slots[index].growth = 0f;
-            if (selfReplant)
+
+            if (treeBed)
             {
-                slots[index].fertilized = false;
+                // The tree bed is emptied as a whole: the tree is felled, and a kept sapling
+                // resets it for the next one.
+                if (replantAfterPortHarvest && saplingItem != null && treeSaplingsPerHarvest > 1)
+                {
+                    treeGrowth = 0f;
+                }
+                else
+                {
+                    treeBed = false;
+                    treeGrowth = 0f;
+                }
             }
             else
             {
-                ResetSlot(index);
+                slots[index].growth = 0f;
+                if (selfReplant)
+                {
+                    slots[index].fertilized = false;
+                }
+                else
+                {
+                    ResetSlot(index);
+                }
+                droughtTimers[index] = 0f;
+                _lastStage[index] = -1;
+                RefreshCellVisual(index, force: true);
             }
-            droughtTimers[index] = 0f;
-            _lastStage[index] = -1;
-            RefreshCellVisual(index, force: true);
 
-            if (harvest.item != null && harvest.count > 0)
-                FarmItemRouter.Push(transform, dumpRadius, harvest.item, harvest.count);
-            if (seedsLeaving > 0 && harvest.seedItem != null)
-                FarmItemRouter.Push(transform, dumpRadius, harvest.seedItem, seedsLeaving);
+            MoveOut(harvest, seedsLeaving);
 
             // A tree also drops biomass, which never travels with the log stack.
-            if (slots[index].tree || harvest.item == woodLogItem)
+            if (treeBed || slots[index].tree || harvest.item == woodLogItem)
             {
                 ResolveTreeItems();
                 if (biomassItem != null && treeBiomassPerHarvest > 0)
-                    FarmItemRouter.Push(transform, dumpRadius, biomassItem, treeBiomassPerHarvest);
+                {
+                    if (!FarmItemRouter.HasRoomFor(transform, dumpRadius, biomassItem, treeBiomassPerHarvest))
+                        InsertBin(biomassItem, treeBiomassPerHarvest);
+                    else
+                        FarmItemRouter.Push(transform, dumpRadius, biomassItem, treeBiomassPerHarvest);
+                }
+            }
+
+            RefreshTreeVisual();
+        }
+
+        /// <summary>Send a harvested payload to the nearest route and anything left to the bin.</summary>
+        private void MoveOut(FarmHarvestYield harvest, int seedsLeaving)
+        {
+            if (harvest.item != null && harvest.count > 0)
+            {
+                int took = FarmItemRouter.Push(transform, dumpRadius, harvest.item, harvest.count);
+                if (took < harvest.count) InsertBin(harvest.item, harvest.count - took);
+            }
+            if (seedsLeaving > 0 && harvest.seedItem != null)
+            {
+                int took = FarmItemRouter.Push(transform, dumpRadius, harvest.seedItem, seedsLeaving);
+                if (took < seedsLeaving) InsertBin(harvest.seedItem, seedsLeaving - took);
             }
         }
 
@@ -821,6 +1088,9 @@ namespace VoxelEngine.Farming
 
             state.SetExtra("boxSlots", slots.Length);
             state.SetExtra("water", Mathf.Max(0f, waterStored));
+            state.SetExtra("treeBed", treeBed ? 1f : 0f);
+            state.SetExtra("treeGrowth", Mathf.Clamp01(treeGrowth));
+
             for (int i = 0; i < slots.Length; i++)
             {
                 var slot = slots[i];
@@ -845,6 +1115,9 @@ namespace VoxelEngine.Farming
             waterStored = Mathf.Clamp(
                 MachineProcessPersistence.FiniteOr(state.GetExtra("water", waterStored), waterStored),
                 0f, Mathf.Max(0f, waterCapacity));
+
+            treeBed = state.GetExtra("treeBed", treeBed ? 1f : 0f) >= 0.5f;
+            treeGrowth = MachineProcessPersistence.ClampOr(state.GetExtra("treeGrowth", treeGrowth), 0f, 1f, 0f);
 
             for (int i = 0; i < slots.Length; i++)
             {
@@ -873,6 +1146,7 @@ namespace VoxelEngine.Farming
                 }
             }
 
+            RefreshTreeVisual();
             _lastStage = new int[slots.Length];
             for (int i = 0; i < slots.Length; i++) _lastStage[i] = -1;
             RefreshAllVisuals(force: true);
@@ -902,7 +1176,15 @@ namespace VoxelEngine.Farming
         {
             EnsureSlots();
             int side = cellsPerSide <= 0 ? SideForSize(boxSize) : cellsPerSide;
-            float span = 1f / side;
+
+            // 18.7.0-dev: the tray is drawn to the BLOCK's footprint, not to one metre. The
+            // old body was a fixed 1 m tray in the middle of a 2 m or 3 m block, which is why
+            // the three sizes looked identical and only the number of cells changed. Every
+            // measurement below is now derived from `side`, so a Small bed is 1 m, a Big bed
+            // is 2 m and a Large bed is 3 m of real furniture.
+            float span = side;                       // metres of bed along one edge
+            float half = span * 0.5f;
+            float edge = half - 0.02f;               // curb centre-line
             bool large = boxSize == PlantBoxSize.Large;
 
             var root = new GameObject("Generated_PlantBoxVisuals").transform;
@@ -916,73 +1198,140 @@ namespace VoxelEngine.Farming
             Color richSoil = new Color(0.26f, 0.17f, 0.10f);
             Color waterChannel = new Color(0.20f, 0.62f, 0.88f);
             Color cropGreen = new Color(0.30f, 0.66f, 0.28f);
+            Color timberBark = new Color(0.40f, 0.26f, 0.14f);
+            Color timberLeaf = new Color(0.22f, 0.54f, 0.24f);
 
-            // Base tray and four timber curbs scaled to the footprint.
+            // Base tray, kerb and curbs, all sized to the footprint.
             MakePart(root, PrimitiveType.Cube, "BaseTray",
-                new Vector3(0f, 0.08f, 0f), new Vector3(0.98f, 0.16f, 0.98f), frameSteel);
-            MakePart(root, PrimitiveType.Cube, "Curb_N", new Vector3(0f, 0.22f, 0.46f), new Vector3(0.98f, 0.14f, 0.08f), curbTimber);
-            MakePart(root, PrimitiveType.Cube, "Curb_S", new Vector3(0f, 0.22f, -0.46f), new Vector3(0.98f, 0.14f, 0.08f), curbTimber);
-            MakePart(root, PrimitiveType.Cube, "Curb_E", new Vector3(0.46f, 0.22f, 0f), new Vector3(0.08f, 0.14f, 0.98f), curbTimber);
-            MakePart(root, PrimitiveType.Cube, "Curb_W", new Vector3(-0.46f, 0.22f, 0f), new Vector3(0.08f, 0.14f, 0.98f), curbTimber);
+                new Vector3(0f, 0.08f, 0f), new Vector3(span * 0.98f, 0.16f, span * 0.98f), frameSteel);
+            MakePart(root, PrimitiveType.Cube, "Curb_N", new Vector3(0f, 0.22f, edge), new Vector3(span * 0.98f, 0.16f, 0.09f), curbTimber);
+            MakePart(root, PrimitiveType.Cube, "Curb_S", new Vector3(0f, 0.22f, -edge), new Vector3(span * 0.98f, 0.16f, 0.09f), curbTimber);
+            MakePart(root, PrimitiveType.Cube, "Curb_E", new Vector3(edge, 0.22f, 0f), new Vector3(0.09f, 0.16f, span * 0.94f), curbTimber);
+            MakePart(root, PrimitiveType.Cube, "Curb_W", new Vector3(-edge, 0.22f, 0f), new Vector3(0.09f, 0.16f, span * 0.94f), curbTimber);
 
-            // One soil cell per slot, plus a crop pod above it.
+            // One soil cell per slot, one metre apart, and a crop pod above each of them.
             for (int r = 0; r < side; r++)
             for (int c = 0; c < side; c++)
             {
                 int index = r * side + c;
-                float x = (c + 0.5f) * span - 0.5f;
-                float z = (r + 0.5f) * span - 0.5f;
+                float x = c - (side - 1) * 0.5f;
+                float z = r - (side - 1) * 0.5f;
 
                 MakePart(root, PrimitiveType.Cube, "Soil_" + index,
-                    new Vector3(x, 0.185f, z), new Vector3(span * 0.86f, 0.06f, span * 0.86f), richSoil);
+                    new Vector3(x, 0.185f, z), new Vector3(0.86f, 0.06f, 0.86f), richSoil);
 
                 var cell = new GameObject("Crop_" + index).transform;
                 cell.SetParent(root, false);
                 cell.localPosition = new Vector3(x, 0.215f, z);
                 cell.localRotation = Quaternion.identity;
 
-                float s = span * 0.75f;
                 MakePart(cell, PrimitiveType.Cylinder, "Stalk",
-                    new Vector3(0f, 0.14f, 0f), new Vector3(0.05f * s, 0.14f, 0.05f * s), new Color(0.34f, 0.52f, 0.22f));
+                    new Vector3(0f, 0.14f, 0f), new Vector3(0.05f, 0.14f, 0.05f), new Color(0.34f, 0.52f, 0.22f));
                 MakePart(cell, PrimitiveType.Cube, "Leaf_A",
-                    new Vector3(0.07f * s, 0.20f, 0.02f), new Vector3(0.18f * s, 0.03f, 0.09f * s), cropGreen, new Vector3(0f, 0f, 22f));
+                    new Vector3(0.07f, 0.20f, 0.02f), new Vector3(0.18f, 0.03f, 0.09f), cropGreen, new Vector3(0f, 0f, 22f));
                 MakePart(cell, PrimitiveType.Cube, "Leaf_B",
-                    new Vector3(-0.07f * s, 0.26f, -0.01f), new Vector3(0.17f * s, 0.03f, 0.09f * s), cropGreen, new Vector3(0f, 0f, -20f));
+                    new Vector3(-0.07f, 0.26f, -0.01f), new Vector3(0.17f, 0.03f, 0.09f), cropGreen, new Vector3(0f, 0f, -20f));
                 MakePart(cell, PrimitiveType.Cube, "Leaf_C",
-                    new Vector3(0.01f, 0.31f, 0.06f * s), new Vector3(0.13f * s, 0.03f, 0.08f * s), cropGreen, new Vector3(12f, 30f, 0f));
+                    new Vector3(0.01f, 0.31f, 0.06f), new Vector3(0.13f, 0.03f, 0.08f), cropGreen, new Vector3(12f, 30f, 0f));
             }
 
-            // Irrigation strip along the inside of the tray.
+            // Irrigation strip along the inside of the back curb.
             MakePart(root, PrimitiveType.Cube, "Irrig_Strip",
-                new Vector3(0f, 0.215f, 0.36f), new Vector3(0.72f, 0.02f, 0.05f), waterChannel);
+                new Vector3(0f, 0.215f, edge - 0.10f), new Vector3(span * 0.74f, 0.02f, 0.05f), waterChannel);
 
-            // Output port on the +X face: a short discharge chute with its own indicator.
+            // Output chute on the +X face, flush with the block edge at any size.
             MakePart(root, PrimitiveType.Cube, "OutputPort_Chute",
-                new Vector3(0.50f, 0.14f, 0f), new Vector3(0.20f, 0.12f, 0.34f), frameSteel);
+                new Vector3(half + 0.06f, 0.14f, 0f), new Vector3(0.22f, 0.12f, 0.34f), frameSteel);
             MakePart(root, PrimitiveType.Cube, "OutputPort_Lip",
-                new Vector3(0.57f, 0.19f, 0f), new Vector3(0.05f, 0.02f, 0.30f), waterChannel);
+                new Vector3(half + 0.14f, 0.19f, 0f), new Vector3(0.06f, 0.02f, 0.30f), waterChannel);
             MakePart(root, PrimitiveType.Cube, "OutputPort_Indicator",
-                new Vector3(0.50f, 0.21f, 0.18f), new Vector3(0.06f, 0.03f, 0.06f), new Color(0.22f, 0.44f, 0.34f));
+                new Vector3(half + 0.06f, 0.21f, 0.18f), new Vector3(0.06f, 0.03f, 0.06f), new Color(0.22f, 0.44f, 0.34f));
 
-            // Water gauge: a thin sight glass on the -X face, so the hand-watered state is
-            // readable without opening anything.
+            // Water sight glass on the -X face.
             MakePart(root, PrimitiveType.Cube, "WaterGauge_Back",
-                new Vector3(-0.50f, 0.14f, 0f), new Vector3(0.04f, 0.20f, 0.10f), frameSteel);
+                new Vector3(-half - 0.05f, 0.14f, 0f), new Vector3(0.05f, 0.20f, 0.10f), frameSteel);
             MakePart(root, PrimitiveType.Cube, "WaterGauge",
-                new Vector3(-0.52f, 0.14f, 0f), new Vector3(0.02f, 0.16f, 0.07f), waterChannel);
+                new Vector3(-half - 0.08f, 0.14f, 0f), new Vector3(0.02f, 0.16f, 0.07f), waterChannel);
 
             if (large)
             {
-                // A Large bed gets corner posts tall enough to read as a bed a tree sits in.
-                MakePart(root, PrimitiveType.Cube, "Post_NW", new Vector3(-0.46f, 0.55f, 0.46f), new Vector3(0.08f, 0.9f, 0.08f), frameSteel);
-                MakePart(root, PrimitiveType.Cube, "Post_NE", new Vector3(0.46f, 0.55f, 0.46f), new Vector3(0.08f, 0.9f, 0.08f), frameSteel);
-                MakePart(root, PrimitiveType.Cube, "Post_SW", new Vector3(-0.46f, 0.55f, -0.46f), new Vector3(0.08f, 0.9f, 0.08f), frameSteel);
-                MakePart(root, PrimitiveType.Cube, "Post_SE", new Vector3(0.46f, 0.55f, -0.46f), new Vector3(0.08f, 0.9f, 0.08f), frameSteel);
-                MakePart(root, PrimitiveType.Cube, "Treillage_Top", new Vector3(0f, 0.98f, 0f), new Vector3(0.9f, 0.04f, 0.06f), frameSteel);
+                // Four posts at the tray corners and a frame that actually meets them. The
+                // old body had a lone rail at post height with nothing under it, which read
+                // as a bar floating over the bed.
+                float postX = edge - 0.04f;
+                float postTop = 1.70f;
+                MakePart(root, PrimitiveType.Cube, "Post_NW", new Vector3(-postX, postTop * 0.5f, postX), new Vector3(0.10f, postTop, 0.10f), frameSteel);
+                MakePart(root, PrimitiveType.Cube, "Post_NE", new Vector3(postX, postTop * 0.5f, postX), new Vector3(0.10f, postTop, 0.10f), frameSteel);
+                MakePart(root, PrimitiveType.Cube, "Post_SW", new Vector3(-postX, postTop * 0.5f, -postX), new Vector3(0.10f, postTop, 0.10f), frameSteel);
+                MakePart(root, PrimitiveType.Cube, "Post_SE", new Vector3(postX, postTop * 0.5f, -postX), new Vector3(0.10f, postTop, 0.10f), frameSteel);
+
+                // A proper trellis: two rails per direction, resting on the post tops, so the
+                // frame reads as one structure from any angle.
+                for (int i = 0; i < 3; i++)
+                {
+                    float t = (i - 1) * 0.85f;
+                    MakePart(root, PrimitiveType.Cube, "Trellis_X" + i,
+                        new Vector3(0f, postTop - 0.04f, t), new Vector3(postX * 2f, 0.05f, 0.06f), frameSteel);
+                    MakePart(root, PrimitiveType.Cube, "Trellis_Z" + i,
+                        new Vector3(t, postTop - 0.04f, 0f), new Vector3(0.06f, 0.05f, postX * 2f), frameSteel);
+                }
+
+                // The timber that a tree on this bed will become. Hidden until a sapling is
+                // planted: `RefreshTreeVisual` scales it from 0 to full.
+                var tree = new GameObject("TreeRoot").transform;
+                tree.SetParent(root, false);
+                tree.localPosition = new Vector3(0f, 0.20f, 0f);
+                MakePart(tree, PrimitiveType.Cylinder, "Trunk",
+                    new Vector3(0f, 1.00f, 0f), new Vector3(0.42f, 1.00f, 0.42f), timberBark);
+                MakePart(tree, PrimitiveType.Cylinder, "TrunkTop",
+                    new Vector3(0f, 2.10f, 0f), new Vector3(0.26f, 0.55f, 0.26f), timberBark);
+                MakePart(tree, PrimitiveType.Sphere, "Canopy_Main",
+                    new Vector3(0f, 2.75f, 0f), new Vector3(2.10f, 1.30f, 2.10f), timberLeaf);
+                MakePart(tree, PrimitiveType.Sphere, "Canopy_Crown",
+                    new Vector3(0f, 3.35f, 0f), new Vector3(1.40f, 0.95f, 1.40f), new Color(0.28f, 0.62f, 0.26f));
+                MakePart(tree, PrimitiveType.Sphere, "Canopy_West",
+                    new Vector3(-0.70f, 2.35f, 0.20f), new Vector3(1.20f, 0.90f, 1.20f), timberLeaf);
+                MakePart(tree, PrimitiveType.Sphere, "Canopy_East",
+                    new Vector3(0.72f, 2.42f, -0.18f), new Vector3(1.20f, 0.90f, 1.20f), timberLeaf);
+                tree.localScale = Vector3.zero;
             }
 
             MakePart(root, PrimitiveType.Cube, "StatusBeacon",
-                new Vector3(0.40f, 0.28f, 0.40f), new Vector3(0.06f, 0.06f, 0.06f), new Color(0.52f, 0.86f, 0.22f));
+                new Vector3(half - 0.18f, 0.28f, half - 0.18f), new Vector3(0.07f, 0.06f, 0.07f), new Color(0.52f, 0.86f, 0.22f));
+        }
+
+        /// <summary>Hide every crop pod - used while a tree owns the bed.</summary>
+        private void HideCropPods()
+        {
+            for (int i = 0; i < _cellRoots.Length; i++)
+                if (_cellRoots[i] != null) _cellRoots[i].gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// The tree that fills a Large bed. Hidden entirely on the smaller boxes and while the
+        /// bed holds crops; scaled from a seedling to a full trunk as the sapling grows.
+        /// </summary>
+        private void RefreshTreeVisual()
+        {
+            var vis = transform.Find("Generated_PlantBoxVisuals");
+            if (vis == null) return;
+            var tree = vis.Find("TreeRoot");
+            if (tree == null) return;
+
+            if (!treeBed)
+            {
+                tree.localScale = Vector3.zero;
+                return;
+            }
+
+            float g = Mathf.Clamp01(treeGrowth);
+            float xz = Mathf.Lerp(0.10f, 1f, g);
+            float y = Mathf.Lerp(0.08f, 1f, g);
+            tree.localScale = new Vector3(xz, y, xz);
+
+            // A tree owns the bed, so the crop pods step aside while it is there.
+            for (int i = 0; i < _cellRoots.Length; i++)
+                if (_cellRoots[i] != null) _cellRoots[i].gameObject.SetActive(false);
         }
 
         private void CacheVisuals()

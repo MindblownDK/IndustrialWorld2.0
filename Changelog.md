@@ -1,9 +1,34 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.6.1-dev`
+**Current Version:** `18.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.7.0-dev] A Panel for Every Planting Block, Beds That Match Their Footprint, and a Tree That Owns the Large Bed
+
+**Type:** MINOR - one new panel, two real containers on the planting blocks, footprint-sized geometry and a new tree bed on the Large Plant Bed. Save-compatible: `treeBed` and `treeGrowth` are additive `IMachineProcessState` keys that an older save loads as "no tree", the two containers are new serialized fields on a component that has never held them, and no block id, recipe, item id or crop asset changes meaning.
+
+**GitHub title:** `[18.7.0-dev] Give the planting boxes a panel, draw each size at its real footprint, and let the Large bed grow a tree`
+
+#### Added
+
+- **`PlantBoxPanel` (`Scripts/UI/Farming/PlantBoxPanel.cs`).** A farm block answered a right-click with a toast and nothing else. It now opens a machine page shared by all six planting blocks - Plant Box, Big Plant Box, Large Plant Bed and all three Auto Farm Plots - because all six are the same `PlantBox` component. The page carries the status pill and run lamps, a water gauge, a beds gauge (a timber gauge on a tree bed), an overall growth bar, crop, ready, lost-crop, power, irrigation and air rows, the **Self Re-seeding** and **Auto Output** switches, a **Harvest into Bin** button, a **Clear Lost Crops** button when crops are lost, one line per cell, a four-slot seed bin and a nine-slot harvest bin.
+- **Two real containers on every planting block:** `seedInput` (4 slots, filtered through `CanPlant`, so a Small box refuses a sapling in the bin as well as in the hand) and `harvestOutput` (9 slots). `EnsureContainers` creates or resizes both, seeds dropped in the bin are planted into free cells once a second, and the panel's harvest button empties the bed into the bin with one click. Both are plain serialized `ItemContainer` fields, the same pattern the grid plots shipped with in 18.5.0, so they ride the normal component save.
+- **A tree bed on the Large bed.** A sapling planted on the Large Plant Bed no longer takes one of its nine cells: it claims the whole bed. `treeBed` and `treeGrowth` are new fields on `PlantBox`, `PlantBox.AllowsTrees` gates them to `boxSize == Large`, and every readout the bed reports - `PlantedCount`, `ReadyCount`, `DeadCount`, `Growth01`, `CropName`, `StateLabel`, `IsEmpty` - has a tree-aware branch, so a bed with a tree reads `TIMBER` and `TIMBER READY` instead of nine empty cells. The tree grows on its own clock (`treeGrowthSeconds`, 110 s, doubled when irrigated, scaled by the bed's own `growthSpeedMultiplier`) and is drawn by a `TreeRoot` visual that scales from a seedling to a full trunk and canopy.
+- **The tree is harvested as a tree.** `PeekSlotHarvest`, `TakeHarvest`, `TryHarvestAt`, `HarvestAllToOutput` and the auto-output path all return logs, saplings and biomass from a tree bed in one go. Self re-seeding keeps a sapling back and starts the next tree; with the switch off the bed empties.
+- **`PlantBox.EnsureSlots` and a small panel surface** (`TreeBed`, `TreeGrowth01`, `HasAir`, `CellCount`, `CellAt`, `CellsFill01`) so the panel reads the block through one door instead of poking at slots and private flags.
+
+#### Changed
+
+- **Each size is drawn at its own footprint.** The bed geometry was a fixed one-metre tray in the middle of a two- or three-metre block, so a Large bed was a Small bed with more cells in it. `BuildVisuals` now derives every measurement from `cellsPerSide`: the tray, curbs and soil are drawn out to 1 m, 2 m and 3 m of real furniture, the cells sit one metre apart on their own grid, and the output chute and the water sight glass are pushed out to the block's edge instead of floating in the middle of a large block.
+- **A right-click with an empty hand on a bed with nothing ripe opens the panel** instead of printing its state in a toast. Manual planting, watering, harvesting, dead-crop clearing and fertilizing are unchanged.
+- **The Auto Farm Plots are explicitly not tree beds.** `WorldFarmOverhaulSetup` now writes `treeBed = false` and `treeGrowth = 0` on all three, and `allowTrees = size == Large` on the three planting boxes, so re-running the setup step cannot resurrect a claimed bed on an old prefab. The step's Console report names the new panel, and its header now reads 18.7.0-dev.
+
+#### Fixed
+
+- **The Large bed had a floating trellis bar.** One `Treillage_Top` cube hovered at 0.98 m over open ground with nothing holding it up - the single clearest "this block was not authored" detail in the screenshot report. The Large bed now grows four corner posts to 1.70 m and three by two trellis rails resting on their tops, so the trellis is a structure rather than an orphan.
+- **A tree no longer shares a bed with crops.** Crop pods are hidden and the nine cells are left unused while a tree grows, which is what "the tree uses the whole plot" has to mean; the cells come back when the tree is felled.
 
 ### [18.6.1-dev] Restore the Sprinkler Repair Pass and Make the Farm Icons Their Own Step
 

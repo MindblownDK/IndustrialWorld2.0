@@ -167,7 +167,7 @@ namespace VoxelEngine.EditorTools
                 if (AssetDatabase.LoadMainAssetAtPath(required[i]) == null) missing.Add(required[i]);
 
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine("Farm overhaul (18.3.0-dev)");
+            sb.AppendLine("Farm overhaul (18.7.0-dev)");
             sb.AppendLine();
             sb.AppendLine($"Created: {created.Count}");
             AppendList(sb, created);
@@ -184,6 +184,7 @@ namespace VoxelEngine.EditorTools
             for (int i = 0; i < missing.Count; i++) sb.AppendLine("  ! " + missing[i]);
             sb.AppendLine();
             sb.AppendLine("Plant boxes: Small = 1 crop, Big = 4, Large = 9 (trees only on Large).");
+            sb.AppendLine("Every planting block opens a panel: seed bin, harvest bin, cells, water, power, self re-seed.");
             sb.AppendLine("Sprinkler: fill by hand with a Liquid Canister, or connect a pipe for automatic refill.");
 
             Debug.Log("[Farm Overhaul] " + sb.ToString().Replace("\n", "\n[Farm Overhaul] "));
@@ -233,6 +234,12 @@ namespace VoxelEngine.EditorTools
                 plant.biomassItem = biomass;
                 plant.autoDumpWhenRipe = true;
                 plant.replantAfterPortHarvest = true;
+                // 18.7.0-dev: only the Large bed takes a tree, and no bed starts out
+                // claimed by one. Spelled out here so a re-run of this step cannot
+                // resurrect a tree bed on a prefab that was authored before the field.
+                plant.allowTrees = size == PlantBoxSize.Large;
+                plant.treeBed = false;
+                plant.treeGrowth = 0f;
                 plant.RebuildVisuals();
                 AssignFarmMaterials(root);
 
@@ -341,6 +348,8 @@ namespace VoxelEngine.EditorTools
                 plot.autoDumpWhenRipe = true;
                 plot.replantAfterPortHarvest = true;
                 plot.growthSpeedMultiplier = 0.5f;
+                plot.treeBed = false;         // 18.7.0-dev: an auto plot never holds a tree
+                plot.treeGrowth = 0f;
                 plot.woodLogItem = woodLog;
                 plot.saplingItem = sapling;
                 plot.biomassItem = biomass;

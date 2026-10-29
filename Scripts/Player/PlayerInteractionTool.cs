@@ -1072,15 +1072,10 @@ namespace VoxelEngine.Player
                         }
                     }
 
-                    VoxelEngine.UI.BuildFeedbackHud.Show(
-                        plantBox.BedName,
-                        plantBox.IsEmpty
-                            ? "Right-click with a seed to plant"
-                            : plantBox.StateLabel + " - " + plantBox.CropName
-                              + " - water " + (plantBox.Water01 * 100f).ToString("0") + "%"
-                              + (plantBox.HasSprinkler ? " (sprinkler)" : ""),
-                        null,
-                        new Color(0.38f, 0.72f, 0.36f));
+                    // 6) Nothing to do by hand? Open the bed. An empty hand on a plot with
+                    //    nothing ripe is a request for the panel, not for a toast - a farm
+                    //    block the player cannot open is a defect (18.7.0-dev).
+                    UI.GameUIController.Instance?.OpenMachine(plantBox);
                     return;
                 }
 

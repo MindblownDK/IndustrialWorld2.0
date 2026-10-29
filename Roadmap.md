@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.6.1-dev`
-**Roadmap Version:** `18.6.1-dev`
-**Date:** 2026-10-27
+**Current Version:** `18.7.0-dev`
+**Roadmap Version:** `18.7.0-dev`
+**Date:** 2026-10-29
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.7.0-dev - Farm Panels, Real Footprints, Tree Beds
+- Every planting block opens `PlantBoxPanel` - water, beds, power, cells, a four-slot seed bin, a nine-slot harvest bin and the self re-seed switch - reached by right-clicking a bed with an empty hand
+- `PlantBox.BuildVisuals` is derived from `cellsPerSide`, so Small, Big and Large are 1, 2 and 3 metres of furniture; the Large bed's orphan trellis bar is replaced by corner posts carrying the rails
+- A sapling on the Large bed claims the whole bed (`treeBed` / `treeGrowth`), hides the crop cells, and comes down as logs, saplings and biomass
+
 ### 18.6.1-dev - Sprinkler Repair Restored, Icons Authored First
 - `WorldFarmOverhaulSetup.RepairSprinkler` is back (18.6.0-dev had deleted it with the old plot block), so the editor assembly compiles again
 - `EnsureFarmIcons` runs before any prefab work and again at the end, authors the six farm icons and rebinds any whose sprite reference was dropped by a re-import
@@ -43,11 +48,6 @@
 - Both grid plots open a machine page - status, water and bed gauges, breathable-air reading, per-bed list, and seed and harvest bins - reached through `GridBlockHasUI`
 - The plot bins are real containers: seeds dropped in are planted automatically, harvests go to cargo first and the bin second, and both ride the shared multi-container save path
 - The Auto Farm Plot is drawn as a machine instead of the plain cube Tilled Soil uses, and the sprinkler is created when missing rather than only repaired
-
-### 18.4.1-dev - Farm Setup Compile Fix
-- `WorldFarmOverhaulSetup.EnsureRecipe` receives the `preserved` list it reports into, so the editor assembly compiles again
-- Every method in that file that reads `created`, `repaired` or `preserved` now declares it; a second setup run now reports an unchanged recipe as preserved instead of skipping it without a word
-- No runtime code, asset, recipe or save field changed
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -67,6 +67,7 @@
 - **Farm authoring acceptance (18.5.0-dev):** confirm in Unity that `RunStep124` reports "all 15 new blocks, prefabs and recipes are present", that the Sprinkler exists on a project that never ran the farming content step, that the Auto Farm Plot in hand looks like a bordered tray rather than a dirt cube, and that Tilled Soil is unchanged.
 - **Auto Farm Plot family and growth pace acceptance (18.6.0-dev):** Unity compilation, a Setup Wizard run of `RunStep124` reporting "all 17 new blocks, prefabs and recipes are present", all three plot sizes crafting and placing with the right cell count, a plot pausing when its power is cut, crop pods climbing visibly on both grid plots and on the three plot sizes, the Slower 0.5 growth pace feeling right in play, and tree saplings refused by every Auto Farm Plot but accepted by the Large Plant Bed and the Large Farm Plot Box remain pending.
 - **Farm icon acceptance (18.6.1-dev):** confirm in Unity that `RunIconRepair` reports six authored icons on a project that never made them, that all six planting-box and plot slots draw their PNG rather than a tint, that the two grid plot icons land under `ItemIcons/Grid Blocks`, and that running it twice reports "0 authored" and does not duplicate or overwrite art.
+- **Farm panel, footprint and tree bed acceptance (18.7.0-dev):** confirm in Unity that all six planting blocks open `PlantBoxPanel` on a right-click with an empty hand, that the seed bin fills the bed and the harvest bin collects from it, that a Small, a Big and a Large bed stand 1 m, 2 m and 3 m across beside each other, that the Large bed has no floating geometry, that a sapling is accepted only on the Large bed and then hides the nine crop cells until it is felled, and that a tree bed survives save/load with its growth intact.
 - ~~**Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.~~ *(17.43.0-dev)*
 - **Screen engine runtime acceptance (17.42.0-dev):** the page remaster is code-complete and statically checked but untested in Unity - fit resolution on every screen size, per-page palettes, the 12 graph series against live grids, icon placement on glass, split-pane outlines, and the typing/Escape input fixes all need in-game verification.
 - **Restored-grid clearance acceptance (17.40.0-dev):** the low-hull probe and bounded correction are implemented, but flat-ground, slope, small-grid and large-grid save/load checks have not run in Unity.
@@ -222,11 +223,14 @@
 - **A crop is meant to be watched.** Automated beds grow at `growthSpeedMultiplier = 0.5` on `PlantBox`, `FarmPlot` and `GridFarmPlotBase`, so a 90-second crop takes three minutes watered. Crops are drawn on the block - one pod per cell, interpolated inside the stage - because a slow cycle nobody can see is indistinguishable from a broken one.
 - **The Auto Farm Plot is a family of three sizes** (18.6.0-dev): 1, 4 and 9 cells at 8, 10 and 14 W, all on `PlantBox` with `powerDraw`/`requiresPower`. `allowTrees` is false on all three - trees belong to the Large Plant Bed and the Large Farm Plot Box.
 - **Trees are a Large Plant Bed privilege.** `AllowsTrees` is false on the 1x1 and 2x2 boxes, and the interaction answers with the reason rather than swallowing the sapling. A tree cell grows on `treeGrowthSeconds` (110 s, 2x when irrigated) and yields logs, saplings and biomass in one harvest.
+- **A tree on the Large bed is the bed, not a cell** (18.7.0-dev): `treeBed` / `treeGrowth` put a sapling in charge of the whole plot, hide the nine crop cells while it grows, and report `TIMBER` off the same readouts the crop beds use. Self re-seeding keeps a sapling back and starts the next tree.
+- **A planting block is a machine and opens a machine page** (18.7.0-dev): `PlantBoxPanel` is the one surface for all six blocks, with a 4-slot seed bin in, a 9-slot harvest bin out, a row per cell, water, power and the re-seed switch. A block a player cannot open is a defect, the same standard the grid plots met in 18.5.0.
+- **Geometry follows the footprint** (18.7.0-dev): every measurement in `PlantBox.BuildVisuals` comes from `cellsPerSide`, so a 2 m or 3 m block is 2 m or 3 m of bed. A tray sized for the smallest box inside a large block reads as one block with more cells - the 18.7.0 playtest report.
 - **The sprinkler is 20 W and 0.4 L/s while spraying, and it stops when either runs out.** `IsActive` remains the single flag every bed reads, so sprinkler-fed beds and canister-fed beds agree on what "irrigated" means. It refills at 2 L/s from any `FluidNode` within 3.5 m, and by hand at one canister click (0.5 L) at a time.
 - **Tilled Soil is untouched.** The powered plot is a separate block: `automatic` and `autoDumpWhenRipe` default off in `FarmPlot`, and only the Auto Farm Plot prefab switches them on with a 40 L tank and an 8 W draw.
 - **The Automatic Tree Farm shows its own plumbing.** The intake hopper and output bin stand outside the frame; a prefab that predates this round rebuilds its body the first time it loads.
 
-**Status:** implemented in `Scripts/Farming/PlantBox.cs`, `Sprinkler.cs`, `FarmPlot.cs`, `IFarmBed.cs`, `FarmAutomation.cs`, `Harvester.cs`, `AutoTreeFarm.cs`, `Scripts/GridSystem/GridScreenBlock.Pages.cs` and `Scripts/Player/PlayerInteractionTool.cs`; authored by the Setup Wizard step "Author planting boxes, Auto Farm Plot, sprinkler mast and tree-farm body (18.3.0-dev)" (`Scripts/Editor/Farming/WorldFarmOverhaulSetup.cs`), which creates the four new blocks with icons and recipes and rebuilds the two existing prefabs without overwriting authored tuning. 18.5.0-dev completes that step: it builds a missing sprinkler from nothing, draws the Auto Farm Plot as a machine body rather than the template cube, and verifies all fifteen claimed assets by path before it reports.
+**Status:** implemented in `Scripts/Farming/PlantBox.cs`, `Sprinkler.cs`, `FarmPlot.cs`, `IFarmBed.cs`, `FarmAutomation.cs`, `Harvester.cs`, `AutoTreeFarm.cs`, `Scripts/UI/Farming/PlantBoxPanel.cs`, `Scripts/GridSystem/GridScreenBlock.Pages.cs` and `Scripts/Player/PlayerInteractionTool.cs`; authored by the Setup Wizard step "Author planting boxes, Auto Farm Plot, sprinkler mast and tree-farm body (18.3.0-dev)" (`Scripts/Editor/Farming/WorldFarmOverhaulSetup.cs`), which creates the four new blocks with icons and recipes and rebuilds the two existing prefabs without overwriting authored tuning. 18.5.0-dev completes that step: it builds a missing sprinkler from nothing, draws the Auto Farm Plot as a machine body rather than the template cube, and verifies all fifteen claimed assets by path before it reports. 18.7.0-dev adds the panel and footprint geometry and pins `treeBed = false` and `allowTrees = size == Large` on the prefabs it rebuilds.
 
 ### Grid Farm Plots (18.4.0-dev)
 
