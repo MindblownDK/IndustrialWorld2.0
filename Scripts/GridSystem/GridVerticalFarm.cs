@@ -18,6 +18,18 @@ namespace VoxelEngine.GridSystem
 
         public override string PlotKind => "VERTICAL";
 
+        /// <summary>
+        /// The vertical plot's nine cells live on three trays, so a crop grows out of the
+        /// tray it was planted in rather than out of the middle of the block.
+        /// </summary>
+        protected override Vector3 PodPosition(int index, int side)
+        {
+            int tray = Mathf.Clamp(index / 3, 0, 2);
+            int column = index % 3;
+            float trayY = tray == 0 ? -0.72f : tray == 1 ? 0.06f : 0.84f;
+            return new Vector3((column - 1) * 0.60f, trayY + 0.10f, 0.10f);
+        }
+
         private void Reset()
         {
             blockName = "Vertical Farm Plot";

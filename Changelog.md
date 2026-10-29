@@ -1,9 +1,27 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.5.0-dev`
+**Current Version:** `18.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.6.0-dev] Three Auto Farm Plot Sizes, Crops That Visibly Grow, and a Slower Crop Cycle
+
+**Type:** MINOR - two new blocks, a slower growth curve and per-cell crop visuals. Save-compatible: the existing Auto Farm Plot keeps its item id, recipe and place in the crafting screen, and no crop, seed or block id changes meaning.
+
+**GitHub title:** `[18.6.0-dev] Add medium and large Auto Farm Plots, draw crops growing inside the beds, and slow the crop cycle`
+
+#### Added
+
+- **Medium Auto Farm Plot** (2x2, four cells, 60 L tank, 10 W) and **Large Auto Farm Plot** (3x3, nine cells, 90 L tank, 14 W). Both are craftable at the Assembler, each with its own block item, prefab, recipe and icon. The existing Auto Farm Plot becomes the Small member of the family - same item id `block_auto_farm_plot`, same recipe, same footprint - and is rebuilt as a planting-box bed so all three sizes share one implementation.
+- **`PlantBox` now runs powered beds.** `powerDraw` plus `requiresPower` (default true) means a plot stops growing while the bus is dead instead of ignoring power, and `StateLabel` reports `NO POWER`. A box with `powerDraw = 0` - every hand-watered planting box - is never gated by power at all. `allowTrees` separates the two families: the Auto Farm Plots set it false, so trees stay a Large Plant Bed and Large Farm Plot Box feature.
+- **Crops are drawn growing inside the grid plots.** `GridFarmPlotBase` builds one pod per cell and drives it from the cell's own state: the pod rises out of the bed as growth climbs, takes the crop asset's own stage colours, grows a trunk instead of a pod on a tree cell, and collapses to a brown lump on a lost cell. Pods are placed per plot - three trays on the Vertical Farm Plot, the soil surface on the Large Farm Plot Box - and redrawn five times a second rather than every physics step.
+
+#### Changed
+
+- **The crop cycle is slower everywhere.** `growthSpeedMultiplier` is new on `PlantBox`, `FarmPlot` and `GridFarmPlotBase`, defaulting to **0.5**: a 90-second crop now takes three minutes watered and six unwatered. Growth is a setting per block, so a server owner who wants the old pace can raise it to 1.
+- **Planting-box crops grow smoothly instead of in four jumps.** The pod used to snap to the next stage scale; it now interpolates inside the stage, so a three-minute crop climbs continuously and the slow pace is actually readable on the block. The early-out that skipped redraws between stages is gone - nine transforms a frame is cheaper than the bookkeeping it replaced.
+- **The stage colour still steps per stage,** so a crop visibly changes colour as it matures even though its size moves continuously.
 
 ### [18.5.0-dev] Give the Grid Farm Plots a Panel, and Author the Sprinkler and Auto Farm Plot Properly
 

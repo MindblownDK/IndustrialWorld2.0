@@ -80,6 +80,9 @@ namespace VoxelEngine.GridSystem
 
         [Header("Tuning")]
         public float fertilizedSpeedMultiplier = 1.5f;
+        [Tooltip("Global growth scale. Crops here are meant to be watched: at 0.5 a 90-second crop takes "
+                 + "three minutes watered, and every stage is drawn on the bed itself.")]
+        [Range(0.05f, 2f)] public float growthSpeedMultiplier = 0.5f;
         [Tooltip("Seconds between oxygen and atmosphere samples.")]
         public float environmentCheckInterval = 2f;
         [Tooltip("Keep one seed of every harvest back and replant the cell.")]
@@ -213,6 +216,7 @@ namespace VoxelEngine.GridSystem
         private float _envTimer;
         private float _pullTimer;
         private float _plantTimer;
+        private float _podTimer;
 
         // ── Lifecycle ───────────────────────────────────────────────────────
         protected virtual void Awake()
@@ -221,6 +225,8 @@ namespace VoxelEngine.GridSystem
             EnsureContainers();
             ResolveTreeItems();
             HasAir = FarmEnvironment.HasBreathableAir(transform.position);
+            EnsurePods();
+            RefreshAllPods();
         }
 
         public override void OnPlaced()
@@ -341,6 +347,16 @@ namespace VoxelEngine.GridSystem
 
             GrowCells(powered, dt);
 
+            // Pods are redrawn a few times a second rather than every physics step: the
+            // growth is slow on purpose, so there is nothing to see at 50 Hz.
+            _podTimer += dt;
+            if (_podTimer >= 0.2f)
+            {
+                _podTimer = 0f;
+                EnsurePods();
+                RefreshAllPods();
+            }
+
             _pullTimer += dt;
             if (automatic && _pullTimer >= 1f)
             {
@@ -365,6 +381,7 @@ namespace VoxelEngine.GridSystem
         {
             if (!powered) return;   // lamps and pumps are what the power buys
 
+            float scale = Mathf.Max(0f, growthSpeedMultiplier);
             int drinking = 0;
             bool irrigated = IsIrrigated;
 
@@ -377,7 +394,7 @@ namespace VoxelEngine.GridSystem
 
                 if (cell.tree)
                 {
-                    float treeSpeed = 1f / Mathf.Max(1f, treeGrowthSeconds);
+                    float treeSpeed = (1f / Mathf.Max(1f, treeGrowthSeconds)) * scale;
                     if (irrigated) treeSpeed *= Mathf.Max(1f, treeIrrigatedSpeedMultiplier);
                     cell.growth = Mathf.Clamp01(cell.growth + treeSpeed * dt);
                     if (irrigated) drinking++;
@@ -391,7 +408,7 @@ namespace VoxelEngine.GridSystem
                 // loses its growth rate, not its crop.
                 if (crop.requiresOxygen && !HasAir) continue;
 
-                float speed = 1f / Mathf.Max(0.5f, crop.growthTime);
+                float speed = (1f / Mathf.Max(0.5f, crop.growthTime)) * scale;
                 if (irrigated) { speed *= Mathf.Max(1f, crop.irrigatedSpeedMultiplier); drinking++; }
                 else if (crop.requiresWater) speed *= 0.3f;
                 if (cell.fertilized) speed *= Mathf.Max(1f, fertilizedSpeedMultiplier);
@@ -549,6 +566,8 @@ namespace VoxelEngine.GridSystem
             cell.growth = 0f;
             cell.fertilized = false;
             cell.dead = false;
+            EnsurePods();
+            RefreshPod(index);
             return index;
         }
 
@@ -583,6 +602,7 @@ namespace VoxelEngine.GridSystem
                 cell.fertilized = false;
                 cleared++;
             }
+            RefreshAllPods();
             return cleared;
         }
 
@@ -591,6 +611,135 @@ namespace VoxelEngine.GridSystem
             for (int i = 0; i < cells.Length; i++)
                 if (cells[i] != null && cells[i].crop == null && !cells[i].tree && !cells[i].dead) return i;
             return -1;
+        }
+
+        // ── Visible growing crops ───────────────────────────────────────────
+        // A grid farm that grows things the player cannot see is a spreadsheet. Every cell
+        // gets a pod on the bed; the pod rises and greens as the cell fills, a lost cell
+        // collapses brown, and a tree cell grows a trunk instead of a pod. The pods are
+        // built lazily so an old prefab gains them the first time it is looked at.
+
+        private readonly List<Transform> _pods = new List<Transform>();
+        private readonly List<MeshRenderer> _podRenderers = new List<MeshRenderer>();
+
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+
+        /// <summary>
+        /// Where a cell's pod stands on the model: the cell's spot on the bed, lifted to the
+        /// bed surface. Used for both placement and growth, so a pod never drifts sideways
+        /// as it grows.
+        /// </summary>
+        protected virtual Vector3 PodPosition(int index, int side)
+        {
+            int n = Mathf.Max(1, side);
+            float step = 2.5f * 0.26f;
+            int x = index % n;
+            int z = index / n;
+            float offset = (n - 1) * 0.5f;
+            return new Vector3((x - offset) * step, -0.55f, (z - offset) * step);
+        }
+
+        private void EnsurePods()
+        {
+            int wanted = cellCount;
+            if (_pods.Count == wanted) return;
+
+            var existing = transform.Find("Generated_FarmPods");
+            if (existing != null)
+            {
+                if (Application.isPlaying) Destroy(existing.gameObject);
+                else DestroyImmediate(existing.gameObject);
+            }
+
+            _pods.Clear();
+            _podRenderers.Clear();
+
+            var root = new GameObject("Generated_FarmPods").transform;
+            root.SetParent(transform, false);
+            root.localPosition = Vector3.zero;
+            root.localRotation = Quaternion.identity;
+            root.localScale = Vector3.one;
+
+            int side = Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(wanted)));
+            for (int i = 0; i < wanted; i++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = "Crop_" + (i + 1);
+                var col = go.GetComponent<Collider>();
+                if (col != null)
+                {
+                    if (Application.isPlaying) Destroy(col);
+                    else DestroyImmediate(col);
+                }
+                go.transform.SetParent(root, false);
+                go.transform.localPosition = PodPosition(i, side);
+                go.transform.localScale = Vector3.zero;   // an empty cell is an empty bed
+                _pods.Add(go.transform);
+                _podRenderers.Add(go.GetComponent<MeshRenderer>());
+            }
+        }
+
+        /// <summary>Redraw one pod from its cell: height, stage colour, dead state.</summary>
+        private void RefreshPod(int index)
+        {
+            if (index < 0 || index >= _pods.Count) return;
+            var cell = cells != null && index < cells.Length ? cells[index] : null;
+            var pod = _pods[index];
+            if (pod == null) return;
+
+            bool planted = cell != null && (cell.crop != null || cell.tree) && !cell.dead;
+            if (!planted)
+            {
+                // A lost crop keeps a collapsed brown lump so the bed shows which cell was
+                // lost; an empty cell shows nothing at all.
+                if (cell != null && cell.dead)
+                {
+                    var deadPos = PodPosition(index, Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(cellCount))));
+                    pod.localScale = new Vector3(0.32f, 0.06f, 0.32f);
+                    pod.localPosition = new Vector3(deadPos.x, deadPos.y + 0.03f, deadPos.z);
+                    Tint(pod, new Color(0.42f, 0.30f, 0.18f));
+                }
+                else pod.localScale = Vector3.zero;
+                return;
+            }
+
+            float g = Mathf.Clamp01(cell.growth);
+            float size = Mathf.Lerp(0.14f, 0.46f, g);
+            float height = Mathf.Lerp(0.08f, cell.tree ? 2.20f : 0.80f, g);
+
+            // A crop grows out of the soil, not around its own middle: the pod's base stays
+            // pinned to the bed and only its top rises.
+            var basePos = PodPosition(index, Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(cellCount))));
+            pod.localScale = new Vector3(size, height, size);
+            pod.localPosition = new Vector3(basePos.x, basePos.y + height * 0.5f, basePos.z);
+
+            // Stage colour comes from the crop asset when it has one, so a pumpkin and a
+            // berry bush do not grow the same green blob.
+            if (cell.tree) Tint(pod, new Color(0.40f, 0.26f, 0.14f));
+            else if (cell.crop != null && cell.crop.stageColors != null && cell.crop.stageColors.Length > 0)
+            {
+                int stage = Mathf.Clamp(Mathf.FloorToInt(g * cell.crop.stageColors.Length),
+                    0, cell.crop.stageColors.Length - 1);
+                Tint(pod, cell.crop.stageColors[stage]);
+            }
+            else Tint(pod, new Color(0.34f, 0.68f, 0.30f));
+        }
+
+        private void RefreshAllPods()
+        {
+            for (int i = 0; i < _pods.Count; i++) RefreshPod(i);
+        }
+
+        private static void Tint(Transform target, Color color)
+        {
+            var mr = target.GetComponent<MeshRenderer>();
+            if (mr == null) return;
+            var mpb = new MaterialPropertyBlock();
+            mr.GetPropertyBlock(mpb);
+            mpb.SetColor(BaseColorId, color);
+            mpb.SetColor(ColorId, color);
+            mr.SetPropertyBlock(mpb);
         }
 
         // ── Persistence ─────────────────────────────────────────────────────

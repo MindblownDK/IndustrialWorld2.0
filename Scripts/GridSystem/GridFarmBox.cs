@@ -18,6 +18,18 @@ namespace VoxelEngine.GridSystem
 
         public override string PlotKind => "FLOOR";
 
+        /// <summary>
+        /// The floor box grows all nine cells on one bed, so the pods spread across the
+        /// soil surface and the centre cell stands where the tree socket is.
+        /// </summary>
+        protected override Vector3 PodPosition(int index, int side)
+        {
+            int n = 3;
+            int x = index % n;
+            int z = index / n;
+            return new Vector3((x - 1) * 0.62f, -0.66f, (z - 1) * 0.62f);
+        }
+
         private void Reset()
         {
             blockName = "Large Farm Plot Box";

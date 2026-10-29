@@ -105,10 +105,9 @@ namespace VoxelEngine.EditorTools
                 created, repaired, preserved, ((ItemDefinition)woodLog, 12), ((ItemDefinition)clay, 8),
                 ((ItemDefinition)ironPlate, 4), ((ItemDefinition)copperWire, 4));
 
-            // ── 2) Auto Farm Plot ───────────────────────────────────────────
-            var autoPlot = EnsureAutoFarmPlot(ironPlate, steelPlate, clay, glass, created, repaired, preserved);
-            EnsureRecipe("Recipe_AutoFarmPlot", "Auto Farm Plot", autoPlot, StationTier.Assembler,
-                created, repaired, preserved, ((ItemDefinition)ironPlate, 2), ((ItemDefinition)clay, 2), ((ItemDefinition)copperWire, 2));
+            // ── 2) Auto Farm Plots (Small / Medium / Large) ─────────────────
+            EnsureAutoFarmPlots(ironPlate, steelPlate, clay, glass, copperWire,
+                woodLog, sapling, biomass, created, repaired, preserved);
 
             // ── 3) Sprinkler rebuild ────────────────────────────────────────
             RepairSprinkler(ironPlate, copperWire, glass, created, repaired, preserved);
@@ -121,6 +120,8 @@ namespace VoxelEngine.EditorTools
             EnsureIcon("block_plant_box_big", IconKind.BigBox, IconRoot);
             EnsureIcon("block_plant_bed_large", IconKind.LargeBed, IconRoot);
             EnsureIcon("block_auto_farm_plot", IconKind.AutoPlot, IconRoot);
+            EnsureIcon("block_auto_farm_plot_medium", IconKind.AutoPlotMedium, IconRoot);
+            EnsureIcon("block_auto_farm_plot_large", IconKind.AutoPlotLarge, IconRoot);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -135,16 +136,22 @@ namespace VoxelEngine.EditorTools
                 FarmBlocksFolder + "/Block_PlantBoxBig.asset",
                 FarmBlocksFolder + "/Block_PlantBedLarge.asset",
                 FarmBlocksFolder + "/Block_AutoFarmPlot.asset",
+                FarmBlocksFolder + "/Block_AutoFarmPlotMedium.asset",
+                FarmBlocksFolder + "/Block_AutoFarmPlotLarge.asset",
                 FarmBlocksFolder + "/Block_Sprinkler.asset",
                 FarmPrefabsFolder + "/PlantBoxSmall.prefab",
                 FarmPrefabsFolder + "/PlantBoxBig.prefab",
                 FarmPrefabsFolder + "/PlantBedLarge.prefab",
                 FarmPrefabsFolder + "/AutoFarmPlot.prefab",
+                FarmPrefabsFolder + "/AutoFarmPlotMedium.prefab",
+                FarmPrefabsFolder + "/AutoFarmPlotLarge.prefab",
                 FarmPrefabsFolder + "/Sprinkler.prefab",
                 FarmRecipesFolder + "/Recipe_PlantBoxSmall.asset",
                 FarmRecipesFolder + "/Recipe_PlantBoxBig.asset",
                 FarmRecipesFolder + "/Recipe_PlantBedLarge.asset",
                 FarmRecipesFolder + "/Recipe_AutoFarmPlot.asset",
+                FarmRecipesFolder + "/Recipe_AutoFarmPlotMedium.asset",
+                FarmRecipesFolder + "/Recipe_AutoFarmPlotLarge.asset",
                 FarmRecipesFolder + "/Recipe_Sprinkler.asset",
             };
             for (int i = 0; i < required.Length; i++)
@@ -163,7 +170,7 @@ namespace VoxelEngine.EditorTools
             AppendList(sb, preserved);
             sb.AppendLine();
             sb.AppendLine(missing.Count == 0
-                ? "On disk: all 15 new blocks, prefabs and recipes are present."
+                ? "On disk: all " + required.Length + " new blocks, prefabs and recipes are present."
                 : "MISSING ON DISK (" + missing.Count + "):");
             for (int i = 0; i < missing.Count; i++) sb.AppendLine("  ! " + missing[i]);
             sb.AppendLine();
@@ -235,50 +242,99 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // ── Auto Farm Plot ──────────────────────────────────────────────────
-        private static BlockItem EnsureAutoFarmPlot(ItemDefinition ironPlate, ItemDefinition steelPlate,
-            ItemDefinition clay, ItemDefinition glass, List<string> created, List<string> repaired,
-            List<string> preserved)
+        // ── Auto Farm Plot family ───────────────────────────────────────────
+        // 18.6.0-dev: one size was not enough. The plot is now three blocks built on the
+        // planting-box component - 1, 4 and 9 cells - each with its own tank, its own
+        // small power draw and its own output chute. The old single plot keeps its item
+        // id, its recipe and its place in the crafting screen; it is simply rebuilt as the
+        // Small member of the family, and because `FarmPlot` never saved anything there is
+        // no crop state to lose in the swap.
+        private static void EnsureAutoFarmPlots(ItemDefinition ironPlate, ItemDefinition steelPlate,
+            ItemDefinition clay, ItemDefinition glass, ItemDefinition copperWire,
+            ItemDefinition woodLog, ItemDefinition sapling, ItemDefinition biomass,
+            List<string> created, List<string> repaired, List<string> preserved)
         {
-            const string displayName = "Auto Farm Plot";
-            var block = EnsureBlockItem($"{FarmBlocksFolder}/Block_AutoFarmPlot.asset",
-                "block_auto_farm_plot", displayName,
-                "Powered one-metre plot. Plant a seed, water it by hand with a Liquid Canister, and it hands its "
-                + "harvest to a belt, chute, funnel or item pipe standing next to it - replanting itself if you leave "
-                + "self re-seeding on. Draws a trickle of power while it works. Tilled Soil stays the manual plot for "
-                + "the early game.",
-                new Color(0.44f, 0.62f, 0.30f), new Vector3Int(1, 1, 1), maxHp: 110,
+            var small = EnsureAutoFarmPlot(PlantBoxSize.Small, "AutoFarmPlot", "Block_AutoFarmPlot",
+                "block_auto_farm_plot", "Auto Farm Plot", 1, 40f, 8f,
+                "The powered one-metre plot. Plant a seed and it hands its harvest to a belt, chute, funnel "
+                + "or item pipe standing next to it, replanting itself if self re-seeding is left on. Water it "
+                + "by hand with a Liquid Canister or with a Sprinkler. Draws a trickle of power while it grows. "
+                + "Tilled Soil stays the manual plot for the early game.",
+                new Color(0.44f, 0.62f, 0.30f),
+                woodLog, sapling, biomass, created, repaired, preserved);
+
+            var medium = EnsureAutoFarmPlot(PlantBoxSize.Big, "AutoFarmPlotMedium", "Block_AutoFarmPlotMedium",
+                "block_auto_farm_plot_medium", "Medium Auto Farm Plot", 2, 60f, 10f,
+                "A powered two-by-two plot with four cells. Same rules as the small plot - one tank, one output "
+                + "chute, one self re-seed switch - but four crops share the water and the power. Hand water or "
+                + "add a Sprinkler.",
+                new Color(0.40f, 0.60f, 0.28f),
+                woodLog, sapling, biomass, created, repaired, preserved);
+
+            var large = EnsureAutoFarmPlot(PlantBoxSize.Large, "AutoFarmPlotLarge", "Block_AutoFarmPlotLarge",
+                "block_auto_farm_plot_large", "Large Auto Farm Plot", 3, 90f, 14f,
+                "A powered three-by-three plot: nine cells, one 90 L tank and one output chute. The biggest "
+                + "automated bed, and the one that wants a Sprinkler and a belt rather than a canister. "
+                + "Trees belong to the Large Plant Bed, not here.",
+                new Color(0.36f, 0.58f, 0.26f),
+                woodLog, sapling, biomass, created, repaired, preserved);
+
+            EnsureRecipe("Recipe_AutoFarmPlot", "Auto Farm Plot", small, StationTier.Assembler,
+                created, repaired, preserved, ((ItemDefinition)ironPlate, 2), ((ItemDefinition)clay, 2), ((ItemDefinition)copperWire, 2));
+            EnsureRecipe("Recipe_AutoFarmPlotMedium", "Medium Auto Farm Plot", medium, StationTier.Assembler,
+                created, repaired, preserved, ((ItemDefinition)ironPlate, 4), ((ItemDefinition)clay, 4),
+                ((ItemDefinition)copperWire, 4), ((ItemDefinition)steelPlate, 2));
+            EnsureRecipe("Recipe_AutoFarmPlotLarge", "Large Auto Farm Plot", large, StationTier.Assembler,
+                created, repaired, preserved, ((ItemDefinition)steelPlate, 6), ((ItemDefinition)clay, 8),
+                ((ItemDefinition)copperWire, 8), ((ItemDefinition)glass, 4));
+        }
+
+        /// <summary>
+        /// One member of the Auto Farm Plot family: a planting-box bed that draws power while
+        /// it grows and empties itself into whatever stands beside it.
+        /// </summary>
+        private static BlockItem EnsureAutoFarmPlot(PlantBoxSize size, string prefabName, string assetName,
+            string itemId, string displayName, int cellsPerSide, float waterCapacity, float watts,
+            string description, Color tint, ItemDefinition woodLog, ItemDefinition sapling,
+            ItemDefinition biomass, List<string> created, List<string> repaired, List<string> preserved)
+        {
+            int side = Mathf.Clamp(cellsPerSide, 1, 3);
+            var block = EnsureBlockItem($"{FarmBlocksFolder}/{assetName}.asset", itemId, displayName, description,
+                tint, new Vector3Int(side, 1, side), maxHp: 110 + side * side * 20,
                 category: "Farming", created, repaired, preserved);
 
-            const string prefabPath = FarmPrefabsFolder + "/AutoFarmPlot.prefab";
+            string prefabPath = $"{FarmPrefabsFolder}/{prefabName}.prefab";
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
 
-            var root = new GameObject("AutoFarmPlot");
+            var root = new GameObject(prefabName);
             try
             {
                 var box = root.AddComponent<BoxCollider>();
                 box.center = new Vector3(0f, 0.16f, 0f);
-                box.size = new Vector3(0.96f, 0.34f, 0.96f);
+                box.size = new Vector3(side * 0.96f, 0.34f, side * 0.96f);
 
                 var pb = root.AddComponent<PlacedBlock>();
                 pb.Item = block;
                 pb.Hp = block.blockHealth;
 
                 var power = root.AddComponent<PowerConsumer>();
-                power.wattsPerSecond = 8f;
+                power.wattsPerSecond = watts;
                 power.connectRadius = 2f;
 
-                // 18.5.0-dev: the plot is drawn as a machine - a bordered tray with soil,
-                // an output chute, a water sight glass and a status lamp - instead of being
-                // left as the plain cube Tilled Soil uses. Tilled Soil itself is untouched.
-                var plot = root.AddComponent<FarmPlot>();
-                plot.automatic = true;
+                var plot = root.AddComponent<PlantBox>();
+                plot.boxSize = size;
+                plot.cellsPerSide = side;
+                plot.waterCapacity = waterCapacity;
+                plot.waterStored = waterCapacity;
+                plot.powerDraw = watts;
+                plot.requiresPower = true;
+                plot.allowTrees = false;      // trees are the Large Plant Bed's job
                 plot.autoDumpWhenRipe = true;
                 plot.replantAfterPortHarvest = true;
-                plot.waterCapacity = 40f;
-                plot.waterStored = 40f;
-                plot.dumpRadius = 1.7f;
-                plot.dumpIntervalSeconds = 1f;
+                plot.growthSpeedMultiplier = 0.5f;
+                plot.woodLogItem = woodLog;
+                plot.saplingItem = sapling;
+                plot.biomassItem = biomass;
                 plot.RebuildVisuals();
                 AssignFarmMaterials(root);
 
@@ -294,89 +350,6 @@ namespace VoxelEngine.EditorTools
             finally
             {
                 Object.DestroyImmediate(root);
-            }
-        }
-
-        // ── Sprinkler ───────────────────────────────────────────────────────
-        private static void RepairSprinkler(ItemDefinition ironPlate, ItemDefinition copperWire,
-            ItemDefinition glass, List<string> created, List<string> repaired, List<string> preserved)
-        {
-            const string prefabPath = FarmPrefabsFolder + "/Sprinkler.prefab";
-            const string blockPath = FarmBlocksFolder + "/Block_Sprinkler.asset";
-
-            // 18.5.0-dev: a project that never ran the farming content step, or that lost
-            // the asset to a bad import, gets a sprinkler built for it rather than a line in
-            // a report. Nothing existing is replaced - CreateSprinkler only runs when the
-            // prefab or its block item is genuinely missing.
-            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null
-                || AssetDatabase.LoadAssetAtPath<BlockItem>(blockPath) == null)
-            {
-                CreateSprinkler(ironPlate, copperWire, glass, created, repaired);
-            }
-
-            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
-            try
-            {
-                bool changed = false;
-
-                var power = contents.GetComponent<PowerConsumer>();
-                if (power == null)
-                {
-                    power = contents.AddComponent<PowerConsumer>();
-                    power.wattsPerSecond = 20f;
-                    power.connectRadius = 2f;
-                    changed = true;
-                    repaired.Add("Sprinkler power draw");
-                }
-
-                var sprinkler = contents.GetComponent<Sprinkler>();
-                if (sprinkler == null)
-                {
-                    sprinkler = contents.AddComponent<Sprinkler>();
-                    changed = true;
-                    repaired.Add("Sprinkler component");
-                }
-
-                // Only fill in what has never been authored; a tuned sprinkler keeps its numbers.
-                if (sprinkler.waterCapacity <= 0f) { sprinkler.waterCapacity = 60f; sprinkler.waterStored = 60f; changed = true; }
-                if (sprinkler.litresPerSecond <= 0f) { sprinkler.litresPerSecond = 0.4f; changed = true; }
-                if (sprinkler.refillLitresPerSecond <= 0f) { sprinkler.refillLitresPerSecond = 2f; changed = true; }
-                if (sprinkler.radius <= 0f) { sprinkler.radius = 8f; changed = true; }
-                if (sprinkler.wattsWhileSpraying <= 0f) { sprinkler.wattsWhileSpraying = 20f; changed = true; }
-
-                // The old body was a single blue cube; the new one is a mast with a sight
-                // glass, so an old prefab has to be rebuilt rather than left as it is.
-                sprinkler.RebuildVisuals();
-                AssignFarmMaterials(contents);
-                changed = true;
-
-                var collider = contents.GetComponent<BoxCollider>();
-                if (collider != null)
-                {
-                    collider.center = new Vector3(0f, 0.30f, 0f);
-                    collider.size = new Vector3(0.60f, 0.70f, 0.60f);
-                }
-
-                if (changed)
-                {
-                    PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
-                    repaired.Add("Sprinkler body (mast, sight glass, rotating head)");
-                }
-                else preserved.Add("Sprinkler prefab");
-
-                var block = AssetDatabase.LoadAssetAtPath<BlockItem>($"{FarmBlocksFolder}/Block_Sprinkler.asset");
-                if (block != null)
-                {
-                    AppendIfMissing(block,
-                        "internal tank",
-                        " Holds its own water tank: fill it by hand with a Liquid Canister, or connect a pipe "
-                        + "for automatic refill. Draws about 20 W while it sprays.",
-                        repaired);
-                }
-            }
-            finally
-            {
-                PrefabUtility.UnloadPrefabContents(contents);
             }
         }
 
@@ -492,7 +465,7 @@ namespace VoxelEngine.EditorTools
         }
 
         // ── Icons ───────────────────────────────────────────────────────────
-        private enum IconKind { SmallBox, BigBox, LargeBed, AutoPlot, VerticalFarm, FarmBox }
+        private enum IconKind { SmallBox, BigBox, LargeBed, AutoPlot, AutoPlotMedium, AutoPlotLarge, VerticalFarm, FarmBox }
 
         /// <summary>
         /// 18.4.0-dev step: the two grid farm plots are authored by the grid content step
@@ -606,8 +579,9 @@ namespace VoxelEngine.EditorTools
             }
 
             // A tray seen at a slight angle: a base slab, a rim, then cells on top.
-            int cells = kind == IconKind.SmallBox ? 1 : kind == IconKind.BigBox ? 2 : 3;
-            bool auto = kind == IconKind.AutoPlot;
+            int cells = kind == IconKind.SmallBox || kind == IconKind.AutoPlot ? 1
+                : kind == IconKind.BigBox || kind == IconKind.AutoPlotMedium ? 2 : 3;
+            bool auto = kind == IconKind.AutoPlot || kind == IconKind.AutoPlotMedium || kind == IconKind.AutoPlotLarge;
 
             int left = 16, right = 112, top = 40, bottom = 104;
             int span = right - left;

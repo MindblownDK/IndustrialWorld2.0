@@ -43,6 +43,11 @@ namespace VoxelEngine.Farming
         [Tooltip("Seconds between attempts to empty a ripe plot.")]
         public float dumpIntervalSeconds = 1f;
 
+        [Header("Growth (18.6.0-dev)")]
+        [Tooltip("Global growth scale. A crop is meant to be watched, so at 0.5 a 90-second crop takes three "
+                 + "minutes watered and every stage is visible on the plot.")]
+        [Range(0.05f, 2f)] public float growthSpeedMultiplier = 0.5f;
+
         [Header("Water (18.3.0-dev)")]
         [Tooltip("Litres this plot holds when no sprinkler is feeding it. Zero on Tilled Soil keeps it sprinkler-only.")]
         public float waterCapacity = 0f;
@@ -275,7 +280,7 @@ namespace VoxelEngine.Farming
             // stop for want of an enclosure the planet is already providing.
             if (growthProgress < 1f && !NeedsOxygen)
             {
-                float speed = 1f / plantedCrop.growthTime;
+                float speed = (1f / plantedCrop.growthTime) * Mathf.Max(0f, growthSpeedMultiplier);
                 if (isIrrigated) speed *= plantedCrop.irrigatedSpeedMultiplier;
                 // Slow down if not irrigated and crop wants water.
                 else if (plantedCrop.requiresWater) speed *= 0.3f;

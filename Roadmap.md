@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.5.0-dev`
-**Roadmap Version:** `18.5.0-dev`
+**Current Version:** `18.6.0-dev`
+**Roadmap Version:** `18.6.0-dev`
 **Date:** 2026-10-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.6.0-dev - Plot Sizes, Visible Growth
+- The Auto Farm Plot is a family of three - 1, 4 and 9 cells at 8, 10 and 14 W - all on `PlantBox`, which now supports a power draw and a per-bed tree permission
+- Both grid plots draw one growing pod per cell on the bed itself, coloured by the crop's own stages and collapsed brown when the cell is lost
+- Every automated bed grows at `growthSpeedMultiplier = 0.5` and the planting-box pods interpolate inside their stage, so a crop climbs slowly and continuously instead of jumping
+
 ### 18.5.0-dev - Grid Farm Plot Panel
 - Both grid plots open a machine page - status, water and bed gauges, breathable-air reading, per-bed list, and seed and harvest bins - reached through `GridBlockHasUI`
 - The plot bins are real containers: seeds dropped in are planted automatically, harvests go to cargo first and the bin second, and both ride the shared multi-container save path
@@ -49,11 +54,6 @@
 - The Sprinkler is a mast with a 60 L tank, a sight glass, a rotating head and a 20 W spray draw, refilling from a `FluidNode` or from a canister by hand, and `IsActive` stays the only flag beds read
 - `FarmPlot` gains an automatic powered form (Auto Farm Plot, 8 W, own tank, port) while Tilled Soil keeps its manual behaviour; the Automatic Tree Farm body now fills its frame with its hopper and output bin outside it
 
-### 18.2.1-dev - Display and Machine-Module Unlocks Authored
-- Camera Block, all seven glass screens and both universal machine modules are claimed by research (`res_grid_displays` is new; the modules sit on `res_factory_automation`), so no shipped recipe is gated with no owner
-- The repair pass only claims recipes nobody owns, decides families from the produced item rather than an asset name, and names anything still orphaned instead of guessing a branch
-- `PlanterAutomationSetup` compiles again (three adjacent string literals became explicit concatenations)
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
@@ -70,6 +70,7 @@
 - **Farm overhaul runtime acceptance (18.3.0-dev):** Unity compilation, a Setup Wizard run of `WorldFarmOverhaulSetup.RunStep124`, planting and harvesting in all three boxes, hand watering from a canister, a sprinkler filled by hand and by pipe, the sprinkler's spray stopping on power loss and on an empty tank, drought loss and clearing, trees refused by the Small and Big boxes, self re-seed on and off, belt pickup from a box chute and from the Auto Farm Plot port, and a save/load round trip of a mixed box (crop, tree, dead cell, tank level) remain pending.
 - **Grid farm plot runtime acceptance (18.4.0-dev / 18.5.0-dev):** Unity compilation, a Setup Wizard run of the grid content step and `RunStep125`, both plots mounting to a grid and opening their panel on right-click, the tank filling from a liquid pipe, growth pausing in an unbreathable room and resuming in a sealed one, crops pausing on a breathable world without an enclosure, seeds dropped in the seed bin filling empty beds, harvests landing in connected cargo and in the plot's bin when there is no cargo, `Clear lost crops`, and both blocks surviving save/load with their bins remain pending.
 - **Farm authoring acceptance (18.5.0-dev):** confirm in Unity that `RunStep124` reports "all 15 new blocks, prefabs and recipes are present", that the Sprinkler exists on a project that never ran the farming content step, that the Auto Farm Plot in hand looks like a bordered tray rather than a dirt cube, and that Tilled Soil is unchanged.
+- **Auto Farm Plot family and growth pace acceptance (18.6.0-dev):** Unity compilation, a Setup Wizard run of `RunStep124` reporting "all 17 new blocks, prefabs and recipes are present", all three plot sizes crafting and placing with the right cell count, a plot pausing when its power is cut, crop pods climbing visibly on both grid plots and on the three plot sizes, the Slower 0.5 growth pace feeling right in play, and tree saplings refused by every Auto Farm Plot but accepted by the Large Plant Bed and the Large Farm Plot Box remain pending.
 - ~~**Cockpit shells and MFD polish - stage 3 of the screen remaster (17.42.0-dev):** the wrap-around harvester glass (floor, sides, front) and the slimmer control console on both shells; the three cabin MFDs (% breathable air, speed, planet globe with name) are drawn from the same page remaster and need their in-seat layout pass.~~ *(17.43.0-dev)*
 - **Screen engine runtime acceptance (17.42.0-dev):** the page remaster is code-complete and statically checked but untested in Unity - fit resolution on every screen size, per-page palettes, the 12 graph series against live grids, icon placement on glass, split-pane outlines, and the typing/Escape input fixes all need in-game verification.
 - **Restored-grid clearance acceptance (17.40.0-dev):** the low-hull probe and bounded correction are implemented, but flat-ground, slope, small-grid and large-grid save/load checks have not run in Unity.
@@ -222,6 +223,8 @@
 - **A crop that needs oxygen pauses; it does not die.** Oxygen comes from `FarmEnvironment.HasBreathableAir` - a sealed breathable room first, then a breathable world - so the same box behaves correctly on Earth and on an airless moon without two code paths.
 - **Water starvation kills, and the body stays.** A thirsty crop that goes twice its `droughtToleranceSec` without water is lost, is kept brown and visible, and cannot be planted over until a player clears it or a Harvester with `clearDeadBeds` does.
 - **Self re-seeding is a per-block toggle, on by default** (`replantAfterPortHarvest`). Turning it off lets a box stop after its last harvest instead of replanting from its own seed return.
+- **A crop is meant to be watched.** Automated beds grow at `growthSpeedMultiplier = 0.5` on `PlantBox`, `FarmPlot` and `GridFarmPlotBase`, so a 90-second crop takes three minutes watered. Crops are drawn on the block - one pod per cell, interpolated inside the stage - because a slow cycle nobody can see is indistinguishable from a broken one.
+- **The Auto Farm Plot is a family of three sizes** (18.6.0-dev): 1, 4 and 9 cells at 8, 10 and 14 W, all on `PlantBox` with `powerDraw`/`requiresPower`. `allowTrees` is false on all three - trees belong to the Large Plant Bed and the Large Farm Plot Box.
 - **Trees are a Large Plant Bed privilege.** `AllowsTrees` is false on the 1x1 and 2x2 boxes, and the interaction answers with the reason rather than swallowing the sapling. A tree cell grows on `treeGrowthSeconds` (110 s, 2x when irrigated) and yields logs, saplings and biomass in one harvest.
 - **The sprinkler is 20 W and 0.4 L/s while spraying, and it stops when either runs out.** `IsActive` remains the single flag every bed reads, so sprinkler-fed beds and canister-fed beds agree on what "irrigated" means. It refills at 2 L/s from any `FluidNode` within 3.5 m, and by hand at one canister click (0.5 L) at a time.
 - **Tilled Soil is untouched.** The powered plot is a separate block: `automatic` and `autoDumpWhenRipe` default off in `FarmPlot`, and only the Auto Farm Plot prefab switches them on with a 40 L tank and an 8 W draw.

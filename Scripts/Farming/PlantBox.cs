@@ -81,6 +81,20 @@ namespace VoxelEngine.Farming
         [Header("Growth")]
         [Tooltip("Growth multiplier while a cell is fertilized.")]
         public float fertilizedSpeedMultiplier = 1.5f;
+        [Tooltip("Global growth scale for this bed. Crops are meant to be watched: at 0.5 a 90-second crop "
+                 + "takes three minutes watered, and every stage is visible on the block.")]
+        [Range(0.05f, 2f)] public float growthSpeedMultiplier = 0.5f;
+
+        [Header("Power (Auto Farm Plot)")]
+        [Tooltip("Watts this bed draws while something is growing. Zero means the box needs no power at all, "
+                 + "which is what the hand-watered planting boxes use.")]
+        public float powerDraw = 0f;
+        [Tooltip("When set, a bed with a power draw stops growing while the power is off instead of running on nothing.")]
+        public bool requiresPower = true;
+
+        [Header("Trees")]
+        [Tooltip("Whether this bed family accepts a tree sapling at all. Only a Large bed can, and only when this is on.")]
+        public bool allowTrees = true;
 
         [Header("Trees (Large beds only)")]
         public ItemDefinition woodLogItem;
@@ -252,7 +266,7 @@ namespace VoxelEngine.Farming
             }
         }
 
-        public bool AllowsTrees => boxSize == PlantBoxSize.Large;
+        public bool AllowsTrees => allowTrees && boxSize == PlantBoxSize.Large;
 
         /// <summary>"Growing", "Ripe", "Dry", "Empty" - the word a prompt prints.</summary>
         public string StateLabel
@@ -262,12 +276,28 @@ namespace VoxelEngine.Farming
                 if (IsEmpty) return "EMPTY";
                 if (DeadCount > 0 && DeadCount == PlantedCount) return "DEAD";
                 if (ReadyCount > 0) return ReadyCount + " READY";
+                if (PowerMissing) return "NO POWER";
                 if (NeedsWater) return "DRY";
                 if (NeedsOxygen) return "NO O2";
                 return (Growth01 * 100f).ToString("0") + "%";
             }
         }
 
+        /// <summary>True when this bed draws power and has it right now.</summary>
+        public bool HasPower
+        {
+            get
+            {
+                if (powerDraw <= 0f) return true;      // an unpowered bed is never unpowered
+                if (_power == null) return true;       // authored without a consumer yet
+                return _power.IsPowered;
+            }
+        }
+
+        /// <summary>True when the block has power available where power is needed.</summary>
+        public bool PowerMissing => requiresPower && !HasPower;
+
+        private VoxelEngine.Power.PowerConsumer _power;
         private Transform[] _cellRoots = Array.Empty<Transform>();
         private MeshRenderer[][] _cellRenderers = Array.Empty<MeshRenderer[]>();
         private MeshRenderer[] _soilRenderers = Array.Empty<MeshRenderer>();
@@ -287,6 +317,7 @@ namespace VoxelEngine.Farming
         // ── Lifecycle ───────────────────────────────────────────────────────
         private void Awake()
         {
+            _power = GetComponent<VoxelEngine.Power.PowerConsumer>();
             EnsureSlots();
             ResolveTreeItems();
             hasOxygen = FarmEnvironment.HasBreathableAir(transform.position);
@@ -387,6 +418,12 @@ namespace VoxelEngine.Farming
             bool oxygenOk = hasOxygen;
             bool irrigated = IsIrrigated;
 
+            // A powered bed that has lost its power holds its crops where they are. It
+            // does not kill them and it does not keep growing on an empty bus.
+            if (PowerMissing) return;
+
+            float scale = Mathf.Max(0f, growthSpeedMultiplier);
+
             for (int i = 0; i < slots.Length; i++)
             {
                 var slot = slots[i];
@@ -396,7 +433,7 @@ namespace VoxelEngine.Farming
 
                 if (slot.tree)
                 {
-                    float treeSpeed = 1f / Mathf.Max(1f, treeGrowthSeconds);
+                    float treeSpeed = (1f / Mathf.Max(1f, treeGrowthSeconds)) * scale;
                     if (irrigated) treeSpeed *= Mathf.Max(1f, treeIrrigatedSpeedMultiplier);
                     slot.growth = Mathf.Clamp01(slot.growth + treeSpeed * dt);
                     RefreshCellVisual(i, force: false);
@@ -406,7 +443,7 @@ namespace VoxelEngine.Farming
                 var crop = slot.crop;
                 if (crop.requiresOxygen && !oxygenOk) continue;   // pauses, does not die
 
-                float speed = 1f / Mathf.Max(0.5f, crop.growthTime);
+                float speed = (1f / Mathf.Max(0.5f, crop.growthTime)) * scale;
                 if (irrigated) speed *= Mathf.Max(1f, crop.irrigatedSpeedMultiplier);
                 else if (crop.requiresWater) speed *= 0.3f;
                 if (slot.fertilized) speed *= Mathf.Max(1f, fertilizedSpeedMultiplier);
@@ -1014,9 +1051,11 @@ namespace VoxelEngine.Farming
                 return;
             }
 
+            // Growth is continuous now, so the pod is redrawn every tick: nine transforms a
+            // frame is cheaper than the stage bookkeeping that used to gate them, and it is
+            // what makes a three-minute crop climb smoothly instead of jumping four times.
             int stages = slot.tree ? 5 : Mathf.Max(1, slot.crop.growthStages);
             int stage = Mathf.Clamp(Mathf.FloorToInt(slot.growth * stages), 0, stages - 1);
-            if (!force && stage == _lastStage[index]) return;
             _lastStage[index] = stage;
 
             float scale = 1f;
@@ -1027,7 +1066,14 @@ namespace VoxelEngine.Farming
             }
             else if (slot.crop.stageScales != null && slot.crop.stageScales.Length > 0)
             {
-                scale = slot.crop.stageScales[Mathf.Clamp(stage, 0, slot.crop.stageScales.Length - 1)];
+                // 18.6.0-dev: interpolate inside the stage instead of snapping to it. The
+                // crop then climbs smoothly through a three-minute cycle rather than jumping
+                // four times, which is what makes "slowly" readable on the block itself.
+                int last = slot.crop.stageScales.Length - 1;
+                float pos = Mathf.Clamp(slot.growth * slot.crop.stageScales.Length, 0f, last);
+                int from = Mathf.FloorToInt(pos);
+                int to = Mathf.Min(from + 1, last);
+                scale = Mathf.Lerp(slot.crop.stageScales[from], slot.crop.stageScales[to], pos - from);
             }
 
             root.localScale = new Vector3(Mathf.Max(0.05f, scale), Mathf.Max(0.05f, scale), Mathf.Max(0.05f, scale));
