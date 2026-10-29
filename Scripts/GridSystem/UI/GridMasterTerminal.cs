@@ -1152,6 +1152,10 @@ namespace VoxelEngine.GridSystem.UI
                     : (dh.hatchOpen ? "Open" : "Closed");
             if (block is GridReceivingChute grc)
                 return grc.Enabled ? $"Catching ({grc.TotalCapturedCount:N0})" : "Disabled";
+            if (block is GridFarmPlotBase farmPlot)
+                return $"{farmPlot.Status} · {farmPlot.Water01 * 100f:0}% H2O";
+            if (block is GridAutoTreeFarm treeFarm)
+                return $"{treeFarm.Status} · {treeFarm.Water01 * 100f:0}% H2O";
             if (block is VoxelEngine.Simulation.GridLightBlock light) return light.IsOnline ? "On" : "Off";
             if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return block.Enabled ? "On" : "Off";
             if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
@@ -1199,6 +1203,8 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridSeasonMonitor) return "Season Monitors";
             if (block is GridLocatorBlock) return "Astral Navigators";
             if (block is GridSlidingDoor) return "Grid Doors";
+            if (block is GridBiofarm) return "Biofarms";
+            if (block is GridFarmPlotBase || block is GridAutoTreeFarm) return "Farm Plots";
             if (block is VoxelEngine.Simulation.GridLightBlock) return "Spotlights";
             if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return "LED Strips";
             if (block is GridScreenBlock) return "Screens";
@@ -1305,6 +1311,20 @@ namespace VoxelEngine.GridSystem.UI
                         Add($"{reactor.blockName} (Fuel)", reactor.fuelC);
                         Add($"{reactor.blockName} (Ice)", reactor.iceC);
                         Add($"{reactor.blockName} (Waste)", reactor.wasteC);
+                        break;
+                    case GridBiofarm biofarm:
+                        if (biofarm.biomassInput == null) biofarm.OnPlaced();
+                        Add($"{biofarm.blockName} (Biomass)", biofarm.biomassInput);
+                        break;
+                    case GridFarmPlotBase farmPlot:
+                        farmPlot.EnsureState();
+                        Add($"{farmPlot.blockName} (Seeds)", farmPlot.seedInput);
+                        Add($"{farmPlot.blockName} (Harvest)", farmPlot.harvestOutput);
+                        break;
+                    case GridAutoTreeFarm treeFarm:
+                        treeFarm.EnsureContainers();
+                        Add($"{treeFarm.blockName} (Input)", treeFarm.inputC);
+                        Add($"{treeFarm.blockName} (Output)", treeFarm.outputC);
                         break;
                 }
             }

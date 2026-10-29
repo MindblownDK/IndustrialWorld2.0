@@ -1201,6 +1201,8 @@ namespace VoxelEngine.Building
             {
                 if (targetBlock is not VoxelEngine.GridSystem.GridLiquidTank
                     && targetBlock is not VoxelEngine.GridSystem.GridBiofarm
+                    && targetBlock is not VoxelEngine.GridSystem.GridFarmPlotBase
+                    && targetBlock is not VoxelEngine.GridSystem.GridAutoTreeFarm
                     && targetBlock is not VoxelEngine.GridSystem.GridH2O2Generator) return false;
                 tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Liquid;
             }

@@ -14,12 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
   itemId: gitem_farmbox
   displayName: Large Farm Plot Box
-  description: Ship-mounted floor farm. A 3x3 bed in one hull cell, the only grid
-    plot that takes a tree sapling in its centre socket. Needs grid power, water
-    through a liquid port, and breathable air - a sealed breathable room or a breathable
-    world under the hull. Crops pause without air instead of dying, and ripe beds
-    are moved into connected grid cargo.
-  icon: {fileID: 21300000, guid: 8605a08df53a285409954603cdb1e099, type: 3}
+  description: Ship-mounted floor farm. A 3x3 bed in one hull cell that grows nine
+    food crops or one standing tree (planting a sapling claims the whole bed and
+    locks the other eight cells until felled). Starts dry (0 L); needs grid power,
+    water through a liquid port (or hand canister), and breathable air. Crops pause
+    without air instead of dying, and ripe harvests move into connected grid cargo.
+  icon: {fileID: 21300000, guid: e9c1a872da9bfd14fad66531fc24a096, type: 3}
   iconTint: {r: 0.44, g: 0.78, b: 0.38, a: 1}
   maxStack: 20
   massPerUnit: 1

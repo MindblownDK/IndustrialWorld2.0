@@ -63,9 +63,10 @@ namespace VoxelEngine.GridSystem.UI
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return MakeScrollable(OreDetectorPanel(od));
                 case GridBiofarm bio:      return MakeScrollable(BiofarmPanel(bio, slot));
-                // 18.5.0-dev: the two grid farm plots. Class before instance, so the
-                // vertical plot and the floor box share one page.
+                // 18.5.0-dev / 18.8.0-dev: the grid farm plots (Vertical Farm, Farm Box,
+                // Grid Seed Planter) and the Grid Automatic Tree Farm.
                 case GridFarmPlotBase plot: return MakeScrollable(GridFarmPlotPanel(plot, slot));
+                case GridAutoTreeFarm atf:  return MakeScrollable(GridAutoTreeFarmPanel(atf, slot));
                 case GridCryobed cryo:      return MakeScrollable(CryobedPanel(cryo));
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Pressure.GridAirVent vent: return MakeScrollable(AirVentPanel(vent));
@@ -3365,83 +3366,177 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         /// <summary>
-        /// 18.5.0-dev: one panel for both grid farm plots - the vertical stack and the
-        /// floor box. It answers the four questions a farm asks: is it working, does it
-        /// have water, does it have air, and where are my seeds and my crop. The seed bin
-        /// and the harvest bin are real slots, so planting and collecting are drag-and-drop
-        /// exactly like every machine in the project.
+        /// 18.5.0-dev / 18.8.0-dev: live-updating panel for grid farm plots (Vertical Farm
+        /// Plot, Large Farm Plot Box, and Grid Seed Planter). Mirrors PlantBoxPanel (18.7.1 /
+        /// 18.7.3) with in-place 10 Hz readouts, Water and Growth/Timber bars, Self Re-seeding
+        /// and Auto Output toggles, Harvest into Bin and Clear Lost Crops actions, per-cell
+        /// 1-slot seed inputs (or whole-bed tree lock notice), and thermal/compartment rows.
         /// </summary>
         private static VisualElement GridFarmPlotPanel(GridFarmPlotBase plot, MachineUIs.SlotBuilder slot)
         {
-            plot.EnsureContainers();
+            plot.EnsureState();
 
             var p = T.MachinePanel();
-            Color statusColor = plot.Status.StartsWith("READY") ? T.AccentGreen
-                : plot.Status == "NO POWER" ? T.AccentRed
-                : plot.Status == "DRY" || plot.Status == "NO O2" ? T.AccentAmber
-                : plot.Status == "GROWING" ? T.AccentGreen
-                : T.TextMuted;
-
-            var (hdr, _, _, _) = T.HeaderRow($"🌿 {plot.blockName}", plot.Status, statusColor);
+            Color statusColor = GridFarmStatusColor(plot);
+            var (hdr, _, statusPill, statusLabel) = T.HeaderRow($"🌿 {plot.blockName}", plot.Status, statusColor);
             p.Add(hdr);
             p.Add(IndustrialTheme.HazardDivider());
-            p.Add(IndustrialTheme.Lamps(plot.IsProducing ? 2 : plot.Status == "NO POWER" ? 0 : 1));
+            bool producing = plot.Enabled && (plot.Grid == null || plot.Grid.HasPower) && plot.PlantedCount > 0 && plot.HasAir && plot.HasWater;
+            p.Add(IndustrialTheme.Lamps(producing ? 2 : plot.Status == "NO POWER" ? 0 : 1));
 
-            // Beds and tanks first: the two things that change second to second.
-            var gauges = Row();
-            gauges.style.justifyContent = Justify.SpaceAround;
-            gauges.Add(T.TankGauge("Water", plot.WaterFill01, new Color(0.25f, 0.55f, 0.95f),
-                $"{plot.waterStored:0}/{plot.waterCapacity:0} L", 60, 100));
-            gauges.Add(T.TankGauge("Beds", plot.CellsFill01, new Color(0.40f, 0.80f, 0.35f),
-                $"{plot.PlantedCount}/{plot.cellCount} planted", 60, 100));
-            p.Add(gauges);
+            // Two thin bars: Water and Growth/Timber.
+            var (waterBar, waterFill, waterVal) = GridFarmLevelBar(
+                "Water", plot.Water01, new Color(0.28f, 0.62f, 0.95f),
+                $"{plot.waterStored:0.0} / {plot.waterCapacity:0} L");
+            p.Add(waterBar);
+
+            string growthTitle = plot.TreeBed ? "Timber" : "Growth";
+            Color growthTint = plot.TreeBed ? new Color(0.56f, 0.42f, 0.24f) : T.AccentGreen;
+            var (growthBar, growthFill, growthVal) = GridFarmLevelBar(
+                growthTitle, plot.Growth01, growthTint,
+                $"{plot.Growth01 * 100f:0}% · {plot.ReadyCount} ready");
+            p.Add(growthBar);
             p.Add(T.Spacer(6));
 
-            p.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(plot.PowerDraw),
-                plot.IsProducing ? T.AccentGreen : T.TextMuted));
-            p.Add(T.StatRow("💧", "Water Supply",
-                plot.HasWaterSupply ? "Piped" : "No tank connected",
-                plot.HasWaterSupply ? T.AccentGreen : T.AccentAmber));
-            p.Add(T.StatRow("🌬", "Breathable Air",
-                plot.HasAir ? "OK" : "None - crops paused",
-                plot.HasAir ? T.AccentGreen : T.AccentRed));
-            p.Add(T.StatRow("🌾", "Ready", $"{plot.ReadyCount} of {plot.cellCount}", T.AccentCyan));
-            if (plot.DeadCount > 0)
-                p.Add(T.StatRow("☠", "Lost Crops", $"{plot.DeadCount}", T.AccentRed));
+            // Compact live stat card.
+            var card = T.Card();
+            int cellCount = plot.cells != null ? plot.cells.Length : 9;
+            var cropRow = T.StatRow("🌱", "Crop", plot.CropName,
+                plot.PlantedCount > 0 ? T.TextPrimary : T.TextMuted);
+            var readyRow = T.StatRow("🌾", "Ready",
+                plot.TreeBed
+                    ? (plot.ReadyCount > 0 ? "Timber ready" : "Growing")
+                    : $"{plot.ReadyCount} / {cellCount}" + (plot.DeadCount > 0 ? $" · {plot.DeadCount} withered" : ""),
+                plot.ReadyCount > 0 ? T.AccentGreen : (plot.DeadCount > 0 ? T.AccentRed : T.TextSecondary));
+            var powerRow = T.StatRow("⚡", "Power", PowerFormat.Watts(plot.PowerDraw),
+                producing ? T.AccentGreen : T.TextMuted);
+            var supplyRow = T.StatRow("💧", "Water Supply",
+                plot.HasWaterSupply ? "Piped" : plot.HasWater ? "Tanked" : "Dry - connect pipe or canister",
+                plot.HasWaterSupply || plot.HasWater ? T.AccentGreen : T.AccentAmber);
+            var airRow = T.StatRow("🌬", "Air",
+                plot.HasAir ? "Breathable" : "None - crops paused",
+                plot.HasAir ? T.AccentGreen : T.AccentRed);
+            var reseedRow = T.StatRow("♻", "Self Re-seeding",
+                plot.replantAfterHarvest ? "Keeps 1 seed per harvest" : "Off",
+                plot.replantAfterHarvest ? T.AccentGreen : T.TextMuted);
+
+            card.Add(cropRow);
+            card.Add(readyRow);
+            card.Add(powerRow);
+            card.Add(supplyRow);
+            card.Add(airRow);
+            card.Add(reseedRow);
+            p.Add(card);
+            p.Add(T.Spacer(6));
+
+            var cropValue   = StatRowValue(cropRow);
+            var readyValue  = StatRowValue(readyRow);
+            var powerValue  = StatRowValue(powerRow);
+            var supplyValue = StatRowValue(supplyRow);
+            var airValue    = StatRowValue(airRow);
+            var reseedValue = StatRowValue(reseedRow);
+
+            // Toggle row: Self Re-seeding + Auto Output.
+            var switches = Row();
+            var reseedBtn = T.SmallButton(
+                plot.replantAfterHarvest ? "♻  Self Re-seeding: ON" : "♻  Self Re-seeding: OFF",
+                () =>
+                {
+                    plot.replantAfterHarvest = !plot.replantAfterHarvest;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                plot.replantAfterHarvest ? T.AccentGreen : T.TextMuted);
+            reseedBtn.style.flexGrow = 1;
+            reseedBtn.style.marginRight = 6;
+            switches.Add(reseedBtn);
+
+            var autoBtn = T.SmallButton(
+                plot.automatic ? "📦  Auto Output: ON" : "📦  Auto Output: OFF",
+                () =>
+                {
+                    plot.automatic = !plot.automatic;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                plot.automatic ? T.AccentCyan : T.TextMuted);
+            autoBtn.style.flexGrow = 1;
+            switches.Add(autoBtn);
+            p.Add(switches);
             p.Add(T.Spacer(4));
 
-            if (plot.DeadCount > 0)
-            {
-                p.Add(T.SmallButton("☠  Clear lost crops", () =>
+            // Action row: Harvest into Bin + Clear Lost Crops (always present so layout never jumps).
+            var actions = Row();
+            var harvestBtn = T.SmallButton(
+                "🌾  Harvest into Bin",
+                () =>
+                {
+                    plot.HarvestAllToOutput();
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                plot.ReadyCount > 0 ? T.AccentGreen : T.TextMuted);
+            harvestBtn.style.flexGrow = 1;
+            harvestBtn.style.marginRight = 6;
+            actions.Add(harvestBtn);
+
+            var clearBtn = T.SmallButton(
+                "☠  Clear Lost Crops",
+                () =>
                 {
                     plot.ClearDead();
-                    // The panel is rebuilt through the same hook every other machine UI
-                    // uses, so the cleared beds appear without closing and reopening.
                     VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                }, T.AccentRed));
-                p.Add(T.Spacer(4));
-            }
-
-            // Cell list: nine short rows beat one unreadable blob, and a lost cell is
-            // named so the player knows what to clear.
-            p.Add(GridUIHelpers.SectionTitle("Beds"));
-            for (int i = 0; i < plot.cellCount; i++)
-            {
-                var cell = plot.CellAt(i);
-                string name = cell == null ? "-"
-                    : cell.dead ? "Lost crop"
-                    : cell.tree ? "Timber"
-                    : cell.crop != null ? cell.crop.cropName
-                    : "Empty";
-                float growth = cell != null ? Mathf.Clamp01(cell.growth) : 0f;
-                Color tint = cell == null || (cell.crop == null && !cell.tree) ? T.TextMuted
-                    : cell.dead ? T.AccentRed
-                    : growth >= 1f ? T.AccentGreen
-                    : T.AccentCyan;
-                p.Add(T.StatRow("#" + (i + 1), name,
-                    cell != null && (cell.crop != null || cell.tree) ? $"{growth * 100f:0}%" : "-", tint));
-            }
+                },
+                plot.DeadCount > 0 ? T.AccentRed : T.TextMuted);
+            clearBtn.style.flexGrow = 1;
+            actions.Add(clearBtn);
+            p.Add(actions);
             p.Add(T.Spacer(6));
+
+            bool builtForTree = plot.TreeBed;
+            var cellNameLabels = new Label[cellCount];
+            var cellPctLabels  = new Label[cellCount];
+
+            if (builtForTree)
+            {
+                p.Add(GridUIHelpers.SectionTitle("Tree Bed"));
+                var treeCard = T.Card();
+                int standingIdx = Mathf.Clamp(plot.treeCell, 0, Mathf.Max(0, cellCount - 1));
+                var treeRow = T.StatRow("🌲",
+                    $"Standing in Cell #{standingIdx + 1} - every other cell locked",
+                    $"{plot.TreeGrowth01 * 100f:0}%",
+                    plot.ReadyCount > 0 ? T.AccentGreen : T.AccentCyan);
+                treeCard.Add(treeRow);
+                p.Add(treeCard);
+                p.Add(T.Muted("A standing tree claims the whole bed. Harvest the timber (or wait for Auto Output) to free the other cells."));
+                p.Add(T.Spacer(6));
+            }
+            else
+            {
+                p.Add(GridUIHelpers.SectionTitle(cellCount == 1
+                    ? "Planter Cell - drop a seed into the cell"
+                    : "Cells - drop a seed into any cell"));
+                var grid = new VisualElement();
+                grid.style.flexDirection = FlexDirection.Column;
+                int rows = Mathf.CeilToInt(cellCount / 3f);
+                for (int r = 0; r < rows; r++)
+                {
+                    var row = new VisualElement();
+                    row.style.flexDirection = FlexDirection.Row;
+                    row.style.justifyContent = Justify.SpaceBetween;
+                    row.style.marginBottom = 4;
+                    for (int c = 0; c < 3; c++)
+                    {
+                        int idx = r * 3 + c;
+                        if (idx >= cellCount) break;
+                        var chip = BuildGridFarmCellChip(plot, idx, slot, out var nameLbl, out var pctLbl);
+                        if (c < 2 && idx + 1 < cellCount) chip.style.marginRight = 4;
+                        cellNameLabels[idx] = nameLbl;
+                        cellPctLabels[idx]  = pctLbl;
+                        row.Add(chip);
+                    }
+                    grid.Add(row);
+                }
+                p.Add(grid);
+                p.Add(T.Spacer(6));
+            }
 
             p.Add(GridUIHelpers.SectionTitle("Seeds (planted automatically)"));
             if (plot.seedInput != null)
@@ -3463,10 +3558,454 @@ namespace VoxelEngine.GridSystem.UI
                     outGrid.Add(slot(plot.harvestOutput, i, plot.harvestOutput.GetSlot(i), false, true));
                 p.Add(outGrid);
             }
+            p.Add(T.Spacer(6));
+
+            AddThermalRow(p, plot);
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("Drop seeds in the seed bin and the beds fill themselves. Water comes from a grid liquid tank through a liquid port. Oxygen comes from a sealed breathable room, or from a breathable world under the hull."));
+            p.Add(T.Muted("Drop seeds into a specific cell or into the seed bin below. Water draws from a connected grid liquid tank (or a hand canister). Oxygen comes from a sealed breathable room or a breathable world."));
+
+            void RefreshLiveValues()
+            {
+                if (plot == null) return;
+                if (plot.TreeBed != builtForTree)
+                {
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                    return;
+                }
+
+                Color sc = GridFarmStatusColor(plot);
+                if (statusLabel != null)
+                {
+                    statusLabel.text = plot.Status;
+                    statusLabel.style.color = new StyleColor(sc);
+                }
+                if (statusPill != null)
+                {
+                    statusPill.style.backgroundColor = new StyleColor(new Color(sc.r, sc.g, sc.b, 0.22f));
+                    T.Border(statusPill, 1f, new Color(sc.r, sc.g, sc.b, 0.55f));
+                }
+
+                if (waterFill != null)
+                    waterFill.style.width = new StyleLength(new Length(Mathf.Clamp01(plot.Water01) * 100f, LengthUnit.Percent));
+                if (waterVal != null)
+                    waterVal.text = $"{plot.waterStored:0.0} / {plot.waterCapacity:0} L";
+
+                if (growthFill != null)
+                    growthFill.style.width = new StyleLength(new Length(Mathf.Clamp01(plot.Growth01) * 100f, LengthUnit.Percent));
+                if (growthVal != null)
+                    growthVal.text = $"{plot.Growth01 * 100f:0}% · {plot.ReadyCount} ready";
+
+                if (cropValue != null)
+                {
+                    cropValue.text = plot.CropName;
+                    cropValue.style.color = new StyleColor(plot.PlantedCount > 0 ? T.TextPrimary : T.TextMuted);
+                }
+                if (readyValue != null)
+                {
+                    int total = plot.cells != null ? plot.cells.Length : cellCount;
+                    readyValue.text = plot.TreeBed
+                        ? (plot.ReadyCount > 0 ? "Timber ready" : "Growing")
+                        : $"{plot.ReadyCount} / {total}" + (plot.DeadCount > 0 ? $" · {plot.DeadCount} withered" : "");
+                    readyValue.style.color = new StyleColor(plot.ReadyCount > 0
+                        ? T.AccentGreen
+                        : (plot.DeadCount > 0 ? T.AccentRed : T.TextSecondary));
+                }
+                if (powerValue != null)
+                {
+                    bool prod = plot.Enabled && (plot.Grid == null || plot.Grid.HasPower) && plot.PlantedCount > 0 && plot.HasAir && plot.HasWater;
+                    powerValue.text = PowerFormat.Watts(plot.PowerDraw);
+                    powerValue.style.color = new StyleColor(prod ? T.AccentGreen : T.TextMuted);
+                }
+                if (supplyValue != null)
+                {
+                    supplyValue.text = plot.HasWaterSupply ? "Piped" : plot.HasWater ? "Tanked" : "Dry - connect pipe or canister";
+                    supplyValue.style.color = new StyleColor(plot.HasWaterSupply || plot.HasWater ? T.AccentGreen : T.AccentAmber);
+                }
+                if (airValue != null)
+                {
+                    airValue.text = plot.HasAir ? "Breathable" : "None - crops paused";
+                    airValue.style.color = new StyleColor(plot.HasAir ? T.AccentGreen : T.AccentRed);
+                }
+                if (reseedValue != null)
+                {
+                    reseedValue.text = plot.replantAfterHarvest ? "Keeps 1 seed per harvest" : "Off";
+                    reseedValue.style.color = new StyleColor(plot.replantAfterHarvest ? T.AccentGreen : T.TextMuted);
+                }
+
+                if (!builtForTree && plot.cells != null)
+                {
+                    int n = Mathf.Min(cellCount, plot.cells.Length);
+                    for (int i = 0; i < n; i++)
+                    {
+                        var cell = plot.cells[i];
+                        bool locked = plot.IsCellLocked(i);
+                        string cname = locked ? "Locked (tree)"
+                            : cell == null ? "-"
+                            : cell.dead ? "Withered"
+                            : cell.tree ? "Timber"
+                            : cell.crop != null ? cell.crop.cropName
+                            : "Empty";
+                        float g = cell != null ? Mathf.Clamp01(cell.growth) : 0f;
+                        string pct = !locked && cell != null && (cell.crop != null || cell.tree) ? $"{g * 100f:0}%" : "-";
+                        Color tint = locked || cell == null || (cell.crop == null && !cell.tree) ? T.TextMuted
+                            : cell.dead ? T.AccentRed
+                            : g >= 0.999f ? T.AccentGreen
+                            : T.AccentCyan;
+
+                        if (cellNameLabels[i] != null)
+                        {
+                            cellNameLabels[i].text = cname;
+                            cellNameLabels[i].style.color = new StyleColor(tint);
+                        }
+                        if (cellPctLabels[i] != null)
+                        {
+                            cellPctLabels[i].text = pct;
+                            cellPctLabels[i].style.color = new StyleColor(tint);
+                        }
+                    }
+                }
+            }
+
+            RefreshLiveValues();
+            p.schedule.Execute(RefreshLiveValues).Every(100);
             IndustrialTheme.Frame(p);
             return p;
+        }
+
+        private static Color GridFarmStatusColor(GridFarmPlotBase plot)
+        {
+            if (plot == null || !plot.Enabled) return T.TextMuted;
+            string s = plot.Status;
+            if (s == "READY" || s == "TIMBER READY" || s.StartsWith("READY") || s.EndsWith("RIPE)")) return T.AccentGreen;
+            if (s == "NO POWER" || s == "WITHERED" || s == "LOST CROP") return T.AccentRed;
+            if (s == "DRY" || s == "NO O2") return T.AccentAmber;
+            if (s == "GROWING" || s == "TIMBER") return T.AccentCyan;
+            return T.TextMuted;
+        }
+
+        private static VisualElement BuildGridFarmCellChip(
+            GridFarmPlotBase plot, int idx, MachineUIs.SlotBuilder slot,
+            out Label nameLbl, out Label pctLbl)
+        {
+            var cell = plot.cells != null && idx < plot.cells.Length ? plot.cells[idx] : null;
+            bool locked = plot.IsCellLocked(idx);
+            string name = locked ? "Locked (tree)"
+                : cell == null ? "-"
+                : cell.dead ? "Withered"
+                : cell.tree ? "Timber"
+                : cell.crop != null ? cell.crop.cropName
+                : "Empty";
+            float growth = cell != null ? Mathf.Clamp01(cell.growth) : 0f;
+            Color tint = locked || cell == null || (cell.crop == null && !cell.tree) ? T.TextMuted
+                : cell.dead ? T.AccentRed
+                : growth >= 0.999f ? T.AccentGreen
+                : T.AccentCyan;
+
+            var chip = new VisualElement();
+            chip.style.flexGrow = 1;
+            chip.style.flexBasis = new Length(31, LengthUnit.Percent);
+            chip.style.paddingLeft = 6;
+            chip.style.paddingRight = 6;
+            chip.style.paddingTop = 4;
+            chip.style.paddingBottom = 4;
+            chip.style.backgroundColor = new StyleColor(new Color(0.11f, 0.13f, 0.17f, 0.92f));
+            T.Radius(chip, 5);
+            T.Border(chip, 1f, new Color(tint.r, tint.g, tint.b, 0.45f));
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.justifyContent = Justify.SpaceBetween;
+            var num = new Label("#" + (idx + 1));
+            num.style.fontSize = 10;
+            num.style.color = new StyleColor(T.TextMuted);
+            pctLbl = new Label(!locked && cell != null && (cell.crop != null || cell.tree) ? $"{growth * 100f:0}%" : "-");
+            pctLbl.style.fontSize = 10;
+            pctLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pctLbl.style.color = new StyleColor(tint);
+            top.Add(num);
+            top.Add(pctLbl);
+            chip.Add(top);
+
+            nameLbl = new Label(name);
+            nameLbl.style.fontSize = 11;
+            nameLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            nameLbl.style.color = new StyleColor(tint);
+            nameLbl.style.marginTop = 1;
+            nameLbl.style.marginBottom = 3;
+            chip.Add(nameLbl);
+
+            if (locked)
+            {
+                var lockNote = new Label("LOCKED");
+                lockNote.style.fontSize = 9;
+                lockNote.style.unityFontStyleAndWeight = FontStyle.Bold;
+                lockNote.style.color = new StyleColor(T.TextMuted);
+                chip.Add(lockNote);
+            }
+            else if (slot != null)
+            {
+                var bin = plot.CellInput(idx);
+                if (bin != null)
+                {
+                    var slotRow = new VisualElement();
+                    slotRow.style.flexDirection = FlexDirection.Row;
+                    slotRow.style.justifyContent = Justify.Center;
+                    slotRow.Add(slot(bin, 0, bin.GetSlot(0), false, true));
+                    chip.Add(slotRow);
+                }
+            }
+            return chip;
+        }
+
+        /// <summary>
+        /// 18.8.0-dev: live-updating panel for the Grid Automatic Tree Farm.
+        /// </summary>
+        private static VisualElement GridAutoTreeFarmPanel(GridAutoTreeFarm farm, MachineUIs.SlotBuilder slot)
+        {
+            farm.EnsureContainers();
+
+            var p = T.MachinePanel();
+            Color statusColor = GridTreeFarmStatusColor(farm);
+            var (hdr, _, statusPill, statusLabel) = T.HeaderRow($"🌲 {farm.blockName}", farm.Status, statusColor);
+            p.Add(hdr);
+            p.Add(IndustrialTheme.HazardDivider());
+            bool producing = farm.Enabled && (farm.Grid == null || farm.Grid.HasPower) && farm.HasTree && farm.HasAir && farm.HasWater && !farm.IsReady;
+            p.Add(IndustrialTheme.Lamps(producing ? 2 : farm.Status == "NO POWER" ? 0 : 1));
+
+            var (waterBar, waterFill, waterVal) = GridFarmLevelBar(
+                "Water", farm.Water01, new Color(0.28f, 0.62f, 0.95f),
+                $"{farm.waterStored:0.0} / {farm.waterCapacity:0} L");
+            p.Add(waterBar);
+
+            var (timberBar, timberFill, timberVal) = GridFarmLevelBar(
+                "Timber", farm.Growth01, new Color(0.42f, 0.78f, 0.36f),
+                $"{farm.Growth01 * 100f:0}% · {farm.StageLabel}");
+            p.Add(timberBar);
+            p.Add(T.Spacer(6));
+
+            var card = T.Card();
+            var stageRow  = T.StatRow("🌲", "Stage", farm.StageLabel, farm.HasTree ? T.AccentGreen : T.TextMuted);
+            var cycleRow  = T.StatRow("⏱", "Cycle Time", $"{farm.EffectiveCycleSeconds:0.0} s ({farm.SpeedMultiplier:0.00}x)", T.AccentCyan);
+            var powerRow  = T.StatRow("⚡", "Power", PowerFormat.Watts(farm.PowerDraw), producing ? T.AccentGreen : T.TextMuted);
+            var supplyRow = T.StatRow("💧", "Water Supply",
+                farm.HasWaterSupply ? "Piped" : farm.HasWater ? "Tanked" : "Dry - connect pipe or canister",
+                farm.HasWaterSupply || farm.HasWater ? T.AccentGreen : T.AccentAmber);
+            var airRow    = T.StatRow("🌬", "Air",
+                farm.HasAir ? "Breathable" : "None - growth paused",
+                farm.HasAir ? T.AccentGreen : T.AccentRed);
+            var fertRow   = T.StatRow("🧪", "Fertilizer",
+                farm.IsCycleFertilized ? "Active (+45% speed, +2 Logs)" : (farm.autoFertilizeFromInput ? "Armed (uses Biomass)" : "Off"),
+                farm.IsCycleFertilized ? T.AccentGreen : T.TextSecondary);
+            var felledRow = T.StatRow("🪵", "Trees Felled", farm.TreesHarvested.ToString("N0"), T.AccentGold);
+
+            card.Add(stageRow);
+            card.Add(cycleRow);
+            card.Add(powerRow);
+            card.Add(supplyRow);
+            card.Add(airRow);
+            card.Add(fertRow);
+            card.Add(felledRow);
+            p.Add(card);
+            p.Add(T.Spacer(6));
+
+            var stageVal  = StatRowValue(stageRow);
+            var cycleVal  = StatRowValue(cycleRow);
+            var powerVal  = StatRowValue(powerRow);
+            var supplyVal = StatRowValue(supplyRow);
+            var airVal    = StatRowValue(airRow);
+            var fertVal   = StatRowValue(fertRow);
+            var felledVal = StatRowValue(felledRow);
+
+            var switches1 = Row();
+            var reseedBtn = T.SmallButton(
+                farm.replantAfterHarvest ? "♻  Self Re-seeding: ON" : "♻  Self Re-seeding: OFF",
+                () =>
+                {
+                    farm.replantAfterHarvest = !farm.replantAfterHarvest;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                farm.replantAfterHarvest ? T.AccentGreen : T.TextMuted);
+            reseedBtn.style.flexGrow = 1;
+            reseedBtn.style.marginRight = 6;
+            switches1.Add(reseedBtn);
+
+            var autoBtn = T.SmallButton(
+                farm.automatic ? "📦  Auto Output: ON" : "📦  Auto Output: OFF",
+                () =>
+                {
+                    farm.automatic = !farm.automatic;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                farm.automatic ? T.AccentCyan : T.TextMuted);
+            autoBtn.style.flexGrow = 1;
+            switches1.Add(autoBtn);
+            p.Add(switches1);
+            p.Add(T.Spacer(4));
+
+            var switches2 = Row();
+            var fertBtn = T.SmallButton(
+                farm.autoFertilizeFromInput ? "🧪  Auto Fertilize: ON" : "🧪  Auto Fertilize: OFF",
+                () =>
+                {
+                    farm.autoFertilizeFromInput = !farm.autoFertilizeFromInput;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                farm.autoFertilizeFromInput ? T.AccentGreen : T.TextMuted);
+            fertBtn.style.flexGrow = 1;
+            fertBtn.style.marginRight = 6;
+            switches2.Add(fertBtn);
+
+            var harvestBtn = T.SmallButton(
+                "🪵  Harvest into Bin",
+                () =>
+                {
+                    farm.HarvestNowToOutput();
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                },
+                farm.IsReady ? T.AccentGreen : T.TextMuted);
+            harvestBtn.style.flexGrow = 1;
+            switches2.Add(harvestBtn);
+            p.Add(switches2);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Saplings & Fertilizer (also pulled from cargo)"));
+            if (farm.inputC != null)
+            {
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(farm.inputC), "Input"));
+                var inGrid = T.SlotGrid(farm.inputC.Size);
+                for (int i = 0; i < farm.inputC.Size; i++)
+                    inGrid.Add(slot(farm.inputC, i, farm.inputC.GetSlot(i), false, true));
+                p.Add(inGrid);
+            }
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Timber & Biomass Output (pushed to connected cargo)"));
+            if (farm.outputC != null)
+            {
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(farm.outputC), "Output"));
+                var outGrid = T.SlotGrid(farm.outputC.Size);
+                for (int i = 0; i < farm.outputC.Size; i++)
+                    outGrid.Add(slot(farm.outputC, i, farm.outputC.GetSlot(i), false, true));
+                p.Add(outGrid);
+            }
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Upgrade Modules (Speed / Efficiency)"));
+            if (farm.upgradeC != null)
+            {
+                var upgGrid = T.SlotGrid(farm.upgradeC.Size);
+                for (int i = 0; i < farm.upgradeC.Size; i++)
+                    upgGrid.Add(slot(farm.upgradeC, i, farm.upgradeC.GetSlot(i), false, true));
+                p.Add(upgGrid);
+            }
+            p.Add(T.Spacer(6));
+
+            AddThermalRow(p, farm);
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Drop one Tree Sapling in the input bin to start continuous self-reseeding timber production. Needs piped water from a grid tank and breathable air."));
+
+            void RefreshLiveValues()
+            {
+                if (farm == null) return;
+                Color sc = GridTreeFarmStatusColor(farm);
+                if (statusLabel != null)
+                {
+                    statusLabel.text = farm.Status;
+                    statusLabel.style.color = new StyleColor(sc);
+                }
+                if (statusPill != null)
+                {
+                    statusPill.style.backgroundColor = new StyleColor(new Color(sc.r, sc.g, sc.b, 0.22f));
+                    T.Border(statusPill, 1f, new Color(sc.r, sc.g, sc.b, 0.55f));
+                }
+
+                if (waterFill != null)
+                    waterFill.style.width = new StyleLength(new Length(Mathf.Clamp01(farm.Water01) * 100f, LengthUnit.Percent));
+                if (waterVal != null)
+                    waterVal.text = $"{farm.waterStored:0.0} / {farm.waterCapacity:0} L";
+
+                if (timberFill != null)
+                    timberFill.style.width = new StyleLength(new Length(Mathf.Clamp01(farm.Growth01) * 100f, LengthUnit.Percent));
+                if (timberVal != null)
+                    timberVal.text = $"{farm.Growth01 * 100f:0}% · {farm.StageLabel}";
+
+                if (stageVal != null)
+                {
+                    stageVal.text = farm.StageLabel;
+                    stageVal.style.color = new StyleColor(farm.HasTree ? T.AccentGreen : T.TextMuted);
+                }
+                if (cycleVal != null)
+                    cycleVal.text = $"{farm.EffectiveCycleSeconds:0.0} s ({farm.SpeedMultiplier:0.00}x)";
+                if (powerVal != null)
+                {
+                    bool prod = farm.Enabled && (farm.Grid == null || farm.Grid.HasPower) && farm.HasTree && farm.HasAir && farm.HasWater && !farm.IsReady;
+                    powerVal.text = PowerFormat.Watts(farm.PowerDraw);
+                    powerVal.style.color = new StyleColor(prod ? T.AccentGreen : T.TextMuted);
+                }
+                if (supplyVal != null)
+                {
+                    supplyVal.text = farm.HasWaterSupply ? "Piped" : farm.HasWater ? "Tanked" : "Dry - connect pipe or canister";
+                    supplyVal.style.color = new StyleColor(farm.HasWaterSupply || farm.HasWater ? T.AccentGreen : T.AccentAmber);
+                }
+                if (airVal != null)
+                {
+                    airVal.text = farm.HasAir ? "Breathable" : "None - growth paused";
+                    airVal.style.color = new StyleColor(farm.HasAir ? T.AccentGreen : T.AccentRed);
+                }
+                if (fertVal != null)
+                {
+                    fertVal.text = farm.IsCycleFertilized ? "Active (+45% speed, +2 Logs)" : (farm.autoFertilizeFromInput ? "Armed (uses Biomass)" : "Off");
+                    fertVal.style.color = new StyleColor(farm.IsCycleFertilized ? T.AccentGreen : T.TextSecondary);
+                }
+                if (felledVal != null)
+                    felledVal.text = farm.TreesHarvested.ToString("N0");
+            }
+
+            RefreshLiveValues();
+            p.schedule.Execute(RefreshLiveValues).Every(100);
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
+        private static (VisualElement bar, VisualElement fill, Label value) GridFarmLevelBar(
+            string caption, float fill01, Color color, string valueText)
+        {
+            var col = new VisualElement();
+            col.style.marginBottom = 6;
+
+            var row = Row();
+            var cap = new Label(caption.ToUpperInvariant());
+            cap.style.color = new StyleColor(T.TextMuted);
+            cap.style.fontSize = 9;
+            cap.style.unityFontStyleAndWeight = FontStyle.Bold;
+            cap.style.letterSpacing = 1.2f;
+            cap.style.flexGrow = 1;
+            cap.pickingMode = PickingMode.Ignore;
+            row.Add(cap);
+
+            var value = new Label(valueText ?? string.Empty);
+            value.style.color = new StyleColor(T.TextPrimary);
+            value.style.fontSize = 10;
+            value.style.unityFontStyleAndWeight = FontStyle.Bold;
+            value.style.unityTextAlign = TextAnchor.MiddleRight;
+            value.pickingMode = PickingMode.Ignore;
+            row.Add(value);
+
+            col.Add(row);
+            var (bar, fillEl) = T.ProgressBar(Mathf.Clamp01(fill01), color, 8, true);
+            col.Add(bar);
+            return (col, fillEl, value);
+        }
+
+        private static Color GridTreeFarmStatusColor(GridAutoTreeFarm farm)
+        {
+            if (farm == null || !farm.Enabled) return T.TextMuted;
+            string s = farm.Status;
+            if (s == "TIMBER READY" || s == "FELLING") return T.AccentGreen;
+            if (s == "NO POWER") return T.AccentRed;
+            if (s == "DRY" || s == "NO O2" || s == "OUTPUT FULL" || s == "NO SAPLING") return T.AccentAmber;
+            if (s == "GROWING") return T.AccentCyan;
+            return T.TextMuted;
         }
 
         private static VisualElement GenericPanel(GridBlock block)

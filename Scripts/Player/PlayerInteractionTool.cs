@@ -1849,6 +1849,88 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Grid farm blocks: allow hand-watering with a Liquid Canister (and direct
+                // hand-planting / fertilizing on a grid plot), then fall through to open the panel.
+                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridFarmPlotBase gridFarmPlot)
+                {
+                    var heldGridItem = inventory.ActiveStack;
+                    if (!heldGridItem.IsEmpty && heldGridItem.item is VoxelEngine.Items.LiquidCanister)
+                    {
+                        var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(heldGridItem);
+                        if (carried != null && carried.Value == VoxelEngine.Items.LiquidType.Water
+                            && gridFarmPlot.waterStored < gridFarmPlot.waterCapacity - 0.01f)
+                        {
+                            int wantedMl = Mathf.RoundToInt(VoxelEngine.Items.LiquidCanister.LitresPerClick * 1000f);
+                            if (VoxelEngine.Items.LiquidCanister.RemoveMl(heldGridItem, wantedMl))
+                            {
+                                float added = gridFarmPlot.TryAddWater(wantedMl / 1000f);
+                                VoxelEngine.UI.BuildFeedbackHud.Show(
+                                    "Watered " + gridFarmPlot.blockName,
+                                    "+" + added.ToString("0.0") + " L - " + (gridFarmPlot.Water01 * 100f).ToString("0") + "% full",
+                                    heldGridItem.item.icon,
+                                    new Color(0.30f, 0.68f, 0.92f));
+                                return;
+                            }
+                        }
+                    }
+                    else if (!heldGridItem.IsEmpty && heldGridItem.item != null)
+                    {
+                        int plantedCell = gridFarmPlot.TryPlant(heldGridItem.item);
+                        if (plantedCell >= 0)
+                        {
+                            inventory.container.Remove(heldGridItem.item, 1);
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Planted",
+                                heldGridItem.item.displayName + " in " + gridFarmPlot.blockName + " (Cell #" + (plantedCell + 1) + ")",
+                                heldGridItem.item.icon,
+                                new Color(0.40f, 0.75f, 0.30f));
+                            return;
+                        }
+                        if (plantedCell == -2)
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Tree Sapling",
+                                "Saplings need a Large Farm Plot Box or Grid Automatic Tree Farm.",
+                                heldGridItem.item.icon,
+                                new Color(0.95f, 0.72f, 0.22f));
+                            return;
+                        }
+                        if (gridFarmPlot.TryFertilize(heldGridItem.item))
+                        {
+                            inventory.container.Remove(heldGridItem.item, 1);
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Fertilized",
+                                "Faster growth, one extra unit at harvest",
+                                heldGridItem.item.icon,
+                                new Color(0.45f, 0.85f, 0.30f));
+                            return;
+                        }
+                    }
+                }
+                else if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridAutoTreeFarm gridAutoTree)
+                {
+                    var heldTreeItem = inventory.ActiveStack;
+                    if (!heldTreeItem.IsEmpty && heldTreeItem.item is VoxelEngine.Items.LiquidCanister)
+                    {
+                        var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(heldTreeItem);
+                        if (carried != null && carried.Value == VoxelEngine.Items.LiquidType.Water
+                            && gridAutoTree.waterStored < gridAutoTree.waterCapacity - 0.01f)
+                        {
+                            int wantedMl = Mathf.RoundToInt(VoxelEngine.Items.LiquidCanister.LitresPerClick * 1000f);
+                            if (VoxelEngine.Items.LiquidCanister.RemoveMl(heldTreeItem, wantedMl))
+                            {
+                                float added = gridAutoTree.TryAddWater(wantedMl / 1000f);
+                                VoxelEngine.UI.BuildFeedbackHud.Show(
+                                    "Watered " + gridAutoTree.blockName,
+                                    "+" + added.ToString("0.0") + " L - " + (gridAutoTree.Water01 * 100f).ToString("0") + "% full",
+                                    heldTreeItem.item.icon,
+                                    new Color(0.30f, 0.68f, 0.92f));
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 if (!holdingGridBlock && gridBlock != null && GridBlockHasUI(gridBlock))
                 {
                     UI.GameUIController.Instance?.OpenMachine(gridBlock);
@@ -3764,6 +3846,7 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridH2O2Generator
                 || b is VoxelEngine.GridSystem.GridBiofarm
                 || b is VoxelEngine.GridSystem.GridFarmPlotBase
+                || b is VoxelEngine.GridSystem.GridAutoTreeFarm
                 || b is VoxelEngine.GridSystem.GridCryobed
                 || b is VoxelEngine.GridSystem.GridBattery
                 || b is VoxelEngine.GridSystem.GridCargoContainer

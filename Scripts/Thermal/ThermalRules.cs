@@ -241,7 +241,8 @@ namespace VoxelEngine.Thermal
             if (block is IHeatshieldBlock shield) return shield.ShieldIntact ? HeatshieldToleranceC : BlockDamageThresholdC;
             if (block is IHeatSourceBlock || block is GridThruster) return MachineryToleranceC;
             if (block is GridGlassBlock) return GlassToleranceC;
-            if (block is GridCockpit || block is GridCryobed || block is GridBiofarm) return HabitatToleranceC;
+            if (block is GridCockpit || block is GridCryobed || block is GridBiofarm
+                || block is GridFarmPlotBase || block is GridAutoTreeFarm) return HabitatToleranceC;
             if (block is GridScreenBlock || block is GridCameraBlock || block is GridBeacon
                 || block is GridOreDetector || block is GridLocatorBlock || block is GridSeasonMonitor
                 || block is GridBattery || block is GridSolarPanel || block is VoxelEngine.Simulation.GridLightBlock)

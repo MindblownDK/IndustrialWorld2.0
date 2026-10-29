@@ -2012,7 +2012,9 @@ namespace VoxelEngine.GridSystem
         {
             // The exhaust stack's gas tap is a tank-side endpoint like any other: without
             // it a capture line can only be built while the stack is actively venting.
-            return (family == PipeFamily.Liquid && (block is GridLiquidTank || block is GridBiofarm || block is GridH2O2Generator))
+            return (family == PipeFamily.Liquid && (block is GridLiquidTank || block is GridBiofarm
+                                                    || block is GridFarmPlotBase || block is GridAutoTreeFarm
+                                                    || block is GridH2O2Generator))
                 || (family == PipeFamily.Gas && (block is GridGasTank || block is GridCryobed || block is GridBiofarm
                                                  || block is GridH2O2Generator || block is VoxelEngine.Maritime.GridExhaustPipe));
         }
@@ -2037,6 +2039,8 @@ namespace VoxelEngine.GridSystem
             {
                 if (targetBlock is not GridLiquidTank
                     && targetBlock is not GridBiofarm
+                    && targetBlock is not GridFarmPlotBase
+                    && targetBlock is not GridAutoTreeFarm
                     && targetBlock is not GridH2O2Generator) return false;
                 tankFamily = GridTankPortFamily.Liquid;
             }

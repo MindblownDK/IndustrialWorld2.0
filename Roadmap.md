@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.7.3-dev`
-**Roadmap Version:** `18.7.3-dev`
+**Current Version:** `18.8.0-dev`
+**Roadmap Version:** `18.8.0-dev`
 **Date:** 2026-10-29
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 18.8.0-dev - Grid Farming Parity, Grid Seed Planter & Grid Auto Tree Farm
+- `GridFarmPlotBase` (`GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`) matches `PlantBox`: 0 L dry start, per-cell `cellInput` bins, whole-bed `treeBed`/`treeCell` locking, bushy crop/fruit and 3D tree visuals, `IFarmBed` screen telemetry, and a 10 Hz live panel
+- `GridSeedPlanter` (1-cell low-power hydroponic tray) and `GridAutoTreeFarm` (continuous self-reseeding timber gantry with fertilizer boost and 2 upgrade slots) ship with liquid ports, recipes, icons and save persistence
+- `WorldFarmOverhaulSetup.RunStep125` non-destructively authors and repairs all four grid farm blocks, their liquid ports, recipes, icons and `ItemPersistenceCatalog` entries on its own
+
 ### 18.7.3-dev - Per-Cell Planting, Dry Beds, Better Crops
 - Every bed page carries a one-slot bin per cell, so a seed is planted into the square it was dropped in (`TryPlantAtCell` / `CanPlantInCell` / `IsCellLocked`)
 - A sapling takes a cell and owns the bed: `treeCell` is saved, the other cells lock, and anything already growing there is harvested into the bin first
@@ -49,15 +54,6 @@
 - `PlantBox.BuildVisuals` is derived from `cellsPerSide`, so Small, Big and Large are 1, 2 and 3 metres of furniture; the Large bed's orphan trellis bar is replaced by corner posts carrying the rails
 - A sapling on the Large bed claims the whole bed (`treeBed` / `treeGrowth`), hides the crop cells, and comes down as logs, saplings and biomass
 
-### 18.6.1-dev - Sprinkler Repair Restored, Icons Authored First
-- `WorldFarmOverhaulSetup.RepairSprinkler` is back (18.6.0-dev had deleted it with the old plot block), so the editor assembly compiles again
-- `EnsureFarmIcons` runs before any prefab work and again at the end, authors the six farm icons and rebinds any whose sprite reference was dropped by a re-import
-- `RunIconRepair` gives the icons their own non-destructive Setup button that touches no prefab, recipe or block
-
-- The Auto Farm Plot is a family of three - 1, 4 and 9 cells at 8, 10 and 14 W - all on `PlantBox`, which now supports a power draw and a per-bed tree permission
-- Both grid plots draw one growing pod per cell on the bed itself, coloured by the crop's own stages and collapsed brown when the cell is lost
-- Every automated bed grows at `growthSpeedMultiplier = 0.5` and the planting-box pods interpolate inside their stage, so a crop climbs slowly and continuously instead of jumping
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permane### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
@@ -70,7 +66,8 @@
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
 - **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
-- **Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** ~~flat and vertical Farm Plots, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm~~ *(18.4.0-dev - the Vertical Farm Plot and the Large Farm Plot Box ship as grid blocks with a piped tank and `FarmEnvironment.HasBreathableAir`; `GridBiofarm` stays the oxygen garden)*. Still open from that stage: the Automatic Tree Farm and the Seed Planter as grid blocks, deferred to a later round because both need the grid item-port family rather than a bed.
+- ~~**Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, Automatic Tree Farm, and Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm.~~ *(18.4.0-dev & 18.8.0-dev - `GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`, and `GridAutoTreeFarm` all ship as grid blocks with piped water tanks, `FarmEnvironment.HasBreathableAir`, cargo auto-push, and 10 Hz live panels; `GridBiofarm` stays the oxygen garden.)*
+- **Grid farming parity and Stage 2 grid farm blocks acceptance (18.8.0-dev):** confirm in Unity that all 16 grid farm assets (4 prefabs, 4 items, 4 recipes, 4 icons) are verified on disk, that all four grid farm blocks start at 0 L and accept both piped grid water and hand canister watering, that `GridFarmBox` locks its other eight cells and grows a 3D tree when a sapling is planted, that `GridSeedPlanter` and `GridAutoTreeFarm` push harvests to connected grid cargo, and that ship screens on `FARMS` and `PLOT STATUS` list grid farm beds alongside world beds.
 - **Farm overhaul runtime acceptance (18.3.0-dev):** Unity compilation, a Setup Wizard run of `WorldFarmOverhaulSetup.RunStep124`, planting and harvesting in all three boxes, hand watering from a canister, a sprinkler filled by hand and by pipe, the sprinkler's spray stopping on power loss and on an empty tank, drought loss and clearing, trees refused by the Small and Big boxes, self re-seed on and off, belt pickup from a box chute and from the Auto Farm Plot port, and a save/load round trip of a mixed box (crop, tree, dead cell, tank level) remain pending.
 - **Grid farm plot runtime acceptance (18.4.0-dev / 18.5.0-dev):** Unity compilation, a Setup Wizard run of the grid content step and `RunStep125`, both plots mounting to a grid and opening their panel on right-click, the tank filling from a liquid pipe, growth pausing in an unbreathable room and resuming in a sealed one, crops pausing on a breathable world without an enclosure, seeds dropped in the seed bin filling empty beds, harvests landing in connected cargo and in the plot's bin when there is no cargo, `Clear lost crops`, and both blocks surviving save/load with their bins remain pending.
 - **Farm authoring acceptance (18.5.0-dev):** confirm in Unity that `RunStep124` reports "all 15 new blocks, prefabs and recipes are present", that the Sprinkler exists on a project that never ran the farming content step, that the Auto Farm Plot in hand looks like a bordered tray rather than a dirt cube, and that Tilled Soil is unchanged.

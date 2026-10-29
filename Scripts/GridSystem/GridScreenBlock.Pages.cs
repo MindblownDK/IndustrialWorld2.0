@@ -1951,6 +1951,7 @@ namespace VoxelEngine.GridSystem
             if (bed is CropPlanter planter && planter.plantedCrop != null) return planter.plantedCrop.harvestItem;
             if (bed is PlantBox box)
             {
+                if (box.TreeBed && box.woodLogItem != null) return box.woodLogItem;
                 var yield = box.PeekHarvest();
                 if (yield.item != null) return yield.item;
                 for (int i = 0; i < box.SlotCount; i++)
@@ -1961,6 +1962,21 @@ namespace VoxelEngine.GridSystem
                     if (slot.tree) return box.woodLogItem;
                 }
             }
+            if (bed is GridFarmPlotBase gridPlot)
+            {
+                if (gridPlot.TreeBed && gridPlot.woodLogItem != null) return gridPlot.woodLogItem;
+                if (gridPlot.cells != null)
+                {
+                    for (int i = 0; i < gridPlot.cells.Length; i++)
+                    {
+                        var c = gridPlot.cells[i];
+                        if (c == null) continue;
+                        if (c.crop != null) return c.crop.harvestItem;
+                        if (c.tree) return gridPlot.woodLogItem;
+                    }
+                }
+            }
+            if (bed is GridAutoTreeFarm gridTree) return gridTree.woodLogItem;
             if (bed is TreeFarmPlot tree) return tree.woodLogItem;
             return null;
         }
@@ -3041,6 +3057,12 @@ namespace VoxelEngine.GridSystem
             var trees = UnityEngine.Object.FindObjectsByType<TreeFarmPlot>(FindObjectsInactive.Exclude);
             for (int i = 0; i < trees.Length; i++) AddFarmBed(trees[i], here, radiusSq);
 
+            var gridPlots = UnityEngine.Object.FindObjectsByType<GridFarmPlotBase>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < gridPlots.Length; i++) AddFarmBed(gridPlots[i], here, radiusSq);
+
+            var gridTreeFarms = UnityEngine.Object.FindObjectsByType<GridAutoTreeFarm>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < gridTreeFarms.Length; i++) AddFarmBed(gridTreeFarms[i], here, radiusSq);
+
             _farmFound.Sort((a, b) => a.distanceSq.CompareTo(b.distanceSq));
         }
 
@@ -3057,7 +3079,8 @@ namespace VoxelEngine.GridSystem
             Vector3 gravityUp = GravityProvider.GetUp(position);
             if (gravityUp.sqrMagnitude < 0.0001f) gravityUp = Vector3.up;
             else gravityUp.Normalize();
-            bool vertical = Mathf.Abs(Vector3.Dot(behaviour.transform.up, gravityUp)) < 0.5f;
+            bool vertical = candidate is GridVerticalFarm
+                || Mathf.Abs(Vector3.Dot(behaviour.transform.up, gravityUp)) < 0.5f;
             _farmFound.Add(new FarmBedEntry
             {
                 bed = bed, position = position, distanceSq = distanceSq, vertical = vertical,

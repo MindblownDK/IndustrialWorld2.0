@@ -1,9 +1,36 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.7.3-dev`
+**Current Version:** `18.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.8.0-dev] Grid Farming Parity, Grid Seed Planter, and Grid Automatic Tree Farm
+
+**Type:** MINOR - brings grid farm plots (`GridFarmPlotBase`, `GridVerticalFarm`, `GridFarmBox`) to full `18.7.3-dev` parity and ships the two remaining Stage 2 grid farm blocks (`GridSeedPlanter` and `GridAutoTreeFarm`). Save-compatible: `treeBed`, `treeGrowth`, and `treeCell` on `GridFarmPlotBase` are additive `IMachineProcessState` keys (and legacy per-cell tree entries migrate automatically), `cellInput` bins are transient, and `GridAutoTreeFarm` / `PlantBox` containers serialize cleanly alongside existing multi-container blocks.
+
+**GitHub title:** `[18.8.0-dev] Complete grid farming parity and ship Grid Seed Planter and Grid Automatic Tree Farm`
+
+#### Added
+
+- **Grid Seed Planter (`GridSeedPlanter` / `GItem_SeedPlanter` / `SeedPlanter_Large.prefab` / `Recipe_GSeedPlanter`).** A compact single-crop hydroponic tray for ships and stations (`240 kg`, `320 HP`, `20 W` active / `2 W` idle, `60 L` water tank starting at `0 L`). Shares the full `GridFarmPlotBase` simulation: draws piped water from `GridLiquidNetwork` (or a hand `LiquidCanister`), checks `FarmEnvironment.HasBreathableAir`, plants automatically from its 2-slot seed bin or its 1-slot cell input, self-reseeds on harvest, and pushes ripe crops to connected `GridCargoContainer`s first and its 4-slot harvest bin second.
+- **Grid Automatic Tree Farm (`GridAutoTreeFarm` / `GItem_AutoTreeFarm` / `AutoTreeFarm_Large.prefab` / `Recipe_GAutoTreeFarm`).** A ship- and station-mounted arboricultural gantry (`920 kg`, `720 HP`, `120 W` active / `8 W` idle, `400 L` water tank starting at `0 L`, `85 s` base cycle at `0.5x` pace) that continuously cultivates and fells trees into `Wood Log`, `Biomass`, `Wood Chips`, and surplus `Tree Sapling`s. Self-reseeds by keeping one sapling per harvest (or pulling from its 4-slot input bin or connected grid cargo), optionally consumes 1 `Biomass` / `Organic Fertilizer` per cycle for `+45%` growth speed and `+2 Wood Log, +1 Biomass` yield, accepts 2 universal `FurnaceUpgradeItem` modules (Speed / Efficiency), animates a 3D growing tree and travelling felling carriage, and opens a live 10 Hz UI panel (`GridAutoTreeFarmPanel`).
+- **Two new 128x128 grid block icons and Unity Sprite `.meta` files** under `VoxelEngineAssets/ItemIcons/Grid Blocks/`: `gitem_seedplanter.png` and `gitem_autotreefarm.png`, authored both on disk and via `WorldFarmOverhaulSetup.EnsureGridFarmIcons` / `RunIconRepair`.
+- **Per-cell one-slot seed bins (`cellInput`), `TryPlantAtCell`, `CanPlantInCell`, `IsCellLocked`, `HarvestAllToOutput`, `TryAddWater`, and `TryFertilize`** on `GridFarmPlotBase`, bringing `GridVerticalFarm`, `GridFarmBox`, and `GridSeedPlanter` to full parity with the ground `PlantBox`.
+- **`IFarmBed` support on `GridFarmPlotBase` and `GridAutoTreeFarm`**, wired into `GridScreenBlock.Pages.cs` (`RefreshFarmScan` and `FarmProductItem`) so ship screens on the `FARMS` and `PLOT STATUS` pages report grid-mounted farm plots and tree farms alongside world beds.
+
+#### Changed
+
+- **Whole-bed tree model on `GridFarmBox` (`GridFarmPlotBase`).** Planting a tree sapling into any cell on `GridFarmBox` harvests any ripe crops into the output bin first (`ClearCropsForTree`), sets `treeBed = true` and `treeCell = index`, locks the other eight cells until the timber is felled, hides crop pods, and scales a 3D `TreeRoot` trunk-and-canopy visual from seedling to full crown as `treeGrowth` advances.
+- **Leafy bush, woody stem, and ripening fruit cluster visuals on grid farm plots.** `GridFarmPlotBase` replaces the placeholder single-cube pod with the multi-part bush plant (`Mound`, `Stem_Low`, `Stem_Top`, eight fanned leaves with per-cell yaw, and a 3-berry `Fruit` cluster appearing at `>= 72%` growth) with separate leaf, stem, and fruit tinting and smooth stage-scale interpolation. `GridBlockMeshBuilder.BuildVerticalFarm` and `BuildFarmBox` now build dark soil planting pads instead of static green blocks so empty grid plots look empty until planted.
+- **Live-updating `GridFarmPlotPanel` (`GridBlockUI.cs` & `GameUIController.cs`).** Rebuilt to match `PlantBoxPanel` with a 10 Hz in-place update schedule (`Water` and `Growth`/`Timber` level bars, live stat card, `Self Re-seeding` and `Auto Output` toggles, `Harvest into Bin` and `Clear Lost Crops` buttons, and a 3x3 grid of cell chips each carrying its 1-slot `cellInput` bin) while suppressing the 4 Hz full-panel rebuild in `GameUIController`.
+- **All grid farm blocks start dry (`waterStored = 0 L`).** `GridFarmPlotBase`, `GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`, `GridAutoTreeFarm`, `VoxelEngineSetupWindow`, and `WorldFarmOverhaulSetup.RunStep125` now initialize `waterStored = 0f` so newly placed grid farms require piped water or hand canister watering.
+- **Self-contained `WorldFarmOverhaulSetup.RunStep125`.** Fixed `RunStep125` looking in `Assets/VoxelEngineAssets/Items` instead of `Assets/VoxelEngineAssets/GridSystem/Items` and made `RunStep125` non-destructively create or repair all 4 grid farm prefabs, liquid ports, `GridBlockItem`s, recipes, icons, and `ItemPersistenceCatalog` entries on its own.
+
+#### Fixed
+
+- **Liquid pipes now snap variable ports and grow visual pipe arms to `GridFarmPlotBase` and `GridAutoTreeFarm`** (`BuildSystem.cs`, `GridBuilder.cs`, and `WaterPipe.cs` previously only checked `GridLiquidTank`, `GridBiofarm`, and `GridH2O2Generator`).
+- **Container persistence and quick-transfer for farm blocks.** Added `GridAutoTreeFarm` and ground `PlantBox` multi-container serialization to `WorldStatePersistence.TryFindContainer` / `RestoreContainer`, watched `cellInput` containers in `GameUIController.OpenMachine`, added Shift-click quick transfer for seeds/saplings/upgrades into `PlantBox`, `GridBiofarm`, `GridFarmPlotBase`, and `GridAutoTreeFarm`, and registered `GridFarmPlotBase` / `GridAutoTreeFarm` in `ThermalRules.ToleranceC` and `GridMasterTerminal`.
 
 ### [18.7.3-dev] Per-Cell Planting, Beds That Arrive Dry, and Crops Worth Looking At
 

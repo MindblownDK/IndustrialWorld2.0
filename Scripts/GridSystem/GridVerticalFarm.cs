@@ -1,12 +1,10 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridVerticalFarm.cs
 //
-// 18.4.0-dev — Vertical Farm Plot.
+// 18.4.0-dev / 18.8.0-dev — Vertical Farm Plot for a grid.
 //
-// Three stacked trays on a 2.5 m grid cell: a tall, narrow block for a hull where floor
-// area is the scarce thing. Nine cells, all crops, no trees - a tree needs depth for its
-// roots and headroom for its canopy, and a stacked tray gives it neither. That rule is
-// enforced here rather than in the UI so a panel, a script or a future drone all get the
-// same answer.
+// Three stacked hydroponic shelves with nine crop pods in a single upright rack.
+// Fits a ship corridor or a station wall where floor space is scarce; takes piped
+// water from GridLiquidNetwork and breathable air from the room it stands in.
 
 using UnityEngine;
 
@@ -15,31 +13,32 @@ namespace VoxelEngine.GridSystem
     public class GridVerticalFarm : GridFarmPlotBase
     {
         public override int CellCount => 9;
-
         public override string PlotKind => "VERTICAL";
-
-        /// <summary>
-        /// The vertical plot's nine cells live on three trays, so a crop grows out of the
-        /// tray it was planted in rather than out of the middle of the block.
-        /// </summary>
-        protected override Vector3 PodPosition(int index, int side)
-        {
-            int tray = Mathf.Clamp(index / 3, 0, 2);
-            int column = index % 3;
-            float trayY = tray == 0 ? -0.72f : tray == 1 ? 0.06f : 0.84f;
-            return new Vector3((column - 1) * 0.60f, trayY + 0.10f, 0.10f);
-        }
+        protected override float PodVisualScale => 0.56f;
 
         private void Reset()
         {
             blockName = "Vertical Farm Plot";
-            BlockMass = 620f;
-            maxHP = 560f;
+            BlockMass = 360f;
+            maxHP = 450f;
             allowsTrees = false;
-            waterCapacity = 180f;
-            waterStored = 110f;
-            powerDraw = 60f;
+            powerDraw = 55f;
             idlePowerDraw = 6f;
+            waterCapacity = 160f;
+            waterStored = 0f;
+            litresPerCellSecond = 0.018f;
+            refillLitresPerSecond = 2.5f;
+            growthSpeedMultiplier = 0.6f;
+        }
+
+        protected override Vector3 PodPosition(int index, int side)
+        {
+            int shelf = Mathf.Clamp(index / 3, 0, 2);
+            int col   = Mathf.Clamp(index % 3, 0, 2);
+            float h = 2.5f * 0.5f;
+            float trayY = Mathf.Lerp(-h * 0.52f, h * 0.36f, shelf / 2f) + 0.04f;
+            float x = (col - 1) * (2.5f * 0.22f);
+            return new Vector3(x, trayY, 0.04f);
         }
     }
 }

@@ -1,24 +1,21 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridFarmPlotBase.cs
 //
-// 18.4.0-dev — grid-mounted farm plots.
+// 18.4.0-dev / 18.8.0-dev — grid-mounted farm plots (Vertical Farm Plot, Large
+// Farm Plot Box, and Grid Seed Planter).
 //
-// Everything in this file exists because a farm on a ship is not the same problem as
-// a farm on the ground. Three things differ and each one shows up here:
-//
-//   * Oxygen. A grid farm has no planet to lean on. It is breathable when the room it
-//     stands in is sealed and breathable, OR when the ship is parked on a world with
-//     air - exactly the rule `FarmEnvironment.HasBreathableAir` already encodes for the
-//     ground beds, so a crop never gets a different answer depending on what it stands
-//     on. Crops that need oxygen pause without it; they never die of it.
-//   * Water. There is no sprinkler mast on a hull. Water comes in through the grid
-//     liquid network into the plot's own tank, and a dry tank simply stops growth
-//     until the plumbing catches up.
-//   * Harvest. There is no player walking past. A ripe cell is moved into a connected
-//     grid cargo container, and only when that container has room - a plot never
-//     destroys a harvest it cannot deliver.
-//
-// The per-cell model matches the ground PlantBox, so a player who has used one already
-// knows how the other behaves.
+// Shares the ground PlantBox rules while running on a ship or station grid:
+//   * Oxygen comes from FarmEnvironment.HasBreathableAir (sealed breathable hull room
+//     or breathable world). Crops pause without air rather than dying.
+//   * Water comes from GridLiquidNetwork into the plot's internal tank (starting at
+//     0 L on a newly placed plot) or from a hand-poured Liquid Canister.
+//   * Seeds dropped in the seed bin (or into a specific cell's 1-slot cellInput)
+//     are planted automatically.
+//   * Ripe harvests move to connected GridCargoContainers first and the plot's own
+//     harvest bin second, keeping one seed back when self-reseeding is enabled.
+//   * On tree-capable beds (allowsTrees = true on Large Farm Plot Box), planting a
+//     sapling claims the whole plot (treeBed = true, treeCell = index), harvests any
+//     ripe crops into the bin first, locks the other eight cells, and grows a 3D
+//     trunk-and-canopy tree visual.
 
 using System;
 using System.Collections.Generic;
@@ -35,18 +32,13 @@ namespace VoxelEngine.GridSystem
     {
         public CropDefinition crop;
         [Range(0f, 1f)] public float growth;
+        public float dryTimer;
         public bool fertilized;
         public bool dead;
         public bool tree;
     }
 
-    /// <summary>
-    /// Shared behaviour for the grid farm plots: the vertical stack and the floor box.
-    /// Subclasses say how many cells they have, how they are laid out and whether a tree
-    /// is allowed; everything else - power, water, oxygen, growth, harvest, persistence -
-    /// is one implementation, so the two blocks cannot drift apart.
-    /// </summary>
-    public abstract class GridFarmPlotBase : GridBlock, IGridDataProvider, IMachineProcessState
+    public abstract class GridFarmPlotBase : GridBlock, IGridDataProvider, IFarmBed, IMachineProcessState
     {
         [Header("Cells")]
         [Tooltip("Live state of every growing cell, row by row.")]
@@ -54,6 +46,14 @@ namespace VoxelEngine.GridSystem
 
         [Tooltip("Whether a tree sapling may be planted here. Only the floor box allows it.")]
         public bool allowsTrees = false;
+
+        [Header("Tree Bed (when allowsTrees is true)")]
+        [Tooltip("True while a sapling is standing in the bed. Claims the whole plot until the timber is felled.")]
+        public bool treeBed = false;
+        [Range(0f, 1f)]
+        public float treeGrowth = 0f;
+        [Tooltip("Index of the cell the sapling was planted into (-1 when no tree is standing). Every other cell is locked while treeBed is true.")]
+        public int treeCell = -1;
 
         [Header("Containers")]
         [Tooltip("Seeds and saplings waiting to go into a free cell. The plot plants from here on its own.")]
@@ -63,31 +63,39 @@ namespace VoxelEngine.GridSystem
 
         public const int SEED_SLOTS = 4;
         public const int OUTPUT_SLOTS = 9;
+        public int seedSlots = SEED_SLOTS;
+        public int harvestSlots = OUTPUT_SLOTS;
+
+        /// <summary>
+        /// One-slot input bin per cell so the player can drop a seed straight onto a
+        /// specific cell in the panel instead of filling the bed in scan order.
+        /// Transient - seeds dropped here are planted within a second.
+        /// </summary>
+        [NonSerialized]
+        public ItemContainer[] cellInput = new ItemContainer[0];
 
         [Header("Power")]
         [Tooltip("Watts drawn while any cell is growing.")]
         public float powerDraw = 55f;
-        [Tooltip("Watts drawn while idle but switched on. A plot with lamps and pumps is never free.")]
+        [Tooltip("Watts drawn while idle but switched on.")]
         public float idlePowerDraw = 6f;
 
         [Header("Water")]
         public float waterCapacity = 200f;
-        public float waterStored = 120f;
+        public float waterStored = 0f;
         [Tooltip("Litres per growing cell per second.")]
         public float litresPerCellSecond = 0.02f;
+        public float waterPerCellLps { get => litresPerCellSecond; set => litresPerCellSecond = value; }
         [Tooltip("Litres pulled per second from the grid liquid network while the tank has room.")]
         public float refillLitresPerSecond = 2.5f;
+        [Tooltip("Seconds a planted crop survives with an empty tank before it withers (0 = pause without withering).")]
+        public float droughtGraceSeconds = 90f;
 
         [Header("Tuning")]
         public float fertilizedSpeedMultiplier = 1.5f;
-        [Tooltip("Global growth scale. Crops here are meant to be watched: at 0.5 a 90-second crop takes "
-                 + "three minutes watered, and every stage is drawn on the bed itself.")]
         [Range(0.05f, 2f)] public float growthSpeedMultiplier = 0.5f;
-        [Tooltip("Seconds between oxygen and atmosphere samples.")]
         public float environmentCheckInterval = 2f;
-        [Tooltip("Keep one seed of every harvest back and replant the cell.")]
         public bool replantAfterHarvest = true;
-        [Tooltip("Move ripe produce into connected grid cargo on its own.")]
         public bool automatic = true;
 
         [Header("Trees")]
@@ -103,14 +111,17 @@ namespace VoxelEngine.GridSystem
         /// <summary>Cells this plot owns. Fixed by the subclass, never by the save.</summary>
         public abstract int CellCount { get; }
 
-        /// <summary>The panel walks the beds by index; the array itself stays this class's business.</summary>
+        /// <summary>One short word for the cell layout: "VERTICAL", "FLOOR", "PLANTER".</summary>
+        public abstract string PlotKind { get; }
+
+        /// <summary>Overall scale of each cell's leafy bush visual relative to the ground PlantBox.</summary>
+        protected virtual float PodVisualScale => 0.82f;
+
         public int cellCount => cells != null ? cells.Length : 0;
 
-        /// <summary>One bed, or null when the index is outside the plot.</summary>
         public GridFarmCell CellAt(int index)
             => cells != null && index >= 0 && index < cells.Length ? cells[index] : null;
 
-        /// <summary>0..1 of the beds that carry a living crop - the "Beds" gauge.</summary>
         public float CellsFill01
         {
             get
@@ -120,24 +131,31 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        /// <summary>One short word for the cell layout: "VERTICAL", "FLOOR".</summary>
-        public abstract string PlotKind { get; }
+        public bool TreeBed => treeBed;
+        public float TreeGrowth01 => Mathf.Clamp01(treeGrowth);
+        public bool HasWater => waterStored > 0.01f;
+        public bool IsIrrigated => waterStored > 0.05f;
+        public float Water01 => waterCapacity > 0f ? Mathf.Clamp01(waterStored / waterCapacity) : 0f;
+        public float WaterFill01 => Water01;
 
-        public float WaterFill01 => waterCapacity > 0f ? Mathf.Clamp01(waterStored / waterCapacity) : 0f;
-
-        /// <summary>True when the plot has breathable air - a sealed room or a breathable world.</summary>
         public bool HasAir { get; private set; }
-
-        /// <summary>True when a connected liquid source is filling the tank.</summary>
         public bool HasWaterSupply => Grid != null && GridLiquidNetwork.Instance != null
                                       && GridLiquidNetwork.Instance.GetTanks(Grid, LiquidType.Water).Count > 0;
 
-        public bool IsIrrigated => waterStored > 0.05f;
+        // ── IFarmBed implementation ───────────────────────────────────────────
+        string IFarmBed.BedName => string.IsNullOrEmpty(blockName) ? PlotKind : blockName;
+        bool IFarmBed.IsReady => ReadyCount > 0;
+        bool IFarmBed.NeedsWater => PlantedCount > 0 && !HasWater;
+        bool IFarmBed.NeedsOxygen => PlantedCount > 0 && !HasAir;
+        bool IFarmBed.IsEmpty => PlantedCount == 0 && DeadCount == 0;
+        bool IFarmBed.IsDead => DeadCount > 0 && PlantedCount == 0;
 
         public int PlantedCount
         {
             get
             {
+                if (treeBed) return 1;
+                if (cells == null) return 0;
                 int n = 0;
                 for (int i = 0; i < cells.Length; i++)
                     if (cells[i] != null && (cells[i].crop != null || cells[i].tree) && !cells[i].dead) n++;
@@ -149,10 +167,12 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
+                if (treeBed) return treeGrowth >= 0.999f ? 1 : 0;
+                if (cells == null) return 0;
                 int n = 0;
                 for (int i = 0; i < cells.Length; i++)
                     if (cells[i] != null && !cells[i].dead && (cells[i].crop != null || cells[i].tree)
-                        && cells[i].growth >= 1f) n++;
+                        && cells[i].growth >= 0.999f) n++;
                 return n;
             }
         }
@@ -161,6 +181,8 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
+                if (treeBed) return 0;
+                if (cells == null) return 0;
                 int n = 0;
                 for (int i = 0; i < cells.Length; i++)
                     if (cells[i] != null && cells[i].dead) n++;
@@ -172,6 +194,8 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
+                if (treeBed) return TreeGrowth01;
+                if (cells == null) return 0f;
                 float sum = 0f;
                 int n = 0;
                 for (int i = 0; i < cells.Length; i++)
@@ -184,6 +208,28 @@ namespace VoxelEngine.GridSystem
             }
         }
 
+        public string CropName
+        {
+            get
+            {
+                if (treeBed) return "Timber";
+                if (cells == null) return "Empty";
+                string first = null;
+                int count = 0;
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    var c = cells[i];
+                    if (c == null || c.dead) continue;
+                    string label = c.tree ? "Timber" : (c.crop != null ? c.crop.cropName : null);
+                    if (string.IsNullOrEmpty(label)) continue;
+                    count++;
+                    if (first == null) first = label;
+                    else if (first != label) return $"Mixed ({count})";
+                }
+                return first ?? "Empty";
+            }
+        }
+
         public bool IsProducing { get; private set; }
 
         public string Status
@@ -192,8 +238,15 @@ namespace VoxelEngine.GridSystem
             {
                 if (!Enabled) return "DISABLED";
                 if (Grid == null) return "NO GRID";
-                if (Grid != null && !Grid.HasPower) return "NO POWER";
-                if (DeadCount > 0 && DeadCount == PlantedCount) return "LOST CROP";
+                if (!Grid.HasPower) return "NO POWER";
+                if (treeBed)
+                {
+                    if (treeGrowth >= 0.999f) return "TIMBER READY";
+                    if (!IsIrrigated) return "DRY";
+                    if (!HasAir) return "NO O2";
+                    return "TIMBER";
+                }
+                if (DeadCount > 0 && PlantedCount == 0) return "LOST CROP";
                 if (ReadyCount > 0) return "READY x" + ReadyCount;
                 if (PlantedCount == 0) return "EMPTY";
                 if (!IsIrrigated) return "DRY";
@@ -202,15 +255,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        public override float PowerDraw
-        {
-            get
-            {
-                if (!Enabled) return 0f;
-                return PlantedCount > 0 ? powerDraw : idlePowerDraw;
-            }
-        }
-
+        public override float PowerDraw => !Enabled ? 0f : (PlantedCount > 0 ? powerDraw : idlePowerDraw);
         public override float ContentMass => (waterStored * 1f) + (PlantedCount * 4f);
 
         private float _envTimer;
@@ -218,36 +263,138 @@ namespace VoxelEngine.GridSystem
         private float _plantTimer;
         private float _podTimer;
 
-        // ── Lifecycle ───────────────────────────────────────────────────────
+        private const string VisualRootName = "Generated_FarmPods";
+        private static readonly Color LeafLitTint   = new Color(0.28f, 0.64f, 0.24f);
+        private static readonly Color DeadTint      = new Color(0.42f, 0.30f, 0.16f);
+        private static readonly Color TrunkBark     = new Color(0.38f, 0.25f, 0.14f);
+        private static readonly Color CanopyFoliage = new Color(0.22f, 0.54f, 0.22f);
+
+        private Transform _podRoot;
+        private readonly List<Transform> _pods = new List<Transform>();
+        private readonly List<Renderer[]> _cellLeafRenderers = new List<Renderer[]>();
+        private readonly List<Renderer[]> _cellStemRenderers = new List<Renderer[]>();
+        private readonly List<Renderer[]> _cellFruitRenderers = new List<Renderer[]>();
+        private Transform _treeRoot;
+        private Transform _treeCanopy;
+        private MaterialPropertyBlock _mpb;
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────
         protected virtual void Awake()
         {
-            EnsureCells();
-            EnsureContainers();
-            ResolveTreeItems();
+            EnsureState();
             HasAir = FarmEnvironment.HasBreathableAir(transform.position);
             EnsurePods();
-            RefreshAllPods();
+            RefreshPods();
         }
 
         public override void OnPlaced()
         {
             base.OnPlaced();
+            EnsureState();
+            HasAir = FarmEnvironment.HasBreathableAir(transform.position);
+            EnsurePods();
+            RefreshPods();
+        }
+
+        public void EnsureState()
+        {
             EnsureCells();
             EnsureContainers();
+            EnsureCellInputs();
             ResolveTreeItems();
-            HasAir = FarmEnvironment.HasBreathableAir(transform.position);
         }
 
         private void EnsureCells()
         {
             int wanted = Mathf.Max(1, CellCount);
-            if (cells == null) cells = new GridFarmCell[0];
-            if (cells.Length == wanted) return;   // never resize a live array; it would drop crops
+            if (cells == null || cells.Length != wanted)
+            {
+                var next = new GridFarmCell[wanted];
+                for (int i = 0; i < wanted; i++)
+                    next[i] = cells != null && i < cells.Length && cells[i] != null ? cells[i] : new GridFarmCell();
+                cells = next;
+            }
+            else
+            {
+                for (int i = 0; i < cells.Length; i++)
+                    if (cells[i] == null) cells[i] = new GridFarmCell();
+            }
+        }
 
-            var next = new GridFarmCell[wanted];
-            for (int i = 0; i < wanted; i++)
-                next[i] = i < cells.Length && cells[i] != null ? cells[i] : new GridFarmCell();
-            cells = next;
+        public void EnsureContainers()
+        {
+            EnsureCells();
+            int wantSeeds = Mathf.Max(1, seedSlots);
+            int wantOut   = Mathf.Max(1, harvestSlots);
+
+            if (seedInput == null) seedInput = new ItemContainer("Seeds", wantSeeds);
+            else if (seedInput.Size != wantSeeds) seedInput.Resize(wantSeeds);
+            seedInput.AcceptFilter = (item, wanted) => CanPlant(item) ? wanted : 0;
+
+            if (harvestOutput == null) harvestOutput = new ItemContainer("Harvest", wantOut);
+            else if (harvestOutput.Size != wantOut) harvestOutput.Resize(wantOut);
+
+            EnsureCellInputs();
+        }
+
+        private void EnsureCellInputs()
+        {
+            int count = cells != null ? cells.Length : Mathf.Max(1, CellCount);
+            if (cellInput == null || cellInput.Length != count)
+            {
+                var next = new ItemContainer[count];
+                if (cellInput != null)
+                {
+                    int copy = Mathf.Min(cellInput.Length, count);
+                    for (int i = 0; i < copy; i++) next[i] = cellInput[i];
+                }
+                cellInput = next;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                int cell = i;
+                if (cellInput[i] == null)
+                    cellInput[i] = new ItemContainer("Cell " + (i + 1), 1);
+                cellInput[i].AcceptFilter = (item, wanted) => CanPlantInCell(cell, item) ? wanted : 0;
+            }
+        }
+
+        public ItemContainer CellInput(int index)
+        {
+            EnsureCellInputs();
+            return index >= 0 && index < cellInput.Length ? cellInput[index] : null;
+        }
+
+        public bool IsCellLocked(int index)
+            => treeBed && index != treeCell;
+
+        public bool CanPlantInCell(int index, ItemDefinition item)
+        {
+            if (item == null || cells == null || index < 0 || index >= cells.Length) return false;
+            if (IsCellLocked(index)) return false;
+            if (IsTreeSeed(item))
+                return allowsTrees && !treeBed;
+            return CropOf(item) != null && IsFreeCell(index);
+        }
+
+        public static bool CanPlantItem(ItemDefinition item)
+            => CropOf(item) != null || IsTreeSeed(item);
+
+        public static CropDefinition CropOf(ItemDefinition item)
+            => item is SeedItem seed ? seed.crop : null;
+
+        public static bool IsTreeSeed(ItemDefinition item)
+            => TreeFarmPlot.IsSaplingOrTreeSeed(item);
+
+        public bool CanPlant(ItemDefinition item)
+        {
+            if (item == null) return false;
+            if (item is SeedItem seed)
+            {
+                if (seed.crop != null) return true;
+                return allowsTrees && TreeFarmPlot.IsSaplingOrTreeSeed(item);
+            }
+            return allowsTrees && TreeFarmPlot.IsSaplingOrTreeSeed(item);
         }
 
         private void ResolveTreeItems()
@@ -272,52 +419,7 @@ namespace VoxelEngine.GridSystem
             if (biomassItem == null) biomassItem = Find("biomass", "Item_Biomass") ?? Find("item_biomass", "Item_Biomass");
         }
 
-        /// <summary>
-        /// Create or resize the two containers. Filters keep the seed bin honest: only
-        /// something that can actually be planted goes in, so the plot never spends a
-        /// cycle discovering that a rock is not a seed.
-        /// </summary>
-        public void EnsureContainers()
-        {
-            if (seedInput == null) seedInput = new ItemContainer("Seeds", SEED_SLOTS);
-            else if (seedInput.Size != SEED_SLOTS) seedInput.Resize(SEED_SLOTS);
-            seedInput.AcceptFilter = (item, wanted) => CanPlant(item) ? wanted : 0;
-
-            if (harvestOutput == null) harvestOutput = new ItemContainer("Harvest", OUTPUT_SLOTS);
-            else if (harvestOutput.Size != OUTPUT_SLOTS) harvestOutput.Resize(OUTPUT_SLOTS);
-        }
-
-        /// <summary>True when this plot would accept <paramref name="item"/> in a free cell.</summary>
-        public bool CanPlant(ItemDefinition item)
-        {
-            if (item == null) return false;
-            if (item is SeedItem seed)
-            {
-                if (seed.crop != null) return true;
-                return allowsTrees && TreeFarmPlot.IsSaplingOrTreeSeed(item);
-            }
-            return allowsTrees && TreeFarmPlot.IsSaplingOrTreeSeed(item);
-        }
-
-        /// <summary>Take one seed or sapling out of the seed bin into the first free cell.</summary>
-        private bool PlantFromSeedBin()
-        {
-            if (seedInput == null) return false;
-            int free = FirstFreeCell();
-            if (free < 0) return false;
-
-            for (int i = 0; i < seedInput.Size; i++)
-            {
-                var slot = seedInput.GetSlot(i);
-                if (slot == null || slot.IsEmpty || !CanPlant(slot.item)) continue;
-                if (TryPlant(slot.item) < 0) continue;
-                seedInput.Remove(slot.item, 1);
-                return true;
-            }
-            return false;
-        }
-
-        // ── Simulation ──────────────────────────────────────────────────────
+        // ── Simulation ────────────────────────────────────────────────────────
         private void FixedUpdate()
         {
             float dt = Time.fixedDeltaTime;
@@ -335,26 +437,23 @@ namespace VoxelEngine.GridSystem
 
             bool powered = Grid.HasPower;
 
-            // A plot with seeds in its bin fills its own empty cells, so a farm can be
-            // set up once instead of walked every cycle.
             _plantTimer += dt;
             if (_plantTimer >= 1f)
             {
                 _plantTimer = 0f;
+                PlantFromCellInputs();
                 while (PlantFromSeedBin()) { }
             }
             IsProducing = powered && PlantedCount > 0;
 
             GrowCells(powered, dt);
 
-            // Pods are redrawn a few times a second rather than every physics step: the
-            // growth is slow on purpose, so there is nothing to see at 50 Hz.
             _podTimer += dt;
             if (_podTimer >= 0.2f)
             {
                 _podTimer = 0f;
                 EnsurePods();
-                RefreshAllPods();
+                RefreshPods();
             }
 
             _pullTimer += dt;
@@ -377,43 +476,126 @@ namespace VoxelEngine.GridSystem
             if (got > 0f) waterStored = Mathf.Min(waterCapacity, waterStored + got);
         }
 
+        public float TryAddWater(float litres)
+        {
+            if (litres <= 0f || waterCapacity <= 0f) return 0f;
+            float before = waterStored;
+            waterStored = Mathf.Clamp(waterStored + litres, 0f, waterCapacity);
+            return waterStored - before;
+        }
+
+        private void PlantFromCellInputs()
+        {
+            if (cellInput == null || cells == null) return;
+            int count = Mathf.Min(cellInput.Length, cells.Length);
+            for (int i = 0; i < count; i++)
+            {
+                var bin = cellInput[i];
+                if (bin == null || bin.Size <= 0) continue;
+                var stack = bin.GetSlot(0);
+                if (stack == null || stack.IsEmpty || stack.item == null) continue;
+                if (TryPlantAtCell(i, stack.item))
+                    bin.Remove(stack.item, 1);
+            }
+        }
+
+        private bool PlantFromSeedBin()
+        {
+            if (seedInput == null || treeBed) return false;
+
+            for (int i = 0; i < seedInput.Size; i++)
+            {
+                var slot = seedInput.GetSlot(i);
+                if (slot == null || slot.IsEmpty || !CanPlant(slot.item)) continue;
+                if (TryPlant(slot.item) < 0) continue;
+                seedInput.Remove(slot.item, 1);
+                return true;
+            }
+            return false;
+        }
+
         private void GrowCells(bool powered, float dt)
         {
-            if (!powered) return;   // lamps and pumps are what the power buys
+            if (!powered) return;
 
             float scale = Mathf.Max(0f, growthSpeedMultiplier);
             int drinking = 0;
             bool irrigated = IsIrrigated;
+
+            if (treeBed)
+            {
+                if (treeGrowth < 1f && HasAir)
+                {
+                    float treeSpeed = (1f / Mathf.Max(1f, treeGrowthSeconds)) * scale;
+                    if (irrigated)
+                    {
+                        treeSpeed *= Mathf.Max(1f, treeIrrigatedSpeedMultiplier);
+                        drinking += 2;
+                    }
+                    else
+                    {
+                        treeSpeed *= 0.25f;
+                    }
+                    treeGrowth = Mathf.Clamp01(treeGrowth + treeSpeed * dt);
+                }
+                if (drinking > 0)
+                    waterStored = Mathf.Max(0f, waterStored - litresPerCellSecond * drinking * dt);
+                return;
+            }
 
             for (int i = 0; i < cells.Length; i++)
             {
                 var cell = cells[i];
                 if (cell == null || cell.dead) continue;
                 bool planted = cell.crop != null || cell.tree;
-                if (!planted || cell.growth >= 1f) continue;
+                if (!planted) continue;
 
                 if (cell.tree)
                 {
-                    float treeSpeed = (1f / Mathf.Max(1f, treeGrowthSeconds)) * scale;
-                    if (irrigated) treeSpeed *= Mathf.Max(1f, treeIrrigatedSpeedMultiplier);
-                    cell.growth = Mathf.Clamp01(cell.growth + treeSpeed * dt);
-                    if (irrigated) drinking++;
-                    continue;
+                    // Migrate legacy single-cell tree to the whole-bed tree model.
+                    treeBed = true;
+                    treeCell = i;
+                    treeGrowth = Mathf.Clamp01(cell.growth);
+                    cell.tree = false;
+                    break;
                 }
+
+                if (cell.growth >= 1f) continue;
 
                 var crop = cell.crop;
                 if (crop == null) continue;
 
-                // Oxygen is a pause, not a death sentence: a ship that loses its air
-                // loses its growth rate, not its crop.
                 if (crop.requiresOxygen && !HasAir) continue;
 
-                float speed = (1f / Mathf.Max(0.5f, crop.growthTime)) * scale;
-                if (irrigated) { speed *= Mathf.Max(1f, crop.irrigatedSpeedMultiplier); drinking++; }
-                else if (crop.requiresWater) speed *= 0.3f;
-                if (cell.fertilized) speed *= Mathf.Max(1f, fertilizedSpeedMultiplier);
-
-                cell.growth = Mathf.Clamp01(cell.growth + speed * dt);
+                if (irrigated)
+                {
+                    cell.dryTimer = 0f;
+                    float speed = (1f / Mathf.Max(0.5f, crop.growthTime)) * scale;
+                    speed *= Mathf.Max(1f, crop.irrigatedSpeedMultiplier);
+                    if (cell.fertilized) speed *= Mathf.Max(1f, fertilizedSpeedMultiplier);
+                    cell.growth = Mathf.Clamp01(cell.growth + speed * dt);
+                    drinking++;
+                }
+                else if (crop.requiresWater)
+                {
+                    cell.dryTimer += dt;
+                    if (droughtGraceSeconds > 0f && cell.dryTimer >= droughtGraceSeconds)
+                    {
+                        cell.dead = true;
+                    }
+                    else
+                    {
+                        float speed = (1f / Mathf.Max(0.5f, crop.growthTime)) * scale * 0.25f;
+                        if (cell.fertilized) speed *= Mathf.Max(1f, fertilizedSpeedMultiplier);
+                        cell.growth = Mathf.Clamp01(cell.growth + speed * dt);
+                    }
+                }
+                else
+                {
+                    float speed = (1f / Mathf.Max(0.5f, crop.growthTime)) * scale;
+                    if (cell.fertilized) speed *= Mathf.Max(1f, fertilizedSpeedMultiplier);
+                    cell.growth = Mathf.Clamp01(cell.growth + speed * dt);
+                }
             }
 
             if (drinking > 0)
@@ -423,39 +605,60 @@ namespace VoxelEngine.GridSystem
         private bool NeedsAirNow()
         {
             if (HasAir) return false;
+            if (treeBed && treeGrowth < 1f) return true;
             for (int i = 0; i < cells.Length; i++)
                 if (cells[i] != null && !cells[i].dead && cells[i].crop != null && cells[i].crop.requiresOxygen
                     && cells[i].growth < 1f) return true;
             return false;
         }
 
-        // ── Harvest ─────────────────────────────────────────────────────────
-        /// <summary>
-        /// Move every ripe cell out to a route or into the plot's own output bin. A cell is
-        /// only emptied once the whole payload has somewhere to go, so a full hold and an
-        /// empty hold both end with the crop still on the bed rather than gone.
-        /// </summary>
+        // ── Harvest ───────────────────────────────────────────────────────────
+        public int HarvestAllToOutput() => PushRipeToGrid();
+
         public int PushRipeToGrid()
         {
             EnsureContainers();
 
-            // A route is optional: with no cargo connected the harvest lands in the plot's
-            // own output bin, which the player empties from the panel. Nothing is ever
-            // destroyed because a ship has no hold yet.
             var containers = Grid != null && GridItemNetwork.Instance != null
                 ? GridItemNetwork.Instance.GetConnectedContainers(Grid)
                 : null;
             if (containers == null) containers = new List<GridCargoContainer>();
 
             int moved = 0;
+
+            if (treeBed)
+            {
+                if (treeGrowth < 0.999f) return 0;
+                ResolveTreeItems();
+                if (!CanDeliver(containers, woodLogItem, treeLogsPerHarvest)) return 0;
+
+                int saps = Mathf.Max(0, treeSaplingsPerHarvest);
+                bool keepSapling = replantAfterHarvest && saplingItem != null && saps > 0;
+                if (keepSapling) saps -= 1;
+
+                Deliver(containers, woodLogItem, treeLogsPerHarvest, ref moved);
+                if (saps > 0) Deliver(containers, saplingItem, saps, ref moved);
+                Deliver(containers, biomassItem, treeBiomassPerHarvest, ref moved);
+
+                if (keepSapling)
+                {
+                    treeGrowth = 0f;
+                }
+                else
+                {
+                    treeBed = false;
+                    treeCell = -1;
+                    treeGrowth = 0f;
+                }
+                RefreshPods();
+                return moved;
+            }
+
             for (int i = 0; i < cells.Length; i++)
             {
                 var cell = cells[i];
-                if (cell == null || cell.dead || cell.growth < 1f) continue;
+                if (cell == null || cell.dead || cell.growth < 0.999f) continue;
                 if (cell.crop == null && !cell.tree) continue;
-
-                bool canReplant = replantAfterHarvest && !cell.tree && cell.crop != null
-                                  && cell.crop.seedItem != null && cell.crop.seedReturnAmount > 0;
 
                 if (cell.tree)
                 {
@@ -469,32 +672,48 @@ namespace VoxelEngine.GridSystem
                     continue;
                 }
 
-                var crop = cell.crop;
-                int seedsToGive = Mathf.Max(0, crop.seedReturnAmount);
-                int seedsKept = canReplant && seedsToGive > 0 ? 1 : 0;
-                if (!CanDeliver(containers, crop.harvestItem, crop.harvestAmount)) continue;
-                if (seedsToGive - seedsKept > 0
-                    && !CanDeliver(containers, crop.seedItem, seedsToGive - seedsKept)) continue;
-
-                Deliver(containers, crop.harvestItem, crop.harvestAmount, ref moved);
-                Deliver(containers, crop.seedItem, seedsToGive - seedsKept, ref moved);
-
-                if (canReplant)
-                {
-                    cell.growth = 0f;
-                    cell.fertilized = false;
-                }
-                else
-                {
-                    cell.crop = null;
-                    cell.growth = 0f;
-                    cell.fertilized = false;
-                }
+                HarvestSingleCellToContainers(cell, containers, replantAfterHarvest, ref moved);
             }
+
+            if (moved > 0) RefreshPods();
             return moved;
         }
 
-        /// <summary>True when the route OR the plot's own bin can take the whole payload.</summary>
+        private bool HarvestSingleCellToContainers(GridFarmCell cell, List<GridCargoContainer> containers,
+            bool allowReplant, ref int moved)
+        {
+            if (cell == null || cell.crop == null) return false;
+            var crop = cell.crop;
+            bool canReplant = allowReplant && crop.seedItem != null && crop.seedReturnAmount > 0;
+            int harvestQty = Mathf.Max(1, crop.harvestAmount) + (cell.fertilized ? 1 : 0);
+            int seedsToGive = Mathf.Max(0, crop.seedReturnAmount);
+            int seedsKept = canReplant && seedsToGive > 0 ? 1 : 0;
+
+            if (!CanDeliver(containers, crop.harvestItem, harvestQty)) return false;
+            if (seedsToGive - seedsKept > 0
+                && !CanDeliver(containers, crop.seedItem, seedsToGive - seedsKept)) return false;
+
+            Deliver(containers, crop.harvestItem, harvestQty, ref moved);
+            Deliver(containers, crop.seedItem, seedsToGive - seedsKept, ref moved);
+
+            if (canReplant)
+            {
+                cell.growth = 0f;
+                cell.dryTimer = 0f;
+                cell.fertilized = false;
+            }
+            else
+            {
+                cell.crop = null;
+                cell.tree = false;
+                cell.growth = 0f;
+                cell.dryTimer = 0f;
+                cell.fertilized = false;
+                cell.dead = false;
+            }
+            return true;
+        }
+
         private bool CanDeliver(List<GridCargoContainer> containers, ItemDefinition item, int count)
         {
             if (item == null || count <= 0) return true;
@@ -502,7 +721,6 @@ namespace VoxelEngine.GridSystem
             return harvestOutput != null && harvestOutput.HasSpace(item, count);
         }
 
-        /// <summary>Hand a stack to the route first and to the plot's own bin second.</summary>
         private void Deliver(List<GridCargoContainer> containers, ItemDefinition item, int count, ref int moved)
         {
             if (item == null || count <= 0) return;
@@ -525,8 +743,6 @@ namespace VoxelEngine.GridSystem
                 if (c == null || c.container == null) continue;
                 if (c.container.HasSpace(item, count)) return true;
             }
-            // No cargo at all means the machine is unfinished plumbing, not broken:
-            // report "no room" so nothing is destroyed.
             return false;
         }
 
@@ -545,33 +761,89 @@ namespace VoxelEngine.GridSystem
             return count - remaining;
         }
 
-        // ── Player / automation control ─────────────────────────────────────
+        // ── Player / automation control ───────────────────────────────────────
+        /// <summary>
+        /// Plants <paramref name="item"/> into a specific cell index. A sapling on a
+        /// tree-capable bed claims the whole plot (<see cref="treeBed"/> = true) after
+        /// harvesting any ripe crops into the output bin.
+        /// </summary>
+        public bool TryPlantAtCell(int index, ItemDefinition item)
+        {
+            EnsureState();
+            if (!CanPlantInCell(index, item)) return false;
+
+            if (IsTreeSeed(item))
+            {
+                ClearCropsForTree();
+                treeBed = true;
+                treeCell = index;
+                treeGrowth = 0f;
+                EnsurePods();
+                RefreshPods();
+                return true;
+            }
+
+            var crop = CropOf(item);
+            if (crop == null) return false;
+            var cell = cells[index];
+            cell.tree = false;
+            cell.crop = crop;
+            cell.growth = 0f;
+            cell.dryTimer = 0f;
+            cell.fertilized = false;
+            cell.dead = false;
+            EnsurePods();
+            RefreshPods();
+            return true;
+        }
+
         /// <summary>Plant a seed or a sapling in the first free cell. -1 = can't, -2 = trees need the box.</summary>
         public int TryPlant(ItemDefinition item)
         {
             if (item == null) return -1;
-            EnsureCells();
+            EnsureState();
 
-            bool isTree = item is SeedItem seed && seed.crop == null && TreeFarmPlot.IsSaplingOrTreeSeed(item);
-            var crop = item is SeedItem si ? si.crop : null;
+            bool isTree = IsTreeSeed(item);
+            var crop = CropOf(item);
             if (!isTree && crop == null) return -1;
             if (isTree && !allowsTrees) return -2;
 
+            if (isTree)
+            {
+                if (treeBed) return -1;
+                int target = FirstFreeCell();
+                if (target < 0) target = 0;
+                return TryPlantAtCell(target, item) ? target : -1;
+            }
+
             int index = FirstFreeCell();
             if (index < 0) return -1;
-
-            var cell = cells[index];
-            cell.tree = isTree;
-            cell.crop = isTree ? null : crop;
-            cell.growth = 0f;
-            cell.fertilized = false;
-            cell.dead = false;
-            EnsurePods();
-            RefreshPod(index);
-            return index;
+            return TryPlantAtCell(index, item) ? index : -1;
         }
 
-        /// <summary>Fertilize the first growing cell that is not fertilized yet.</summary>
+        private void ClearCropsForTree()
+        {
+            if (cells == null) return;
+            EnsureContainers();
+            var containers = Grid != null && GridItemNetwork.Instance != null
+                ? GridItemNetwork.Instance.GetConnectedContainers(Grid)
+                : new List<GridCargoContainer>();
+            int moved = 0;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                var c = cells[i];
+                if (c == null) continue;
+                if (!c.dead && c.crop != null && c.growth >= 0.999f)
+                    HarvestSingleCellToContainers(c, containers, allowReplant: false, ref moved);
+                c.crop = null;
+                c.tree = false;
+                c.growth = 0f;
+                c.dryTimer = 0f;
+                c.fertilized = false;
+                c.dead = false;
+            }
+        }
+
         public bool TryFertilize(ItemDefinition item)
         {
             if (item == null || !TreeFarmPlot.IsFertilizerOrBiomass(item)) return false;
@@ -587,7 +859,6 @@ namespace VoxelEngine.GridSystem
             return false;
         }
 
-        /// <summary>Clear every lost cell. Returns how many were cleared.</summary>
         public int ClearDead()
         {
             int cleared = 0;
@@ -599,37 +870,28 @@ namespace VoxelEngine.GridSystem
                 cell.crop = null;
                 cell.tree = false;
                 cell.growth = 0f;
+                cell.dryTimer = 0f;
                 cell.fertilized = false;
                 cleared++;
             }
-            RefreshAllPods();
+            RefreshPods();
             return cleared;
         }
 
+        private bool IsFreeCell(int index)
+            => !treeBed
+            && cells != null && index >= 0 && index < cells.Length
+            && cells[index] != null && cells[index].crop == null && !cells[index].tree && !cells[index].dead;
+
         public int FirstFreeCell()
         {
+            if (treeBed || cells == null) return -1;
             for (int i = 0; i < cells.Length; i++)
-                if (cells[i] != null && cells[i].crop == null && !cells[i].tree && !cells[i].dead) return i;
+                if (IsFreeCell(i)) return i;
             return -1;
         }
 
-        // ── Visible growing crops ───────────────────────────────────────────
-        // A grid farm that grows things the player cannot see is a spreadsheet. Every cell
-        // gets a pod on the bed; the pod rises and greens as the cell fills, a lost cell
-        // collapses brown, and a tree cell grows a trunk instead of a pod. The pods are
-        // built lazily so an old prefab gains them the first time it is looked at.
-
-        private readonly List<Transform> _pods = new List<Transform>();
-        private readonly List<MeshRenderer> _podRenderers = new List<MeshRenderer>();
-
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int ColorId = Shader.PropertyToID("_Color");
-
-        /// <summary>
-        /// Where a cell's pod stands on the model: the cell's spot on the bed, lifted to the
-        /// bed surface. Used for both placement and growth, so a pod never drifts sideways
-        /// as it grows.
-        /// </summary>
+        // ── Bush, stem, fruit & 3D tree visuals ───────────────────────────────
         protected virtual Vector3 PodPosition(int index, int side)
         {
             int n = Mathf.Max(1, side);
@@ -642,113 +904,371 @@ namespace VoxelEngine.GridSystem
 
         private void EnsurePods()
         {
+            EnsureCells();
             int wanted = cellCount;
-            if (_pods.Count == wanted) return;
-
-            var existing = transform.Find("Generated_FarmPods");
-            if (existing != null)
+            if (_podRoot == null)
             {
-                if (Application.isPlaying) Destroy(existing.gameObject);
-                else DestroyImmediate(existing.gameObject);
+                var existing = transform.Find(VisualRootName);
+                if (existing != null) _podRoot = existing;
+                else
+                {
+                    var go = new GameObject(VisualRootName);
+                    go.transform.SetParent(transform, false);
+                    _podRoot = go.transform;
+                }
             }
 
-            _pods.Clear();
-            _podRenderers.Clear();
+            if (_pods.Count == wanted && (!allowsTrees || _treeRoot != null))
+                return;
 
-            var root = new GameObject("Generated_FarmPods").transform;
-            root.SetParent(transform, false);
-            root.localPosition = Vector3.zero;
-            root.localRotation = Quaternion.identity;
-            root.localScale = Vector3.one;
+            _pods.Clear();
+            _cellLeafRenderers.Clear();
+            _cellStemRenderers.Clear();
+            _cellFruitRenderers.Clear();
 
             int side = Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(wanted)));
+            float plantScale = PodVisualScale;
+            var mat = SharedLitMaterial();
+
             for (int i = 0; i < wanted; i++)
             {
-                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                go.name = "Crop_" + (i + 1);
-                var col = go.GetComponent<Collider>();
-                if (col != null)
+                string name = "Crop_" + (i + 1);
+                var child = _podRoot.Find(name);
+                if (child != null && child.Find("Stem_Low") == null)
                 {
-                    if (Application.isPlaying) Destroy(col);
-                    else DestroyImmediate(col);
+                    if (Application.isPlaying) Destroy(child.gameObject);
+                    else DestroyImmediate(child.gameObject);
+                    child = null;
                 }
-                go.transform.SetParent(root, false);
-                go.transform.localPosition = PodPosition(i, side);
-                go.transform.localScale = Vector3.zero;   // an empty cell is an empty bed
-                _pods.Add(go.transform);
-                _podRenderers.Add(go.GetComponent<MeshRenderer>());
+                if (child == null)
+                    child = BuildCropPlant(_podRoot, name, i, mat);
+
+                child.localPosition = PodPosition(i, side);
+                child.localScale = Vector3.one * plantScale;
+                _pods.Add(child);
+                CachePlantRenderers(child);
+            }
+
+            if (allowsTrees)
+            {
+                var tree = _podRoot.Find("TreeRoot");
+                if (tree == null)
+                    tree = BuildTreeVisual(_podRoot, mat);
+                _treeRoot = tree;
+                _treeCanopy = tree.Find("Canopy_Main");
             }
         }
 
-        /// <summary>Redraw one pod from its cell: height, stage colour, dead state.</summary>
-        private void RefreshPod(int index)
+        private static Transform BuildCropPlant(Transform parent, string name, int index, Material mat)
         {
-            if (index < 0 || index >= _pods.Count) return;
-            var cell = cells != null && index < cells.Length ? cells[index] : null;
-            var pod = _pods[index];
-            if (pod == null) return;
+            var cellRoot = new GameObject(name).transform;
+            cellRoot.SetParent(parent, false);
 
-            bool planted = cell != null && (cell.crop != null || cell.tree) && !cell.dead;
+            Prim(PrimitiveType.Cylinder, "Mound", cellRoot,
+                new Vector3(0f, 0.012f, 0f), new Vector3(0.20f, 0.012f, 0.20f),
+                Quaternion.identity, mat, new Color(0.22f, 0.14f, 0.08f));
+
+            Prim(PrimitiveType.Cylinder, "Stem_Low", cellRoot,
+                new Vector3(0f, 0.08f, 0f), new Vector3(0.032f, 0.075f, 0.032f),
+                Quaternion.Euler(0f, 0f, 3f), mat, new Color(0.30f, 0.44f, 0.18f));
+            Prim(PrimitiveType.Cylinder, "Stem_Top", cellRoot,
+                new Vector3(-0.006f, 0.19f, 0.004f), new Vector3(0.024f, 0.065f, 0.024f),
+                Quaternion.Euler(4f, 0f, -5f), mat, new Color(0.32f, 0.48f, 0.20f));
+
+            float baseYaw = (index * 37f) % 360f;
+            for (int l = 0; l < 4; l++)
+            {
+                float yaw = baseYaw + l * 90f;
+                Quaternion rot = Quaternion.Euler(28f, yaw, 0f);
+                Vector3 dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                float h = 0.08f + (l & 1) * 0.03f;
+                Prim(PrimitiveType.Sphere, "Leaf_" + l, cellRoot,
+                    dir * 0.075f + new Vector3(0f, h, 0f),
+                    new Vector3(0.11f, 0.032f, 0.16f), rot, mat, LeafLitTint);
+            }
+            for (int l = 0; l < 4; l++)
+            {
+                float yaw = baseYaw + 45f + l * 90f;
+                Quaternion rot = Quaternion.Euler(18f, yaw, 0f);
+                Vector3 dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                float h = 0.17f + (l & 1) * 0.025f;
+                Prim(PrimitiveType.Sphere, "LeafB_" + l, cellRoot,
+                    dir * 0.06f + new Vector3(0f, h, 0f),
+                    new Vector3(0.095f, 0.030f, 0.13f), rot, mat, LeafLitTint);
+            }
+
+            Prim(PrimitiveType.Sphere, "Fruit_0", cellRoot,
+                new Vector3(0.045f, 0.22f, 0.030f), new Vector3(0.065f, 0.065f, 0.065f),
+                Quaternion.identity, mat, new Color(0.86f, 0.34f, 0.20f));
+            Prim(PrimitiveType.Sphere, "Fruit_1", cellRoot,
+                new Vector3(-0.040f, 0.24f, 0.025f), new Vector3(0.058f, 0.058f, 0.058f),
+                Quaternion.identity, mat, new Color(0.86f, 0.34f, 0.20f));
+            Prim(PrimitiveType.Sphere, "Fruit_2", cellRoot,
+                new Vector3(0.010f, 0.26f, -0.040f), new Vector3(0.055f, 0.055f, 0.055f),
+                Quaternion.identity, mat, new Color(0.86f, 0.34f, 0.20f));
+
+            cellRoot.gameObject.SetActive(false);
+            return cellRoot;
+        }
+
+        private static Transform BuildTreeVisual(Transform parent, Material mat)
+        {
+            var tree = new GameObject("TreeRoot").transform;
+            tree.SetParent(parent, false);
+            tree.localPosition = Vector3.zero;
+
+            Prim(PrimitiveType.Cylinder, "Trunk", tree,
+                new Vector3(0f, 0.48f, 0f), new Vector3(0.22f, 0.48f, 0.22f),
+                Quaternion.identity, mat, TrunkBark);
+            Prim(PrimitiveType.Cylinder, "TrunkTop", tree,
+                new Vector3(0.02f, 1.05f, -0.01f), new Vector3(0.15f, 0.28f, 0.15f),
+                Quaternion.Euler(3f, 0f, -4f), mat, TrunkBark);
+
+            var canopy = Prim(PrimitiveType.Sphere, "Canopy_Main", tree,
+                new Vector3(0f, 1.42f, 0f), new Vector3(1.15f, 0.92f, 1.15f),
+                Quaternion.identity, mat, CanopyFoliage);
+            Prim(PrimitiveType.Sphere, "Canopy_Crown", canopy,
+                new Vector3(0.04f, 0.36f, -0.03f), new Vector3(0.72f, 0.65f, 0.72f),
+                Quaternion.identity, mat, new Color(0.26f, 0.60f, 0.24f));
+            Prim(PrimitiveType.Sphere, "Canopy_West", canopy,
+                new Vector3(-0.34f, -0.06f, 0.10f), new Vector3(0.65f, 0.58f, 0.65f),
+                Quaternion.identity, mat, new Color(0.20f, 0.48f, 0.20f));
+            Prim(PrimitiveType.Sphere, "Canopy_East", canopy,
+                new Vector3(0.32f, -0.04f, -0.12f), new Vector3(0.62f, 0.55f, 0.62f),
+                Quaternion.identity, mat, new Color(0.24f, 0.56f, 0.22f));
+
+            tree.gameObject.SetActive(false);
+            return tree;
+        }
+
+        private static Transform Prim(PrimitiveType type, string name, Transform parent,
+            Vector3 localPos, Vector3 localScale, Quaternion localRot, Material mat, Color tint)
+        {
+            var go = GameObject.CreatePrimitive(type);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localRotation = localRot;
+            go.transform.localScale = localScale;
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+            {
+                if (Application.isPlaying) Destroy(col);
+                else DestroyImmediate(col);
+            }
+            var r = go.GetComponent<Renderer>();
+            if (r != null)
+            {
+                if (mat != null) r.sharedMaterial = mat;
+                var mpb = new MaterialPropertyBlock();
+                mpb.SetColor("_BaseColor", tint);
+                mpb.SetColor("_Color", tint);
+                r.SetPropertyBlock(mpb);
+            }
+            return go.transform;
+        }
+
+        private void CachePlantRenderers(Transform cellRoot)
+        {
+            var leaves = new List<Renderer>(8);
+            var stems  = new List<Renderer>(2);
+            var fruits = new List<Renderer>(3);
+            if (cellRoot != null)
+            {
+                for (int c = 0; c < cellRoot.childCount; c++)
+                {
+                    var ch = cellRoot.GetChild(c);
+                    var r = ch.GetComponent<Renderer>();
+                    if (r == null) continue;
+                    string n = ch.name;
+                    if (n.StartsWith("Leaf")) leaves.Add(r);
+                    else if (n.StartsWith("Stem")) stems.Add(r);
+                    else if (n.StartsWith("Fruit")) fruits.Add(r);
+                }
+            }
+            _cellLeafRenderers.Add(leaves.ToArray());
+            _cellStemRenderers.Add(stems.ToArray());
+            _cellFruitRenderers.Add(fruits.ToArray());
+        }
+
+        public void RefreshPods()
+        {
+            if (_pods.Count != cellCount)
+                EnsurePods();
+
+            if (treeBed && allowsTrees)
+            {
+                HideCropPods();
+                RefreshTreeVisual();
+                return;
+            }
+
+            if (_treeRoot != null && _treeRoot.gameObject.activeSelf)
+                _treeRoot.gameObject.SetActive(false);
+
+            for (int i = 0; i < _pods.Count && i < cells.Length; i++)
+                RefreshPod(i, _pods[i], cells[i]);
+        }
+
+        private void HideCropPods()
+        {
+            for (int i = 0; i < _pods.Count; i++)
+                if (_pods[i] != null && _pods[i].gameObject.activeSelf)
+                    _pods[i].gameObject.SetActive(false);
+        }
+
+        private void RefreshTreeVisual()
+        {
+            if (_treeRoot == null) return;
+            if (!treeBed)
+            {
+                _treeRoot.gameObject.SetActive(false);
+                return;
+            }
+            if (!_treeRoot.gameObject.activeSelf)
+                _treeRoot.gameObject.SetActive(true);
+
+            int side = Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(cellCount)));
+            int idx = (treeCell >= 0 && cells != null && treeCell < cells.Length) ? treeCell : 0;
+            _treeRoot.localPosition = PodPosition(idx, side);
+
+            float g = Mathf.Clamp01(treeGrowth);
+            float trunkXZ = Mathf.Lerp(0.24f, 0.78f, g);
+            float trunkY  = Mathf.Lerp(0.20f, 0.78f, g);
+            _treeRoot.localScale = new Vector3(trunkXZ, trunkY, trunkXZ);
+            if (_treeCanopy != null)
+            {
+                float c = Mathf.Lerp(0.32f, 1.0f, Mathf.SmoothStep(0f, 1f, g));
+                _treeCanopy.localScale = new Vector3(1.15f * c, 0.92f * c, 1.15f * c);
+            }
+        }
+
+        private void RefreshPod(int index, Transform pod, GridFarmCell cell)
+        {
+            if (pod == null) return;
+            bool planted = cell != null && (cell.crop != null || cell.tree);
             if (!planted)
             {
-                // A lost crop keeps a collapsed brown lump so the bed shows which cell was
-                // lost; an empty cell shows nothing at all.
-                if (cell != null && cell.dead)
-                {
-                    var deadPos = PodPosition(index, Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(cellCount))));
-                    pod.localScale = new Vector3(0.32f, 0.06f, 0.32f);
-                    pod.localPosition = new Vector3(deadPos.x, deadPos.y + 0.03f, deadPos.z);
-                    Tint(pod, new Color(0.42f, 0.30f, 0.18f));
-                }
-                else pod.localScale = Vector3.zero;
+                if (pod.gameObject.activeSelf) pod.gameObject.SetActive(false);
+                return;
+            }
+
+            if (!pod.gameObject.activeSelf) pod.gameObject.SetActive(true);
+            float baseScale = PodVisualScale;
+
+            if (cell.dead)
+            {
+                pod.localScale = new Vector3(0.70f, 0.42f, 0.70f) * baseScale;
+                SetFruitVisible(index, false);
+                TintPlant(index, DeadTint, isDead: true);
                 return;
             }
 
             float g = Mathf.Clamp01(cell.growth);
-            float size = Mathf.Lerp(0.14f, 0.46f, g);
-            float height = Mathf.Lerp(0.08f, cell.tree ? 2.20f : 0.80f, g);
+            Vector3 scale = InterpolatedCropScale(cell, g);
+            float breadth = Mathf.Max(0.28f, scale.x * 1.15f);
+            float height  = Mathf.Max(0.24f, scale.y * 1.20f);
+            pod.localScale = new Vector3(breadth, height, breadth) * baseScale;
 
-            // A crop grows out of the soil, not around its own middle: the pod's base stays
-            // pinned to the bed and only its top rises.
-            var basePos = PodPosition(index, Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(cellCount))));
-            pod.localScale = new Vector3(size, height, size);
-            pod.localPosition = new Vector3(basePos.x, basePos.y + height * 0.5f, basePos.z);
+            SetFruitVisible(index, g >= 0.72f);
 
-            // Stage colour comes from the crop asset when it has one, so a pumpkin and a
-            // berry bush do not grow the same green blob.
-            if (cell.tree) Tint(pod, new Color(0.40f, 0.26f, 0.14f));
-            else if (cell.crop != null && cell.crop.stageColors != null && cell.crop.stageColors.Length > 0)
+            int stages = cell.crop != null ? Mathf.Max(1, cell.crop.growthStages) : 4;
+            int stage = Mathf.Clamp(Mathf.FloorToInt(g * stages), 0, stages - 1);
+            Color tint = LeafLitTint;
+            if (cell.crop != null && cell.crop.stageColors != null && cell.crop.stageColors.Length > 0)
+                tint = cell.crop.stageColors[Mathf.Min(stage, cell.crop.stageColors.Length - 1)];
+            TintPlant(index, tint, isDead: false);
+        }
+
+        private static Vector3 InterpolatedCropScale(GridFarmCell cell, float g)
+        {
+            if (cell.crop != null && cell.crop.stageScales != null && cell.crop.stageScales.Length > 0)
             {
-                int stage = Mathf.Clamp(Mathf.FloorToInt(g * cell.crop.stageColors.Length),
-                    0, cell.crop.stageColors.Length - 1);
-                Tint(pod, cell.crop.stageColors[stage]);
+                var arr = cell.crop.stageScales;
+                float s;
+                if (arr.Length == 1)
+                {
+                    s = arr[0];
+                }
+                else
+                {
+                    float pos = Mathf.Clamp01(g) * (arr.Length - 1);
+                    int lo = Mathf.Clamp(Mathf.FloorToInt(pos), 0, arr.Length - 1);
+                    int hi = Mathf.Clamp(lo + 1, 0, arr.Length - 1);
+                    s = Mathf.Lerp(arr[lo], arr[hi], pos - lo);
+                }
+                return new Vector3(
+                    Mathf.Lerp(0.28f, 0.90f, Mathf.Clamp01(s)),
+                    Mathf.Max(0.18f, s),
+                    Mathf.Lerp(0.28f, 0.90f, Mathf.Clamp01(s)));
             }
-            else Tint(pod, new Color(0.34f, 0.68f, 0.30f));
+            return new Vector3(
+                Mathf.Lerp(0.28f, 0.90f, g),
+                Mathf.Lerp(0.18f, 0.95f, g),
+                Mathf.Lerp(0.28f, 0.90f, g));
         }
 
-        private void RefreshAllPods()
+        private void SetFruitVisible(int index, bool visible)
         {
-            for (int i = 0; i < _pods.Count; i++) RefreshPod(i);
+            if (index < 0 || index >= _cellFruitRenderers.Count) return;
+            var fruits = _cellFruitRenderers[index];
+            for (int i = 0; i < fruits.Length; i++)
+                if (fruits[i] != null && fruits[i].gameObject.activeSelf != visible)
+                    fruits[i].gameObject.SetActive(visible);
         }
 
-        private static void Tint(Transform target, Color color)
+        private void TintPlant(int index, Color color, bool isDead)
         {
-            var mr = target.GetComponent<MeshRenderer>();
-            if (mr == null) return;
-            var mpb = new MaterialPropertyBlock();
-            mr.GetPropertyBlock(mpb);
-            mpb.SetColor(BaseColorId, color);
-            mpb.SetColor(ColorId, color);
-            mr.SetPropertyBlock(mpb);
+            _mpb ??= new MaterialPropertyBlock();
+
+            Color leafColor = isDead
+                ? color
+                : Color.Lerp(color, new Color(0.32f, 0.78f, 0.28f), 0.30f);
+            Color stemColor = isDead
+                ? color * 0.80f
+                : Color.Lerp(leafColor, new Color(0.32f, 0.24f, 0.14f), 0.45f);
+            Color fruitColor = isDead
+                ? color
+                : Color.Lerp(color, new Color(0.95f, 0.52f, 0.18f), 0.55f);
+
+            ApplyColor(index < _cellLeafRenderers.Count ? _cellLeafRenderers[index] : null, leafColor);
+            ApplyColor(index < _cellStemRenderers.Count ? _cellStemRenderers[index] : null, stemColor);
+            ApplyColor(index < _cellFruitRenderers.Count ? _cellFruitRenderers[index] : null, fruitColor);
         }
 
-        // ── Persistence ─────────────────────────────────────────────────────
+        private void ApplyColor(Renderer[] renderers, Color color)
+        {
+            if (renderers == null) return;
+            _mpb.SetColor("_BaseColor", color);
+            _mpb.SetColor("_Color", color);
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null) renderers[i].SetPropertyBlock(_mpb);
+        }
+
+        private static Material s_podMat;
+        private static Material SharedLitMaterial()
+        {
+            if (s_podMat != null) return s_podMat;
+            var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            if (sh == null) return null;
+            s_podMat = new Material(sh) { name = "GridFarmPlotPod_Runtime" };
+            if (s_podMat.HasProperty("_Smoothness")) s_podMat.SetFloat("_Smoothness", 0.25f);
+            return s_podMat;
+        }
+
+        // ── Persistence (IMachineProcessState) ────────────────────────────────
         public void CaptureProcessState(MachineProcessState state)
         {
             if (state == null) return;
             EnsureCells();
 
             state.SetExtra("water", Mathf.Max(0f, waterStored));
+            state.SetExtra("enabled", Enabled ? 1f : 0f);
+            state.SetExtra("auto", automatic ? 1f : 0f);
+            state.SetExtra("replant", replantAfterHarvest ? 1f : 0f);
+            state.SetExtra("treeBed", treeBed ? 1f : 0f);
+            state.SetExtra("treeGrowth", Mathf.Clamp01(treeGrowth));
+            state.SetExtra("treeCell", treeCell);
             state.SetExtra("cells", cells.Length);
             for (int i = 0; i < cells.Length; i++)
             {
@@ -759,6 +1279,7 @@ namespace VoxelEngine.GridSystem
                 state.SetExtra("g" + i, Mathf.Clamp01(cell.growth));
                 state.SetExtra("f" + i, cell.fertilized ? 1f : 0f);
                 state.SetExtra("d" + i, cell.dead ? 1f : 0f);
+                state.SetExtra("dry" + i, Mathf.Max(0f, cell.dryTimer));
             }
         }
 
@@ -770,6 +1291,12 @@ namespace VoxelEngine.GridSystem
             waterStored = Mathf.Clamp(
                 MachineProcessPersistence.FiniteOr(state.GetExtra("water", waterStored), waterStored),
                 0f, Mathf.Max(0f, waterCapacity));
+            Enabled = state.GetExtra("enabled", Enabled ? 1f : 0f) >= 0.5f;
+            automatic = state.GetExtra("auto", automatic ? 1f : 0f) >= 0.5f;
+            replantAfterHarvest = state.GetExtra("replant", replantAfterHarvest ? 1f : 0f) >= 0.5f;
+            treeBed = allowsTrees && state.GetExtra("treeBed", 0f) >= 0.5f;
+            treeGrowth = MachineProcessPersistence.ClampOr(state.GetExtra("treeGrowth", 0f), 0f, 1f, 0f);
+            treeCell = Mathf.RoundToInt(MachineProcessPersistence.FiniteOr(state.GetExtra("treeCell", treeBed ? 0f : -1f), treeBed ? 0f : -1f));
 
             for (int i = 0; i < cells.Length; i++)
             {
@@ -782,6 +1309,7 @@ namespace VoxelEngine.GridSystem
                     cell.crop = null;
                     cell.tree = false;
                     cell.growth = 0f;
+                    cell.dryTimer = 0f;
                     cell.dead = false;
                     cell.fertilized = false;
                     continue;
@@ -790,11 +1318,19 @@ namespace VoxelEngine.GridSystem
                 cell.growth = MachineProcessPersistence.ClampOr(state.GetExtra("g" + i, 0f), 0f, 1f, 0f);
                 cell.fertilized = state.GetExtra("f" + i, 0f) >= 0.5f;
                 cell.dead = state.GetExtra("d" + i, 0f) >= 0.5f;
+                cell.dryTimer = Mathf.Max(0f, MachineProcessPersistence.FiniteOr(state.GetExtra("dry" + i, 0f), 0f));
 
                 if (cropName == "TREE")
                 {
-                    cell.tree = true;
                     cell.crop = null;
+                    cell.tree = false;
+                    if (allowsTrees)
+                    {
+                        treeBed = true;
+                        treeCell = i;
+                        treeGrowth = cell.growth;
+                    }
+                    cell.growth = 0f;
                 }
                 else
                 {
@@ -807,24 +1343,23 @@ namespace VoxelEngine.GridSystem
                     }
                 }
             }
+
+            EnsurePods();
+            RefreshPods();
         }
 
-        // ── Screens ─────────────────────────────────────────────────────────
+        // ── IGridDataProvider for screens ─────────────────────────────────────
         public string SourceName => string.IsNullOrEmpty(blockName) ? "Farm Plot" : blockName;
 
         public string DataCategory => "Life Support";
 
         public string GetDisplayData()
         {
-            string crop = "-";
-            for (int i = 0; i < cells.Length; i++)
-            {
-                if (cells[i] == null) continue;
-                if (cells[i].crop != null) { crop = cells[i].crop.cropName; break; }
-                if (cells[i].tree) { crop = "Timber"; break; }
-            }
-
-            return $"{PlotKind} FARM\n{Status}\n{crop} {ReadyCount}/{cells.Length} ready\n"
+            string crop = CropName;
+            string readyStr = treeBed
+                ? (treeGrowth >= 0.999f ? "1/1 ready" : $"{TreeGrowth01 * 100f:0}%")
+                : $"{ReadyCount}/{cells.Length} ready";
+            return $"{PlotKind} FARM\n{Status}\n{crop} {readyStr}\n"
                  + $"Water {waterStored:0}/{waterCapacity:0} L {(HasWaterSupply ? "(piped)" : "(dry)")}\n"
                  + $"Air {(HasAir ? "OK" : "NONE")} · {Growth01 * 100f:0}%";
         }

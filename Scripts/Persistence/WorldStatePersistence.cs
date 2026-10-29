@@ -1901,6 +1901,24 @@ namespace VoxelEngine.Persistence
                 return SerializeMulti(farmPlot.seedInput, farmPlot.harvestOutput);
             }
 
+            // 18.8.0-dev: Grid Automatic Tree Farm (sapling/fertilizer input, timber output, upgrades)
+            // and ground PlantBox (seed bin + harvest bin with port configuration).
+            var gridTreeFarm = go.GetComponentInChildren<VoxelEngine.GridSystem.GridAutoTreeFarm>(true);
+            if (gridTreeFarm != null)
+            {
+                gridTreeFarm.EnsureContainers();
+                return SerializeMulti(gridTreeFarm.inputC, gridTreeFarm.outputC, gridTreeFarm.upgradeC);
+            }
+
+            var plantBox = go.GetComponentInChildren<VoxelEngine.Farming.PlantBox>(true);
+            if (plantBox != null)
+            {
+                plantBox.EnsureContainers();
+                var sc = SerializeMulti(plantBox.seedInput, plantBox.harvestOutput);
+                if (sc != null) AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var chest = go.GetComponentInChildren<Chest>();
             if (chest != null)
             {
@@ -5415,6 +5433,24 @@ namespace VoxelEngine.Persistence
             {
                 farmPlotRestore.EnsureContainers();
                 DeserializeMulti(sc, farmPlotRestore.seedInput, farmPlotRestore.harvestOutput);
+                return;
+            }
+
+            // 18.8.0-dev: mirror of TryFindContainer for GridAutoTreeFarm and ground PlantBox.
+            var gridTreeFarmRestore = go.GetComponentInChildren<VoxelEngine.GridSystem.GridAutoTreeFarm>(true);
+            if (gridTreeFarmRestore != null)
+            {
+                gridTreeFarmRestore.EnsureContainers();
+                DeserializeMulti(sc, gridTreeFarmRestore.inputC, gridTreeFarmRestore.outputC, gridTreeFarmRestore.upgradeC);
+                return;
+            }
+
+            var plantBoxRestore = go.GetComponentInChildren<VoxelEngine.Farming.PlantBox>(true);
+            if (plantBoxRestore != null)
+            {
+                plantBoxRestore.EnsureContainers();
+                DeserializeMulti(sc, plantBoxRestore.seedInput, plantBoxRestore.harvestOutput);
+                RestorePortSnapshot(go, sc);
                 return;
             }
 

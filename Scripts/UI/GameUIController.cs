@@ -512,7 +512,11 @@ namespace VoxelEngine.UI
             bool liveGridBatteryPanel = _openGridBlock is VoxelEngine.GridSystem.GridBattery
                 // Navigation owns scheduled status labels. Rebuilding every quarter-second resets
                 // route selections/confirmation between choosing a mode and clicking Start.
-                || _openGridBlock is VoxelEngine.Navigation.GridRouteRecorder;
+                || _openGridBlock is VoxelEngine.Navigation.GridRouteRecorder
+                // 18.8.0-dev: grid farm panels run their own 10 Hz in-place schedule so scroll
+                // position, hover state, and per-cell seed slots are never rebuilt under the cursor.
+                || _openGridBlock is VoxelEngine.GridSystem.GridFarmPlotBase
+                || _openGridBlock is VoxelEngine.GridSystem.GridAutoTreeFarm;
             // Master terminal controls are also interactive and must not be rebuilt under
             // battery mode buttons. Explicit terminal actions already refresh immediately.
             bool gridTerminalControlOpen = _openGridTerminal != null;
@@ -1139,6 +1143,9 @@ namespace VoxelEngine.UI
                     plantBox.EnsureContainers();
                     WatchContainer(plantBox.seedInput);
                     WatchContainer(plantBox.harvestOutput);
+                    if (plantBox.cellInput != null)
+                        for (int i = 0; i < plantBox.cellInput.Length; i++)
+                            WatchContainer(plantBox.cellInput[i]);
                     break;
                 case VoxelEngine.GridSystem.GridTrainScheduleBlock scheduleBlock:
                     _openSchedule = scheduleBlock; break;
@@ -1151,6 +1158,22 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridReceivingChute grc) { grc.EnsureContainers(); WatchContainer(grc.container); }
                     else if (gb is VoxelEngine.GridSystem.GridH2O2Generator gh2) { if (gh2.iceInput == null) gh2.OnPlaced(); WatchContainer(gh2.iceInput); }
                     else if (gb is VoxelEngine.GridSystem.GridBiofarm gbf) { if (gbf.biomassInput == null) gbf.OnPlaced(); WatchContainer(gbf.biomassInput); }
+                    else if (gb is VoxelEngine.GridSystem.GridFarmPlotBase gfp)
+                    {
+                        gfp.EnsureState();
+                        WatchContainer(gfp.seedInput);
+                        WatchContainer(gfp.harvestOutput);
+                        if (gfp.cellInput != null)
+                            for (int i = 0; i < gfp.cellInput.Length; i++)
+                                WatchContainer(gfp.cellInput[i]);
+                    }
+                    else if (gb is VoxelEngine.GridSystem.GridAutoTreeFarm gatf)
+                    {
+                        gatf.EnsureContainers();
+                        WatchContainer(gatf.inputC);
+                        WatchContainer(gatf.outputC);
+                        WatchContainer(gatf.upgradeC);
+                    }
                     else if (gb is VoxelEngine.GridSystem.GridWeapon gw) { if (gw.ammo == null) gw.OnPlaced(); WatchContainer(gw.ammo); }
                     else if (gb is VoxelEngine.GridSystem.GridDockingPort gdp) { if (gdp.container == null) gdp.OnPlaced(); WatchContainer(gdp.container); }
                     else if (gb is VoxelEngine.GridSystem.GridPortableReactor gpr) { if (gpr.fuelC == null) gpr.OnPlaced(); WatchContainer(gpr.fuelC); WatchContainer(gpr.iceC); WatchContainer(gpr.wasteC); }
@@ -7633,6 +7656,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     bool isUpgrade = item is FurnaceUpgradeItem;
                     return isUpgrade ? _openAutoTreeFarm.upgradeC : _openAutoTreeFarm.inputC;
                 }
+                if (_openPlantBox != null)
+                {
+                    _openPlantBox.EnsureContainers();
+                    return _openPlantBox.CanPlant(item) ? _openPlantBox.seedInput : null;
+                }
                 // Coal Generator: only fuel items go in.
                 if (_openCoalGen != null)
                 {
@@ -7719,6 +7747,15 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     return weapon.ammo;
                 case VoxelEngine.GridSystem.GridH2O2Generator h2:
                     return IsItemId(item, "ice") ? h2.iceInput : null;
+                case VoxelEngine.GridSystem.GridBiofarm bio:
+                    if (bio.biomassInput == null) bio.OnPlaced();
+                    return bio.biomassInput;
+                case VoxelEngine.GridSystem.GridFarmPlotBase farmPlot:
+                    farmPlot.EnsureState();
+                    return farmPlot.CanPlant(item) ? farmPlot.seedInput : null;
+                case VoxelEngine.GridSystem.GridAutoTreeFarm gridTreeFarm:
+                    gridTreeFarm.EnsureContainers();
+                    return item is FurnaceUpgradeItem ? gridTreeFarm.upgradeC : gridTreeFarm.inputC;
                 case VoxelEngine.GridSystem.GridElectricFurnace furnace:
                     return furnace.inputC;
                 case VoxelEngine.GridSystem.GridPortableReactor reactor:

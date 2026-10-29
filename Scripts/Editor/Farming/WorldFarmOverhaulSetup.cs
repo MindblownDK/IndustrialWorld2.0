@@ -572,35 +572,436 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // ── Icons ───────────────────────────────────────────────────────────
-        private enum IconKind { SmallBox, BigBox, LargeBed, AutoPlot, AutoPlotMedium, AutoPlotLarge, VerticalFarm, FarmBox }
+        // ── Icons & Grid Farm Blocks ────────────────────────────────────────
+        private enum IconKind
+        {
+            SmallBox, BigBox, LargeBed,
+            AutoPlot, AutoPlotMedium, AutoPlotLarge,
+            VerticalFarm, FarmBox, GridSeedPlanter, GridAutoTreeFarm
+        }
+
+        private const string GridRoot          = AssetRoot + "/GridSystem";
+        private const string GridItemsFolder   = GridRoot + "/Items";
+        private const string GridPrefabsFolder = GridRoot + "/Prefabs";
+        private const string GridRecipesFolder = GridRoot + "/Recipes";
+        private const string GridIconRoot      = AssetRoot + "/ItemIcons/Grid Blocks";
 
         /// <summary>
-        /// 18.4.0-dev step: the two grid farm plots are authored by the grid content step
-        /// inside the wizard; this step gives them their icons and makes sure their items
-        /// can survive a save. It never creates the prefabs - that is the grid step's job.
+        /// 18.4.0-dev / 18.8.0-dev: self-contained, non-destructive setup step for all
+        /// four grid farm blocks (Vertical Farm Plot, Large Farm Plot Box, Grid Seed
+        /// Planter, and Grid Automatic Tree Farm). Creates or repairs their prefabs,
+        /// meshes, liquid ports, GridBlockItems, recipes, icons, and save catalog entries.
         /// </summary>
         public static void RunStep125()
         {
-            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-
-            const string gridIconRoot = AssetRoot + "/ItemIcons/Grid Blocks";
-            EnsureIcon("gitem_verticalfarm", IconKind.VerticalFarm, gridIconRoot);
-            EnsureIcon("gitem_farmbox", IconKind.FarmBox, gridIconRoot);
-
-            var vertical = AssetDatabase.LoadAssetAtPath<ItemDefinition>($"{AssetRoot}/Items/GItem_VerticalFarm.asset");
-            var farmBox = AssetDatabase.LoadAssetAtPath<ItemDefinition>($"{AssetRoot}/Items/GItem_FarmBox.asset");
-            EnsureCatalogEntry(vertical);
-            EnsureCatalogEntry(farmBox);
-
-            if (vertical == null || farmBox == null)
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                Debug.LogWarning("[Farm Overhaul] Grid farm items are missing - run the grid block content step first, then this step.");
+                EditorUtility.DisplayDialog("Grid Farm Setup",
+                    "Exit Play Mode before running setup.", "OK");
                 return;
             }
 
+            var created = new List<string>();
+            var repaired = new List<string>();
+            var preserved = new List<string>();
+
+            EnsureFolderPath(GridRoot);
+            EnsureFolderPath(GridItemsFolder);
+            EnsureFolderPath(GridPrefabsFolder);
+            EnsureFolderPath(GridPrefabsFolder + "/Mats");
+            EnsureFolderPath(GridRecipesFolder);
+            EnsureFolderPath(GridIconRoot);
+
+            // 1) Icons first so they exist on disk before item binding.
+            EnsureGridFarmIcons(created, repaired);
+
+            // 2) Resolve crafting ingredients and crop/timber items.
+            var steelPlate = FindItem("Item_SteelPlate") ?? FindItem("Item_IronPlate");
+            var glass      = FindItem("Item_Glass");
+            var circuit    = FindItem("Item_Circuit");
+            var copperWire = FindItem("Item_CopperWire");
+            var woodLog    = FindItem("Item_WoodLog");
+            var sapling    = FindItem("Seed_TreeSapling");
+            var biomass    = FindItem("Item_Biomass");
+            var woodChips  = FindItem("Item_WoodChips");
+
+            // 3) Four grid farm prefabs, items, liquid ports, and recipes.
+            var verticalPref = EnsureGridFarmPrefab<VoxelEngine.GridSystem.GridVerticalFarm>(
+                "VerticalFarm_Large", VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.VerticalFarm,
+                new Color(0.34f, 0.68f, 0.40f),
+                c =>
+                {
+                    if (string.IsNullOrEmpty(c.blockName)) c.blockName = "Vertical Farm Plot";
+                    c.allowsTrees = false;
+                    if (c.powerDraw <= 0f) c.powerDraw = 60f;
+                    if (c.idlePowerDraw <= 0f) c.idlePowerDraw = 6f;
+                    if (c.waterCapacity <= 0f) c.waterCapacity = 180f;
+                    c.waterStored = 0f;
+                    if (c.litresPerCellSecond <= 0f) c.litresPerCellSecond = 0.02f;
+                },
+                "VerticalFarm_LiquidPortMarker", created, repaired);
+
+            var verticalItem = EnsureGridFarmItem(
+                "GItem_VerticalFarm", "gitem_verticalfarm", "Vertical Farm Plot",
+                "Ship-mounted vertical farm. Nine growing cells stacked in three trays, for a hull where floor space is the scarce thing. Starts dry (0 L); needs grid power, water through a liquid port (or hand canister), and breathable air - a sealed breathable room or a breathable world under the hull. Crops pause without air instead of dying, and ripe beds are moved into connected grid cargo. No trees: a tray has no room for roots or canopy.",
+                new Color(0.38f, 0.80f, 0.46f), verticalPref, 620f, 560f,
+                created, repaired, preserved);
+            EnsureGridRecipe("Recipe_GVerticalFarm", "Vertical Farm Plot", verticalItem,
+                created, repaired, preserved,
+                (steelPlate, 8), (glass, 8), (circuit, 3), (copperWire, 10));
+
+            var farmBoxPref = EnsureGridFarmPrefab<VoxelEngine.GridSystem.GridFarmBox>(
+                "FarmBox_Large", VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.FarmBox,
+                new Color(0.40f, 0.66f, 0.34f),
+                c =>
+                {
+                    if (string.IsNullOrEmpty(c.blockName)) c.blockName = "Large Farm Plot Box";
+                    c.allowsTrees = true;
+                    c.treeBed = false;
+                    c.treeCell = -1;
+                    c.treeGrowth = 0f;
+                    if (woodLog != null) c.woodLogItem = woodLog;
+                    if (sapling != null) c.saplingItem = sapling;
+                    if (biomass != null) c.biomassItem = biomass;
+                    if (c.powerDraw <= 0f) c.powerDraw = 75f;
+                    if (c.idlePowerDraw <= 0f) c.idlePowerDraw = 7f;
+                    if (c.waterCapacity <= 0f) c.waterCapacity = 260f;
+                    c.waterStored = 0f;
+                    if (c.treeGrowthSeconds <= 0f) c.treeGrowthSeconds = 100f;
+                },
+                "FarmBox_LiquidPortMarker", created, repaired);
+
+            var farmBoxItem = EnsureGridFarmItem(
+                "GItem_FarmBox", "gitem_farmbox", "Large Farm Plot Box",
+                "Ship-mounted floor farm. A 3x3 bed in one hull cell that grows nine food crops or one standing tree (planting a sapling claims the whole bed and locks the other eight cells until felled). Starts dry (0 L); needs grid power, water through a liquid port (or hand canister), and breathable air. Crops pause without air instead of dying, and ripe harvests move into connected grid cargo.",
+                new Color(0.44f, 0.78f, 0.38f), farmBoxPref, 780f, 620f,
+                created, repaired, preserved);
+            EnsureGridRecipe("Recipe_GFarmBox", "Large Farm Plot Box", farmBoxItem,
+                created, repaired, preserved,
+                (steelPlate, 12), (glass, 10), (circuit, 4), (copperWire, 12));
+
+            var seedPlanterPref = EnsureGridFarmPrefab<VoxelEngine.GridSystem.GridSeedPlanter>(
+                "SeedPlanter_Large", VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.SeedPlanter,
+                new Color(0.36f, 0.64f, 0.38f),
+                c =>
+                {
+                    if (string.IsNullOrEmpty(c.blockName)) c.blockName = "Grid Seed Planter";
+                    c.allowsTrees = false;
+                    if (c.powerDraw <= 0f) c.powerDraw = 20f;
+                    if (c.idlePowerDraw <= 0f) c.idlePowerDraw = 2f;
+                    if (c.waterCapacity <= 0f) c.waterCapacity = 60f;
+                    c.waterStored = 0f;
+                    if (c.litresPerCellSecond <= 0f) c.litresPerCellSecond = 0.02f;
+                },
+                "SeedPlanter_LiquidPortMarker", created, repaired);
+
+            var seedPlanterItem = EnsureGridFarmItem(
+                "GItem_SeedPlanter", "gitem_seedplanter", "Grid Seed Planter",
+                "Compact ship-mounted single-crop hydroponic planter. Grows one crop pod at low power (20 W), drawing piped water from connected grid liquid tanks (or a hand canister) in a breathable room or world. Automatically plants seeds from its bin, keeps one seed to self-replant, and pushes ripe harvests into connected grid cargo.",
+                new Color(0.42f, 0.80f, 0.44f), seedPlanterPref, 240f, 320f,
+                created, repaired, preserved);
+            EnsureGridRecipe("Recipe_GSeedPlanter", "Grid Seed Planter", seedPlanterItem,
+                created, repaired, preserved,
+                (steelPlate, 4), (glass, 4), (circuit, 2), (copperWire, 6));
+
+            var autoTreePref = EnsureGridFarmPrefab<VoxelEngine.GridSystem.GridAutoTreeFarm>(
+                "AutoTreeFarm_Large", VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.AutoTreeFarm,
+                new Color(0.32f, 0.58f, 0.30f),
+                c =>
+                {
+                    if (string.IsNullOrEmpty(c.blockName)) c.blockName = "Grid Automatic Tree Farm";
+                    if (woodLog != null) c.woodLogItem = woodLog;
+                    if (sapling != null) c.saplingItem = sapling;
+                    if (biomass != null) c.biomassItem = biomass;
+                    if (woodChips != null) c.woodChipsItem = woodChips;
+                    if (c.basePowerDraw <= 0f) c.basePowerDraw = 120f;
+                    if (c.idlePowerDraw <= 0f) c.idlePowerDraw = 8f;
+                    if (c.waterCapacity <= 0f) c.waterCapacity = 400f;
+                    c.waterStored = 0f;
+                    if (c.baseGrowthSeconds <= 0f) c.baseGrowthSeconds = 85f;
+                },
+                "AutoTreeFarm_LiquidPortMarker", created, repaired);
+
+            var autoTreeItem = EnsureGridFarmItem(
+                "GItem_AutoTreeFarm", "gitem_autotreefarm", "Grid Automatic Tree Farm",
+                "Ship-mounted automated arboricultural gantry. Continuously cultivates and fells trees into Wood Logs, Biomass, Wood Chips, and surplus Saplings using grid power (120 W), piped water from connected grid liquid tanks, and breathable air. Self-reseeds automatically, accepts Biomass/Organic Fertilizer for +45% speed and bonus timber, takes 2 Speed/Efficiency upgrade modules, and pushes timber into connected grid cargo.",
+                new Color(0.36f, 0.74f, 0.34f), autoTreePref, 920f, 720f,
+                created, repaired, preserved);
+            EnsureGridRecipe("Recipe_GAutoTreeFarm", "Grid Automatic Tree Farm", autoTreeItem,
+                created, repaired, preserved,
+                (steelPlate, 16), (glass, 10), (circuit, 6), (copperWire, 14));
+
+            // Re-run icon binding now that all four GridBlockItems exist on disk.
+            EnsureGridFarmIcons(created, repaired);
+
             AssetDatabase.SaveAssets();
-            Debug.Log("[Farm Overhaul] Grid farm plots: icons and save catalog ready.");
+            AssetDatabase.Refresh();
+
+            var missing = new List<string>();
+            string[] required =
+            {
+                GridPrefabsFolder + "/VerticalFarm_Large.prefab",
+                GridPrefabsFolder + "/FarmBox_Large.prefab",
+                GridPrefabsFolder + "/SeedPlanter_Large.prefab",
+                GridPrefabsFolder + "/AutoTreeFarm_Large.prefab",
+                GridItemsFolder + "/GItem_VerticalFarm.asset",
+                GridItemsFolder + "/GItem_FarmBox.asset",
+                GridItemsFolder + "/GItem_SeedPlanter.asset",
+                GridItemsFolder + "/GItem_AutoTreeFarm.asset",
+                GridRecipesFolder + "/Recipe_GVerticalFarm.asset",
+                GridRecipesFolder + "/Recipe_GFarmBox.asset",
+                GridRecipesFolder + "/Recipe_GSeedPlanter.asset",
+                GridRecipesFolder + "/Recipe_GAutoTreeFarm.asset",
+                GridIconRoot + "/gitem_verticalfarm.png",
+                GridIconRoot + "/gitem_farmbox.png",
+                GridIconRoot + "/gitem_seedplanter.png",
+                GridIconRoot + "/gitem_autotreefarm.png",
+            };
+            for (int i = 0; i < required.Length; i++)
+                if (AssetDatabase.LoadMainAssetAtPath(required[i]) == null) missing.Add(required[i]);
+
+            Debug.Log($"[Farm Overhaul] Grid farm blocks (18.8.0-dev): created {created.Count}, repaired {repaired.Count}, preserved {preserved.Count}, missing {missing.Count}.");
+            EditorUtility.DisplayDialog("Grid Farm Blocks Complete (18.8.0-dev)",
+                $"Created {created.Count}, repaired {repaired.Count}, preserved {preserved.Count}.\n"
+                + (missing.Count == 0
+                    ? "All 16 grid farm assets (4 prefabs, 4 items, 4 recipes, 4 icons) are verified on disk."
+                    : $"{missing.Count} asset(s) are MISSING - see the Console."),
+                "OK");
+        }
+
+        private static GameObject EnsureGridFarmPrefab<T>(
+            string prefabName, VoxelEngine.GridSystem.GridBlockMeshBuilder.Style style,
+            Color baseColor, System.Action<T> configure, string portMatName,
+            List<string> created, List<string> repaired) where T : VoxelEngine.GridSystem.GridBlock
+        {
+            string prefabPath = $"{GridPrefabsFolder}/{prefabName}.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            bool isNew = existing == null;
+
+            int matIdx = 0;
+            VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+            {
+                string mp = $"{GridPrefabsFolder}/Mats/{prefabName}_{matIdx++}.mat";
+                if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
+                AssetDatabase.CreateAsset(mat, mp);
+                return AssetDatabase.LoadAssetAtPath<Material>(mp);
+            };
+
+            try
+            {
+                if (isNew)
+                {
+                    var root = new GameObject(prefabName);
+                    try
+                    {
+                        VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, VoxelEngine.GridSystem.GridSize.Large, baseColor);
+                        float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+                        var box = root.AddComponent<BoxCollider>();
+                        box.size = new Vector3(cs, cs, cs);
+                        var comp = root.AddComponent<T>();
+                        configure?.Invoke(comp);
+                        PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                        created.Add($"{prefabName} prefab");
+                    }
+                    finally
+                    {
+                        Object.DestroyImmediate(root);
+                    }
+                }
+                else
+                {
+                    var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+                    try
+                    {
+                        for (int i = contents.transform.childCount - 1; i >= 0; i--)
+                        {
+                            var ch = contents.transform.GetChild(i);
+                            if (ch.name.StartsWith("Port_LiquidIO")) continue;
+                            Object.DestroyImmediate(ch.gameObject);
+                        }
+                        VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(contents, style, VoxelEngine.GridSystem.GridSize.Large, baseColor);
+                        float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+                        var box = contents.GetComponent<BoxCollider>() ?? contents.AddComponent<BoxCollider>();
+                        box.size = new Vector3(cs, cs, cs);
+                        var comp = contents.GetComponent<T>() ?? contents.AddComponent<T>();
+                        configure?.Invoke(comp);
+                        PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+                        repaired.Add($"{prefabName} prefab & dry tank");
+                    }
+                    finally
+                    {
+                        PrefabUtility.UnloadPrefabContents(contents);
+                    }
+                }
+            }
+            finally
+            {
+                VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
+            }
+
+            var savedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            EnsureGridLiquidPorts(savedPrefab, portMatName, new Color(0.20f, 0.55f, 1.00f, 1f));
+            return savedPrefab;
+        }
+
+        private static void EnsureGridLiquidPorts(GameObject prefabAsset, string materialName, Color color)
+        {
+            if (prefabAsset == null) return;
+            string prefabPath = AssetDatabase.GetAssetPath(prefabAsset);
+            if (string.IsNullOrEmpty(prefabPath)) return;
+
+            string matPath = $"{GridPrefabsFolder}/Mats/{materialName}.mat";
+            var mat = GetOrCreateMaterial(matPath, color, emissive: true);
+
+            var prefabRoot = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                var ports = new (string name, Vector3 pos, Vector3 euler, Vector3 outward)[]
+                {
+                    ("Port_LiquidIO_N",      new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f),  Vector3.back),
+                    ("Port_LiquidIO_S",      new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f),  Vector3.forward),
+                    ("Port_LiquidIO_E",      new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.right),
+                    ("Port_LiquidIO_W",      new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.left),
+                    ("Port_LiquidIO_Top",    new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero,              Vector3.up),
+                    ("Port_LiquidIO_Bottom", new Vector3( 0.00f, -0.55f,  0.00f), new Vector3(180f, 0f, 0f), Vector3.down),
+                };
+
+                foreach (var (portName, pos, euler, outward) in ports)
+                {
+                    var existing = prefabRoot.transform.Find(portName);
+                    if (existing != null)
+                    {
+                        existing.localPosition = pos;
+                        existing.localRotation = Quaternion.Euler(euler);
+                        var facingExisting = existing.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>()
+                            ?? existing.gameObject.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                        facingExisting.localOutward = outward;
+                        continue;
+                    }
+
+                    var port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    port.name = portName;
+                    port.transform.SetParent(prefabRoot.transform, false);
+                    port.transform.localPosition = pos;
+                    port.transform.localRotation = Quaternion.Euler(euler);
+                    port.transform.localScale = new Vector3(0.14f, 0.035f, 0.14f);
+                    var facing = port.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                    facing.localOutward = outward;
+                    var col = port.GetComponent<Collider>();
+                    if (col != null) Object.DestroyImmediate(col);
+                    var renderer = port.GetComponent<Renderer>();
+                    if (renderer != null && mat != null) renderer.sharedMaterial = mat;
+                }
+
+                PrefabUtility.SaveAsPrefabAsset(prefabRoot, prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(prefabRoot);
+            }
+        }
+
+        private static VoxelEngine.GridSystem.GridBlockItem EnsureGridFarmItem(
+            string assetName, string itemId, string displayName, string description,
+            Color tint, GameObject prefab, float mass, float hp,
+            List<string> created, List<string> repaired, List<string> preserved)
+        {
+            string path = $"{GridItemsFolder}/{assetName}.asset";
+            var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(path);
+            bool isNew = item == null;
+            if (isNew)
+            {
+                item = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>();
+                AssetDatabase.CreateAsset(item, path);
+                created.Add(displayName);
+            }
+            else
+            {
+                preserved.Add($"{displayName} tuning");
+            }
+
+            item.itemId = itemId;
+            item.displayName = displayName;
+            item.description = description;
+            item.iconTint = tint;
+            item.maxStack = 20;
+            item.gridSize = VoxelEngine.GridSystem.GridSize.Large;
+            item.blockPrefab = prefab;
+            if (item.blockMass <= 0f) item.blockMass = mass;
+            if (item.blockHP <= 0f) item.blockHP = hp;
+            item.category = "Grid Blocks";
+
+            EditorUtility.SetDirty(item);
+            EnsureCatalogEntry(item);
+            return item;
+        }
+
+        private static void EnsureGridRecipe(
+            string assetName, string displayName, ItemDefinition output,
+            List<string> created, List<string> repaired, List<string> preserved,
+            params (ItemDefinition item, int count)[] inputs)
+        {
+            if (output == null) return;
+            string path = $"{GridRecipesFolder}/{assetName}.asset";
+            var recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(path);
+            bool isNew = recipe == null;
+            if (isNew)
+            {
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                AssetDatabase.CreateAsset(recipe, path);
+                created.Add($"{displayName} recipe");
+            }
+            else
+            {
+                preserved.Add($"{displayName} recipe");
+            }
+
+            recipe.displayName = displayName;
+            recipe.outputItem = output;
+            if (recipe.outputCount <= 0) recipe.outputCount = 1;
+            recipe.requiredStation = StationTier.Assembler;
+            if (recipe.craftSeconds <= 0f) recipe.craftSeconds = 4f;
+            if (isNew || recipe.inputs == null || recipe.inputs.Length == 0)
+            {
+                var valid = new List<RecipeIngredient>();
+                foreach (var (item, count) in inputs)
+                    if (item != null && count > 0) valid.Add(new RecipeIngredient { item = item, count = count });
+                recipe.inputs = valid.ToArray();
+                recipe.unlockedByDefault = true;
+            }
+            EditorUtility.SetDirty(recipe);
+
+            var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(RecipeRegistryPath);
+            if (registry != null)
+            {
+                if (registry.recipes == null) registry.recipes = new List<RecipeDefinition>();
+                if (!registry.recipes.Contains(recipe))
+                {
+                    registry.recipes.Add(recipe);
+                    EditorUtility.SetDirty(registry);
+                    repaired.Add($"{displayName} RecipeRegistry link");
+                }
+            }
+        }
+
+        private static void EnsureGridFarmIcons(List<string> created, List<string> repaired)
+        {
+            EnsureFolderPath(GridIconRoot);
+            var gridIcons = new (string itemId, IconKind kind)[]
+            {
+                ("gitem_verticalfarm", IconKind.VerticalFarm),
+                ("gitem_farmbox",      IconKind.FarmBox),
+                ("gitem_seedplanter",  IconKind.GridSeedPlanter),
+                ("gitem_autotreefarm", IconKind.GridAutoTreeFarm),
+            };
+            for (int i = 0; i < gridIcons.Length; i++)
+            {
+                string path = $"{GridIconRoot}/{gridIcons[i].itemId}.png";
+                bool existed = System.IO.File.Exists(path);
+                EnsureIcon(gridIcons[i].itemId, gridIcons[i].kind, GridIconRoot);
+                if (!existed && System.IO.File.Exists(path)) created?.Add($"{gridIcons[i].itemId} icon");
+                else if (BindIcon(path, gridIcons[i].itemId)) repaired?.Add($"{gridIcons[i].itemId} icon binding");
+            }
         }
 
         /// <summary>
@@ -678,23 +1079,7 @@ namespace VoxelEngine.EditorTools
             var created = new List<string>();
             var repaired = new List<string>();
             EnsureFarmIcons(created, repaired);
-
-            // The two grid plots live in their own icon folder and their own step.
-            const string gridIconRoot = AssetRoot + "/ItemIcons/Grid Blocks";
-            EnsureFolderPath(gridIconRoot);
-            var gridIcons = new (string itemId, IconKind kind)[]
-            {
-                ("gitem_verticalfarm", IconKind.VerticalFarm),
-                ("gitem_farmbox",      IconKind.FarmBox),
-            };
-            for (int i = 0; i < gridIcons.Length; i++)
-            {
-                string path = $"{gridIconRoot}/{gridIcons[i].itemId}.png";
-                bool existed = System.IO.File.Exists(path);
-                EnsureIcon(gridIcons[i].itemId, gridIcons[i].kind, gridIconRoot);
-                if (!existed && System.IO.File.Exists(path)) created.Add($"{gridIcons[i].itemId} icon");
-                else if (BindIcon(path, gridIcons[i].itemId)) repaired.Add($"{gridIcons[i].itemId} icon binding");
-            }
+            EnsureGridFarmIcons(created, repaired);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -702,7 +1087,7 @@ namespace VoxelEngine.EditorTools
             string summary = $"Farm icons: {created.Count} authored, {repaired.Count} rebound.";
             Debug.Log("[Farm Overhaul] " + summary);
             EditorUtility.DisplayDialog("Farm Icons",
-                summary + "\n\n" + IconRoot + "\n" + gridIconRoot
+                summary + "\n\n" + IconRoot + "\n" + GridIconRoot
                 + "\n\nIf a slot is still blank the item is drawing its iconTint instead: "
                 + "select the item asset and check that Icon is set.", "OK");
         }
@@ -781,6 +1166,100 @@ namespace VoxelEngine.EditorTools
                 texF.Apply();
                 System.IO.File.WriteAllBytes(path, texF.EncodeToPNG());
                 Object.DestroyImmediate(texF);
+                FinishIconImport(path, itemId);
+                return;
+            }
+
+            if (kind == IconKind.GridSeedPlanter)
+            {
+                // Single-basin grid hydroponic planter with an overhead grow-lamp arch,
+                // central leafy bush, and blue water column on the left.
+                for (int y = 20; y < 56; y++)
+                {
+                    for (int x = 24; x < 104; x++)
+                    {
+                        bool edge = x < 30 || x >= 98 || y < 26 || y >= 50;
+                        px[y * S + x] = edge ? steel : soil;
+                    }
+                }
+                // Water sight column on the left and cargo chute on the right.
+                for (int y = 24; y < 86; y++)
+                    for (int x = 16; x < 24; x++)
+                        px[y * S + x] = water;
+                for (int y = 24; y < 48; y++)
+                    for (int x = 104; x < 114; x++)
+                        px[y * S + x] = steel;
+                // Overhead grow-lamp arch.
+                for (int y = 56; y < 104; y++)
+                {
+                    for (int x = 26; x < 32; x++) px[y * S + x] = steel;
+                    for (int x = 96; x < 102; x++) px[y * S + x] = steel;
+                }
+                for (int y = 98; y < 106; y++)
+                    for (int x = 26; x < 102; x++)
+                        px[y * S + x] = y < 101 ? glow : steel;
+                // Central leafy bush and ripening fruit.
+                for (int y = 46; y < 84; y++)
+                {
+                    for (int x = 44; x < 84; x++)
+                    {
+                        float dx = (x - 64f) / 18f;
+                        float dy = (y - 64f) / 17f;
+                        if (dx * dx + dy * dy <= 1f)
+                            px[y * S + x] = ((x + y) / 4) % 2 == 0 ? leaf : glow;
+                    }
+                }
+
+                var texS = new Texture2D(S, S, TextureFormat.RGBA32, false);
+                texS.SetPixels32(px);
+                texS.Apply();
+                System.IO.File.WriteAllBytes(path, texS.EncodeToPNG());
+                Object.DestroyImmediate(texS);
+                FinishIconImport(path, itemId);
+                return;
+            }
+
+            if (kind == IconKind.GridAutoTreeFarm)
+            {
+                // Industrial arboricultural gantry frame with a standing tree trunk,
+                // lush crown, blue water column, and amber felling carriage.
+                Color32 hazard = new Color32(218, 152, 42, 255);
+                for (int y = 16; y < 38; y++)
+                    for (int x = 18; x < 110; x++)
+                        px[y * S + x] = y >= 32 ? hazard : steel;
+                // Gantry pillars & top truss.
+                for (int y = 38; y < 112; y++)
+                {
+                    for (int x = 18; x < 26; x++) px[y * S + x] = steel;
+                    for (int x = 102; x < 110; x++) px[y * S + x] = steel;
+                }
+                for (int y = 104; y < 112; y++)
+                    for (int x = 18; x < 110; x++)
+                        px[y * S + x] = y < 107 ? glow : steel;
+                // Water pipe on left.
+                for (int y = 38; y < 104; y++)
+                    for (int x = 28; x < 34; x++)
+                        px[y * S + x] = water;
+                // Tree trunk & canopy.
+                for (int y = 36; y < 74; y++)
+                    for (int x = 56; x < 72; x++)
+                        px[y * S + x] = timber;
+                for (int y = 62; y < 102; y++)
+                {
+                    for (int x = 36; x < 92; x++)
+                    {
+                        float dx = (x - 64f) / 26f;
+                        float dy = (y - 82f) / 18f;
+                        if (dx * dx + dy * dy <= 1f)
+                            px[y * S + x] = ((x + y) / 5) % 2 == 0 ? leaf : glow;
+                    }
+                }
+
+                var texT = new Texture2D(S, S, TextureFormat.RGBA32, false);
+                texT.SetPixels32(px);
+                texT.Apply();
+                System.IO.File.WriteAllBytes(path, texT.EncodeToPNG());
+                Object.DestroyImmediate(texT);
                 FinishIconImport(path, itemId);
                 return;
             }

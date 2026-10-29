@@ -60,6 +60,8 @@ namespace VoxelEngine.Fluids
                     bool endpoint = block is VoxelEngine.GridSystem.GridLiquidTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridBiofarm
+                                 || block is VoxelEngine.GridSystem.GridFarmPlotBase
+                                 || block is VoxelEngine.GridSystem.GridAutoTreeFarm
                                  || block is VoxelEngine.GridSystem.GridRefinery
                                  || block is VoxelEngine.GridSystem.GridChemicalPlant
                                  || block is VoxelEngine.Maritime.GridMaritimeEngine
