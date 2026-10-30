@@ -117,6 +117,27 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
+        internal bool TryDetachBlockForSplit(Vector3Int precisionPos, out GridBlock block)
+        {
+            return _blocks.Remove(precisionPos, out block);
+        }
+
+        internal void AttachSplitBlock(Vector3Int precisionPos, Vector3Int hostLargePos, GridBlock block, Quaternion localRotation)
+        {
+            var grid = Grid;
+            if (grid == null || block == null) return;
+            _blocks[precisionPos] = block;
+            block.Grid = grid;
+            block.GridPos = grid.WorldToGrid(grid.transform.TransformPoint((Vector3)precisionPos * CellSize));
+            block.IsPrecisionAttachment = true;
+            block.PrecisionGridPos = precisionPos;
+            block.PrecisionHostGridPos = hostLargePos;
+
+            block.transform.SetParent(transform, false);
+            block.transform.localPosition = (Vector3)precisionPos * CellSize;
+            block.transform.localRotation = localRotation;
+        }
+
         public void RemoveBlock(Vector3Int precisionPos)
         {
             if (!_blocks.TryGetValue(precisionPos, out var block)) return;
@@ -130,6 +151,7 @@ namespace VoxelEngine.GridSystem
             }
             var grid = Grid;
             grid?.RecalculateMass();
+            grid?.PruneDisconnectedIslands();
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition, CellSize * 5.15f + 0.25f);
             // 14.29.0: a lattice removal a CLIENT performed must reach the host.
             // Fired before the empty-hull teardown so the id is still resolvable.

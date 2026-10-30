@@ -2251,8 +2251,7 @@ namespace VoxelEngine.GridSystem
             bool createdNewGrid = false;
             if (grid == null)
             {
-                grid = GridEntity.Create(worldPos, GridSize.Large);
-                grid.transform.rotation = rotation;
+                grid = GridEntity.Create(worldPos, GridSize.Large, rotation);
                 grid.ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId ?? "";
                 grid.accessMode = (int)VoxelEngine.Networking.AccessShareMode.Team;
                 if (grid.Body != null) grid.Body.isKinematic = true;

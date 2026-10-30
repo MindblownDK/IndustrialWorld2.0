@@ -912,7 +912,7 @@ namespace VoxelEngine.Persistence
             try
             {
                 var record = JsonUtility.FromJson<SavedGrid>(json);
-                return record == null ? null : RestoreOneGrid(record, out _);
+                return record == null ? null : RestoreOneGrid(record, out _, fromNetwork: true);
             }
             catch (System.Exception ex)
             {
@@ -2499,13 +2499,14 @@ namespace VoxelEngine.Persistence
         {
             if (grid == null || grid.BlockCount == 0) return null;
 
+            bool useBodyPose = grid.Body != null && !grid.Body.isKinematic;
             var entry = new SavedGrid
             {
-                // Rigidbody pose is authoritative for interpolated movable grids.
-                // Transform pose can lag a physics step and was responsible for
-                // some restored ships reopening at an unintended upright angle.
-                pos = grid.Body != null ? grid.Body.position : grid.transform.position,
-                rot = grid.Body != null ? grid.Body.rotation : grid.transform.rotation,
+                // Rigidbody pose is authoritative for dynamic interpolated movable grids;
+                // kinematic or freshly created grids before FixedUpdate store their true
+                // pose on transform.
+                pos = useBodyPose ? grid.Body.position : grid.transform.position,
+                rot = useBodyPose ? grid.Body.rotation : grid.transform.rotation,
                 netId = VoxelEngine.Networking.GridSync.IdOf(grid),
                 ownerId = grid.ownerId ?? "",
                 accessMode = grid.accessMode,
@@ -3195,7 +3196,7 @@ namespace VoxelEngine.Persistence
         /// exact code path that loads one from disk. Returns null when the record is
         /// unusable. <paramref name="fromAnchor"/> reports whether the pose came from a
         /// body anchor rather than the raw saved scene coordinate.</summary>
-        private GridEntity RestoreOneGrid(SavedGrid savedGrid, out bool fromAnchor)
+        private GridEntity RestoreOneGrid(SavedGrid savedGrid, out bool fromAnchor, bool fromNetwork = false)
         {
             fromAnchor = false;
             if (savedGrid == null || savedGrid.blocks == null || savedGrid.blocks.Count == 0) return null;
@@ -3209,7 +3210,7 @@ namespace VoxelEngine.Persistence
             // — every save written before this round — resolves to its saved scene pose.
             ResolveSavedGridPose(savedGrid, out Vector3 gridPosition, out Quaternion gridRotation, out fromAnchor);
 
-            var grid = GridEntity.Create(gridPosition, (GridSize)savedGrid.gridSize);
+            var grid = GridEntity.Create(gridPosition, (GridSize)savedGrid.gridSize, gridRotation);
             grid.name = "Grid (restored)";
             // Claim the saved identity before anything else can mint a fresh one.
             VoxelEngine.Networking.GridSync.Adopt(grid, savedGrid.netId);
@@ -3222,7 +3223,8 @@ namespace VoxelEngine.Persistence
             grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
             grid.RestorePersistentPose(gridPosition, gridRotation,
                 savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.velocity,
-                savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity);
+                savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity,
+                applyGroundClearance: !fromNetwork);
             grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
             grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
 
@@ -3398,7 +3400,9 @@ namespace VoxelEngine.Persistence
             grid.StabilizeRestoredVelocityIfPossible();
             // Colliders now exist, so resolve only the small post-load terrain
             // interpenetration before the restore pose releases physics.
-            grid.ResolvePersistentGroundClearance();
+            // Skip on live network replication so the Host's authoritative pose is preserved verbatim.
+            if (!fromNetwork)
+                grid.ResolvePersistentGroundClearance();
             return grid;
         }
 

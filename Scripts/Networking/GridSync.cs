@@ -189,16 +189,28 @@ namespace VoxelEngine.Networking
             }
         }
 
+        internal void CopyPoseFrom(GridNetTag other)
+        {
+            if (other == null || !other._hasNetPose) return;
+            _netPosition = other._netPosition;
+            _netRotation = other._netRotation;
+            _netVelocity = other._netVelocity;
+            _netAngularVelocity = other._netAngularVelocity;
+            _netReceivedAt = other._netReceivedAt;
+            _hasNetPose = true;
+        }
+
         internal GridPose CapturePose()
         {
             var body = Grid != null ? Grid.Body : null;
+            bool useBodyPose = body != null && !body.isKinematic;
             if (body != null)
             {
                 return new GridPose
                 {
                     NetId = _id,
-                    Position = body.position,
-                    Rotation = body.rotation,
+                    Position = useBodyPose ? body.position : transform.position,
+                    Rotation = useBodyPose ? body.rotation : transform.rotation,
                     Velocity = body.linearVelocity,
                     AngularVelocity = body.angularVelocity,
                     Thrust = Grid != null ? Grid.ThrustInput : Vector3.zero,
@@ -473,10 +485,15 @@ namespace VoxelEngine.Networking
             try
             {
                 var existing = Find(record.NetId);
+                var oldTag = existing != null ? existing.GetComponent<GridNetTag>() : null;
                 _reseat.Clear();
                 if (existing != null)
                 {
                     EvacuateBeforeRebuild(existing, _reseat);
+                    var oldCols = existing.GetComponentsInChildren<Collider>(true);
+                    for (int i = 0; i < oldCols.Length; i++)
+                        if (oldCols[i] != null) oldCols[i].enabled = false;
+                    existing.gameObject.SetActive(false);
                     Object.Destroy(existing.gameObject);
                 }
                 ForgetSeats(record.NetId);
@@ -488,6 +505,8 @@ namespace VoxelEngine.Networking
                 if (grid != null)
                 {
                     Adopt(grid, record.NetId);
+                    if (oldTag != null)
+                        grid.GetComponent<GridNetTag>()?.CopyPoseFrom(oldTag);
                     Reseat(grid);
                 }
                 _reseat.Clear();

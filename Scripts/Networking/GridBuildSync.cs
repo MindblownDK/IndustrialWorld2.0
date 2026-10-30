@@ -73,6 +73,13 @@ namespace VoxelEngine.Networking
         /// is attached. Silent everywhere except on a client performing a LOCAL edit -
         /// a record being applied, a save being restored and the host's own building
         /// all pass through here without a sound.</summary>
+        public static void NotifyHostGridChanged(GridEntity grid)
+        {
+            if (grid == null || GridSync.IsApplyingRemote) return;
+            if (CanSendHost)
+                _hostDirtyGrids.Add(grid);
+        }
+
         public static void NotifyLocalPlaced(GridEntity grid, GridBlock block)
         {
             if (grid == null || block == null || GridSync.IsApplyingRemote) return;

@@ -1,9 +1,36 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.9.2-dev`
+**Current Version:** `18.9.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.9.4-dev] Grid Rail Bogie Compilation Fix
+
+**Type:** PATCH - fixes a compilation error introduced in `18.9.3-dev`.
+
+**GitHub title:** `[18.9.4-dev] Fix grid rail-bogie split physics compilation`
+
+#### Fixed
+
+- **Grid split physics compilation (`GridEntity`).** `EnsureDynamicAfterSplit` now checks the existing `GridRailBogie.IsOnRails` property instead of the nonexistent `IsLatched` property. Rail-attached and orbiting grids retain their kinematic safeguard.
+
+### [18.9.3-dev] Client Grid Rebuild Pose Stability, Stationary Jump on Grids, and Exact Disconnected Grid Island Splits
+
+**Type:** PATCH - fixes three grid and player movement bugs: (1) grids bouncing upward on clients whenever blocks are placed or removed on a grid, (2) players being unable to jump while standing still on a grid or ground (only while walking), and (3) severed grid islands spawning displaced/rotated or failing to fall immediately under gravity when a connecting block is ground away.
+
+**GitHub title:** `[18.9.3-dev] Fix client grid bounce on block placement, stationary jump on grids, and disconnected grid island physics`
+
+#### Fixed
+
+- **Whole Grid Bounces Up on Client When Placing or Removing Blocks (`GridSync`, `WorldStatePersistence`, `GridEntity`).** When `GridSync.ApplyRecord` rebuilt a grid from a structure update, `Object.Destroy(existing.gameObject)` left the old hull's colliders active until end of frame while `WorldStatePersistence.ApplyGridRecord` -> `RestoreOneGrid` called `RestorePersistentPose` (`_restoreGroundClearanceTicks = 12`) and `ResolvePersistentGroundClearance()`. Downward clearance raycasts hit the still-enabled colliders of the old hull (and/or terrain below an anchored grid), lifting the newly rebuilt client grid upward by up to `0.85 * cellSize` (`2.125m` on Large grids) before `GridNetTag.FixedUpdate` lerped it back down. `GridSync.ApplyRecord` now disables all colliders and deactivates `existing.gameObject` prior to `Object.Destroy`, copies the live `GridNetTag` pose across the rebuild, and `ApplyGridRecord` / `RestoreOneGrid` / `RestorePersistentPose` skip post-load ground-clearance lift during live network replication.
+- **Host and Client Cannot Jump on a Grid While Standing Still (`PlayerController`).** When `groundJumpFired` applied upward jump velocity, `_grounded` remained `true` for the rest of the frame. Whenever the player jumped without holding movement keys (`wishDir.sqrMagnitude < 0.001f`), `noIntentToMove` and `planted = _grounded && noIntentToMove` evaluated to `true` later in the same `Update`, and `if (planted) _velocity = Vector3.ProjectOnPlane(_velocity, up);` immediately wiped out the vertical jump velocity. `groundJumpFired` now clears `_grounded`, `_planted`, and `_hasCarryAnchor` immediately, `noIntentToMove` excludes frames with an active jump or upward vertical speed, and `UpdateDeckAnchor` releases the deck carry anchor while jumping or rising.
+- **Severed Grid Islands Spawning Offset and Not Falling Under Gravity (`GridEntity`, `GridPrecisionAttachmentLayer`, `GridBuilder`, `WorldStatePersistence`, `GridBuildSync`).** Fixed five interacting causes when grinding a connecting block:
+  1. `GridEntity.Create` previously added `Rigidbody` while `transform.rotation` was still `Quaternion.identity`, so setting `transform.rotation` afterward in `SplitIslandIntoGrid` and `GridBuilder` left `Body.rotation` at `Quaternion.identity` with `RigidbodyInterpolation.Interpolate` active, causing PhysX, `StabilizeGroundAlignment`, and `BuildSavedGrid` (`rot = grid.Body.rotation`) to snap or serialize the island with the wrong rotation. `GridEntity.Create` now accepts `rotation` and initializes both `transform` and `Rigidbody` pose before `GridEntity.Awake`.
+  2. `IgnoreSeamCollisions` previously expanded `seam` by `gridSize.CellSize() * 1.2f` (`3.0m`), which reached across the 1-cell gap of the ground-out block and disabled collisions (`Physics.IgnoreCollision`) between the newly severed upper block and the supporting grid blocks below it, causing the cut-off block to fall into the lower block and get shoved sideways on depenetration. `IgnoreSeamCollisions` now only ignores immediate seam contacts within `0.04m`.
+  3. `PruneDisconnectedIslands` previously chose which component to keep purely by cockpit presence and block count, ignoring locked `GridLandingGear` / `GridDockingPort` and terrain contact. `SelectPrimaryIslandIndex` now prioritizes stationary locks, cockpits, world-ground contact, block count, and lowest altitude so the grounded base stays on the parent grid and the unsupported upper section breaks off as the dynamic island.
+  4. `HasSupportBelow` previously raycasted `4 * cellSize` (`10m`) from `_rb.worldCenterOfMass`, treating islands floating up to `10m` in the air as ground-supported and running `StabilizeGroundAlignment` on them. It now probes `0.85 * EffectiveCellSize` from the lowest block.
+  5. `PruneDisconnectedIslands` and `GridPrecisionAttachmentLayer.RemoveBlock` now support precision-layer island splits, call `EnsureDynamicAfterSplit()` (`_rb.isKinematic = false; _rb.WakeUp();`) on any unanchored hull, and notify `GridBuildSync.NotifyHostGridChanged` so severed islands replicate and fall immediately on both Host and Client.
 
 ### [18.9.2-dev] Multiplayer Client Scatter, Host Avatar & Ghost Sync, Grid Block Replication, and Depth-Tested Chest Text
 

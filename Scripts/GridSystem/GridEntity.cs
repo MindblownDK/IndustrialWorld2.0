@@ -1047,10 +1047,14 @@ namespace VoxelEngine.GridSystem
         /// hulls are kinematic copies of the host's - the authoritative split happens
         /// on the host and arrives as the usual structure records (the changed
         /// original plus a brand-new hull).</summary>
-        private void PruneDisconnectedIslands()
+        internal void PruneDisconnectedIslands()
         {
-            if (_blocks.Count <= 1) return;
             if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client) return;
+            if (_blocks.Count <= 1)
+            {
+                if (_blocks.Count == 0) PruneDisconnectedPrecisionIslands();
+                return;
+            }
 
             var remaining = new HashSet<Vector3Int>(_blocks.Keys);
             var components = new List<List<Vector3Int>>();
@@ -1087,22 +1091,7 @@ namespace VoxelEngine.GridSystem
             }
             if (components.Count <= 1) return;
 
-            int keep = -1;
-            for (int c = 0; c < components.Count && keep < 0; c++)
-            {
-                var comp = components[c];
-                for (int i = 0; i < comp.Count; i++)
-                {
-                    var b = GetBlock(comp[i]);
-                    if (b != null && b.GetComponentInChildren<GridCockpit>() != null) { keep = c; break; }
-                }
-            }
-            if (keep < 0)
-            {
-                int best = -1;
-                for (int c = 0; c < components.Count; c++)
-                    if (components[c].Count > best) { best = components[c].Count; keep = c; }
-            }
+            int keep = SelectPrimaryIslandIndex(components);
 
             int broken = 0;
             int newGrids = 0;
@@ -1113,7 +1102,13 @@ namespace VoxelEngine.GridSystem
                 {
                     if (c == keep) continue;
                     var island = SplitIslandIntoGrid(components[c]);
-                    if (island != null) { newGrids++; broken += island.BlockCount; }
+                    if (island != null)
+                    {
+                        newGrids++;
+                        broken += island.BlockCount;
+                        island.EnsureDynamicAfterSplit();
+                        VoxelEngine.Networking.GridBuildSync.NotifyHostGridChanged(island);
+                    }
                 }
             }
             finally { _pruningIslands = false; }
@@ -1121,6 +1116,8 @@ namespace VoxelEngine.GridSystem
             if (newGrids > 0)
             {
                 RecalculateMass();
+                EnsureDynamicAfterSplit();
+                VoxelEngine.Networking.GridBuildSync.NotifyHostGridChanged(this);
                 if (!VoxelEngine.Networking.NetworkSession.IsDedicated)
                     VoxelEngine.UI.BuildFeedbackHud.Show("Structural Integrity",
                         newGrids == 1
@@ -1131,6 +1128,217 @@ namespace VoxelEngine.GridSystem
             }
         }
 
+        private int SelectPrimaryIslandIndex(List<List<Vector3Int>> components)
+        {
+            Vector3 up = GravityProvider.GetUp(transform.position);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            else up.Normalize();
+
+            int bestIndex = 0;
+            long bestScore = long.MinValue;
+            float bestLowestAltitude = float.PositiveInfinity;
+
+            for (int c = 0; c < components.Count; c++)
+            {
+                var comp = components[c];
+                bool hasLock = false;
+                bool hasCockpit = false;
+                bool touchesGround = false;
+                float lowestAlt = float.PositiveInfinity;
+
+                for (int i = 0; i < comp.Count; i++)
+                {
+                    var b = GetBlock(comp[i]);
+                    if (b == null) continue;
+                    if (b is GridLandingGear gear && gear.IsLocked) hasLock = true;
+                    if (b is GridDockingPort dock && dock.IsDocked) hasLock = true;
+                    if (b.GetComponentInChildren<GridCockpit>() != null) hasCockpit = true;
+
+                    Vector3 worldPos = b.transform.position;
+                    float alt = Vector3.Dot(worldPos, up);
+                    if (alt < lowestAlt) lowestAlt = alt;
+
+                    if (!touchesGround && IsBlockTouchingWorldGround(b, up))
+                        touchesGround = true;
+                }
+
+                long score = (long)comp.Count;
+                if (touchesGround) score += 10_000L;
+                if (hasCockpit) score += 100_000L;
+                if (hasLock) score += 1_000_000L;
+
+                if (score > bestScore || (score == bestScore && lowestAlt < bestLowestAltitude - 0.01f))
+                {
+                    bestScore = score;
+                    bestLowestAltitude = lowestAlt;
+                    bestIndex = c;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        private bool IsBlockTouchingWorldGround(GridBlock block, Vector3 up)
+        {
+            if (block == null) return false;
+            float cs = Mathf.Max(0.25f, block.EffectiveCellSize);
+            Vector3 origin = block.transform.position;
+            float dist = cs * 0.72f;
+            int hits = Physics.RaycastNonAlloc(origin, -up, s_restoreGroundHits, dist, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits; i++)
+            {
+                var col = s_restoreGroundHits[i].collider;
+                if (col == null || !col.enabled) continue;
+                if (col.transform.IsChildOf(transform)) continue;
+                if (col.GetComponentInParent<GridEntity>() != null) continue;
+                if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(col, transform)) continue;
+                var rb = col.attachedRigidbody;
+                if (rb != null && !rb.isKinematic) continue;
+                return true;
+            }
+            return false;
+        }
+
+        internal void EnsureDynamicAfterSplit()
+        {
+            if (_rb == null) return;
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client) return;
+
+            bool hasLock = HasStationaryLock();
+            if (!hasLock)
+            {
+                // Clean up any orphaned FixedJoint if the locked gear/dock was split onto another island.
+                var joints = GetComponents<FixedJoint>();
+                for (int i = 0; i < joints.Length; i++)
+                    if (joints[i] != null) Destroy(joints[i]);
+
+                var bogie = GetComponent<GridRailBogie>();
+                var rails = GetComponent<VoxelEngine.Cosmos.OrbitalRails>();
+                bool onRailOrOrbit = (bogie != null && bogie.IsOnRails) || (rails != null && rails.IsOnRails);
+                if (!onRailOrOrbit)
+                {
+                    _rb.isKinematic = false;
+                    _rb.WakeUp();
+                }
+            }
+        }
+
+        private void PruneDisconnectedPrecisionIslands()
+        {
+            var layer = PrecisionAttachments;
+            if (layer == null || layer.Count <= 1) return;
+
+            var remaining = new HashSet<Vector3Int>();
+            foreach (var kv in layer.Blocks)
+                if (kv.Value != null) remaining.Add(kv.Key);
+            if (remaining.Count <= 1) return;
+
+            var components = new List<List<Vector3Int>>();
+            var stack = new Stack<Vector3Int>();
+            while (remaining.Count > 0)
+            {
+                var comp = new List<Vector3Int>();
+                var e = remaining.GetEnumerator(); e.MoveNext();
+                Vector3Int seed = e.Current;
+                remaining.Remove(seed);
+                stack.Push(seed);
+                while (stack.Count > 0)
+                {
+                    Vector3Int cell = stack.Pop();
+                    comp.Add(cell);
+                    for (int i = 0; i < SixNeighbours.Length; i++)
+                    {
+                        Vector3Int nb = cell + SixNeighbours[i];
+                        if (remaining.Remove(nb)) stack.Push(nb);
+                    }
+                }
+                components.Add(comp);
+            }
+            if (components.Count <= 1) return;
+
+            Vector3 up = GravityProvider.GetUp(transform.position);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            else up.Normalize();
+
+            int keep = 0;
+            long bestScore = long.MinValue;
+            for (int c = 0; c < components.Count; c++)
+            {
+                var comp = components[c];
+                bool touchesGround = false;
+                for (int i = 0; i < comp.Count; i++)
+                {
+                    var b = layer.GetBlock(comp[i]);
+                    if (b != null && IsBlockTouchingWorldGround(b, up)) { touchesGround = true; break; }
+                }
+                long score = comp.Count + (touchesGround ? 10_000L : 0L);
+                if (score > bestScore) { bestScore = score; keep = c; }
+            }
+
+            _pruningIslands = true;
+            try
+            {
+                for (int c = 0; c < components.Count; c++)
+                {
+                    if (c == keep) continue;
+                    var island = SplitPrecisionIslandIntoGrid(layer, components[c]);
+                    if (island != null)
+                    {
+                        island.EnsureDynamicAfterSplit();
+                        VoxelEngine.Networking.GridBuildSync.NotifyHostGridChanged(island);
+                    }
+                }
+            }
+            finally { _pruningIslands = false; }
+
+            RecalculateMass();
+            EnsureDynamicAfterSplit();
+            VoxelEngine.Networking.GridBuildSync.NotifyHostGridChanged(this);
+        }
+
+        private GridEntity SplitPrecisionIslandIntoGrid(GridPrecisionAttachmentLayer sourceLayer, List<Vector3Int> precisionCells)
+        {
+            if (sourceLayer == null || precisionCells == null || precisionCells.Count == 0) return null;
+            Vector3Int baseCell = precisionCells[0];
+            float smallSize = GridSize.Small.CellSize();
+            Vector3 islandWorldPos = transform.TransformPoint((Vector3)baseCell * smallSize);
+            Quaternion islandWorldRot = transform.rotation;
+
+            var island = Create(islandWorldPos, GridSize.Large, islandWorldRot);
+            island.ownerId = ownerId ?? "";
+            island.accessMode = accessMode;
+            island.gravityScale = gravityScale;
+            island.DampenersOn = DampenersOn;
+            var targetLayer = island.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+
+            int moved = 0;
+            for (int i = 0; i < precisionCells.Count; i++)
+            {
+                if (!sourceLayer.TryDetachBlockForSplit(precisionCells[i], out var block) || block == null) continue;
+                Vector3Int relCell = precisionCells[i] - baseCell;
+                Quaternion localRot = block.transform.localRotation;
+                targetLayer.AttachSplitBlock(relCell, Vector3Int.zero, block, localRot);
+                moved++;
+            }
+            if (moved == 0) { Destroy(island.gameObject); return null; }
+
+            Physics.SyncTransforms();
+            island.RecalculateMass();
+            IgnoreSeamCollisions(island);
+            if (_rb != null && !_rb.isKinematic && island.Body != null)
+            {
+                bool parentAtRest = _rb.linearVelocity.sqrMagnitude < 0.0025f
+                                    && _rb.angularVelocity.sqrMagnitude < 0.0004f;
+                if (!parentAtRest)
+                {
+                    island.Body.linearVelocity = _rb.GetPointVelocity(island.Body.worldCenterOfMass);
+                    island.Body.angularVelocity = _rb.angularVelocity;
+                }
+            }
+            if (island.Body != null) island.Body.WakeUp();
+            return island;
+        }
+
         /// <summary>Moves one disconnected component of blocks onto a brand-new
         /// GridEntity that shares this grid's frame (same origin, same rotation, same
         /// cell coordinates), so every block keeps its exact world pose - no popping,
@@ -1139,39 +1347,68 @@ namespace VoxelEngine.GridSystem
         /// keeps sailing, it does not freeze in space.</summary>
         private GridEntity SplitIslandIntoGrid(List<Vector3Int> cells)
         {
-            // 14.64.0 — rebase the island's ORIGIN onto its own cells. Creating the
-            // new grid at the PARENT's origin kept split-off blocks keyed to cells far
-            // away from that origin; every origin-pivoted pass afterwards (ground
-            // alignment, stabilization) then swung the piece around a point nowhere
-            // near it — the visible "cut block teleports sideways/down" bug. With the
-            // origin AT the island's min cell, every block keeps its exact world pose
-            // through the cut and physics pivots where the piece actually is.
+            // Use the first actual block cell in the island as the new grid's origin,
+            // and initialize the Rigidbody with transform.rotation BEFORE adding
+            // components so _rb.rotation and transform.rotation are identical from birth.
             Vector3Int baseCell = cells[0];
-            for (int i = 1; i < cells.Count; i++)
-                baseCell = Vector3Int.Min(baseCell, cells[i]);
-
             float cellSize = gridSize.CellSize();
-            var island = Create(transform.TransformPoint((Vector3)baseCell * cellSize), gridSize);
-            island.transform.rotation = transform.rotation;
+            Vector3 islandWorldPos = transform.TransformPoint((Vector3)baseCell * cellSize);
+            Quaternion islandWorldRot = transform.rotation;
+
+            var island = Create(islandWorldPos, gridSize, islandWorldRot);
             island.ownerId = ownerId ?? "";
             island.accessMode = accessMode;
+            island.gravityScale = gravityScale;
+            island.DampenersOn = DampenersOn;
 
+            var cellSet = new HashSet<Vector3Int>(cells);
             int moved = 0;
             for (int i = 0; i < cells.Count; i++)
             {
                 if (!_blocks.TryGetValue(cells[i], out var block) || block == null) continue;
                 Vector3Int cell = cells[i] - baseCell;
+                Quaternion localRot = block.transform.localRotation;
                 UnregisterBlockFootprint(block, cells[i]);
                 _blocks.Remove(cells[i]);
                 island._blocks[cell] = block;
                 block.GridPos = cell;
                 block.Grid = island;
-                block.transform.SetParent(island.transform, true);
-                island.RegisterBlockFootprint(block, cell, block.transform.localRotation);
+                block.transform.SetParent(island.transform, false);
+                block.transform.localPosition = (Vector3)cell * cellSize;
+                block.transform.localRotation = localRot;
+                island.RegisterBlockFootprint(block, cell, localRot);
                 moved++;
             }
             if (moved == 0) { Destroy(island.gameObject); return null; }
 
+            // Also move any precision attachments hosted on the split structural cells.
+            var sourcePrecision = PrecisionAttachments;
+            if (sourcePrecision != null && sourcePrecision.Count > 0)
+            {
+                List<Vector3Int> precisionToMove = null;
+                foreach (var kv in sourcePrecision.Blocks)
+                {
+                    if (kv.Value != null && cellSet.Contains(kv.Value.PrecisionHostGridPos))
+                        (precisionToMove ??= new List<Vector3Int>()).Add(kv.Key);
+                }
+                if (precisionToMove != null)
+                {
+                    var targetPrecision = island.GetComponent<GridPrecisionAttachmentLayer>()
+                        ?? island.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+                    int ratio = Mathf.RoundToInt(gridSize.CellSize() / GridSize.Small.CellSize());
+                    Vector3Int precisionBaseOffset = baseCell * ratio;
+                    for (int i = 0; i < precisionToMove.Count; i++)
+                    {
+                        Vector3Int pCell = precisionToMove[i];
+                        if (!sourcePrecision.TryDetachBlockForSplit(pCell, out var pBlock) || pBlock == null) continue;
+                        Quaternion pLocalRot = pBlock.transform.localRotation;
+                        Vector3Int newHost = pBlock.PrecisionHostGridPos - baseCell;
+                        targetPrecision.AttachSplitBlock(pCell - precisionBaseOffset, newHost, pBlock, pLocalRot);
+                    }
+                }
+            }
+
+            Physics.SyncTransforms();
             island.RecalculateMass();
             IgnoreSeamCollisions(island);
 
@@ -1212,19 +1449,17 @@ namespace VoxelEngine.GridSystem
         private void IgnoreSeamCollisions(GridEntity island)
         {
             if (island == null) return;
-            // 14.65.1 — pair by BOUNDS, not by cell neighborhood. The 26-cell pass
-            // still missed multi-cell blocks (a thruster spanning three cells keyed
-            // at its root touches parent blocks far outside the root's neighborhood)
-            // and every such missed pair kept feeding contact impulses into the
-            // island. Now: EVERY island collider is paired against every parent
-            // collider whose bounds reach the island's expanded bounds — nothing
-            // that can physically touch across the cut is left armed.
+            // Only ignore colliders that are in immediate face contact (within 4 cm)
+            // at the moment of the split. Expanding by 1.2 * CellSize reached across
+            // the 1-cell gap of a ground-out block and disabled collision with the
+            // remaining blocks below, causing the cut-off piece to fall through the
+            // parent grid and get shoved sideways.
             var islandCols = island.GetComponentsInChildren<Collider>(true);
             if (islandCols.Length == 0) return;
             Bounds seam = islandCols[0].bounds;
             for (int i = 1; i < islandCols.Length; i++)
                 if (islandCols[i] != null) seam.Encapsulate(islandCols[i].bounds);
-            seam.Expand(gridSize.CellSize() * 1.2f);
+            seam.Expand(0.04f);
 
             var parentCols = GetComponentsInChildren<Collider>(true);
             var pairs = new List<(Collider a, Collider b)>();
@@ -1232,10 +1467,12 @@ namespace VoxelEngine.GridSystem
             {
                 var pc = parentCols[p];
                 if (pc == null || !pc.bounds.Intersects(seam)) continue;
+                Bounds pb = pc.bounds;
+                pb.Expand(0.04f);
                 for (int i = 0; i < islandCols.Length; i++)
                 {
                     var ic = islandCols[i];
-                    if (ic == null) continue;
+                    if (ic == null || !ic.bounds.Intersects(pb)) continue;
                     Physics.IgnoreCollision(ic, pc, true);
                     pairs.Add((ic, pc));
                 }
@@ -1328,7 +1565,7 @@ namespace VoxelEngine.GridSystem
         /// a saved ship from snapping upright or receiving an unwanted torque.
         /// </summary>
         public void RestorePersistentPose(Vector3 position, Quaternion rotation,
-            Vector3 velocity, Vector3 angularVelocity)
+            Vector3 velocity, Vector3 angularVelocity, bool applyGroundClearance = true)
         {
             float rotationLengthSqr = rotation.x * rotation.x + rotation.y * rotation.y
                                     + rotation.z * rotation.z + rotation.w * rotation.w;
@@ -1338,19 +1575,28 @@ namespace VoxelEngine.GridSystem
                     : Quaternion.identity;
             rotation = rotation.normalized;
 
+            bool isClient = VoxelEngine.Networking.NetworkSession.Mode
+                            == VoxelEngine.Networking.SessionMode.Client;
+
             _restorePosition = position;
             _restoreRotation = rotation;
             _restoreVelocity = velocity;
             _restoreAngularVelocity = angularVelocity;
-            _restorePoseTicks = 2;
-            _restoreGroundClearanceTicks = 12;
+            _restorePoseTicks = isClient ? 0 : (applyGroundClearance ? 2 : 0);
+            _restoreGroundClearanceTicks = (applyGroundClearance && !isClient && !VoxelEngine.Networking.GridSync.IsApplyingRemote) ? 12 : 0;
 
             transform.SetPositionAndRotation(position, rotation);
             if (_rb != null)
             {
-                _rb.isKinematic = true;
+                if (isClient || _restorePoseTicks > 0)
+                    _rb.isKinematic = true;
                 _rb.position = position;
                 _rb.rotation = rotation;
+                if (!isClient && _restorePoseTicks == 0 && !_rb.isKinematic)
+                {
+                    _rb.linearVelocity = velocity;
+                    _rb.angularVelocity = angularVelocity;
+                }
             }
         }
 
@@ -1363,6 +1609,8 @@ namespace VoxelEngine.GridSystem
         public void ResolvePersistentGroundClearance()
         {
             if (_rb == null || BlockCount <= 0) return;
+            if (VoxelEngine.Networking.NetworkSession.Mode == VoxelEngine.Networking.SessionMode.Client) return;
+            if (VoxelEngine.Networking.GridSync.IsApplyingRemote) return;
 
             Vector3 posePosition = _restorePoseTicks > 0 ? _restorePosition : _rb.position;
             Vector3 up = GravityProvider.GetUp(posePosition);
@@ -2150,18 +2398,29 @@ namespace VoxelEngine.GridSystem
             Vector3 gravityDir = GravityProvider.GetGravity(transform.position);
             if (gravityDir.sqrMagnitude < 0.0001f) return false;
             gravityDir.Normalize();
-            float probe = Mathf.Max(6f, gridSize.CellSize() * 4f);
-            var supportHits = Physics.RaycastAll(_rb.worldCenterOfMass, gravityDir, probe, ~0, QueryTriggerInteraction.Ignore);
+            Vector3 up = -gravityDir;
+
+            float lowestDot = float.PositiveInfinity;
+            Vector3 lowestPos = _rb.worldCenterOfMass;
+            float lowestCellSize = gridSize.CellSize();
+            foreach (var block in AllBlocks)
+            {
+                if (block == null) continue;
+                float d = Vector3.Dot(block.transform.position, up);
+                if (d < lowestDot)
+                {
+                    lowestDot = d;
+                    lowestPos = block.transform.position;
+                    lowestCellSize = Mathf.Max(0.25f, block.EffectiveCellSize);
+                }
+            }
+
+            float probe = lowestCellSize * 0.85f;
+            var supportHits = Physics.RaycastAll(lowestPos, gravityDir, probe, ~0, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < supportHits.Length; i++)
             {
                 var col = supportHits[i].collider;
                 if (col == null) continue;
-                // 14.65.1 — "support" means the WORLD: terrain or anchored
-                // structure. ANY hull below is not ground — a severed piece
-                // hovering over its own parent ship passed this test and the
-                // 4 Hz planet-up slerp rotated it CONTINUOUSLY (the "cut piece
-                // still rotates" bug: never an impulse, an alignment loop).
-                // Ships resting on other ships align via locked landing gear.
                 if (col.GetComponentInParent<GridEntity>() != null) continue;
                 var supportRb = col.attachedRigidbody;
                 if (supportRb != null && !supportRb.isKinematic) continue;
@@ -2262,11 +2521,14 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        public static GridEntity Create(Vector3 position, GridSize size)
+        public static GridEntity Create(Vector3 position, GridSize size, Quaternion? rotation = null)
         {
+            Quaternion rot = rotation ?? Quaternion.identity;
             var go = new GameObject($"Grid_{size}_{Time.frameCount}");
-            go.transform.position = position;
+            go.transform.SetPositionAndRotation(position, rot);
             var rb = go.AddComponent<Rigidbody>();
+            rb.position = position;
+            rb.rotation = rot;
             rb.mass = 1f;
             rb.useGravity = false;
             rb.linearDamping = 0f;

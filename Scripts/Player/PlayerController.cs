@@ -936,6 +936,10 @@ namespace VoxelEngine.Player
                 _lastGroundedTime = -999f; // consume coyote
                 _jumpBufferTimer = 0f;
                 _variableJumpActive = true;
+                _grounded = false;
+                _planted = false;
+                _hasCarryAnchor = false;
+                _carryGrid = null;
 
                 // Slide-jump keeps all tangent momentum, ends the slide, and restores
                 // standing height so the airborne capsule does not stay crouched.
@@ -1062,6 +1066,9 @@ namespace VoxelEngine.Player
                 // capsule stands perfectly still. Walking, jumping, water and the boots are
                 // all untouched.
                 bool noIntentToMove = wishDir.sqrMagnitude < 0.001f
+                    && !groundJumpFired
+                    && !_variableJumpActive
+                    && VerticalSpeed(up) <= 0.05f
                     && (_boots == null || !_boots.Engaged);
                 planted = _grounded && noIntentToMove;
                 // 17.27.7-dev: HOLD PLANTED ACROSS A GROUND BLIP. The ground probe under a
@@ -1685,7 +1692,13 @@ namespace VoxelEngine.Player
         /// who has stepped off from being yanked back by a ship that has left.</summary>
         private void UpdateDeckAnchor(Vector3 up, bool inWater)
         {
-            _carryGrid = inWater ? null : FindDeckBelow(up);
+            if (inWater || !_grounded || _variableJumpActive || VerticalSpeed(up) > 0.05f)
+            {
+                _carryGrid = null;
+                _hasCarryAnchor = false;
+                return;
+            }
+            _carryGrid = FindDeckBelow(up);
             if (_carryGrid == null)
             {
                 _hasCarryAnchor = false;
