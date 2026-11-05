@@ -1,4 +1,4 @@
-﻿namespace FishNet.Component.ColliderRollback
+namespace FishNet.Component.ColliderRollback
 {
     /// <summary>
     /// Which physics to apply after rolling back colliders.

@@ -1316,9 +1316,16 @@ namespace VoxelEngine.Player
                 if (interactedBlock != null)
                     VoxelEngine.Networking.ContainerSync.NotifyLocalInteraction(interactedBlock);
 
-                // Pickup dropped items from the world.
+                // Pickup dropped items from the world. In a client session the host
+                // validates the claim first (18.10.0-dev); offline and host sessions
+                // keep the immediate local path.
                 var droppedItem = hit.collider.GetComponentInParent<VoxelEngine.Items.DroppedItem>();
-                if (droppedItem != null) { droppedItem.TryPickup(inventory); return; }
+                if (droppedItem != null)
+                {
+                    if (!VoxelEngine.Networking.DropSync.TryRequestPickup(droppedItem, inventory))
+                        droppedItem.TryPickup(inventory);
+                    return;
+                }
 
                 // Code lock first: clicking the lock itself (or right beside it)
                 // opens the keypad or the owner menu, never the door behind it.

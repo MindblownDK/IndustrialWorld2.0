@@ -1,9 +1,41 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.9.4-dev`
+**Current Version:** `18.10.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.10.0-dev] Server-Validated Drop Pickup Claims (Milestone 2 Slice)
+
+**Type:** MINOR - new networked interaction validation; save-compatible. No save-schema or API change; offline and host play paths are unchanged.
+
+**GitHub title:** `[18.10.0-dev] Server-validate world-drop pickup claims (host grants, claimant applies)`
+
+#### Added
+
+- **Claim intent and verdict on the wire (`NetworkBootstrap`).** New `DropClaimBroadcast` (guest -> host) and `DropClaimResultBroadcast` (host -> all clients, carrying the stack JSON snapshot taken at validation time), registered and unregistered alongside the other drop broadcasts.
+- **`NetworkBootstrap.HostApplyDropClaim(playerId, dropId)`.** The host refuses a claim with a logged reason when the drop is unknown or empty, already carries a pending claim (one grant per drop, 5 s pending window), the claimant has no avatar, or the avatar stands beyond pickup reach (8 m interact ray / 2.5 m trigger, plus latency slack). A granted claim is broadcast as a verdict and the host's own copy despawns through the ordinary removal path.
+
+#### Changed
+
+- **`DropSync` claim API.** `TryRequestPickup(drop, inv)` routes player-driven pickups to the host in client sessions after a local fit pre-check (`ItemContainer.HasSpace`); offline and host sessions keep the immediate local path. `ApplyClaimResult` despawns the drop on every client and, on a granted verdict, inserts the approved stack into the claimant's own inventory with the usual pickup HUD and sound; overflow is re-spawned as a fresh announced drop.
+- **`PlayerInteractionTool` and `DroppedItem`.** Both pickup seams (interact raycast and `OnTriggerEnter`) now go through `TryRequestPickup`, so a guest can no longer consume a drop the host has not approved.
+
+#### Fixed
+
+- **Same-instant double pickup of one world drop in multiplayer.** Two players grabbing the same drop now produce one grant and one denial instead of both receiving the stack (closes the accepted 14.11.0 window for player pickups).
+
+### [18.9.5-dev] Roadmap Sync - Recently Done Caught Up With 18.9.1-dev To 18.9.4-dev
+
+**Type:** PATCH - documentation only; no code, save-schema, or API change.
+
+**GitHub title:** `[18.9.5-dev] Sync roadmap Recently Done with the 18.9.1-dev to 18.9.4-dev rounds`
+
+#### Changed
+
+- **Roadmap `Recently Done` block (`Roadmap.md`).** The four rounds shipped since the roadmap was last synced are listed newest-first above `18.9.0-dev`: `18.9.1-dev` (placement pattern wheel on `V`, host UDP port recovery), `18.9.2-dev` (host local-client connect, client scatter and spawn stall, ghost and grid block replication, depth-tested chest text), `18.9.3-dev` (client grid rebuild pose, stationary jump, severed island splits), and `18.9.4-dev` (rail-bogie compilation fix), each in three short lines. The four oldest rounds (`18.8.0-dev`, `18.7.3-dev`, `18.7.2-dev`, `18.7.1-dev`) were removed to respect the five-round cap; their permanent home remains their `Changelog.md` entries.
+- **Mangled roadmap line repaired (`Roadmap.md`).** The `Locked Decisions` topology bullet was truncated mid-word and glued to the `### Milestone Plan` heading on a single line; it now reads `**True P2P is permanently out of scope.**` with the milestone heading restored to its own line, matching the pre-truncation wording.
+- **Version headers.** `Current Version` and `Roadmap Version` bumped to `18.9.5-dev` in both files, and the roadmap date set to 2026-11-02.
 
 ### [18.9.4-dev] Grid Rail Bogie Compilation Fix
 

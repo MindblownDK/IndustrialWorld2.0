@@ -626,6 +626,24 @@ namespace VoxelEngine.Networking
         public string Id;
     }
 
+    /// <summary>Guest -> host: claim intent for one world drop (18.10.0-dev). The host
+    /// validates existence, single-claim and range, then answers with a verdict.</summary>
+    public struct DropClaimBroadcast : IBroadcast
+    {
+        public string DropId;
+    }
+
+    /// <summary>Host -> all: verdict on one drop claim. A granted verdict carries the
+    /// stack JSON snapshot taken at validation time, so the claimant applies exactly
+    /// what the host approved.</summary>
+    public struct DropClaimResultBroadcast : IBroadcast
+    {
+        public string DropId;
+        public string PlayerId;
+        public bool Granted;
+        public string StackJson;
+    }
+
     /// <summary>A chunk of live world drops (join merge, 14.11.0).</summary>
     public struct DropSnapshotBroadcast : IBroadcast
     {
@@ -966,6 +984,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
             _networkManager.ServerManager.RegisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<DropClaimBroadcast>(OnServerDropClaim);
             _networkManager.ServerManager.RegisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<AnimalSpawnBroadcast>(OnServerAnimalSpawn);
             _networkManager.ServerManager.RegisterBroadcast<AnimalPoseBroadcast>(OnServerAnimalPose);
@@ -1024,6 +1043,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
             _networkManager.ClientManager.RegisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<DropClaimResultBroadcast>(OnClientDropClaimResult);
             _networkManager.ClientManager.RegisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<AnimalSpawnBroadcast>(OnClientAnimalSpawn);
             _networkManager.ClientManager.RegisterBroadcast<AnimalPoseBroadcast>(OnClientAnimalPose);
@@ -1142,6 +1162,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
             _networkManager.ServerManager.UnregisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<DropClaimBroadcast>(OnServerDropClaim);
             _networkManager.ServerManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<AnimalSpawnBroadcast>(OnServerAnimalSpawn);
             _networkManager.ServerManager.UnregisterBroadcast<AnimalPoseBroadcast>(OnServerAnimalPose);
@@ -1200,6 +1221,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
             _networkManager.ClientManager.UnregisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<DropClaimResultBroadcast>(OnClientDropClaimResult);
             _networkManager.ClientManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<AnimalSpawnBroadcast>(OnClientAnimalSpawn);
             _networkManager.ClientManager.UnregisterBroadcast<AnimalPoseBroadcast>(OnClientAnimalPose);
@@ -4206,6 +4228,20 @@ namespace VoxelEngine.Networking
             SendOrRelay(new DropRemovedBroadcast { Id = id });
         }
 
+        /// <summary>Client: forward one drop pickup claim to the host. The server
+        /// decides; nothing is applied locally (18.10.0-dev).</summary>
+        public void SendDropClaim(string dropId)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(dropId)) return;
+            _networkManager.ClientManager.Broadcast(new DropClaimBroadcast { DropId = dropId });
+        }
+
+        private void SendDropClaimResult(string dropId, string playerId, bool granted, string stackJson)
+        {
+            SendOrRelay(new DropClaimResultBroadcast
+            { DropId = dropId, PlayerId = playerId ?? "", Granted = granted, StackJson = stackJson ?? "" });
+        }
+
         // ── livestock (14.54.0) ──
 
         public void SendAnimalSpawn(int id, byte species, bool rideable,
@@ -4313,6 +4349,71 @@ namespace VoxelEngine.Networking
             if (!_serverStarted) return;
             if (!conn.IsLocalClient) DropSync.ApplyRemoved(msg.Id);
             RelayToOthers(conn, msg);
+        }
+
+        private void OnServerDropClaim(NetworkConnection conn, DropClaimBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string playerId)
+                || string.IsNullOrEmpty(playerId))
+            {
+                Debug.Log($"[Drops] claim refused: connection {conn.ClientId} has no admitted identity.");
+                return;
+            }
+            HostApplyDropClaim(playerId, msg.DropId);
+        }
+
+        /// <summary>Authority check for one drop pickup claim (18.10.0-dev). The drop
+        /// must exist, must not already carry a pending claim, and must sit within
+        /// pickup reach of the claimant's avatar. The granted stack is applied by the
+        /// claimant's own machine when the verdict arrives - the host only decides.</summary>
+        public void HostApplyDropClaim(string playerId, string dropId)
+        {
+            if (!_serverStarted) return;
+            if (string.IsNullOrEmpty(playerId) || string.IsNullOrEmpty(dropId))
+            {
+                Debug.Log($"[Drops] claim refused: empty id (player='{playerId}', drop='{dropId}').");
+                return;
+            }
+            if (!DropSync.TryGet(dropId, out var drop) || drop == null || drop.stack == null || drop.stack.IsEmpty)
+            {
+                Debug.Log($"[Drops] claim refused: drop '{dropId}' unknown or already gone (player {playerId}).");
+                SendDropClaimResult(dropId, playerId, false, null);
+                return;
+            }
+            if (DropSync.IsClaimPending(dropId))
+            {
+                Debug.Log($"[Drops] claim refused: drop '{dropId}' already has a pending claim (player {playerId}).");
+                SendDropClaimResult(dropId, playerId, false, null);
+                return;
+            }
+            var avatar = PlayerAvatar.Find(playerId);
+            if (avatar == null)
+            {
+                Debug.Log($"[Drops] claim refused: no avatar for player {playerId}.");
+                SendDropClaimResult(dropId, playerId, false, null);
+                return;
+            }
+            // Pickup happens by the 8 m interact ray or the 2.5 m trigger; generous
+            // slack absorbs replication latency without allowing cross-map grabs.
+            const float pickupReach = 8f;
+            float allowed = pickupReach * 1.35f + 4f;
+            float separation = Vector3.Distance(avatar.transform.position, drop.transform.position);
+            if (separation > allowed)
+            {
+                Debug.Log($"[Drops] claim refused: out of range ({separation:F1}m > {allowed:F1}m allowed, {playerId} -> {dropId}).");
+                SendDropClaimResult(dropId, playerId, false, null);
+                return;
+            }
+
+            DropSync.MarkClaimPending(dropId);
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            string json = persistence != null ? persistence.CaptureStackJson(drop.stack) : null;
+            Debug.Log($"[Drops] {playerId} claimed '{dropId}' ({separation:F1}m) - granted.");
+            SendDropClaimResult(dropId, playerId, true, json);
+            // The host's own copy leaves through the ordinary removal path; the verdict
+            // above is what tells the clients (and the claimant) to converge.
+            DropSync.ApplyRemoved(dropId);
         }
 
         // ── livestock (14.54.0): state flows host->guests, intents guest->host ──
@@ -4497,6 +4598,12 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted || WorldMismatch) return;
             DropSync.ApplyRemoved(msg.Id);
+        }
+
+        private void OnClientDropClaimResult(DropClaimResultBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            DropSync.ApplyClaimResult(msg.DropId, msg.PlayerId, msg.Granted, msg.StackJson);
         }
 
         private void OnClientDropSnapshot(DropSnapshotBroadcast msg, Channel channel)

@@ -147,6 +147,118 @@ namespace VoxelEngine.Networking
             finally { IsApplyingRemote = false; }
         }
 
+        // ── server-validated pickup claims (18.10.0-dev) ───────────────
+        //
+        // A guest never consumes a world drop locally any more: TryRequestPickup
+        // routes the attempt to the host as a claim intent, and only the verdict
+        // (ApplyClaimResult) applies it. The host holds one pending claim per drop,
+        // so two players grabbing the same drop in the same instant can no longer
+        // both receive it.
+
+        /// <summary>How long a granted claim stays reserved before a lost verdict
+        /// releases the drop for someone else.</summary>
+        public const float ClaimPendingSeconds = 5f;
+
+        // dropId -> Time.time of the grant. Host-side only.
+        private static readonly Dictionary<string, float> _pendingClaims = new();
+
+        public static bool TryGet(string id, out DroppedItem drop)
+            => _byId.TryGetValue(id, out drop);
+
+        public static bool IsClaimPending(string id)
+        {
+            PruneClaims();
+            return !string.IsNullOrEmpty(id) && _pendingClaims.ContainsKey(id);
+        }
+
+        public static void MarkClaimPending(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+            PruneClaims();
+            _pendingClaims[id] = Time.time;
+        }
+
+        private static void PruneClaims()
+        {
+            if (_pendingClaims.Count == 0) return;
+            List<string> stale = null;
+            foreach (var entry in _pendingClaims)
+                if (Time.time - entry.Value > ClaimPendingSeconds)
+                    (stale ??= new List<string>()).Add(entry.Key);
+            if (stale == null) return;
+            foreach (var key in stale) _pendingClaims.Remove(key);
+        }
+
+        /// <summary>Entry point for every player-driven pickup (interact ray and
+        /// proximity trigger). Returns true when the attempt was routed to the host
+        /// as a claim and the caller must NOT apply it locally; false means the
+        /// caller keeps the immediate local path (offline session, host session, or
+        /// a stack that cannot fit anyway).</summary>
+        public static bool TryRequestPickup(DroppedItem drop, Inventory inv)
+        {
+            if (drop == null || inv == null) return false;
+            if (NetworkSession.Mode != SessionMode.Client) return false;
+            var bootstrap = NetworkBootstrap.Instance;
+            if (bootstrap == null || bootstrap.WorldMismatch) return false;
+            if (string.IsNullOrEmpty(drop.NetId) || drop.stack == null || drop.stack.IsEmpty) return false;
+            // The host cannot see this guest's live inventory, so the guest only asks
+            // when at least one unit actually fits; anything left over at apply time
+            // is re-spawned as a fresh drop by ApplyClaimResult.
+            if (inv.container == null || !inv.container.HasSpace(drop.stack.item, 1)) return false;
+            bootstrap.SendDropClaim(drop.NetId);
+            return true;
+        }
+
+        /// <summary>Host verdict, applied on every client. Granted: the drop despawns
+        /// everywhere and the claimant alone inserts the approved stack into its own
+        /// inventory. Denied: only the claimant gets feedback.</summary>
+        public static void ApplyClaimResult(string dropId, string playerId, bool granted, string stackJson)
+        {
+            if (string.IsNullOrEmpty(dropId)) return;
+            if (!granted)
+            {
+                if (playerId == PlayerIdentity.LocalId)
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Already taken",
+                        "Another player claimed it first", null, new Color(1f, 0.72f, 0.22f));
+                return;
+            }
+            bool mine = playerId == PlayerIdentity.LocalId;
+            ItemStack leftover = null;
+            IsApplyingRemote = true;
+            try
+            {
+                if (_byId.TryGetValue(dropId, out var drop) && drop != null) drop.Despawn();
+                else _byId.Remove(dropId);
+                if (mine)
+                {
+                    var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+                    var stack = persistence != null ? persistence.RestoreStackJson(stackJson) : null;
+                    var inv = VoxelEngine.Player.PlayerStats.Instance != null
+                        ? VoxelEngine.Player.PlayerStats.Instance.GetComponent<Inventory>() : null;
+                    if (stack != null && !stack.IsEmpty && inv != null && inv.container != null)
+                    {
+                        leftover = inv.container.Insert(stack);
+                        VoxelEngine.UI.BuildFeedbackHud.Show($"Picked up {stack.item.displayName}",
+                            $"+{stack.count - (leftover != null ? leftover.count : 0)}", stack.item.icon,
+                            new Color(0.30f, 0.75f, 0.40f));
+                        VoxelEngine.FX.AudioManager.PlayUI(VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Pickup),
+                            0.45f, UnityEngine.Random.Range(0.97f, 1.06f));
+                    }
+                }
+            }
+            finally { IsApplyingRemote = false; }
+            // Overflow (the inventory filled between the pre-check and the verdict)
+            // leaves as a fresh announced drop - outside the remote-apply guard on
+            // purpose so the host learns about it.
+            if (leftover != null && leftover.count > 0)
+            {
+                var inv = VoxelEngine.Player.PlayerStats.Instance != null
+                    ? VoxelEngine.Player.PlayerStats.Instance.GetComponent<Inventory>() : null;
+                if (inv != null)
+                    DroppedItem.Spawn(leftover, inv.transform.position + Vector3.up * 0.6f, Vector3.up);
+            }
+        }
+
         /// <summary>Join merge: spawn what is missing, by id. Snapshot drops arrive
         /// without toss physics; settled ones freeze at their exact rest position.</summary>
         public static void ApplySnapshot(List<DropRecord> records)

@@ -343,7 +343,12 @@ namespace VoxelEngine.Items
             if (belt != null && TryInsertIntoConveyor(belt)) return;
 
             var inv = other.GetComponentInParent<Inventory>();
-            if (inv != null && (inv != _dropOwner || _ownerLeftPickupRange)) TryPickup(inv);
+            if (inv != null && (inv != _dropOwner || _ownerLeftPickupRange))
+            {
+                // 18.10.0-dev: client sessions route the pickup through a host-validated
+                // claim instead of consuming the drop locally.
+                if (!VoxelEngine.Networking.DropSync.TryRequestPickup(this, inv)) TryPickup(inv);
+            }
         }
 
         /// <summary>Consumes up to <paramref name="count"/> items from this world drop into a receiving chute or collector.</summary>

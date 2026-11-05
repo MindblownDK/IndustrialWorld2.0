@@ -1,4 +1,4 @@
-﻿using FishNet.Broadcast;
+using FishNet.Broadcast;
 
 namespace FishNet.Example.Authenticating
 {
