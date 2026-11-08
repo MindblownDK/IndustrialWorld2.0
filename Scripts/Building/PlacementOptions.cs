@@ -102,7 +102,18 @@ namespace VoxelEngine.Building
 
         public static PlacementPattern Pattern
         {
-            get { EnsureLoaded(); return _pattern; }
+            get { EnsureLoaded(); return _itemDefaultActive ? (PlacementPattern)_itemDefaultPattern : _pattern; }
+        }
+
+        // 18.14.0-dev: the held item's own default pattern (a strip drags a run by
+        // itself). Active only until the player touches the wheel in SetPattern.
+        private static int _itemDefaultPattern = -1;
+        private static bool _itemDefaultActive;
+
+        public static void ApplyItemDefaultPattern(int raw)
+        {
+            _itemDefaultPattern = raw;
+            _itemDefaultActive = raw >= 0 && System.Enum.IsDefined(typeof(PlacementPattern), raw);
         }
 
         public static PlacementStep Step
@@ -199,6 +210,7 @@ namespace VoxelEngine.Building
         public static void SetPattern(PlacementPattern pattern)
         {
             EnsureLoaded();
+            _itemDefaultActive = false;   // 18.14.0-dev: an explicit wheel pick beats any item default for the session
             if (_pattern == pattern) return;
             _pattern = pattern;
             PlayerPrefs.SetInt(K_PATTERN, (int)_pattern);

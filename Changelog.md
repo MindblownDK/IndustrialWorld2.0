@@ -1,9 +1,31 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.13.1-dev`
+**Current Version:** `18.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.14.0-dev] Lighting Content Rework - Real Grid Floodlight, Flood Beam, Drag-Run LED Strip
+
+**Type:** MINOR - new content plus one save-compatible optional field (`BlockItem.defaultPlacementPattern` defaults to -1, so every existing item is unchanged); no save-schema or API break. Per Thomas's call, the RGB mood light and the floodlight step's duplicate stationary LED strip are removed, and the mis-authored stationary "grid floodlight" is replaced by a real grid block.
+
+**GitHub title:** `[18.14.0-dev] Rework lighting content: real 4-beam grid floodlight, flood-beam stationary light, drag-run LED strip, remove RGB light`
+
+#### Added
+
+- **Real grid floodlight (`GItem_GridFloodlight` / `GridFloodlight_Large.prefab`)** authored in the grid content step (`Editor/Core/VoxelEngineSetupWindow.cs`): a big standing floodlight - base plate, pole, head - with four Spot lights in a 2x2 grid on the head, driven by one `GridLightBlock` (60 m range, 50-degree beams, 100 W draw, off without grid power). All materials go through the persisting `GetMaterial` helper, fixing the pink block the old step produced by calling `GridBlockMeshBuilder.Build` directly with transient materials. Recipe `Recipe_GGridFloodlight` sits with the other grid spotlight recipes.
+- **`BlockItem.defaultPlacementPattern` (int, -1 = none)** with `PlacementOptions.ApplyItemDefaultPattern`, a Pattern-getter override, and a clear in `SetPattern`; `BuildSystem` applies it when the held item is assigned (`_ghostItem = block`) and clears it on release. An item's own default pattern applies only until the player touches the pattern wheel, which still wins for the session. Save-compatible: new optional field, default -1.
+- **`Block_LEDStripFactory` (stationary LED Strip) defaults to SPAN**, so holding it and dragging places a whole run by itself, exactly like a grid drag, with no pattern wheel. Set at authoring time in the factory step and repaired onto pre-existing assets by the floodlight step.
+
+#### Changed
+
+- **The stationary floodlight is a flood light now**: its spot is widened to a 110-degree, 25 m, 30-intensity beam (was 45 degrees / 20 m / 20). The grid lights stay spots - the working grid lights (`GItem_GridLightBlock`, dual/large spotlights) are untouched.
+
+#### Removed (explicitly ordered)
+
+- **RGB mood light** (`Block_RGB_Light` prefab/item/`Recipe_RGB_Light`) - deleted from `Power/Floodlights` and unlinked from the recipe registry and the `res_floodlighting` node.
+- **Duplicate stationary LED strip** (`Block_LEDStrip` + `LEDStrip_Stationary.prefab` + `Recipe_LEDStrip`) - the two strip kinds that remain are the working ones: stationary `Block_LEDStripFactory` and grid `GItem_LEDStrip` / `GItem_LargeGridLEDStrip` (gated on `res_led_lighting`).
+- **Mis-authored `Block_Floodlight_Grid`** (a stationary BlockItem pretending to be a grid floodlight, with transient pink materials) - deleted; the real grid floodlight is `GItem_GridFloodlight`.
 
 ### [18.13.1-dev] Floodlight Setup Dependency Gate Fix
 

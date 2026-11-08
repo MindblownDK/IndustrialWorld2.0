@@ -24,6 +24,12 @@ namespace VoxelEngine.Items
                  "trim, signage and lamps can share an edge with the thing they decorate. " +
                  "Machines, foundations and anything with a function stay off.")]
         public bool   softClearance = false;
+        /// <summary>18.14.0-dev: this item's own default placement pattern while held
+        /// (-1 = none, the player-wide choice applies). A decorative strip sets SPAN so
+        /// holding it and dragging lays a run by itself, like a grid drag, without
+        /// opening the pattern wheel. An explicit wheel pick clears it for the session.</summary>
+        [Tooltip("Default placement pattern while this item is held (-1 = player-wide choice). SPAN = a drag lays a run by itself.")]
+        public int    defaultPlacementPattern = -1;
         [Tooltip("Required pickaxe tier to break this block once placed.")]
         [Range(0,4)] public int miningTier = 0;
 

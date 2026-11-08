@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_floodlight_stationary
   displayName: Stationary Floodlight
-  description: 
+  description: 'A standing floodlight: wide 110-degree flood beam, 25 m range. Consumes
+    50 W. Only glows when powered.'
   icon: {fileID: 0}
   iconTint: {r: 0.7, g: 0.7, b: 0.75, a: 1}
   maxStack: 99
@@ -31,6 +32,7 @@ MonoBehaviour:
   allowStacking: 1
   blockHealth: 200
   softClearance: 0
+  defaultPlacementPattern: -1
   miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

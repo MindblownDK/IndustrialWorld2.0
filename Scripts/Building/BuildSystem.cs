@@ -588,6 +588,7 @@ namespace VoxelEngine.Building
                 }
                 _ghost.name = "BuildGhost";
                 _ghostItem = block;
+                PlacementOptions.ApplyItemDefaultPattern(block != null ? block.defaultPlacementPattern : -1);   // 18.14.0-dev
                 _rotationManual = false;
                 _pipeGhostVisual = null;
                 _pipeGhostTargetId = EntityId.None;
@@ -852,6 +853,7 @@ namespace VoxelEngine.Building
             HeldBlockName = string.Empty;
             RotationSteps = _rotSteps;
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; }
+            PlacementOptions.ApplyItemDefaultPattern(-1);   // 18.14.0-dev: nothing held, no item default
             _appliedGhostMaterial = null;
             HidePrecisionLattice();
             HideStaticSurfaceLattice();

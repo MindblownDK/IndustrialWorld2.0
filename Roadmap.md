@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.13.1-dev`
-**Roadmap Version:** `18.13.1-dev`
+**Current Version:** `18.14.0-dev`
+**Roadmap Version:** `18.14.0-dev`
 **Date:** 02-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,6 +30,12 @@
 
 ## 0. Recently Done
 
+### 18.14.0-dev - Lighting Content Rework (Grid Floodlight, Flood Beam, Drag-Run Strip)
+- `GItem_GridFloodlight` is a real Large grid block - a big standing floodlight with four spot beams in a 2x2 head - authored in the grid content step with persisted materials (no more pink) and recipe `Recipe_GGridFloodlight`
+- The stationary floodlight's lamp is now a wide flood beam (110 deg, 25 m); grid lights stay spots and the working grid lights are untouched
+- New save-compatible `BlockItem.defaultPlacementPattern` (-1 default): the stationary LED strip defaults to SPAN so a drag lays a run by itself like a grid drag; an explicit wheel pick still wins for the session
+- Removed per Thomas: the RGB mood light, the floodlight step's duplicate stationary LED strip, and the mis-authored stationary `Block_Floodlight_Grid`
+
 ### 18.13.1-dev - Floodlight Setup Gate Fix
 - `BuildFloodlightContent`'s dependency gate now finds copper wire at `Industrial/Items/Item_CopperWire.asset` first, then the legacy `Items/` paths, instead of only the nonexistent `Items/Item_CopperWire.asset`
 - The "run base crafting and industrial content first" dialog now appears only when no copper wire asset exists at all
@@ -50,11 +56,6 @@
 - Refusals are logged with a reason and answered with an addressed `MachineStateDeniedBroadcast` ("Machine locked" feedback on the offender's machine); unowned legacy blocks stay open to everyone
 - The host's own edits and offline play are unchanged
 
-### 18.10.0-dev - Server-Validated Drop Pickup Claims
-- Guests no longer consume world drops locally: `DropSync.TryRequestPickup` sends a claim intent and only the host's verdict applies it
-- `NetworkBootstrap.HostApplyDropClaim` checks the drop exists, has no pending claim, and is within pickup reach (8 m ray / 2.5 m trigger plus latency slack) of the claimant's avatar, then broadcasts the verdict with a stack-JSON snapshot
-- The claimant's own machine inserts the approved stack on a granted verdict (`DropSync.ApplyClaimResult`); the 14.11.0 same-instant double-grab window is closed for player pickups
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -70,10 +71,11 @@
 - **Planter automation and bed-telemetry runtime acceptance (18.2.0-dev):** Unity compilation, Setup Wizard run of `PlanterAutomationSetup`, port geometry on the existing Seed Planter prefab, tray-to-belt dumping, self-replanting across a full row, Harvester coverage of all three bed families with a full belt and with no belt at all, dead-bed clearing, `Water01` fall across a drought, `DEAD`/`PORT` rendering on both farm pages, and tray save/load round-trips (including a crop whose asset was renamed) remain pending in Unity.
 - **18.0.0-dev progression overhaul runtime acceptance (18.0.0-dev):** Unity compilation, Setup overhaul execution, 6-pack lab bar/icons, Crafting Bench bootstrap crafting, Exoskeletal Load Harness carry-weight scaling, jetpack-only flight enforcement, and zero-duplicate asset validation remain pending on a fresh save.
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.
-- **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
+- **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred. (18.14.0-dev ships the narrower per-item DEFAULT: `BlockItem.defaultPlacementPattern` applies only until the player touches the wheel - true per-family memory of the last choice is still deferred.)
 - ~~**Soft-clearance authoring pass (17.44.0-dev, picked up 18.12.1-dev):** `BlockItem.softClearance` defaults off so nothing existing changed.~~ *(18.13.0-dev - `SoftClearanceSetup.RunStep126`, Setup Wizard step 126, marks the six decorative lamp/signage BlockItems; soft-vs-soft allowed, soft-vs-hard still refused. Status: code + editor step authored, Unity run pending.)*
 - **Soft-clearance acceptance (18.13.0-dev):** step 126 run confirmed by Thomas on 02-11-2026 (report: 6 marked / 0 already soft / 0 missing, grid items skipped by design); still pending: rerun reads 0 marked, and in play a lamp beside a departure board places without refusal while a lamp against a machine is still refused.
-- **Floodlight setup gate acceptance (18.13.1-dev):** after base crafting + industrial content have run, the "Build stationary and grid floodlights" step no longer shows the dependency dialog and authors the floodlight / LED strip / RGB light prefabs, items and recipes under `Power/Floodlights`.
+- **Floodlight setup gate acceptance (18.13.1-dev):** after base crafting + industrial content have run, the "Build stationary and grid floodlights" step no longer shows the dependency dialog and authors the stationary floodlight prefab, item and recipe under `Power/Floodlights` (the grid floodlight, LED strips and RGB light moved out of this step in 18.14.0-dev).
+- **Lighting rework acceptance (18.14.0-dev):** on a fresh project run the grid content step and the floodlight step; `GItem_GridFloodlight` renders with persisted materials after a domain reload (no pink) and its four head beams switch with grid power, the stationary floodlight throws a wide flood beam, `Block_Floodlight_Grid` / `Block_LEDStrip` / `Block_RGB_Light` and their prefabs and recipes are gone from `Power/Floodlights`, exactly two LED strip kinds exist (stationary `Block_LEDStripFactory`, grid `GItem_LEDStrip` / `GItem_LargeGridLEDStrip`), and holding the stationary strip and dragging places a whole run without opening the pattern wheel while using the wheel still overrides for the session.
 - ~~**Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, Automatic Tree Farm, and Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm.~~ *(18.4.0-dev & 18.8.0-dev - `GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`, and `GridAutoTreeFarm` all ship as grid blocks with piped water tanks, `FarmEnvironment.HasBreathableAir`, cargo auto-push, and 10 Hz live panels; `GridBiofarm` stays the oxygen garden.)*
 - **Grid farming parity and Stage 2 grid farm blocks acceptance (18.8.0-dev):** confirm in Unity that all 16 grid farm assets (4 prefabs, 4 items, 4 recipes, 4 icons) are verified on disk, that all four grid farm blocks start at 0 L and accept both piped grid water and hand canister watering, that `GridFarmBox` locks its other eight cells and grows a 3D tree when a sapling is planted, that `GridSeedPlanter` and `GridAutoTreeFarm` push harvests to connected grid cargo, and that ship screens on `FARMS` and `PLOT STATUS` list grid farm beds alongside world beds.
 - **Farm overhaul runtime acceptance (18.3.0-dev):** Unity compilation, a Setup Wizard run of `WorldFarmOverhaulSetup.RunStep124`, planting and harvesting in all three boxes, hand watering from a canister, a sprinkler filled by hand and by pipe, the sprinkler's spray stopping on power loss and on an empty tank, drought loss and clearing, trees refused by the Small and Big boxes, self re-seed on and off, belt pickup from a box chute and from the Auto Farm Plot port, and a save/load round trip of a mixed box (crop, tree, dead cell, tank level) remain pending.

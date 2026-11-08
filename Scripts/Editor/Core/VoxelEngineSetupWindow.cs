@@ -8636,9 +8636,9 @@ namespace VoxelEngine.EditorTools
             lightGo.transform.localPosition = new Vector3(0, -0.11f, 0);
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Spot;
-            light.intensity = 20f;
-            light.range = 20f;
-            light.spotAngle = 45f;
+            light.intensity = 30f;
+            light.range = 25f;
+            light.spotAngle = 110f;   // 18.14.0-dev: the ceiling/flood lamp is a FLOOD light - wide beam
             light.color = Color.white;
 
             var statFlood = statRoot.AddComponent<VoxelEngine.Power.Floodlight>();
@@ -8651,94 +8651,39 @@ namespace VoxelEngine.EditorTools
             Object.DestroyImmediate(statRoot);
 
             var statItem = MakeBlock(itemsFolder, "Block_Floodlight_Stationary", "Stationary Floodlight", new Color(0.7f, 0.7f, 0.75f), statPrefab, "Power");
-            statItem.description = "A powerful outdoor light. Consumes 50 W. Only glows when powered.";
+            statItem.description = "A standing floodlight: wide 110-degree flood beam, 25 m range. Consumes 50 W. Only glows when powered.";
 
-            // -- 2) Grid Floodlight --
-            string gridPath = $"{prefabsFolder}/Floodlight_Grid.prefab";
-            var gridRoot = GetOrCreatePrefab(gridPath, "Floodlight_Grid", (root) =>
+            // -- 2) Removed in 18.14.0-dev --
+            // This step used to author three stationary mistakes here: a "grid" floodlight
+            // that was really a stationary BlockItem with a transient (pink) material, a
+            // duplicate stationary LED strip, and an RGB mood light. The grid floodlight is
+            // now a real grid block (GItem_GridFloodlight, authored in the grid content
+            // step with persisted materials and a 2x2 four-beam head), and the only LED
+            // strips are the ones that already work: Block_LEDStripFactory (stationary) and
+            // GItem_LEDStrip / GItem_LargeGridLEDStrip (grid). Delete only what this step
+            // itself authored, and unlink it from the recipe registry and research.
+            string[] removedPrefabs = { "Floodlight_Grid", "LEDStrip_Stationary", "RGB_Light" };
+            string[] removedItems   = { "Block_Floodlight_Grid", "Block_LEDStrip", "Block_RGB_Light" };
+            string[] removedRecipes = { "Recipe_Floodlight_Grid", "Recipe_LEDStrip", "Recipe_RGB_Light" };
+            foreach (var n in removedPrefabs) AssetDatabase.DeleteAsset($"{prefabsFolder}/{n}.prefab");
+            foreach (var n in removedItems)   AssetDatabase.DeleteAsset($"{itemsFolder}/{n}.asset");
+            foreach (var n in removedRecipes)
             {
-                VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic, VoxelEngine.GridSystem.GridSize.Small, new Color(0.6f, 0.6f, 0.65f));
-                var lightGo = new GameObject("LightSource");
-                lightGo.transform.SetParent(root.transform, false);
-                lightGo.transform.localPosition = new Vector3(0, 0.51f, 0);
-                var light = lightGo.AddComponent<Light>();
-                light.type = LightType.Spot;
-                light.intensity = 20f;
-                light.range = 20f;
-                light.spotAngle = 60f;
-                light.color = Color.white;
+                string rp = $"{recipesFolder}/{n}.asset";
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(rp);
+                if (r != null && registry != null) registry.recipes.Remove(r);
+                AssetDatabase.DeleteAsset(rp);
+            }
 
-                var flood = root.AddComponent<VoxelEngine.Power.VoxelLightController>();
-                flood.lightComponent = light;
-                flood.intensity = 20f;
-                var cons = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
-                cons.wattsPerSecond = 50f;
-                cons.connectRadius = 1.6f;
-            });
-
-            var gridItem = MakeBlock(itemsFolder, "Block_Floodlight_Grid", "Grid Floodlight", new Color(0.7f, 0.7f, 0.75f), gridRoot, "Power");
-            gridItem.description = "Grid-mountable floodlight. Consumes 50 W. Only glows when powered.";
-
-            // -- 3) LED Strip Light --
-            string ledPath = $"{prefabsFolder}/LEDStrip_Stationary.prefab";
-            var ledRoot = new GameObject("LEDStrip_Stationary");
-            var stripMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            stripMesh.transform.SetParent(ledRoot.transform, false);
-            stripMesh.transform.localScale = new Vector3(2f, 0.1f, 0.1f);
-            stripMesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_LEDStrip", new Color(0.9f, 0.9f, 0.9f));
-
-            var ledLightGo = new GameObject("LEDLight");
-            ledLightGo.transform.SetParent(ledRoot.transform, false);
-            ledLightGo.transform.localPosition = new Vector3(0, 0.1f, 0);
-            var ledLight = ledLightGo.AddComponent<Light>();
-            ledLight.type = LightType.Point;
-            ledLight.range = 5f;
-            ledLight.intensity = 5f;
-            ledLight.color = Color.cyan;
-
-            var ledCtrl = ledRoot.AddComponent<VoxelEngine.Power.VoxelLightController>();
-            ledCtrl.lightComponent = ledLight;
-            ledCtrl.lightColor = Color.cyan;
-            ledCtrl.intensity = 5f;
-            var ledCons = ledRoot.AddComponent<VoxelEngine.Power.PowerConsumer>();
-            ledCons.wattsPerSecond = 10f;
-            ledCons.connectRadius = 1.8f;
-
-            var ledPrefab = PrefabUtility.SaveAsPrefabAsset(ledRoot, ledPath);
-            Object.DestroyImmediate(ledRoot);
-
-            var ledItem = MakeBlock(itemsFolder, "Block_LEDStrip", "LED Strip Light", new Color(0, 1, 1), ledPrefab, "Power");
-            ledItem.description = "A thin LED strip. Low power (10 W). Supports color changes.";
-
-            // -- 4) RGB Light --
-            string rgbPath = $"{prefabsFolder}/RGB_Light.prefab";
-            var rgbRoot = new GameObject("RGB_Light");
-            var rgbMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            rgbMesh.transform.SetParent(rgbRoot.transform, false);
-            rgbMesh.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
-            rgbMesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_RGB", Color.white);
-
-            var rgbLightGo = new GameObject("RGBLight");
-            rgbLightGo.transform.SetParent(rgbRoot.transform, false);
-            var rgbLight = rgbLightGo.AddComponent<Light>();
-            rgbLight.type = LightType.Point;
-            rgbLight.range = 10f;
-            rgbLight.intensity = 15f;
-            rgbLight.color = Color.magenta;
-
-            var rgbCtrl = rgbRoot.AddComponent<VoxelEngine.Power.VoxelLightController>();
-            rgbCtrl.lightComponent = rgbLight;
-            rgbCtrl.lightColor = Color.magenta;
-            rgbCtrl.intensity = 15f;
-            var rgbCons = rgbRoot.AddComponent<VoxelEngine.Power.PowerConsumer>();
-            rgbCons.wattsPerSecond = 20f;
-            rgbCons.connectRadius = 1.8f;
-
-            var rgbPrefab = PrefabUtility.SaveAsPrefabAsset(rgbRoot, rgbPath);
-            Object.DestroyImmediate(rgbRoot);
-
-            var rgbItem = MakeBlock(itemsFolder, "Block_RGB_Light", "RGB Mood Light", new Color(1, 0, 1), rgbPrefab, "Power");
-            rgbItem.description = "Small RGB light. Change colors via the Lighting UI. Consumes 20 W.";
+            // The stationary LED strip drag-places a whole run by itself, like a grid
+            // drag: repair the per-item default pattern onto assets authored before
+            // 18.14.0-dev (the factory step sets it at authoring time from now on).
+            var stripItem = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>($"{ASSET_ROOT}/Factory/Items/Block_LEDStripFactory.asset");
+            if (stripItem != null && stripItem.defaultPlacementPattern < 0)
+            {
+                stripItem.defaultPlacementPattern = (int)VoxelEngine.Building.PlacementPattern.Span;
+                EditorUtility.SetDirty(stripItem);
+            }
 
             // -- 5) Recipes --
             VoxelEngine.Crafting.RecipeDefinition AddRec(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
@@ -8803,9 +8748,8 @@ namespace VoxelEngine.EditorTools
             }
 
             var recStat = AddRec("Recipe_Floodlight_Stationary", "Stationary Floodlight", statItem, (ironIngot, 2), (copperWire, 4), (glass, 1));
-            var recGrid = AddRec("Recipe_Floodlight_Grid", "Grid Floodlight", gridItem, (ironIngot, 2), (copperWire, 4), (glass, 1));
-            var recLed  = AddRec("Recipe_LEDStrip", "LED Strip Light", ledItem, (copperWire, 8), (glass, 2));
-            var recRgb  = AddRec("Recipe_RGB_Light", "RGB Mood Light", rgbItem, (copperWire, 8), (glass, 1), (ironIngot, 1));
+            // 18.14.0-dev: the grid floodlight (GItem_GridFloodlight) and both LED strips
+            // are authored with their recipes in the grid/factory content steps.
 
             // -- 6) Research --
             if (tree != null)
@@ -8862,11 +8806,13 @@ namespace VoxelEngine.EditorTools
                         if (nLighting.prerequisites == null) nLighting.prerequisites = Array.Empty<VoxelEngine.Research.ResearchNode>();
                     }
 
-                    // LED strips have a dedicated later node. Keep other lighting unlocks
-                    // on this node and remove only the one migrated recipe reference.
                     var lightingUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>(nLighting.unlocksRecipes);
-                    if (recLed != null) lightingUnlocks.RemoveAll(recipe => recipe == recLed);
-                    foreach (var recipe in new[] { recStat, recGrid, recRgb })
+                    // 18.14.0-dev: only the stationary floodlight stays on this node; the grid
+                    // floodlight and the LED strips are gated by their own content steps'
+                    // nodes. Drop references to the removed recipes.
+                    lightingUnlocks.RemoveAll(r => r == null
+                        || r.name == "Recipe_Floodlight_Grid" || r.name == "Recipe_LEDStrip" || r.name == "Recipe_RGB_Light");
+                    foreach (var recipe in new[] { recStat })
                         if (recipe != null && !lightingUnlocks.Contains(recipe)) lightingUnlocks.Add(recipe);
                     nLighting.unlocksRecipes = lightingUnlocks.ToArray();
                     if (nElec != null)
@@ -8883,7 +8829,7 @@ namespace VoxelEngine.EditorTools
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine", "Lighting content created!\n\n- Floodlights, LED Strips, RGB Lights\n- Recipes\n- 'Advanced Lighting' research node", "OK");
+            EditorUtility.DisplayDialog("Voxel Engine", "Lighting content updated (18.14.0-dev)!\n\n- Stationary floodlight now throws a wide flood beam\n- Removed: misplaced grid floodlight, duplicate LED strip, RGB light\n- Grid floodlight is authored in the grid content step (GItem_GridFloodlight)\n- 'Advanced Lighting' node keeps the stationary floodlight recipe", "OK");
         }
 
         // ============================================================
@@ -10364,6 +10310,43 @@ namespace VoxelEngine.EditorTools
             var largeGridSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSpotlight", "Structural Spotlight", "Structural-scale single-beam spotlight inspired by rugged industrial searchlights. Long range, configurable color/range/intensity, 65 W draw.", new Color(1f, 0.96f, 0.84f), largeGridSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 420f, 520f);
             var smallDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightSmall", "Detail Dual Spotlight", "Compact detail-scale dual-output spotlight for the unified Grid with two synchronized beams, 38 W draw.", new Color(1f, 0.96f, 0.84f), smallDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Small, 130f, 260f);
             var largeDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightLarge", "Structural Dual Spotlight", "Structural-scale dual-output flood spotlight with two synchronized beams for broad ship and base illumination, 95 W draw.", new Color(1f, 0.96f, 0.84f), largeDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 520f, 640f);
+            // 18.14.0-dev - Structural Floodlight: a big standing floodlight block with four
+            // spot beams in a 2x2 grid on the head. Replaces the floodlight step's old
+            // Block_Floodlight_Grid, which was a stationary BlockItem built without a
+            // material persister (the usual source of pink blocks). All materials here
+            // go through GetMaterial, so they are persisted assets, never transient.
+            var gridFloodlightPrefab = GetOrCreateStep17Prefab($"{GRID_PREFABS}/GridFloodlight_Large.prefab", "GridFloodlight_Large", root =>
+            {
+                var shellMat = GetMaterial(GRID_MATS, "Mat_GridFloodlightShell", new Color(0.50f, 0.52f, 0.55f));
+                var trimMat = GetMaterial(GRID_MATS, "Mat_GridFloodlightTrim", new Color(0.06f, 0.065f, 0.07f));
+                var lensMat = GetMaterial(GRID_MATS, "Mat_GridFloodlightLens", new Color(1f, 0.97f, 0.86f), true);
+                EnsurePrimitive(root, "Generated_BasePlate", PrimitiveType.Cube, new Vector3(0f, -1.16f, 0f), new Vector3(1.80f, 0.14f, 1.80f), trimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_Pole", PrimitiveType.Cylinder, new Vector3(0f, 0f, 0f), new Vector3(0.22f, 2.30f, 0.22f), shellMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_Head", PrimitiveType.Cube, new Vector3(0f, 1.02f, -0.10f), new Vector3(1.70f, 0.60f, 0.75f), shellMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HeadTop", PrimitiveType.Cube, new Vector3(0f, 1.38f, -0.10f), new Vector3(1.30f, 0.10f, 0.65f), trimMat, Vector3.zero);
+                for (int i = 0; i < 4; i++)   // four light sources in a 2x2 grid on the head
+                {
+                    float x = (i % 2 == 0 ? -1f : 1f) * 0.55f;
+                    float y = 1.02f + (i < 2 ? 1f : -1f) * 0.16f;
+                    EnsurePrimitive(root, "Generated_LampCan_" + i, PrimitiveType.Cylinder, new Vector3(x, y, -0.50f), new Vector3(0.30f, 0.26f, 0.30f), shellMat, new Vector3(90f, 0f, 0f));
+                    EnsurePrimitive(root, "Generated_Bezel_" + i, PrimitiveType.Cylinder, new Vector3(x, y, -0.66f), new Vector3(0.36f, 0.05f, 0.36f), trimMat, new Vector3(90f, 0f, 0f));
+                    EnsurePrimitive(root, "Generated_Lens_" + i, PrimitiveType.Cylinder, new Vector3(x, y, -0.70f), new Vector3(0.28f, 0.03f, 0.28f), lensMat, new Vector3(90f, 0f, 0f));
+                    EnsureLight(root, "Generated_Spot_" + i, new Vector3(x, y, -0.74f), LightType.Spot, Color.white, 8f, 60f, 50f);
+                }
+                EnsureRootCollider(root, new Vector3(1.9f, 2.5f, 1.9f), Vector3.zero);
+                EnsureStep17Component<VoxelEngine.Simulation.GridLightBlock>(root, lightBlock =>
+                {
+                    lightBlock.blockName = "Structural Floodlight";
+                    lightBlock.lightColor = Color.white;
+                    lightBlock.range = 60f;
+                    lightBlock.spotAngle = 50f;
+                    lightBlock.intensity = 8f;
+                    lightBlock.lightType = LightType.Spot;
+                    lightBlock.wattsDraw = 100f;   // four beams
+                });
+            });
+            var gridFloodlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_GridFloodlight", "Structural Floodlight", "Big standing floodlight for ships and bases: four synchronized spot beams in a 2x2 head, 60 m range, 100 W draw when enabled, switches off automatically without grid power.", new Color(1f, 0.96f, 0.84f), gridFloodlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 640f, 700f);
+
 
             GameObject CreateLedStripPrefab(string folder, string matsFolder, string assetName, bool gridVariant)
             {
@@ -10417,6 +10400,11 @@ namespace VoxelEngine.EditorTools
             var gridLEDStripPrefab = CreateLedStripPrefab(GRID_PREFABS, GRID_MATS, "LEDStrip_Grid", true);
             var largeGridLEDStripPrefab = CreateLedStripPrefab(GRID_PREFABS, GRID_MATS, "LEDStrip_LargeGrid", true);
             var blockLEDStrip = ConfigureBlock(FAC_ITEMS, "Block_LEDStripFactory", "LED Strip", "Segmented low-profile accent lighting for factory floors, walls, and machines. Runtime length is configurable on the LEDStrip component.", new Color(0.18f, 0.72f, 0.88f), staticLEDStripPrefab, "Factory", 70);
+            if (blockLEDStrip != null)   // 18.14.0-dev: a drag lays a SPAN run by itself, like a grid drag
+            {
+                blockLEDStrip.defaultPlacementPattern = (int)VoxelEngine.Building.PlacementPattern.Span;
+                EditorUtility.SetDirty(blockLEDStrip);
+            }
             var gridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LEDStrip", "Detail LED Strip", "Detail-scale segmented LED strip with individual diode elements, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), gridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Small, 25f, 90f);
             var largeGridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridLEDStrip", "Structural LED Strip", "Structural-scale segmented LED strip with individual diode elements, higher output, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), largeGridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Large, 90f, 180f);
 
@@ -10535,6 +10523,7 @@ namespace VoxelEngine.EditorTools
             var recLargeGridSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSpotlight", "Structural Spotlight", largeGridSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 3), (copperWire, 6), (glass, 2), (circuit, 1));
             var recSmallDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightSmall", "Detail Dual Spotlight", smallDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 2), (copperWire, 4), (glass, 2), (circuit, 1));
             var recLargeDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightLarge", "Structural Dual Spotlight", largeDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 4), (circuit, 2));
+            var recGridFloodlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_GGridFloodlight", "Structural Floodlight", gridFloodlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 6), (copperWire, 8), (glass, 4), (circuit, 2));
             var recLEDStrip = CreateRecipe(registry, FAC_RECIPES, "Recipe_LEDStripFactory", "LED Strip", blockLEDStrip, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
             var recGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_GLEDStrip", "Detail LED Strip", gridLEDStripItem, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
             var recLargeGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridLEDStrip", "Structural LED Strip", largeGridLEDStripItem, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 8), (glass, 2), (ironPlate, 1));
@@ -10553,7 +10542,7 @@ namespace VoxelEngine.EditorTools
                 recConveyorBasic, recConveyorFast, recConveyorExpress, recChute, recFunnel,
                 recSplitterMk1, recSplitterMk2, recSplitterMk3,
                 recCrusher, recAssemblerMk1, recAssemblerMk2, recAssemblerMk3, recElectricFurnace,
-                recGridLight, recLargeGridSpotlight, recSmallDualSpotlight, recLargeDualSpotlight,
+                recGridLight, recLargeGridSpotlight, recSmallDualSpotlight, recLargeDualSpotlight, recGridFloodlight,
                 recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip, recLargeSingleDoor, recLargeDoubleDoor, recHeavyVaultDoor
             })
             {
