@@ -1,9 +1,9 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.10.0-dev`
-**Roadmap Version:** `18.10.0-dev`
-**Date:** 2026-11-02
+**Current Version:** `18.13.0-dev`
+**Roadmap Version:** `18.13.0-dev`
+**Date:** 02-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -24,10 +24,26 @@
    survive a status row being summarised.
 5. **A shipped feature is a struck-through item** with `*(version)*`, and its design section keeps a
    one-line status note pointing at the code and the setup step that authors it.
+6. **Dates are DD-MM-YYYY and nothing else** (`02-11-2026` - never `2026-11-02`, never a month name).
 
 ---
 
 ## 0. Recently Done
+
+### 18.13.0-dev - Soft-Clearance Authoring Pass for Decorative Families
+- `SoftClearanceSetup.RunStep126` (Setup Wizard, non-destructive) sets `BlockItem.softClearance = true` on the six decorative BlockItems: `block_light`, `block_ledstripfactory`, `railsignal`, `hangingdepartureboard`, `nixiereadout`, `displaycabinet`
+- It never unsets the flag or touches other fields, reports marked / already-soft / missing per item id, and a second run reports 0 marked
+- Grid-mounted lights (grid light, spotlights, camera, radar beacon) are `GridBlockItem` - no `softClearance` field, cell-based placement - logged as skipped by design
+
+### 18.12.0-dev - Host Gates for Tiered-Piece Use-Actions
+- `BuildingSync.HostAllowsPieceAction` is the shared host gate: piece ownership must allow the sender (unowned legacy pieces stay open to everyone) and the sender's avatar must be within interact reach of the piece
+- Door/hatch toggles, lock fit/remove and all three keypad intents (set/enter/toggle) pass that gate on the host; a denied keypad attempt still gets its addressed verdict so the guest keypad never hangs
+- Denied door toggles still re-announce the true state so a predicted door swings back; host/offline paths are unchanged
+
+### 18.11.0-dev - Host-Validated Machine Edits
+- `OnServerMachineState` validates every guest machine-runtime edit before applying or relaying it: block exists, `PlacedBlock.AllowsAccess` passes, and the sender's avatar is within interact reach of the block
+- Refusals are logged with a reason and answered with an addressed `MachineStateDeniedBroadcast` ("Machine locked" feedback on the offender's machine); unowned legacy blocks stay open to everyone
+- The host's own edits and offline play are unchanged
 
 ### 18.10.0-dev - Server-Validated Drop Pickup Claims
 - Guests no longer consume world drops locally: `DropSync.TryRequestPickup` sends a claim intent and only the host's verdict applies it
@@ -39,36 +55,24 @@
 - Rail-attached and orbiting grids keep their kinematic safeguard after a split
 - PATCH only: no save-schema, API, or content change
 
-### 18.9.3-dev - Client Grid Pose, Stationary Jump & Island Splits
-- `GridSync.ApplyRecord` disables the old hull's colliders before destroy and carries the live `GridNetTag` pose across the rebuild, so client grids stay put when blocks are placed or removed
-- `PlayerController.groundJumpFired` clears `_grounded`, `_planted` and the deck carry anchor in the same frame, so a standing jump works on grids and on ground
-- Severed islands are created with the rigidbody pose set up front, ignore only 0.04 m seam contacts, choose the primary island by locks/cockpit/ground contact/altitude, probe support at 0.85 cells, and call `EnsureDynamicAfterSplit()` so they replicate and fall at once on host and client
-
-### 18.9.2-dev - Host Client Connect, Client Scatter & Ghost Replication
-- `NetworkBootstrap` starts the host's local client on `OnServerConnectionState(Started)` and host `Send*` calls broadcast whenever the server is up, so host avatar, ghosts, animals, enemies, pieces, blocks, drops and bags reach clients again
-- Remote joins set `LoadCompleted` and `CosmicClockSettled`, so chunk scatter runs on clients and `AnimalSync`/`HostileSync` pump every frame without the 15 s spawn stall
-- Ghosts replicate across all three build systems, host grid edits flush end-of-frame through `GridSync`/`GridBuildSync`, and chest text plus nameplates use the depth-tested `WorldTextMaterial`
-
-### 18.9.1-dev - Pattern Wheel on V & Host Port Recovery
-- `InputAction.PlacementWheel` (default `V`; `BuildLock` migrated `V` to `X` in settings version 29) owns the `SINGLE`/`SPAN`/`PILLAR`/`DECK`/`WALL` ring, while `B` (`BuildWheel`) is block/shape/family variants only
-- `GridShapeWheel` activates only for shape-variant grid items, so cockpit shell and grid window variants stay reachable on `B`
-- `NetworkBootstrap.StartHost` probes UDP `7770..7799` with an OS ephemeral fallback, starts the local client only after the server binds, and closes sockets plus `LanDiscovery` on destroy
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
-2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns - the claimed bed rides the host-held player record and beds are owned by their placer; 18.10.0-dev server-validates world-drop pickup claims - the host grants one claim per drop within range and the claimant's own machine applies it; remaining: server-side validation of block/machine use-actions.)*
+2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(DONE - 14.2.0-dev held item + stance replication on avatars; 14.24.0 host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon; 14.38.0 per-player bed spawns; 18.10.0-dev server-validated drop-pickup claims; 18.11.0-dev host-validated machine-runtime edits; 18.12.0-dev host gates on tiered-piece use-actions. Runtime acceptance of the three 18.1x validation rounds stays visible in Open Scope; every future use-action stays on the MP-readiness checklist.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit### Open Scope (named with the version that deferred it)
 - **Drop-claim runtime acceptance (18.10.0-dev):** in a two-player session, confirm one player can pick up a drop while the other's same-instant claim is denied, that a claim from beyond reach is refused in the host log, that the granted stack lands in the claimant's inventory exactly once, and that single-player and host pickups still apply instantly with no network traffic.
+- **Machine-edit validation runtime acceptance (18.11.0-dev):** in a two-player session, confirm a teammate can still edit a TEAM block's panel with the host log quiet, that a guest edit to a PRIVATE block is refused with a "Machine locked" toast and the host state untouched, that an edit sent from beyond reach is refused, and that host/offline machine play is unchanged.
+- **Tiered-piece gate runtime acceptance (18.12.0-dev):** in a two-player session, confirm a teammate can toggle a TEAM door and keypad a coded lock, that a guest toggle on a PRIVATE uncoded door is refused and the door swings back via the re-announce, that a keypad attempt on a far-away piece is denied with a verdict, and that host/offline door and lock play is unchanged.
 - **Display and module unlock acceptance (18.2.1-dev):** confirm in Unity that `DisplayAndModuleUnlockSetup` creates `res_grid_displays` once, that all eight orphaned recipes appear under a node, that no other branch loses a recipe, that nothing in the report reads "still orphaned", and that the Camera Block and every screen are craftable after the node is researched and not before.
 - **Planter automation and bed-telemetry runtime acceptance (18.2.0-dev):** Unity compilation, Setup Wizard run of `PlanterAutomationSetup`, port geometry on the existing Seed Planter prefab, tray-to-belt dumping, self-replanting across a full row, Harvester coverage of all three bed families with a full belt and with no belt at all, dead-bed clearing, `Water01` fall across a drought, `DEAD`/`PORT` rendering on both farm pages, and tray save/load round-trips (including a crop whose asset was renamed) remain pending in Unity.
 - **18.0.0-dev progression overhaul runtime acceptance (18.0.0-dev):** Unity compilation, Setup overhaul execution, 6-pack lab bar/icons, Crafting Bench bootstrap crafting, Exoskeletal Load Harness carry-weight scaling, jetpack-only flight enforcement, and zero-duplicate asset validation remain pending on a fresh save.
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
-- **Soft-clearance authoring pass (17.44.0-dev):** `BlockItem.softClearance` defaults off so nothing existing changed, which means no decorative item is marked yet. A non-destructive Setup step that opts trim, railing, signage and lamp families in remains to be written.
+- ~~**Soft-clearance authoring pass (17.44.0-dev, picked up 18.12.1-dev):** `BlockItem.softClearance` defaults off so nothing existing changed.~~ *(18.13.0-dev - `SoftClearanceSetup.RunStep126`, Setup Wizard step 126, marks the six decorative lamp/signage BlockItems; soft-vs-soft allowed, soft-vs-hard still refused. Status: code + editor step authored, Unity run pending.)*
+- **Soft-clearance acceptance (18.13.0-dev):** run step 126 on a fresh project and confirm the report reads 6 marked / 0 missing, run it again and confirm 0 marked, then place a lamp against a departure board without a refusal and a lamp against a machine with one.
 - ~~**Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, Automatic Tree Farm, and Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm.~~ *(18.4.0-dev & 18.8.0-dev - `GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`, and `GridAutoTreeFarm` all ship as grid blocks with piped water tanks, `FarmEnvironment.HasBreathableAir`, cargo auto-push, and 10 Hz live panels; `GridBiofarm` stays the oxygen garden.)*
 - **Grid farming parity and Stage 2 grid farm blocks acceptance (18.8.0-dev):** confirm in Unity that all 16 grid farm assets (4 prefabs, 4 items, 4 recipes, 4 icons) are verified on disk, that all four grid farm blocks start at 0 L and accept both piped grid water and hand canister watering, that `GridFarmBox` locks its other eight cells and grows a 3D tree when a sapling is planted, that `GridSeedPlanter` and `GridAutoTreeFarm` push harvests to connected grid cargo, and that ship screens on `FARMS` and `PLOT STATUS` list grid farm beds alongside world beds.
 - **Farm overhaul runtime acceptance (18.3.0-dev):** Unity compilation, a Setup Wizard run of `WorldFarmOverhaulSetup.RunStep124`, planting and harvesting in all three boxes, hand watering from a canister, a sprinkler filled by hand and by pipe, the sprinkler's spray stopping on power loss and on an empty tank, drought loss and clearing, trees refused by the Small and Big boxes, self re-seed on and off, belt pickup from a box chute and from the Auto Farm Plot port, and a save/load round trip of a mixed box (crop, tree, dead cell, tank level) remain pending.

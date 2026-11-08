@@ -590,6 +590,15 @@ namespace VoxelEngine.Networking
         public string Json;
     }
 
+    /// <summary>Host -> everyone: a guest's machine-state edit was refused
+    /// (18.11.0-dev). Addressed by PlayerId; all other clients ignore it.</summary>
+    public struct MachineStateDeniedBroadcast : IBroadcast
+    {
+        public string ItemId;
+        public Vector3 Position;
+        public string PlayerId;
+    }
+
     /// <summary>A chunk of machine runtime states (join merge, 14.12.0).</summary>
     public struct MachineSnapshotBroadcast : IBroadcast
     {
@@ -1031,6 +1040,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
             _networkManager.ClientManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
+            _networkManager.ClientManager.RegisterBroadcast<MachineStateDeniedBroadcast>(OnClientMachineStateDenied);
             _networkManager.ClientManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
             _networkManager.ClientManager.RegisterBroadcast<AdminStateBroadcast>(OnClientAdminState);
@@ -1209,6 +1219,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
             _networkManager.ClientManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
+            _networkManager.ClientManager.UnregisterBroadcast<MachineStateDeniedBroadcast>(OnClientMachineStateDenied);
             _networkManager.ClientManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
             _networkManager.ClientManager.UnregisterBroadcast<AdminStateBroadcast>(OnClientAdminState);
@@ -2170,7 +2181,7 @@ namespace VoxelEngine.Networking
                 // onto an uncoded lock). Coded-lock changes go through the
                 // keypad intents below, where the host verifies. Anything else
                 // is dropped unrelayed.
-                if (!BuildingSync.HostAcceptsGuestLockState(msg.Family, msg.Position, msg.HasCode)) return;
+                if (!BuildingSync.HostAcceptsGuestLockState(msg.Family, msg.Position, msg.HasCode, SenderPlayerId(conn))) return;
                 BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.HasCode, msg.Salt, msg.Locked, msg.AuthorizedIds);
             }
             RelayToOthers(conn, msg);
@@ -3594,8 +3605,46 @@ namespace VoxelEngine.Networking
         private void OnServerMachineState(NetworkConnection conn, MachineStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
-            if (!conn.IsLocalClient) MachineSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+            // The host's own edits are trusted - it is the authority (18.11.0-dev).
+            if (conn.IsLocalClient) { RelayToOthers(conn, msg); return; }
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string playerId)
+                || string.IsNullOrEmpty(playerId))
+            {
+                Debug.Log($"[Machines] state edit refused: connection {conn.ClientId} has no admitted identity.");
+                return;
+            }
+            if (!HostValidateMachineEdit(playerId, msg.ItemId, msg.Position, out string reason))
+            {
+                Debug.Log($"[Machines] {playerId} edit refused on '{msg.ItemId}' at {msg.Position}: {reason}.");
+                SendOrRelay(new MachineStateDeniedBroadcast
+                { ItemId = msg.ItemId, Position = msg.Position, PlayerId = playerId });
+                return;
+            }
+            MachineSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
             RelayToOthers(conn, msg);
+        }
+
+        /// <summary>Authority check for one machine-runtime edit from a guest
+        /// (18.11.0-dev): the block must exist at the sent position, the sender must
+        /// pass the block's ownership rules, and the sender's avatar must stand within
+        /// interact reach of the block.</summary>
+        public bool HostValidateMachineEdit(string playerId, string itemId, Vector3 pos, out string reason)
+        {
+            reason = null;
+            if (string.IsNullOrEmpty(playerId)) { reason = "empty player id"; return false; }
+            var block = BlockSync.FindBlockAt(itemId, pos);
+            if (block == null) { reason = "unknown block"; return false; }
+            // Unowned (legacy) blocks stay open to everyone, per the 18.9.0 rule.
+            if (!block.AllowsAccess(playerId)) { reason = "access denied by ownership"; return false; }
+            var avatar = PlayerAvatar.Find(playerId);
+            if (avatar == null) { reason = "no avatar"; return false; }
+            // Interact reach is 8 m; generous slack absorbs poll cadence and
+            // replication latency without allowing cross-map edits.
+            const float interactReach = 8f;
+            float allowed = interactReach * 1.35f + 8f;
+            float separation = Vector3.Distance(avatar.transform.position, block.transform.position);
+            if (separation > allowed) { reason = $"out of range ({separation:F1}m > {allowed:F1}m)"; return false; }
+            return true;
         }
 
         // ─────────────────────────── beacon markers (14.30.0) ───────────────────────────
@@ -3652,6 +3701,14 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted || WorldMismatch) return;
             MachineSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+        }
+
+        private void OnClientMachineStateDenied(MachineStateDeniedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            if (msg.PlayerId != PlayerIdentity.LocalId) return;
+            VoxelEngine.UI.BuildFeedbackHud.Show("Machine locked",
+                "The host refused that edit (access or range)", null, new Color(0.95f, 0.25f, 0.18f));
         }
 
         private void OnServerMachineSnapshot(NetworkConnection conn, MachineSnapshotBroadcast msg, Channel channel)

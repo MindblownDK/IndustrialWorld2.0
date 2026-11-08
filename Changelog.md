@@ -1,9 +1,88 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.10.0-dev`
+**Current Version:** `18.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.13.0-dev] Soft-Clearance Authoring Pass for Decorative Families
+
+**Type:** MINOR - new non-destructive Setup step, save-compatible: no save-schema or API change; `BlockItem.softClearance` still defaults off for everything not listed.
+
+**GitHub title:** `[18.13.0-dev] Add non-destructive Setup step marking lamp and signage families soft-clearance`
+
+#### Added
+
+- **`Scripts/Editor/Building/SoftClearanceSetup.cs` - Step 126 (`SoftClearanceSetup.RunStep126`)**, registered in the Setup Wizard's non-destructive repair list. It scans every `BlockItem` asset and, for the confirmed decorative families - lamp/light (`block_light`, `block_ledstripfactory`, `railsignal`) and signage (`hangingdepartureboard`, `nixiereadout`, `displaycabinet`) - sets `softClearance = true`. It never unsets the flag, never touches any other field, saves only the assets it changed, and reports marked / already-soft / missing per item id, so a second run reports "0 marked".
+- **Skipped by design:** grid-mounted decorative items (`gitem_gridlightblock`, both spotlight sizes, `camera_block`, `stationary_radar_beacon`) are `GridBlockItem`, which has no `softClearance` field, and grid placement is cell-based; the step logs them as skipped.
+
+#### Changed
+
+- **Setup Wizard (`Editor/Core/VoxelEngineSetupWindow.cs`).** New repair-section entry: "Mark decorative lamp and signage families as soft-clearance (non-destructive, 18.13.0-dev)".
+
+#### Notes
+
+- 17.44.0-dev behavior is unchanged for everything else: hard clearance remains the default, soft-vs-soft placement is allowed, soft-vs-hard is still refused (`BuildSystem` placement probe). The new editor script lives under `Scripts/Editor/Building/`, so it ships in the editor assembly only, never in player builds.
+
+### [18.12.1-dev] Roadmap: Milestone Item 2 Closed, Soft-Clearance Pass Picked as Next
+
+**Type:** PATCH - documentation only; no code, save-schema, or API change.
+
+**GitHub title:** `[18.12.1-dev] Mark multiplayer milestone item 2 done and pick the soft-clearance pass as next`
+
+#### Changed
+
+- **`Roadmap.md` milestone plan item 2 (player state + server-validated interactions).** Now marked DONE with the full version trail: 14.2.0-dev (avatar held-item/stance), 14.24.0 (host-owned per-player records), 14.34.0-14.36.0 (server-validated PvP, universal melee, loot bags), 14.38.0 (per-player bed spawns), 18.10.0-dev (drop-pickup claims), 18.11.0-dev (machine-edit validation), 18.12.0-dev (tiered-piece gates). Runtime acceptance of the three 18.1x validation rounds remains visible in Open Scope, and future use-actions stay bound to the MP-readiness checklist.
+- **`Roadmap.md` open scope.** The soft-clearance authoring pass (deferred 17.44.0-dev) is now labelled NEXT; the exact decorative families to opt into `BlockItem.softClearance` are to be confirmed before the non-destructive Setup step is written.
+
+### [18.12.0-dev] Host Gates for Tiered-Piece Use-Actions (Milestone 2 Slice)
+
+**Type:** MINOR - server-side validation hardening, save-compatible: no save-schema or API change; host and offline paths are unchanged.
+
+**GitHub title:** `[18.12.0-dev] Gate guest door/lock actions on ownership access + range at the host`
+
+#### Added
+
+- **`BuildingSync.HostAllowsPieceAction(piece, playerId, out reason)`** - the shared authority gate for tiered-piece use-actions: the piece's ownership rules must allow the sender (unowned legacy pieces stay open to everyone, per 18.9.0) and the sender's avatar must stand within interact reach (8 m plus slack) of the piece.
+
+#### Changed
+
+- **Door/hatch toggles (`HostAcceptsDoorState`).** A guest toggle now also has to pass the piece-level gate, on top of the existing 14.57.0 coded-lock rule; denials still re-announce the true state so the sender's predicted door swings back.
+- **Lock fit announce (`HostAcceptsGuestLockState`).** Now takes the sender id and applies the same gate (`OnServerLockState` passes `SenderPlayerId(conn)`).
+- **Lock removal (`HostAcceptsLockRemove`) and the keypad intents (`HostApplyLockSetCode`, `HostApplyLockEnter`, `HostApplyLockToggle`).** All now require the piece-level gate. A denied keypad attempt still receives its addressed `LockEnterResult` verdict (granted = false) so the guest keypad never hangs.
+
+#### Fixed
+
+- **Guest door/lock actions were gated only by the coded-lock rule**, not by piece ownership or reach: a modified client could toggle an uncoded door on someone else's PRIVATE piece, or fire keypad/lock intents at a piece across the map. The host now enforces the same access rules the UI displays.
+
+### [18.11.0-dev] Host-Validated Machine Edits (Milestone 2 Slice)
+
+**Type:** MINOR - new server-side validation, save-compatible: no save-schema or API change; host and offline play paths are unchanged.
+
+**GitHub title:** `[18.11.0-dev] Validate guest machine-state edits on the host (access + range) before apply`
+
+#### Added
+
+- **`NetworkBootstrap.HostValidateMachineEdit(playerId, itemId, pos, out reason)`** plus an addressed refusal on the wire: `MachineStateDeniedBroadcast` (registered on clients next to `MachineStateBroadcast`).
+
+#### Changed
+
+- **`OnServerMachineState` (`NetworkBootstrap`).** Every guest machine-runtime edit is now validated before it is applied or relayed: the block must exist at the sent position (`BlockSync.FindBlockAt`), the sender must pass the block's ownership rules (`PlacedBlock.AllowsAccess` - unowned legacy blocks stay open to everyone, per 18.9.0), and the sender's avatar must stand within interact reach (8 m plus latency slack) of the block. The host's own edits are trusted and relayed exactly as before. A refused edit is logged with its reason and answered with the addressed denial, which the offending guest shows as a "Machine locked" feedback.
+
+#### Fixed
+
+- **Guest machine-panel edits applied without host validation.** A guest could previously overwrite the runtime state (toggles, recipe locks, mode) of a block it had no access to, because the per-machine UI gates were UX-only on the guest; the host now enforces the same access rules it displays.
+
+### [18.10.1-dev] Roadmap Date Format Locked to DD-MM-YYYY
+
+**Type:** PATCH - documentation only; no code, save-schema, or API change.
+
+**GitHub title:** `[18.10.1-dev] Write all roadmap dates as DD-MM-YYYY`
+
+#### Changed
+
+- **`Roadmap.md`.** The header date is now `02-11-2026`, and a new rule 6 in "How this roadmap is written" locks the convention: every date in the roadmap is DD-MM-YYYY and nothing else.
+- **`Changelog.md`.** The 18.9.5-dev entry's reference to the roadmap date updated to match (`02-11-2026`).
 
 ### [18.10.0-dev] Server-Validated Drop Pickup Claims (Milestone 2 Slice)
 
@@ -35,7 +114,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 - **Roadmap `Recently Done` block (`Roadmap.md`).** The four rounds shipped since the roadmap was last synced are listed newest-first above `18.9.0-dev`: `18.9.1-dev` (placement pattern wheel on `V`, host UDP port recovery), `18.9.2-dev` (host local-client connect, client scatter and spawn stall, ghost and grid block replication, depth-tested chest text), `18.9.3-dev` (client grid rebuild pose, stationary jump, severed island splits), and `18.9.4-dev` (rail-bogie compilation fix), each in three short lines. The four oldest rounds (`18.8.0-dev`, `18.7.3-dev`, `18.7.2-dev`, `18.7.1-dev`) were removed to respect the five-round cap; their permanent home remains their `Changelog.md` entries.
 - **Mangled roadmap line repaired (`Roadmap.md`).** The `Locked Decisions` topology bullet was truncated mid-word and glued to the `### Milestone Plan` heading on a single line; it now reads `**True P2P is permanently out of scope.**` with the milestone heading restored to its own line, matching the pre-truncation wording.
-- **Version headers.** `Current Version` and `Roadmap Version` bumped to `18.9.5-dev` in both files, and the roadmap date set to 2026-11-02.
+- **Version headers.** `Current Version` and `Roadmap Version` bumped to `18.9.5-dev` in both files, and the roadmap date set to 02-11-2026.
 
 ### [18.9.4-dev] Grid Rail Bogie Compilation Fix
 

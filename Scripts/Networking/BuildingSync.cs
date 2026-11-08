@@ -324,12 +324,36 @@ namespace VoxelEngine.Networking
         /// <summary>Host gate for guest-authored LockState announces (14.56.0):
         /// a guest may only announce a FIT (no code). Anything touching a coded
         /// lock must come through the keypad intents, where the host verifies.</summary>
-        public static bool HostAcceptsGuestLockState(string family, Vector3 pos, bool msgHasCode)
+        public static bool HostAcceptsGuestLockState(string family, Vector3 pos, bool msgHasCode, string playerId)
         {
             if (msgHasCode) return false;   // codes are set via RequestLockSetCode only
             var piece = FindPieceAt(family, pos);
+            // 18.12.0-dev: piece-level authority gate (ownership + reach).
+            if (piece != null && !HostAllowsPieceAction(piece, playerId, out _)) return false;
             var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
             return codeLock == null || !codeLock.HasCode;   // never wipe a coded lock
+        }
+
+        /// <summary>18.12.0-dev - shared authority gate for tiered-piece use-actions
+        /// (door/hatch toggles, lock fit/remove, keypad intents): the piece's ownership
+        /// rules must allow the sender (unowned legacy pieces stay open to everyone,
+        /// per 18.9.0) and the sender's avatar must stand within interact reach of the
+        /// piece. Returns true when the sender may act; reason says why not.</summary>
+        public static bool HostAllowsPieceAction(PlacedTieredBlock piece, string playerId, out string reason)
+        {
+            reason = null;
+            if (piece == null) { reason = "unknown piece"; return false; }
+            if (string.IsNullOrEmpty(playerId)) { reason = "empty player id"; return false; }
+            if (!piece.AllowsAccess(playerId)) { reason = "access denied by ownership"; return false; }
+            var avatar = PlayerAvatar.Find(playerId);
+            if (avatar == null) { reason = "no avatar"; return false; }
+            // Interact reach is 8 m; generous slack absorbs replication latency
+            // without allowing cross-map actions.
+            const float interactReach = 8f;
+            float allowed = interactReach * 1.35f + 8f;
+            float separation = Vector3.Distance(avatar.transform.position, piece.transform.position);
+            if (separation > allowed) { reason = $"out of range ({separation:F1}m > {allowed:F1}m)"; return false; }
+            return true;
         }
 
         /// <summary>Host gate for a guest-authored door toggle (14.57.0): a
@@ -341,6 +365,8 @@ namespace VoxelEngine.Networking
         {
             var piece = FindPieceAt(family, pos);
             if (piece == null) return true;   // nothing local to protect
+            // 18.12.0-dev: piece-level authority gate (ownership + reach) first.
+            if (!HostAllowsPieceAction(piece, senderId, out _)) return false;
             var codeLock = piece.GetComponentInChildren<CodeLock>(true);
             if (codeLock == null || !codeLock.HasCode || !codeLock.isLocked) return true;
             return codeLock.IsAuthorized(senderId);
@@ -363,6 +389,8 @@ namespace VoxelEngine.Networking
         public static bool HostAcceptsLockRemove(string family, Vector3 pos, string playerId)
         {
             var piece = FindPieceAt(family, pos);
+            // 18.12.0-dev: piece-level authority gate (ownership + reach).
+            if (piece != null && !HostAllowsPieceAction(piece, playerId, out _)) return false;
             var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
             if (codeLock == null) return false;
             return !codeLock.HasCode || codeLock.IsAuthorized(playerId);
@@ -378,6 +406,8 @@ namespace VoxelEngine.Networking
             var piece = FindPieceAt(family, pos);
             var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
             if (codeLock == null) return;
+            // 18.12.0-dev: piece-level authority gate (ownership + reach).
+            if (!HostAllowsPieceAction(piece, playerId, out _)) return;
             // Re-coding a coded lock is for authorized players only.
             if (codeLock.HasCode && !codeLock.IsAuthorized(playerId)) return;
             codeLock.code = packed;
@@ -394,7 +424,10 @@ namespace VoxelEngine.Networking
         {
             var piece = FindPieceAt(family, pos);
             var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
-            bool granted = codeLock != null && LockCodes.MatchesHash(codeLock.code, attemptHash);
+            // 18.12.0-dev: piece-level gate first; a denied attempt still receives its
+            // addressed verdict below so the guest keypad never hangs.
+            bool allowed = piece != null && HostAllowsPieceAction(piece, playerId, out _);
+            bool granted = allowed && codeLock != null && LockCodes.MatchesHash(codeLock.code, attemptHash);
             if (granted && !string.IsNullOrEmpty(playerId) && !codeLock.authorizedIds.Contains(playerId))
             {
                 codeLock.authorizedIds.Add(playerId);
@@ -409,6 +442,8 @@ namespace VoxelEngine.Networking
         public static void HostApplyLockToggle(string family, Vector3 pos, bool locked, string playerId)
         {
             var piece = FindPieceAt(family, pos);
+            // 18.12.0-dev: piece-level authority gate (ownership + reach).
+            if (piece != null && !HostAllowsPieceAction(piece, playerId, out _)) return;
             var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
             if (codeLock == null || !codeLock.HasCode || !codeLock.IsAuthorized(playerId)) return;
             codeLock.isLocked = locked;

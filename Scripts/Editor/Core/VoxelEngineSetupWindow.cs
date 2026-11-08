@@ -344,7 +344,8 @@ namespace VoxelEngine.EditorTools
                 Setup("Repair Crafting Bench and Assembler interactions (non-destructive)", () => VoxelEngine.EditorTools.StationInteractionSetup.Run()),
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
                 Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()),
-                Setup("Apply the unified UI scale law to every PanelSettings (non-destructive, 17.17.0-dev)", () => VoxelEngine.EditorTools.UiScaleLawSetup.Run()));
+                Setup("Apply the unified UI scale law to every PanelSettings (non-destructive, 17.17.0-dev)", () => VoxelEngine.EditorTools.UiScaleLawSetup.Run()),
+                Setup("Mark decorative lamp and signage families as soft-clearance (non-destructive, 18.13.0-dev)", () => VoxelEngine.EditorTools.SoftClearanceSetup.RunStep126()));
         }
 
         /// <summary>One group as the filter sees it: the foldout, and every button with the
