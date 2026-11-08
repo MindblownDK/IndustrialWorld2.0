@@ -8598,7 +8598,13 @@ namespace VoxelEngine.EditorTools
             // -- Dependencies --
             string commonItems = ASSET_ROOT + "/Items";
             var ironIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");
-            var copperWire = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperWire.asset");
+            // 18.13.1-dev: the copper wire asset lives at Industrial/Items/Item_CopperWire
+            // (legacy variant: Items/Item_CopperLVWire). The old single path pointed at
+            // the nonexistent Items/Item_CopperWire, so the gate fired even after base
+            // crafting + industrial content had both run.
+            var copperWire = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{ASSET_ROOT}/Industrial/Items/Item_CopperWire.asset")
+                          ?? AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperWire.asset")
+                          ?? AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperLVWire.asset");
             var glass = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{ASSET_ROOT}/Industrial/Items/Item_Glass.asset");
             if (ironIngot == null || copperWire == null || glass == null)
             {

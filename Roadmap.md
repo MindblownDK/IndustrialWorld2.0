@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.13.0-dev`
-**Roadmap Version:** `18.13.0-dev`
+**Current Version:** `18.13.1-dev`
+**Roadmap Version:** `18.13.1-dev`
 **Date:** 02-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,6 +30,11 @@
 
 ## 0. Recently Done
 
+### 18.13.1-dev - Floodlight Setup Gate Fix
+- `BuildFloodlightContent`'s dependency gate now finds copper wire at `Industrial/Items/Item_CopperWire.asset` first, then the legacy `Items/` paths, instead of only the nonexistent `Items/Item_CopperWire.asset`
+- The "run base crafting and industrial content first" dialog now appears only when no copper wire asset exists at all
+- Editor-only fix; no save, API, or gameplay change
+
 ### 18.13.0-dev - Soft-Clearance Authoring Pass for Decorative Families
 - `SoftClearanceSetup.RunStep126` (Setup Wizard, non-destructive) sets `BlockItem.softClearance = true` on the six decorative BlockItems: `block_light`, `block_ledstripfactory`, `railsignal`, `hangingdepartureboard`, `nixiereadout`, `displaycabinet`
 - It never unsets the flag or touches other fields, reports marked / already-soft / missing per item id, and a second run reports 0 marked
@@ -50,11 +55,6 @@
 - `NetworkBootstrap.HostApplyDropClaim` checks the drop exists, has no pending claim, and is within pickup reach (8 m ray / 2.5 m trigger plus latency slack) of the claimant's avatar, then broadcasts the verdict with a stack-JSON snapshot
 - The claimant's own machine inserts the approved stack on a granted verdict (`DropSync.ApplyClaimResult`); the 14.11.0 same-instant double-grab window is closed for player pickups
 
-### 18.9.4-dev - Grid Rail Bogie Compilation Fix
-- `GridEntity.EnsureDynamicAfterSplit` reads the existing `GridRailBogie.IsOnRails` property, so the split-physics path compiles again
-- Rail-attached and orbiting grids keep their kinematic safeguard after a split
-- PATCH only: no save-schema, API, or content change
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -72,7 +72,8 @@
 - **Grid-block pattern runtime acceptance (17.52.2-dev):** Unity compilation and play-mode checks of all five patterns, long-range grid acquisition and drag continuity, wall height aiming, freeze/nudge/commit, armour eligibility on matching native grids, Ctrl+scroll selection without ghost rotation, valid/blocked cell previews, carried plus authorized wireless stock, release-time revalidation/refunds, right-click prompts, and unchanged SINGLE paths for custom and precision families remain pending.
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred.
 - ~~**Soft-clearance authoring pass (17.44.0-dev, picked up 18.12.1-dev):** `BlockItem.softClearance` defaults off so nothing existing changed.~~ *(18.13.0-dev - `SoftClearanceSetup.RunStep126`, Setup Wizard step 126, marks the six decorative lamp/signage BlockItems; soft-vs-soft allowed, soft-vs-hard still refused. Status: code + editor step authored, Unity run pending.)*
-- **Soft-clearance acceptance (18.13.0-dev):** run step 126 on a fresh project and confirm the report reads 6 marked / 0 missing, run it again and confirm 0 marked, then place a lamp against a departure board without a refusal and a lamp against a machine with one.
+- **Soft-clearance acceptance (18.13.0-dev):** step 126 run confirmed by Thomas on 02-11-2026 (report: 6 marked / 0 already soft / 0 missing, grid items skipped by design); still pending: rerun reads 0 marked, and in play a lamp beside a departure board places without refusal while a lamp against a machine is still refused.
+- **Floodlight setup gate acceptance (18.13.1-dev):** after base crafting + industrial content have run, the "Build stationary and grid floodlights" step no longer shows the dependency dialog and authors the floodlight / LED strip / RGB light prefabs, items and recipes under `Power/Floodlights`.
 - ~~**Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, Automatic Tree Farm, and Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm.~~ *(18.4.0-dev & 18.8.0-dev - `GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`, and `GridAutoTreeFarm` all ship as grid blocks with piped water tanks, `FarmEnvironment.HasBreathableAir`, cargo auto-push, and 10 Hz live panels; `GridBiofarm` stays the oxygen garden.)*
 - **Grid farming parity and Stage 2 grid farm blocks acceptance (18.8.0-dev):** confirm in Unity that all 16 grid farm assets (4 prefabs, 4 items, 4 recipes, 4 icons) are verified on disk, that all four grid farm blocks start at 0 L and accept both piped grid water and hand canister watering, that `GridFarmBox` locks its other eight cells and grows a 3D tree when a sapling is planted, that `GridSeedPlanter` and `GridAutoTreeFarm` push harvests to connected grid cargo, and that ship screens on `FARMS` and `PLOT STATUS` list grid farm beds alongside world beds.
 - **Farm overhaul runtime acceptance (18.3.0-dev):** Unity compilation, a Setup Wizard run of `WorldFarmOverhaulSetup.RunStep124`, planting and harvesting in all three boxes, hand watering from a canister, a sprinkler filled by hand and by pipe, the sprinkler's spray stopping on power loss and on an empty tank, drought loss and clearing, trees refused by the Small and Big boxes, self re-seed on and off, belt pickup from a box chute and from the Auto Farm Plot port, and a save/load round trip of a mixed box (crop, tree, dead cell, tank level) remain pending.

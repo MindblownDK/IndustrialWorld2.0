@@ -1,9 +1,19 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.13.0-dev`
+**Current Version:** `18.13.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.13.1-dev] Floodlight Setup Dependency Gate Fix
+
+**Type:** PATCH - editor-only bug fix; no save-schema, API, or gameplay change.
+
+**GitHub title:** `[18.13.1-dev] Fix floodlight setup step copper-wire dependency path`
+
+#### Fixed
+
+- **`BuildFloodlightContent` (`Editor/Core/VoxelEngineSetupWindow.cs`).** The dependency gate loaded copper wire from `Items/Item_CopperWire.asset`, which does not exist - the asset is `Assets/VoxelEngineAssets/Industrial/Items/Item_CopperWire.asset` (legacy variant `Items/Item_CopperLVWire.asset`) - so the "Run base crafting and industrial content first" dialog fired even after both steps had run, and no floodlight content was authored. The gate now tries the Industrial path first, then the legacy common-items paths, and only shows the dialog when no copper wire asset exists at all.
 
 ### [18.13.0-dev] Soft-Clearance Authoring Pass for Decorative Families
 
