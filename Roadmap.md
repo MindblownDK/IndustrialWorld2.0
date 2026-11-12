@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.17.0-dev`
-**Roadmap Version:** `18.17.0-dev`
+**Current Version:** `18.17.1-dev`
+**Roadmap Version:** `18.17.1-dev`
 **Date:** 12-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,6 +30,11 @@
 
 ## 0. Recently Done
 
+### 18.17.1-dev - Off-Screen Marker Arrow Fix
+- The edge chevron of an off-screen ping or teammate marker was a constant 90 degrees clockwise of its target (`angle - 45` instead of `angle + 45`) - the chevron's point is the square's top-right corner, which is minus 45 degrees in panel space
+- Both marker layers now call one documented `AimRotationDegrees` helper instead of carrying a copy of the formula each
+- Marker positions, distances and on-screen markers were never affected; no API, save or network change
+
 ### 18.17.0-dev - Team Locator
 - Every teammate now draws a marker with their name, live distance and a health bar (only while it is not full), read straight from the replicated avatar - the locator adds no network channel and no save field of its own
 - Anyone outside the frame is pinned to the screen edge with an arrow aimed at them; a marker behind terrain dims instead of lying, and a gap past 20 km reads "elsewhere" rather than a number you cannot act on
@@ -51,11 +56,6 @@
 - New Machine Yield Module (`upgrade_machine_yield`, +12% chance of one extra main-product unit per finished batch) authored by setup step 127 with an icon, an Assembler recipe and the Advanced Manufacturing unlock
 - The Chemical Plant, Distillation Plant and Catalytic Cracker get the two module slots the Refinery already had; their containers are appended LAST in the save record, so an older save restores inputs and outputs at the same index
 - Editor step 127 repairs the role field on the two modules step 75 authored (matched by itemId) and touches nothing else; the Crusher/Assembler byproduct statistic no longer counts a unit the full output refused
-
-### 18.14.1-dev - 18.14.0-dev Lighting Acceptance Recorded
-- Open Scope: the 18.14.0-dev lighting rework acceptance line is now CONFIRMED by Thomas on 02-11-2026 ("good it works") - no pink grid floodlight, four beams, 2x2 stationary fixture with flood beam, block_light spot fixture, removed assets gone, two LED strips with drag-run
-- The 18.13.1-dev floodlight gate line is confirmed in the same pass: the floodlight step ran clean with no dependency dialog during the 18.14.0-dev verification
-- Docs only; no code, save-schema, or API change
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

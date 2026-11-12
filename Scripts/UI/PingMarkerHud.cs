@@ -168,11 +168,9 @@ namespace VoxelEngine.UI
                 }
                 else
                 {
-                    // Arrow: a chevron aimed along the direction the ping lies in.
-                    float angle = Mathf.Atan2(target.y - centre.y, target.x - centre.x) * Mathf.Rad2Deg;
                     entry.Ring.style.display = DisplayStyle.None;
                     entry.Arrow.style.display = DisplayStyle.Flex;
-                    entry.Arrow.style.rotate = new Rotate(angle - 45f);
+                    entry.Arrow.style.rotate = new Rotate(AimRotationDegrees(centre, target));
                 }
 
                 // Far shouts stay readable but get a little quieter with distance.
@@ -242,6 +240,28 @@ namespace VoxelEngine.UI
             _container.Add(root);
             return new Entry { Root = root, Ring = ring, Arrow = arrow, Name = name, Distance = distance };
         }
+
+        /// <summary>How far to rotate the edge chevron so its point aims at the
+        /// marker.
+        ///
+        /// 18.17.1-dev - this used to be `angle - 45`, which put the arrow 90
+        /// degrees clockwise of the truth (a ping to your left read as pointing
+        /// down). The angle is measured in PANEL space, where y grows downwards,
+        /// so Atan2 already counts clockwise from +X. The chevron is a square
+        /// carrying only its top and right edge, which leaves its point at the
+        /// square's TOP-RIGHT corner - that corner faces up-right, i.e. MINUS 45
+        /// degrees in this same clockwise convention. Rotating by `angle + 45`
+        /// therefore carries that corner exactly onto the marker's direction.</summary>
+        private static float AimRotationDegrees(Vector2 centre, Vector2 target)
+        {
+            Vector2 dir = target - centre;
+            if (dir.sqrMagnitude < 0.0001f) return 0f;
+            return Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + ChevronCornerDeg;
+        }
+
+        /// <summary>The chevron's own point, in panel degrees (y down, clockwise
+        /// from +X): its top-right corner.</summary>
+        private const float ChevronCornerDeg = 45f;
 
         private static Label MakeLabel(int size, FontStyle weight)
         {

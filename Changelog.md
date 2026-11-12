@@ -1,9 +1,20 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.17.0-dev`
+**Current Version:** `18.17.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.17.1-dev] Off-Screen Marker Arrows Pointed 90 Degrees Wide
+
+**Type:** PATCH - one rotation expression in two HUD files. No API, save, network or gameplay change; the marker positions, the distances and the on-screen markers were always correct, and only the direction the edge chevron faced was wrong.
+
+**GitHub title:** `[18.17.1-dev] Fix off-screen marker arrow aiming 90 degrees clockwise of the target`
+
+#### Fixed
+
+- **`PingMarkerHud` and `TeamLocatorHud`: the edge chevron for an off-screen marker faced 90 degrees clockwise of its target** - a ping to your left pointed down, a teammate to your right pointed up. The aim rotation was computed as `angle - 45` degrees. The angle itself was right: it is taken in PANEL space, where y grows downwards, so `Atan2` already counts clockwise from +X. The mistake was the -45: the chevron is a square carrying only its top and right edge, so its point is the square's TOP-RIGHT corner, which faces up-right - MINUS 45 degrees in that same clockwise convention. Rotating that corner onto the target therefore needs `angle + 45`, and the old expression left every arrow a constant 90 degrees off, which is why the marker's position looked correct while its arrow did not.
+- **Both layers now share one named helper instead of two copies of the same formula.** `AimRotationDegrees(centre, target)` returns the aim rotation and documents the chevron's `ChevronCornerDeg = 45` corner in the place the sign is easy to verify, so the next arrow added to a HUD cannot re-derive it wrongly (or be fixed in one file while the other keeps the bug).
 
 ### [18.17.0-dev] Team Locator - Markers, Edge Arrows and Health for Your Team
 

@@ -219,10 +219,9 @@ namespace VoxelEngine.UI
                 }
                 else
                 {
-                    float angle = Mathf.Atan2(target.y - centre.y, target.x - centre.x) * Mathf.Rad2Deg;
                     entry.Dot.style.display = DisplayStyle.None;
                     entry.Arrow.style.display = DisplayStyle.Flex;
-                    entry.Arrow.style.rotate = new Rotate(angle - 45f);
+                    entry.Arrow.style.rotate = new Rotate(AimRotationDegrees(centre, target));
                 }
 
                 // Behind a wall the marker stays, quieter - you can still find them,
@@ -335,6 +334,24 @@ namespace VoxelEngine.UI
                 Name = name, Distance = distance
             };
         }
+
+        /// <summary>How far to rotate the edge chevron so its point aims at the
+        /// teammate. 18.17.1-dev - the same off-by-90 the ping strip had: the
+        /// angle is measured in PANEL space (y down, so Atan2 counts clockwise
+        /// from +X), while the chevron's point is its TOP-RIGHT corner, which
+        /// faces up-right at MINUS 45 degrees in that same convention. The aim
+        /// rotation is therefore `angle + 45`, and a teammate to your left reads
+        /// as pointing left.</summary>
+        private static float AimRotationDegrees(Vector2 centre, Vector2 target)
+        {
+            Vector2 dir = target - centre;
+            if (dir.sqrMagnitude < 0.0001f) return 0f;
+            return Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + ChevronCornerDeg;
+        }
+
+        /// <summary>The chevron's own point, in panel degrees (y down, clockwise
+        /// from +X): its top-right corner.</summary>
+        private const float ChevronCornerDeg = 45f;
 
         private static Label MakeLabel(int size, FontStyle weight)
         {
