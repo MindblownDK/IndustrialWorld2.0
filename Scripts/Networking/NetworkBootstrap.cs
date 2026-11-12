@@ -566,6 +566,25 @@ namespace VoxelEngine.Networking
         public List<BeaconMarkerRecord> Markers;
     }
 
+    /// <summary>18.16.0-dev - a guest asks the host to shout a ping. The
+    /// position is the aim point the guest resolved locally; it is advisory and
+    /// the host refuses anything grossly out of reach of the sender's avatar.
+    /// Everything else about the ping (owner id, owner name, lifetime) is
+    /// stamped by the host, never taken from this message.</summary>
+    public struct PingRequestBroadcast : IBroadcast
+    {
+        public Vector3 Position;
+    }
+
+    /// <summary>18.16.0-dev - one ping, host to one teammate connection. Only
+    /// ever sent to connections standing on the pinger's team, so a guest is
+    /// never told about a shout it has no right to hear. Expiry is local on
+    /// both ends, so there is no removal counterpart.</summary>
+    public struct PingBroadcast : IBroadcast
+    {
+        public PingRecord Ping;
+    }
+
     /// <summary>One block's container contents as save-format JSON (14.10.0).</summary>
     public struct ContainerStateBroadcast : IBroadcast
     {
@@ -879,6 +898,11 @@ namespace VoxelEngine.Networking
         /// markers (14.30.0), so an unchanged sweep sends nothing.</summary>
         private readonly Dictionary<int, string> _beaconSignatureByConnection = new();
 
+        /// <summary>Server-side: when each connection last made a ping (18.16.0),
+        /// so the rate limit is enforced where it matters - on the host, by
+        /// connection, and never by trusting a client's own clock.</summary>
+        private readonly Dictionary<int, float> _lastPingAtByConnection = new();
+
         /// <summary>Server-side: the player id each connection was admitted
         /// under - the duplicate-identity guard reads this.</summary>
         private readonly Dictionary<int, string> _playerIdByConnection = new();
@@ -986,6 +1010,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.RegisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
+            _networkManager.ServerManager.RegisterBroadcast<PingRequestBroadcast>(OnServerPingRequest);
             _networkManager.ServerManager.RegisterBroadcast<PlayerCosmeticsIntentBroadcast>(OnServerPlayerCosmeticsIntent);
             _networkManager.ServerManager.RegisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.RegisterBroadcast<AdminIntentBroadcast>(OnServerAdminIntent);
@@ -1082,6 +1107,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<GridBlockStateBroadcast>(OnClientGridBlockState);
             _networkManager.ClientManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
             _networkManager.ClientManager.RegisterBroadcast<BeaconMarkersBroadcast>(OnClientBeaconMarkers);
+            _networkManager.ClientManager.RegisterBroadcast<PingBroadcast>(OnClientPing);
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
@@ -1165,6 +1191,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.UnregisterBroadcast<TeamBannerIntentBroadcast>(OnServerBannerIntent);
+            _networkManager.ServerManager.UnregisterBroadcast<PingRequestBroadcast>(OnServerPingRequest);
             _networkManager.ServerManager.UnregisterBroadcast<PlayerCosmeticsIntentBroadcast>(OnServerPlayerCosmeticsIntent);
             _networkManager.ServerManager.UnregisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.UnregisterBroadcast<AdminIntentBroadcast>(OnServerAdminIntent);
@@ -1261,6 +1288,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<GridBlockStateBroadcast>(OnClientGridBlockState);
             _networkManager.ClientManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
             _networkManager.ClientManager.UnregisterBroadcast<BeaconMarkersBroadcast>(OnClientBeaconMarkers);
+            _networkManager.ClientManager.UnregisterBroadcast<PingBroadcast>(OnClientPing);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -1667,6 +1695,7 @@ namespace VoxelEngine.Networking
                 _avatarsByConnection.Clear();
                 _playerIdByConnection.Clear();
                 _beaconSignatureByConnection.Clear();
+                _lastPingAtByConnection.Clear();
                 _terrainCatchupServed.Clear();
                 if (!_clientStarted) GoOffline();
             }
@@ -1966,6 +1995,7 @@ namespace VoxelEngine.Networking
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
             _playerIdByConnection.Remove(connection.ClientId);
             _beaconSignatureByConnection.Remove(connection.ClientId);
+            _lastPingAtByConnection.Remove(connection.ClientId);
             // A pilot who crashed out must not leave a hull flying on their last
             // input. Cut the throttle and free the seat for somebody else.
             ReleasePilotConnection(connection);
@@ -3697,6 +3727,90 @@ namespace VoxelEngine.Networking
             BeaconSync.ApplyMarkers(msg.Markers);
         }
 
+        // ─────────────────────────── team pings (18.16.0) ───────────────────────────
+
+        /// <summary>Client: ask the host to shout my ping at my team. Only the
+        /// aim point travels - the host stamps who I am from its connection
+        /// table and decides who hears it.</summary>
+        public void SendPingRequest(PingRecord record)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new PingRequestBroadcast { Position = record.Position });
+        }
+
+        /// <summary>Host: forward one ping to every connection standing on the
+        /// pinger's team, and to nobody else. The team rule is asked here, where
+        /// the message is sent, so a shouted position is never a thing a guest
+        /// could have been told and merely failed to draw. The pinger's own
+        /// connection is skipped - they already see it locally.</summary>
+        public void HostRelayPing(PingRecord record)
+        {
+            if (!_serverStarted || _networkManager?.ServerManager == null) return;
+            string ownerId = record.OwnerId ?? "";
+            if (string.IsNullOrEmpty(ownerId)) return;
+            var msg = new PingBroadcast { Ping = record };
+            foreach (var kv in _networkManager.ServerManager.Clients)
+            {
+                var conn = kv.Value;
+                if (conn == null || conn.IsLocalClient) continue;
+                if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string recipientId)
+                    || string.IsNullOrEmpty(recipientId)) continue;
+                if (!TeamRegistry.SameTeam(ownerId, recipientId)) continue;
+                _networkManager.ServerManager.Broadcast(conn, msg, true);
+            }
+        }
+
+        /// <summary>Server: a guest shouted. The host stamps the sender from the
+        /// connection table, holds the rate limit itself, and refuses a position
+        /// that is grossly out of reach of the sender's own body - the only cheat
+        /// a ping offers. An accepted ping is applied here (the host's own client
+        /// is a teammate too) and then relayed to the rest of the team.</summary>
+        private void OnServerPingRequest(NetworkConnection conn, PingRequestBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string requesterId)
+                || string.IsNullOrEmpty(requesterId)) return;
+
+            float now = Time.unscaledTime;
+            if (_lastPingAtByConnection.TryGetValue(conn.ClientId, out float last)
+                && now - last < PingSync.RateLimitS) return;
+            _lastPingAtByConnection[conn.ClientId] = now;
+
+            var avatar = PlayerAvatar.Find(requesterId);
+            if (avatar == null) return;   // no body in the world, no shout from it
+            float separation = Vector3.Distance(avatar.transform.position, msg.Position);
+            if (separation > PingSync.MaxRangeM)
+            {
+                Debug.Log($"[Pings] refused from {requesterId}: {separation:F0} m from the sender " +
+                          $"(limit {PingSync.MaxRangeM:F0} m).");
+                return;
+            }
+
+            var presence = NetworkSession.GetPlayer(requesterId);
+            string name = presence != null && !string.IsNullOrEmpty(presence.displayName)
+                ? presence.displayName
+                : requesterId;
+
+            var record = new PingRecord
+            {
+                Id = requesterId + "#srv#" + Time.frameCount,
+                OwnerId = requesterId,
+                OwnerName = name,
+                Position = msg.Position,
+                LifetimeS = PingSync.DefaultLifetimeS
+            };
+            PingSync.ApplyRemote(record);   // the host's local client sees it too
+            HostRelayPing(record);
+        }
+
+        /// <summary>Client: a teammate's ping arrived. The host already applied
+        /// the team rule, so this machine draws it and asks nothing further.</summary>
+        private void OnClientPing(PingBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            PingSync.ApplyRemote(msg.Ping);
+        }
+
         private void OnClientMachineState(MachineStateBroadcast msg, Channel channel)
         {
             if (_serverStarted || WorldMismatch) return;
@@ -5057,6 +5171,7 @@ namespace VoxelEngine.Networking
             GridStateSync.Clear();
             GridBuildSync.Clear();
             BeaconSync.Clear();
+            PingSync.Clear();   // 18.16.0 - a shout does not survive the session
             _beaconSignatureByConnection.Clear();
             GridSyncManager.Instance?.ForgetBaseline();
             _statusLine = "Offline";

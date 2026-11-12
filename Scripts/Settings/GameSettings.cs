@@ -38,7 +38,8 @@ namespace VoxelEngine.Settings
         WindLines,      // surface wind-line visuals; read WITH the Ctrl modifier - Ctrl+B by default (17.20.0-dev)
         BuildLock,      // freeze the placement hologram in the world, then nudge it (17.44.0-dev)
         HammerTier,     // the Building Hammer's upgrade-tier wheel (17.45.0-dev)
-        PlacementWheel  // the placement-type / build-pattern wheel (18.9.1-dev): V by default, keeping B for block variants
+        PlacementWheel, // the placement-type / build-pattern wheel (18.9.1-dev): V by default, keeping B for block variants
+        Ping            // team ping at the crosshair (18.16.0-dev): middle mouse by default
     }
 
     /// <summary>How the microphone decides it is your turn to speak.
@@ -87,7 +88,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 29;   // v29: PlacementWheel (V) separated from BuildWheel (B); BuildLock moves to X
+        private const int    CURRENT_VERSION = 30;   // v30: Ping (Mouse2) joins the keybind list; no rebind migrations
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -429,6 +430,10 @@ namespace VoxelEngine.Settings
             // share a context. Either can be rebound in Settings - Keybinds.
             InputAction.HammerTier      => "U",
             InputAction.PlacementWheel  => "V",
+            // 18.16.0-dev: middle mouse. The one button nothing else claims -
+            // Mine and Build own the other two, and a ping is a gesture, not a
+            // held action, so it wants a key you can tap without leaving WASD.
+            InputAction.Ping            => "Mouse2",
             _ => "None"
         };
 
@@ -526,6 +531,9 @@ namespace VoxelEngine.Settings
             string placementWheel = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.PlacementWheel, "");
             if (string.IsNullOrEmpty(placementWheel) || placementWheel == "None")
                 PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.PlacementWheel, DefaultKey(InputAction.PlacementWheel));
+            // v30: the team ping is new; the generic pass above already handed an
+            // unset profile its middle-mouse default, and a deliberate rebind is
+            // preserved. Nothing else moves.
 
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();

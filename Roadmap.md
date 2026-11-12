@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.15.1-dev`
-**Roadmap Version:** `18.15.1-dev`
+**Current Version:** `18.16.0-dev`
+**Roadmap Version:** `18.16.0-dev`
 **Date:** 12-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,6 +30,11 @@
 
 ## 0. Recently Done
 
+### 18.16.0-dev - Team Pings
+- The ping key (middle mouse, rebindable as **Ping Location**) plants a transient team marker on the point under the crosshair, or 60 m out when the crosshair meets nothing
+- A ping lasts 8 s, is rate-limited to one per 1.5 s per player, and is only ever drawn for the pinger and their teammates - `PingSync` enforces the team rule where the ping is SENT, and the pinger's own marker goes up locally before the wire is touched
+- `UI/PingMarkerHud` draws a pulsing ring with the pinger's name and live distance (cyan "You" for your own, amber for a teammate), and turns an off-screen ping into a screen-edge arrow pointing at it
+
 ### 18.15.1-dev - Machine Module Note Compile Fix
 - The module summary line under a machine's upgrade slots was inserted into `OreWasherPanel`, which has neither an `upgrades` parameter nor a `moduleSupport` argument (CS0103 x4) - it now sits in `ProcessingMachinePanel` where both are in scope
 - The washer, foundry, press and tree-farm panels keep their own `AppendModuleNote` call inside the block that draws their slot card; no behaviour changed
@@ -54,11 +59,6 @@
 - New save-compatible `BlockItem.defaultPlacementPattern` (-1 default): the stationary LED strip defaults to SPAN so a drag lays a run by itself like a grid drag; an explicit wheel pick still wins for the session
 - Removed per Thomas: the RGB mood light, the floodlight step's duplicate stationary LED strip, and the mis-authored stationary `Block_Floodlight_Grid`
 
-### 18.13.1-dev - Floodlight Setup Gate Fix
-- `BuildFloodlightContent`'s dependency gate now finds copper wire at `Industrial/Items/Item_CopperWire.asset` first, then the legacy `Items/` paths, instead of only the nonexistent `Items/Item_CopperWire.asset`
-- The "run base crafting and industrial content first" dialog now appears only when no copper wire asset exists at all
-- Editor-only fix; no save, API, or gameplay change
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -71,6 +71,7 @@
 > **Repair note (12-11-2026):** this list was truncated in the repository history after milestone 3 - milestones 4-11 and the heading below were merged into that sentence, and have NOT been re-invented here. Their shipped evidence is still recorded per round in `Changelog.md`; section 9.6 keeps pointing at the live multiplayer plan.
 
 ### Open Scope (named with the version that deferred it)
+- **Team ping runtime acceptance (18.16.0-dev):** confirm in Unity that the ping key (middle mouse by default, rebindable as **Ping Location** in Settings - Keybinds) plants a marker on the point under the crosshair and 60 m out when the crosshair meets nothing, that the pinger's own marker reads cyan with a "You" tag while a teammate's reads amber with their name and live distance, that turning away from a ping turns it into a screen-edge arrow pointing at it, that a second press inside 1.5 s is ignored, that a marker fades out after 8 s, that a player in no team pings alone, that in a two-player session a non-teammate never sees the ping, that a ping claiming a position beyond 300 m of the sender's own avatar is refused in the host log, and that single-player pings apply instantly with no network traffic.
 - **Machine module runtime acceptance (18.15.0-dev):** confirm in Unity that setup step 127 reports the three modules and repairs the role field, that a Speed / Efficiency / Yield module fits the Crusher, Assembler, Electric Furnace, Foundry, Ore Washer, Refinery, Chemical Plant, Distillation Plant and Catalytic Cracker, that a Yield module is refused by the Automatic Tree Farm, Biomass Press and Drone Port with a named toast rather than a silent no-op, that a Quarry upgrade is refused by a machine slot and vice versa, that a fitted module survives a save and reload on the Chemical Plant, Distillation Plant and Catalytic Cracker (whose containers are appended last), that an older save of those three machines still restores its inputs and outputs, and that x-speed / x-power / bonus-yield readouts match the panel.
 - **Drop-claim runtime acceptance (18.10.0-dev):** in a two-player session, confirm one player can pick up a drop while the other's same-instant claim is denied, that a claim from beyond reach is refused in the host log, that the granted stack lands in the claimant's inventory exactly once, and that single-player and host pickups still apply instantly with no network traffic.
 - **Machine-edit validation runtime acceptance (18.11.0-dev):** in a two-player session, confirm a teammate can still edit a TEAM block's panel with the host log quiet, that a guest edit to a PRIVATE block is refused with a "Machine locked" toast and the host state untouched, that an edit sent from beyond reach is refused, and that host/offline machine play is unchanged.
@@ -326,6 +327,11 @@
 - **Beacon sharing is a PER-BEACON setting, not one global rule (DECIDED).** Three values, chosen on the beacon itself: **share global** (everyone in the session sees it), **share team** (only the owner's team sees it), and **do not share** (owner only). The default for a newly placed beacon is do-not-share, so nothing a player builds leaks to the session until they say so.
 - **The team value is stored from day one and honoured as soon as teams exist.** Beacons ship before teams, so until milestone 11 lands a beacon set to share-team behaves as do-not-share for everyone except its owner. The setting is never silently rewritten - a player who chose share-team gets exactly that the moment they have a team, with no revisiting of old beacons.
 - **Sharing is enforced where the beacon is SENT, not where it is drawn.** A client is never told about a beacon it has no right to see, so hiding a marker is not what keeps it secret.
+- **A ping is a shout, not a waypoint.** Beacons are persistent owner-made markers on a 2.5 s sweep; a ping is a transient call-out (8 s, one per 1.5 s per player, at most eight live) that travels the moment it is made and expires on a local timer, so it costs no sweep and needs no removal message.
+- **The pinger always sees their own ping**, added locally on the key press; everyone else hears it only through the host, which stamps the sender from its connection table and refuses a position further than 300 m from that sender's own avatar.
+- **Ping sharing uses the same send-side rule as beacon sharing**: the host forwards a ping only to connections standing on the pinger's team, never to the session at large, and a player in no team pings alone.
+- **A ping carries no authority.** It moves nothing, unlocks nothing and edits nothing, so a modified client can at worst point its own team at the wrong piece of sky.
+
 
 ### Era Transition Feel
 

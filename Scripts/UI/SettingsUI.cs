@@ -778,7 +778,7 @@ namespace VoxelEngine.UI
                 row.style.backgroundColor = new StyleColor(T.BgCard);
                 T.Radius(row, 5f);
 
-                var lbl = new Label(a == InputAction.ToggleFly ? "Toggle Jetpack" : Prettify(a.ToString()));
+                var lbl = new Label(ActionName(a));
                 lbl.style.color    = new StyleColor(T.TextSecondary);
                 lbl.style.fontSize = 12;
                 lbl.style.flexGrow = 1;
@@ -815,7 +815,7 @@ namespace VoxelEngine.UI
                 p.Add(row);
 
                 rows.Add((row,
-                    Prettify(a.ToString()).ToLowerInvariant(),
+                    ActionName(a).ToLowerInvariant(),
                     GameSettings.GetKey(a).ToLowerInvariant()));
             }
 
@@ -1180,6 +1180,16 @@ namespace VoxelEngine.UI
             field.RegisterCallback<ChangeEvent<int>>(_ => Apply(field));
             field.RegisterCallback<ChangeEvent<float>>(_ => Apply(field));
         }
+
+        /// <summary>The name a keybind row shows (18.16.0-dev: pulled out of the row
+        /// builder so the visible label and the "search by function" haystack can
+        /// never drift apart again).</summary>
+        private static string ActionName(InputAction a) => a switch
+        {
+            InputAction.ToggleFly => "Toggle Jetpack",
+            InputAction.Ping      => "Ping Location",   // the ping at the crosshair
+            _ => Prettify(a.ToString())
+        };
 
         // ── Pretty-print enum / camelCase names → "Mouse Sensitivity" etc. ──
         private static string Prettify(string raw)

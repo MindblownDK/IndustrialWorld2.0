@@ -1,9 +1,34 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.15.1-dev`
+**Current Version:** `18.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.16.0-dev] Team Pings - A Shout at the Crosshair, Heard by the Team Only
+
+**Type:** MINOR - one new feature (a new input action, a new network channel and a new HUD layer) built on systems that already exist. No save-schema change of any kind: a ping is never persisted, so an old save, an old world or an old team roster loads exactly as before. The only player-facing state that moves is one new keybind, and it defaults in on its own.
+
+**GitHub title:** `[18.16.0-dev] Add team pings: crosshair marker, team-only relay, own marker in local colour, off-screen edge arrow`
+
+#### Added
+
+- **`Scripts/Networking/PingSync.cs` - the ping channel.** `PingRecord` is the wire shape (id, owner id, owner name, position, lifetime) and `LivePing` is the runtime entry with the age the HUD draws from. `PingSync.Ping(Vector3)` plants the local marker first and unconditionally, then asks the host to shout it; `ApplyRemote` takes a teammate's ping off the wire; `Current` is the single list every consumer reads and it expires its own entries, so no caller has to sweep. Lifetime 8 s, one ping per 1.5 s per player, at most eight live - a shout, not a waypoint.
+- **Team-only delivery, decided where the ping is SENT.** `NetworkBootstrap.HostRelayPing` walks the connection table and forwards a ping only to connections whose player id satisfies `TeamRegistry.SameTeam` with the pinger, so a non-teammate is never told a ping exists and cannot leak one it was never given. The pinger's own connection is skipped because their marker is already up locally. A player in no team pings alone, and single player applies with no traffic at all.
+- **`PingRequestBroadcast` and the host-side handler.** A guest sends only an aim point; the host stamps the owner id from its connection table (never from the message), holds the rate limit per connection itself instead of trusting a client clock, and refuses a position further than `PingSync.MaxRangeM` (300 m) from the sender's own avatar with a line in the host log. An accepted ping is applied on the host (its local client is a teammate too) and then relayed. A ping carries no authority - it moves nothing, unlocks nothing and edits nothing - which is why gross range is the whole validation.
+- **`Scripts/UI/PingMarkerHud.cs` - the marker layer.** One floating ring per live ping with the pinger's name and the live distance, easing in on arrival and fading out over the last 1.4 s. The ring pops to full size in a fifth of a second and then breathes, so a shout reads as live rather than painted. Your own ping is cyan and tagged "You"; a teammate's is amber with their name, and both stay distinguishable from the beacon strip's owner-chosen colours, which is the point of choosing them separately.
+- **An off-screen ping becomes an arrow, not a nothing.** The beacon strip hides what is behind you because a waypoint will wait; a shout will not, so a ping outside the frame is pinned to the screen edge as a chevron aimed at it with the distance still attached. A ping on a moving hull glides between frames instead of teleporting, and a ping past the screen edge snaps so the arrow stays a compass.
+- **`InputAction.Ping`, default middle mouse.** The enum member is appended last so every stored binding keeps its number, `DefaultKey` gives it `Mouse2` (the one button nothing else claims - Mine and Build own the other two, and a ping wants a tap, not a hold), and Settings - Keybinds lists it as "Ping Location" through a new shared `SettingsUI.ActionName` helper. `CURRENT_VERSION` moves to 30; the generic migration pass fills the binding for every existing profile, so no player has to visit the settings screen.
+- **An audible half: one chat line per received ping.** "Thomas - Pinged a location" appears in chat when a teammate pings, because a shout you happen to be looking away from is otherwise invisible. Your own ping says nothing - you just watched it appear.
+
+#### Changed
+
+- **`PlayerController` now resolves the aim point and owns the ping key.** `UpdatePingInput` runs through the same soft-UI gate as every other action key (and stays quiet while typing), and `ResolvePingPoint` raycasts the crosshair against a 400 m span with its own dedicated probe buffer, ignoring the player's own colliders. Aiming at the sky is legitimate, so a ping that hits nothing lands 60 m out - inside the host's range check with room to spare.
+- **`GameUIController` mounts the ping layer** beside the beacon strip, and `NetworkBootstrap` teardown clears it with the rest of the session state, so a stale shout cannot survive into the next world.
+
+#### Fixed
+
+- **The "search by function" keybind filter no longer disagrees with the row label.** Row labels and the search haystack were built in two places from two different expressions; they now both come from `SettingsUI.ActionName`, so a renamed action cannot search under one name and display another.
 
 ### [18.15.1-dev] Machine Module Note Compile Fix
 

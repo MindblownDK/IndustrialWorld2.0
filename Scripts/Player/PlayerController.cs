@@ -298,6 +298,10 @@ namespace VoxelEngine.Player
         // solve then went blind exactly where the player most needed it held down.
         private readonly RaycastHit[] _terrainProbeHits = new RaycastHit[32];
 
+        /// <summary>18.16.0-dev - buffer for the ping aim probe. Its own array so a
+        /// ping can never disturb a traversal or footing probe mid-frame.</summary>
+        private readonly RaycastHit[] _pingProbeHits = new RaycastHit[16];
+
         // ===== Editor inspector helpers (for the in-inspector toggle button) =====
         [HideInInspector] public bool inspectorFlyToggle;
 
@@ -600,6 +604,10 @@ namespace VoxelEngine.Player
             if (!softUiOpen) UpdateLook();
             else { _sliding = false; }   // no slide tricks while browsing a menu
 
+            // Team ping (18.16.0): a shout at the crosshair, silenced by the same
+            // gate as every other action key - browsing a menu is not a shout.
+            if (!softUiOpen && !VoxelEngine.UI.ChatOverlay.IsTyping) UpdatePingInput();
+
             // Petrify slow decay (Basilisk gaze, etc.).
             if (_petrifyTimer > 0f) { _petrifyTimer -= Time.deltaTime; if (_petrifyTimer <= 0f) _petrifySlow = 0f; }
 
@@ -688,6 +696,41 @@ namespace VoxelEngine.Player
             // active gravity "up" (world-up on flat worlds → identity rotation, unchanged).
             transform.rotation       = Quaternion.FromToRotation(Vector3.up, UpVec) * Quaternion.Euler(0, _yaw, 0);
             cameraPivot.localRotation= Quaternion.Euler(_pitch, 0, 0);
+        }
+
+        /// <summary>18.16.0-dev - the ping key. The aim point is resolved here, on
+        /// the player's own machine against the crosshair, and handed to PingSync.
+        /// No authority rides along, so the host only re-checks the gross range
+        /// rather than re-simulating the shot.</summary>
+        private void UpdatePingInput()
+        {
+            if (!GameSettings.WasPressed(InputAction.Ping)) return;
+            VoxelEngine.Networking.PingSync.Ping(ResolvePingPoint());
+        }
+
+        /// <summary>The point a ping is planted on: the first thing the crosshair
+        /// meets, or a spot in the air 60 m out when it meets nothing - looking at
+        /// the sky is a legitimate place to point a team.</summary>
+        private Vector3 ResolvePingPoint()
+        {
+            var cam = playerCamera != null ? playerCamera : Camera.main;
+            if (cam == null) return transform.position + transform.forward * 20f;
+
+            Ray ray = new Ray(cam.transform.position, cam.transform.forward);
+            Vector3 point = ray.origin + ray.direction * 60f;   // nothing hit: shout at the air
+            float best = float.MaxValue;
+            int count = Physics.RaycastNonAlloc(ray, _pingProbeHits, 400f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _pingProbeHits[i];
+                if (hit.collider == null || hit.distance <= 0.01f) continue;
+                // Our own body sits under the camera - never ping the inside of it.
+                if (hit.collider.transform.IsChildOf(transform)) continue;
+                if (hit.distance >= best) continue;
+                best = hit.distance;
+                point = hit.point;
+            }
+            return point;
         }
 
         private bool HasFlightPermission()
