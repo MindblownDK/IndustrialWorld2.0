@@ -89,6 +89,10 @@ namespace VoxelEngine.Simulation
         public float ProcessProgressSeconds => _processProgress;
         public float SpeedMultiplier => _speedMult * TierSpeedMultiplier;
         public float EfficiencyMultiplier => _effMult;
+        /// <summary>18.15.0-dev: every socketed module, read once per container change.</summary>
+        public MachineModuleProfile Modules => _modules;
+        private MachineModuleProfile _modules = MachineModuleProfile.Identity;
+        [System.NonSerialized] private bool _modulesHooked;
 
         public bool UserEnabled
         {
@@ -137,37 +141,20 @@ namespace VoxelEngine.Simulation
             if (inputC  == null) inputC  = new ItemContainer("Inputs",  inSlots);  else inputC.Resize(inSlots);
             if (fuelC   == null) fuelC   = new ItemContainer("Fuel",    1);        else fuelC.Resize(1);
             if (outputC == null) outputC = new ItemContainer("Outputs", outSlots); else outputC.Resize(outSlots);
-            if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", upSlots); else upgradeC.Resize(upSlots);
+            // 18.15.0-dev: a solid-fuel foundry has no upgrade section in its panel, so its
+            // slots honour nothing and refuse every module instead of swallowing one silently.
+            upgradeC = MachineModules.Prepare(upgradeC, "Upgrades", upSlots,
+                UsesSolidFuel ? MachineModuleSupport.None : MachineModuleSupport.All);
 
-            upgradeC.OnChanged -= RecalculateUpgrades;
-            upgradeC.OnChanged += RecalculateUpgrades;
+            if (!_modulesHooked) { _modulesHooked = true; upgradeC.OnChanged += RecalculateUpgrades; }
             RecalculateUpgrades();
         }
 
         private void RecalculateUpgrades()
         {
-            if (!UsesSolidFuel && upgradeC != null)
-            {
-                float speed = 1f;
-                float eff = 1f;
-                for (int i = 0; i < upgradeC.Size; i++)
-                {
-                    var stack = upgradeC.GetSlot(i);
-                    if (stack == null || stack.IsEmpty || stack.item == null) continue;
-                    if (stack.item is FurnaceUpgradeItem mod)
-                    {
-                        speed *= Mathf.Pow(mod.speedMultiplier, stack.count);
-                        eff   *= Mathf.Pow(mod.efficiencyMultiplier, stack.count);
-                    }
-                }
-                _speedMult = speed;
-                _effMult = eff;
-            }
-            else
-            {
-                _speedMult = 1f;
-                _effMult = 1f;
-            }
+            _modules = UsesSolidFuel ? MachineModuleProfile.Identity : MachineModules.Read(upgradeC);
+            _speedMult = _modules.speedMultiplier;
+            _effMult = _modules.efficiencyMultiplier;
         }
 
         // ── IMachineProcessState ──────────────────────────────────────
@@ -545,6 +532,9 @@ namespace VoxelEngine.Simulation
 
             outputC.Insert(new ItemStack(_current.outputItem, _current.outputCount));
             ProductionStatsTracker.RecordProduced(_current.outputItem, _current.outputCount);
+
+            // 18.15.0-dev: a socketed Yield module can hand one extra cast unit per batch.
+            MachineModules.RollBonusUnit(_modules, outputC, _current.outputItem, _current.outputCount);
 
             if (_current.byproductItem != null && _current.byproductCount > 0 && Random.value <= _current.byproductChance)
             {

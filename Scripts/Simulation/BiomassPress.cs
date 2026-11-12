@@ -38,6 +38,7 @@ namespace VoxelEngine.Simulation
         public ItemContainer inputC;
         public ItemContainer outputC;
         public ItemContainer upgradeC;
+        [System.NonSerialized] private bool _modulesHooked;
 
         [Header("Fluid Tanks")]
         public MachineFluidTank waterTank = new MachineFluidTank("Water In", 1000f, LiquidType.Water, autoType: false);
@@ -122,15 +123,12 @@ namespace VoxelEngine.Simulation
             if (outputC == null) outputC = new ItemContainer("Pressed Outputs", OUTPUT_SLOTS);
             else if (outputC.Size != OUTPUT_SLOTS) outputC.Resize(OUTPUT_SLOTS);
 
-            if (upgradeC == null)
-            {
-                upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS);
-                upgradeC.OnChanged += RecalculateUpgrades;
-            }
-            else if (upgradeC.Size != UPGRADE_SLOTS)
-            {
-                upgradeC.Resize(UPGRADE_SLOTS);
-            }
+            // 18.15.0-dev: shared module system. The press has no batch step of its own to
+            // hand a bonus unit to, so it honours speed and efficiency only and refuses a
+            // Yield module at the slot instead of letting it sit there idle.
+            upgradeC = MachineModules.Prepare(upgradeC, "Upgrades", UPGRADE_SLOTS,
+                MachineModuleSupport.Speed | MachineModuleSupport.Efficiency);
+            if (!_modulesHooked) { _modulesHooked = true; upgradeC.OnChanged += RecalculateUpgrades; }
         }
 
         public void EnsureTanks()
@@ -626,23 +624,9 @@ namespace VoxelEngine.Simulation
 
         public void RecalculateUpgrades()
         {
-            float speed = 1f;
-            float eff = 1f;
-            if (upgradeC != null)
-            {
-                for (int i = 0; i < upgradeC.Size; i++)
-                {
-                    var st = upgradeC.GetSlot(i);
-                    if (st == null || st.IsEmpty || st.item == null) continue;
-                    if (st.item is FurnaceUpgradeItem upg)
-                    {
-                        if (upg.speedMultiplier > 0f) speed *= upg.speedMultiplier;
-                        if (upg.efficiencyMultiplier > 0f) eff *= upg.efficiencyMultiplier;
-                    }
-                }
-            }
-            SpeedMultiplier = Mathf.Clamp(speed, 0.25f, 5f);
-            EfficiencyMultiplier = Mathf.Clamp(eff, 0.2f, 3f);
+            var modules = MachineModules.Read(upgradeC);
+            SpeedMultiplier = modules.speedMultiplier;
+            EfficiencyMultiplier = modules.efficiencyMultiplier;
         }
 
         public void ResolveDefaultItems()

@@ -112,6 +112,11 @@ namespace VoxelEngine.Transport
         {
             if (upgrades == null) upgrades = new ItemContainer("Upgrades", upgradeSlots);
             else if (upgrades.Size != upgradeSlots) upgrades.Resize(upgradeSlots);
+            // 18.15.0-dev: a port reads speed (flight) and efficiency (payload), so it joins the
+            // shared module filter and refuses a Yield module rather than parking one in a slot
+            // that has no batch to boost.
+            VoxelEngine.Simulation.MachineModules.InstallFilter(upgrades,
+                VoxelEngine.Items.MachineModuleSupport.Speed | VoxelEngine.Items.MachineModuleSupport.Efficiency);
         }
 
         /// <summary>

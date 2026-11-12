@@ -60,9 +60,14 @@ namespace VoxelEngine.Crafting
         [Header("Recipes")]
         public List<ProcessingRecipe> knownRecipes = new();
 
+        /// <summary>18.15.0-dev: two universal module slots, as on every other processor.</summary>
+        public const int UPGRADE_SLOTS = 2;
+
         [Header("Containers (auto-created)")]
         public ItemContainer inputC;
         public ItemContainer outputC;
+        [Tooltip("Universal machine module slots (18.15.0-dev). Appended last in the saved container order, so an older save still restores its inputs and outputs at the same index.")]
+        public ItemContainer upgradeC;
 
         [Header("Fluid Tanks")]
         [Tooltip("Feed tank. Auto-typed: adopts crude oil for the Atmospheric Cut or refined oil for the Re-Run cut — whichever is poured in first while empty. Output routing never fills it.")]
@@ -99,6 +104,9 @@ namespace VoxelEngine.Crafting
         public ProcessingRecipe Current   => _current;
         public bool  IsOnline             => _power != null && _power.IsPowered;
         public float CurrentWattage       { get; private set; }
+        /// <summary>18.15.0-dev: what the socketed modules add up to.</summary>
+        public VoxelEngine.Simulation.MachineModuleProfile Modules { get; private set; }
+            = VoxelEngine.Simulation.MachineModuleProfile.Identity;
 
         /// <summary>Player-selected recipe (from the UI). Null = auto-pick the first runnable.</summary>
         [System.NonSerialized] public ProcessingRecipe selectedRecipe;
@@ -146,7 +154,22 @@ namespace VoxelEngine.Crafting
         {
             if (inputC  == null) inputC  = new ItemContainer("Inputs",  INPUT_SLOTS);   else inputC.Resize(INPUT_SLOTS);
             if (outputC == null) outputC = new ItemContainer("Outputs", OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
+            // 18.15.0-dev: the plant finishes batches, so it honours all three module roles.
+            upgradeC = VoxelEngine.Simulation.MachineModules.Prepare(
+                upgradeC, "Upgrades", UPGRADE_SLOTS, VoxelEngine.Items.MachineModuleSupport.All);
+            if (!_modulesHooked)
+            {
+                _modulesHooked = true;
+                upgradeC.OnChanged += RecalculateModules;
+            }
+            RecalculateModules();
         }
+
+        [System.NonSerialized] private bool _modulesHooked;
+
+        /// <summary>Re-read the socketed modules (18.15.0-dev).</summary>
+        private void RecalculateModules()
+            => Modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
 
         /// <summary>Make sure the feed tank and the six typed product tanks exist.
         /// Existing entries are kept as tuned — only missing slots are created.</summary>
@@ -242,8 +265,9 @@ namespace VoxelEngine.Crafting
             EnsureContainers();
 
             // Drive power draw.
+            // 18.15.0-dev: an Efficiency module cuts the running draw.
             float wantWatts = (_current != null)
-                ? baseWattsPerSecond * _current.powerDrawMultiplier
+                ? baseWattsPerSecond * _current.powerDrawMultiplier * Modules.efficiencyMultiplier
                 : idleWattsPerSecond;
             CurrentWattage = wantWatts;
             if (_power != null) _power.wattsPerSecond = wantWatts;
@@ -256,7 +280,8 @@ namespace VoxelEngine.Crafting
             if (_current == null) _current = FindRecipe();
             if (_current == null) { _progress = 0; return; }
 
-            _progress += Time.deltaTime;
+            // 18.15.0-dev: a Speed module advances the cut faster.
+            _progress += Time.deltaTime * Mathf.Max(0.01f, Modules.speedMultiplier);
             if (_progress >= EffectiveBatchTime(_current))
                 CompleteBatch();
         }
@@ -387,6 +412,9 @@ namespace VoxelEngine.Crafting
                 _progress = EffectiveBatchTime(_current);
                 return;
             }
+            // 18.15.0-dev: a socketed Yield module can hand one extra unit of the cut's main
+            // product once the run has landed.
+            VoxelEngine.Simulation.MachineModules.RollBonusUnit(Modules, outputC, _current.outputs);
             _progress = 0f;
             _current  = FindRecipe();
         }

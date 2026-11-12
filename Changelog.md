@@ -1,9 +1,38 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.14.1-dev`
+**Current Version:** `18.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.15.0-dev] Universal Machine Modules - One Resolver, Role-Aware Slots, Machine Yield Module
+
+**Type:** MINOR - new content (one module item, one recipe, one research unlock, one Setup step) plus a shared system that is save-compatible. `FurnaceUpgradeItem` gains two additive fields (`moduleKind` defaults to Speed, `yieldBonusChance` defaults to 0), the three machines that gain module slots APPEND them last in their saved container order, and no item id, container index or save field changes meaning. The kind field is repaired per asset by itemId in step 127, and reading a module never depends on it being right - both multipliers are still applied whatever the role says.
+
+**GitHub title:** `[18.15.0-dev] Unify machine modules: shared resolver, role-aware slots, Machine Yield Module, module slots on the chemical and petroleum processors`
+
+#### Added
+
+- **`Scripts/Simulation/MachineModules.cs` - the universal module system.** `MachineModuleProfile` is everything a machine's socketed modules add up to (throughput multiplier, power-draw multiplier, bonus-yield chance, and the per-role counts the panel chips use); `MachineModules.Read(ItemContainer)` is the one pass that produces it; `Prepare` sizes a machine's slots and installs the role filter; `RollBonusUnit` is the bonus-yield roll a machine calls where its batch lands; `HintFor` and `ShortHintFor` print what a machine accepts. Speed is bounded to x0.25-5, power draw to x0.2-3 and bonus yield to +0-50%, so a mistyped module asset can no longer turn a Crusher into a teleporter.
+- **`MachineModuleKind` (Speed, Efficiency, Yield) and `MachineModuleSupport` (a flag set) on `FurnaceUpgradeItem`**, plus a `moduleKind` field, a `yieldBonusChance` field, `SupportBit`, `HasEffect` and `EffectSummary()`. The role is what the slot filter and the panel label read; the two multipliers are applied regardless, so an asset authored before this round keeps behaving exactly as it did until step 127 repairs its role by itemId.
+- **Machine Yield Module (`upgrade_machine_yield`)** - a universal module that gives every finished batch a 12% chance per module of one extra unit of the recipe's main product. Assembler recipe from 7 Steel Plate, 5 Circuit, 3 Iron Gear and 7 Copper Wire (just above the Speed module: extra product is the strongest of the three roles), unlocked by Advanced Manufacturing, with a procedurally authored 64 px crystal icon and its importer meta written as a single sprite so no Inspector pass is needed.
+- **Editor step 127 - `Editor/Crafting/MachineModuleSetup.cs`,** registered in `Tools > Voxel Engine > Voxel Engine Setup` under *Factory, Industry & Power* and again in the non-destructive repair list. It repairs the role on the two modules step 75 authored, authors the Yield module, and appends all three recipes to the research node and the registry and all three items to the save catalogue - append-only, and idempotent.
+- **Module slots on three processors that never had them:** `StationaryChemicalPlant`, `DistillationPlant` and `CatalyticCracker` now carry two universal slots, with the same speed, power and bonus-yield wiring the Refinery already had. Their panels gained a Modules section, shift-click routes a module into those slots, and the save record appends the new container LAST on both the write and the read side, so an older save still lands its inputs and outputs on the same indices and simply restores the module record empty.
+- **`ItemContainer.moduleSlotSupport`** - a `[NonSerialized]` nullable mask, set only on a machine's module slots, so the UI can name the rule a refused module broke. It is never read by the accept path; `AcceptFilter` remains the single authority on what a slot takes. One cached delegate per mask keeps a per-frame `EnsureContainers` (every processor has one) allocation-free.
+
+#### Changed
+
+- **Nine hand-rolled `RecalculateUpgrades` loops are gone.** Crusher, Assembler, Electric Furnace, Ore Washer, Metallurgical Foundry, Biomass Press, Automatic Tree Farm, Grid Automatic Tree Farm and Oil Refinery all read one `MachineModules.Read` result now. They used to multiply both multipliers from every `FurnaceUpgradeItem` with no bounds, no role and no filter; the tree farm and press clamped locally and the others did not, which is how the same two modules could mean different things on two machines.
+- **Machines declare the roles they honour, and their slots refuse everything else.** Processing machines take all three; the Automatic Tree Farm, the Biomass Press and the Drone Port take Speed and Efficiency (they grow, press or fly on their own cycle and have no batch to boost); a solid-fuel Foundry takes none while it runs on solid fuel, exactly as its panel already implied by hiding the section. Anything that is not a universal module - a Quarry upgrade tier, a maritime engine module, cargo - is refused by a machine slot instead of occupying one and doing nothing.
+- **The Quarry is the mirror image.** Its slots now accept only `QuarryUpgradeItem`, so a universal module can no longer be parked in a slot the Quarry can never read.
+- **A refused module says so.** `GameUIController.ExplainRefusal` sits in front of the weight toast at every drag and quick-transfer refusal point: a role mismatch reports "Module not accepted" with the machine's accepted roles, and a non-module dropped into module slots reports "Not a machine module". Before this round the only explanation a refusal could give was weight, so a role refusal read as a full container.
+- **Module readouts are computed, not hard-coded.** `ProcessorUI`'s upgrade block was a fixed sentence claiming "x1.25 / x0.8" - true only until a module was retuned, and silent about what was actually fitted. It is now a Modules section with the live aggregate (`x1.56 throughput · x0.80 power draw · +24% bonus yield`), the same line under the Electric Furnace's live multipliers, and the same helper (`MachineUIs.AppendModuleNote`) under the washer, foundry, press and tree-farm slot cards.
+
+#### Fixed
+
+- **`Crusher` and `Assembler` byproduct statistics counted units that never existed.** The `RecordProduced` call sat outside the `HasSpace` check on the byproduct branch, so a byproduct the full output refused was still recorded as produced; the record now runs only for a unit that really landed.
+- **Upgrade listeners were attached on every tick, and on two machines never attached at all.** Crusher, Assembler, Ore Washer and Foundry re-added their `OnChanged` listener from a per-tick `EnsureContainers`, allocating two delegates per tick each; the Biomass Press and Automatic Tree Farm only subscribed when the container was CREATED, so a prefab-authored container never subscribed and a module change did not refresh them until something else did. Both now hook exactly once behind a `_modulesHooked` flag that is set on the first `EnsureContainers`.
+- **`Roadmap.md` structural damage (documentation, no code):** milestone 3's sentence had swallowed the `### Open Scope` heading and milestones 4-11 were lost to an older edit (recorded as a repair note rather than re-invented), and the 4.5.0 status table carried a broken fragment row (`| Recipe reansport blocks to ...`) whose tail belonged to the Item entity system row - the tail is restored there and the broken row removed.
 
 ### [18.14.1-dev] Lighting Rework Acceptance Recorded
 

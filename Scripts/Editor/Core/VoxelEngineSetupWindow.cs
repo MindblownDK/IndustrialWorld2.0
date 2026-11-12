@@ -219,6 +219,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Author flare stacks and heat recovery", () => VoxelEngine.EditorTools.FlareStackSetup.RunStep70()),
                 Setup("Author catalytic cracking and petrochemicals", () => VoxelEngine.EditorTools.CatalyticCrackingSetup.RunStep71()),
                 Setup("Author universal machine upgrade modules", () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75()),
+                Setup("Author universal machine module roles and the machine yield module (18.15.0-dev)", () => IndustrialWorld.EditorTools.MachineModuleSetup.RunStep127()),
                 Setup("Convert the jack pump to tank-only crude output", () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76()),
                 Setup("Build the deep-core programme", () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86()),
                 Setup("Rebuild the Quarry machine with a spinning cutter wheel and a fitted name plate (17.27.3-dev)", () => VoxelEngine.EditorTools.QuarryMachineSetup.RunStep121()));
@@ -345,6 +346,7 @@ namespace VoxelEngine.EditorTools
                 Setup("Normalize biome surface materials", () => VoxelEngine.EditorTools.CosmosAuthoring.NormalizeBiomeSurfaces()),
                 Setup("Validate pollution scent rules", () => PollutionScentValidation.Run()),
                 Setup("Apply the unified UI scale law to every PanelSettings (non-destructive, 17.17.0-dev)", () => VoxelEngine.EditorTools.UiScaleLawSetup.Run()),
+                Setup("Repair universal machine module roles and the yield module link (non-destructive, 18.15.0-dev)", () => IndustrialWorld.EditorTools.MachineModuleSetup.RunStep127()),
                 Setup("Mark decorative lamp and signage families as soft-clearance (non-destructive, 18.13.0-dev)", () => VoxelEngine.EditorTools.SoftClearanceSetup.RunStep126()));
         }
 

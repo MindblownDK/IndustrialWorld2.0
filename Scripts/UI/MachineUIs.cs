@@ -81,6 +81,21 @@ namespace VoxelEngine.UI
 
 
 
+        // ── Universal machine modules (18.15.0-dev) ──────────────────
+        /// <summary>
+        /// Print what a machine's socketed modules add up to, and which modules the machine
+        /// accepts. Every machine panel that draws upgrade slots calls this, so a refused
+        /// drop reads as a stated rule instead of as a slot that silently ate an item.
+        /// </summary>
+        public static void AppendModuleNote(VisualElement parent, ItemContainer upgrades,
+            MachineModuleSupport support)
+        {
+            if (parent == null || upgrades == null || upgrades.Size <= 0) return;
+            var profile = VoxelEngine.Simulation.MachineModules.Read(upgrades);
+            parent.Add(T.Muted(profile.Summary()));
+            parent.Add(T.Muted(VoxelEngine.Simulation.MachineModules.HintFor(support)));
+        }
+
         // ════════════════════════════════════════════════════════════
         //                   CRUSHER / ASSEMBLERS
         // ════════════════════════════════════════════════════════════
@@ -245,8 +260,10 @@ namespace VoxelEngine.UI
             {
                 slotRow.Add(T.Spacer(10));
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(washer.upgradeC, slot)));
+                AppendModuleNote(content, washer.upgradeC, MachineModuleSupport.All);
             }
             content.Add(slotRow);
+            if (upgrades != null && upgrades.Size > 0) AppendModuleNote(content, upgrades, moduleSupport);
             IndustrialTheme.Frame(p);
             return p;
         }
@@ -354,6 +371,7 @@ namespace VoxelEngine.UI
             {
                 slotRow.Add(T.Spacer(10));
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(foundry.upgradeC, slot)));
+                AppendModuleNote(content, foundry.upgradeC, MachineModuleSupport.All);
             }
             content.Add(slotRow);
             IndustrialTheme.Frame(p);
@@ -690,6 +708,8 @@ namespace VoxelEngine.UI
             {
                 slotRow.Add(T.Spacer(10));
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(press.upgradeC, slot)));
+                AppendModuleNote(content, press.upgradeC,
+                    MachineModuleSupport.Speed | MachineModuleSupport.Efficiency);
             }
             content.Add(slotRow);
             IndustrialTheme.Frame(p);
@@ -817,6 +837,8 @@ namespace VoxelEngine.UI
             {
                 slotRow.Add(T.Spacer(10));
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(farm.upgradeC, slot)));
+                AppendModuleNote(content, farm.upgradeC,
+                    MachineModuleSupport.Speed | MachineModuleSupport.Efficiency);
             }
             content.Add(slotRow);
             IndustrialTheme.Frame(p);
@@ -966,7 +988,8 @@ namespace VoxelEngine.UI
             SlotBuilder slot,
             System.Action<MachineRecipe> selectRecipe,
             Color accent,
-            string hint)
+            string hint,
+            MachineModuleSupport moduleSupport = MachineModuleSupport.All)
         {
             var p = T.MachinePanel();
             string status = !machine.UserEnabled ? "DISABLED" : !machine.IsOnline ? "NO POWER" : machine.IsActive ? "RUNNING" : "IDLE";

@@ -2028,7 +2028,11 @@ namespace VoxelEngine.Persistence
             if (distillation != null)
             {
                 distillation.EnsureContainers();
-                var sc = SerializeMulti(distillation.inputC, distillation.outputC);
+                // 18.15.0-dev: the module slots are APPENDED last. DeserializeMulti matches
+                // containers by index, so an older save written when this machine had two
+                // containers still lands its entries on the inputs and outputs, and the new
+                // upgrade record simply restores empty.
+                var sc = SerializeMulti(distillation.inputC, distillation.outputC, distillation.upgradeC);
                 AttachPortSnapshot(go, sc);
                 return sc;
             }
@@ -2037,7 +2041,7 @@ namespace VoxelEngine.Persistence
             if (cracker != null)
             {
                 cracker.EnsureContainers();
-                var sc = SerializeMulti(cracker.inputC, cracker.outputC);
+                var sc = SerializeMulti(cracker.inputC, cracker.outputC, cracker.upgradeC);
                 AttachPortSnapshot(go, sc);
                 return sc;
             }
@@ -2058,7 +2062,7 @@ namespace VoxelEngine.Persistence
             if (chemicalPlant != null)
             {
                 chemicalPlant.EnsureContainers();
-                var sc = SerializeMulti(chemicalPlant.inputC, chemicalPlant.outputC);
+                var sc = SerializeMulti(chemicalPlant.inputC, chemicalPlant.outputC, chemicalPlant.upgradeC);
                 AttachPortSnapshot(go, sc);
                 return sc;
             }
@@ -5578,7 +5582,7 @@ namespace VoxelEngine.Persistence
             if (distillation != null)
             {
                 distillation.EnsureContainers();
-                DeserializeMulti(sc, distillation.inputC, distillation.outputC);
+                DeserializeMulti(sc, distillation.inputC, distillation.outputC, distillation.upgradeC);
                 RestorePortSnapshot(go, sc);
                 return;
             }
@@ -5587,7 +5591,7 @@ namespace VoxelEngine.Persistence
             if (cracker != null)
             {
                 cracker.EnsureContainers();
-                DeserializeMulti(sc, cracker.inputC, cracker.outputC);
+                DeserializeMulti(sc, cracker.inputC, cracker.outputC, cracker.upgradeC);
                 RestorePortSnapshot(go, sc);
                 return;
             }
@@ -5605,7 +5609,7 @@ namespace VoxelEngine.Persistence
             if (chemicalPlant != null)
             {
                 chemicalPlant.EnsureContainers();
-                DeserializeMulti(sc, chemicalPlant.inputC, chemicalPlant.outputC);
+                DeserializeMulti(sc, chemicalPlant.inputC, chemicalPlant.outputC, chemicalPlant.upgradeC);
                 RestorePortSnapshot(go, sc);
                 return;
             }

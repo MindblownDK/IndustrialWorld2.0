@@ -57,6 +57,8 @@ namespace VoxelEngine.Simulation
         private bool _userEnabled = true;
         private float _speedMult = 1f;
         private float _effMult = 1f;
+        private MachineModuleProfile _modules = MachineModuleProfile.Identity;
+        [System.NonSerialized] private bool _modulesHooked;
 
         // ── IMachine ──────────────────────────────────────────────────
 
@@ -105,30 +107,20 @@ namespace VoxelEngine.Simulation
 
             if (inputC   == null) inputC   = new ItemContainer("Inputs",   inSlots);  else inputC.Resize(inSlots);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  outSlots); else outputC.Resize(outSlots);
-            if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", upSlots);  else upgradeC.Resize(upSlots);
+            // 18.15.0-dev: shared module system - sized here (the slot count still follows the
+            // assembler tier) and carrying the role filter, so an assembled batch can be sped
+            // up, made cheaper to run, or given a bonus-yield roll.
+            upgradeC = MachineModules.Prepare(upgradeC, "Upgrades", upSlots, MachineModuleSupport.All);
 
-            upgradeC.OnChanged -= RecalculateUpgrades;
-            upgradeC.OnChanged += RecalculateUpgrades;
+            if (!_modulesHooked) { _modulesHooked = true; upgradeC.OnChanged += RecalculateUpgrades; }
             RecalculateUpgrades();
         }
 
         private void RecalculateUpgrades()
         {
-            if (upgradeC == null) return;
-            float speed = 1f;
-            float eff = 1f;
-            for (int i = 0; i < upgradeC.Size; i++)
-            {
-                var stack = upgradeC.GetSlot(i);
-                if (stack == null || stack.IsEmpty || stack.item == null) continue;
-                if (stack.item is FurnaceUpgradeItem mod)
-                {
-                    speed *= Mathf.Pow(mod.speedMultiplier, stack.count);
-                    eff   *= Mathf.Pow(mod.efficiencyMultiplier, stack.count);
-                }
-            }
-            _speedMult = speed;
-            _effMult = eff;
+            _modules = MachineModules.Read(upgradeC);
+            _speedMult = _modules.speedMultiplier;
+            _effMult = _modules.efficiencyMultiplier;
         }
 
         /// <summary>Restores additive machine state after its containers are loaded.</summary>
@@ -295,14 +287,20 @@ namespace VoxelEngine.Simulation
             outputC.Insert(new ItemStack(_current.outputItem, _current.outputCount));
             ProductionStatsTracker.RecordProduced(_current.outputItem, _current.outputCount);
 
-            // Byproduct.
+            // 18.15.0-dev: a socketed Yield module can hand one extra primary unit per batch.
+            MachineModules.RollBonusUnit(_modules, outputC, _current.outputItem, _current.outputCount);
+
+            // Byproduct. 18.15.0-dev: the produced-count record now runs only for a unit that
+            // really fitted - it used to fire for a byproduct the full output refused.
             if (_current.byproductItem != null && _current.byproductCount > 0)
             {
                 if (Random.value <= _current.byproductChance)
                 {
                     if (outputC.HasSpace(_current.byproductItem, _current.byproductCount))
+                    {
                         outputC.Insert(new ItemStack(_current.byproductItem, _current.byproductCount));
                         ProductionStatsTracker.RecordProduced(_current.byproductItem, _current.byproductCount);
+                    }
                 }
             }
 

@@ -19,8 +19,10 @@ namespace VoxelEngine.Industrial
     [RequireComponent(typeof(ItemPortRouting))]
     public class StationaryChemicalPlant : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
-        public const int INPUT_SLOTS  = 3;
-        public const int OUTPUT_SLOTS = 3;
+        public const int INPUT_SLOTS   = 3;
+        public const int OUTPUT_SLOTS  = 3;
+        /// <summary>18.15.0-dev: the plant joins the universal module system.</summary>
+        public const int UPGRADE_SLOTS = 2;
 
         [Header("Recipes")]
         public List<ProcessingRecipe> knownRecipes = new();
@@ -28,6 +30,8 @@ namespace VoxelEngine.Industrial
         [Header("Containers (auto-created)")]
         public ItemContainer inputC;
         public ItemContainer outputC;
+        [Tooltip("Universal machine module slots (18.15.0-dev). Appended last in the saved container order, so a save written before the plant had module slots still restores its inputs and outputs at the same index.")]
+        public ItemContainer upgradeC;
 
         [Header("Fluid Tanks")]
         public MachineFluidTank fluidIn  = new MachineFluidTank("Fluid In",  2000f, LiquidType.RefinedOil, autoType: true);
@@ -46,6 +50,9 @@ namespace VoxelEngine.Industrial
         public ProcessingRecipe Current => _current;
         public bool  IsOnline           => _power != null && _power.IsPowered;
         public float CurrentWattage     { get; private set; }
+        /// <summary>18.15.0-dev: what the socketed modules add up to.</summary>
+        public VoxelEngine.Simulation.MachineModuleProfile Modules { get; private set; }
+            = VoxelEngine.Simulation.MachineModuleProfile.Identity;
 
         private void Awake()
         {
@@ -59,9 +66,24 @@ namespace VoxelEngine.Industrial
         {
             if (inputC  == null) inputC  = new ItemContainer("Inputs",  INPUT_SLOTS);  else inputC.Resize(INPUT_SLOTS);
             if (outputC == null) outputC = new ItemContainer("Outputs", OUTPUT_SLOTS); else outputC.Resize(OUTPUT_SLOTS);
+            // 18.15.0-dev: the plant finishes batches, so it honours all three module roles.
+            upgradeC = VoxelEngine.Simulation.MachineModules.Prepare(
+                upgradeC, "Upgrades", UPGRADE_SLOTS, MachineModuleSupport.All);
+            if (!_modulesHooked)
+            {
+                _modulesHooked = true;
+                upgradeC.OnChanged += RecalculateModules;
+            }
+            RecalculateModules();
             fluidIn  ??= new MachineFluidTank("Fluid In",  2000f, LiquidType.RefinedOil);
             fluidOut ??= new MachineFluidTank("Fluid Out", 2000f, LiquidType.LiquidFuel);
         }
+
+        [System.NonSerialized] private bool _modulesHooked;
+
+        /// <summary>Re-read the socketed modules. Cheap enough to call from EnsureContainers.</summary>
+        private void RecalculateModules()
+            => Modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
 
         // ── Machine process persistence (9.57.0-dev) ────────────────────────
         // One auto-typed tank in, one auto-typed tank out, plus the batch and the
@@ -123,7 +145,11 @@ namespace VoxelEngine.Industrial
         {
             EnsureContainers();
 
-            float wantWatts = (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
+            // 18.15.0-dev: an Efficiency module cuts the running draw, exactly as it does on
+            // the refinery, the furnace and every other machine with module slots.
+            float wantWatts = (_current != null)
+                ? baseWattsPerSecond * _current.powerDrawMultiplier * Modules.efficiencyMultiplier
+                : idleWattsPerSecond;
             CurrentWattage = wantWatts;
             if (_power != null) _power.wattsPerSecond = wantWatts;
 
@@ -132,7 +158,8 @@ namespace VoxelEngine.Industrial
             if (_current == null) _current = FindRecipe();
             if (_current == null) { _progress = 0f; return; }
 
-            _progress += Time.deltaTime;
+            // 18.15.0-dev: a Speed module advances the batch faster.
+            _progress += Time.deltaTime * Mathf.Max(0.01f, Modules.speedMultiplier);
             if (_progress >= Mathf.Max(0.1f, _current.secondsPerBatch))
                 CompleteBatch();
         }
@@ -163,6 +190,9 @@ namespace VoxelEngine.Industrial
                 _progress = Mathf.Max(0.1f, _current.secondsPerBatch);
                 return;
             }
+            // 18.15.0-dev: a socketed Yield module can hand one extra unit of the batch's
+            // main product once the run has landed.
+            VoxelEngine.Simulation.MachineModules.RollBonusUnit(Modules, outputC, _current.outputs);
             _progress = 0f;
             _current = FindRecipe();
         }

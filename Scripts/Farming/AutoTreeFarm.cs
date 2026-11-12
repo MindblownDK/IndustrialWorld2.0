@@ -33,6 +33,7 @@ namespace VoxelEngine.Farming
         public ItemContainer inputC;
         public ItemContainer outputC;
         public ItemContainer upgradeC;
+        [System.NonSerialized] private bool _modulesHooked;
 
         [Header("Irrigation Water Tank")]
         public MachineFluidTank waterTank = new MachineFluidTank("Irrigation Water", 500f, LiquidType.Water, autoType: false);
@@ -160,15 +161,11 @@ namespace VoxelEngine.Farming
             if (outputC == null) outputC = new ItemContainer("Timber & Biomass Output", OUTPUT_SLOTS);
             else if (outputC.Size != OUTPUT_SLOTS) outputC.Resize(OUTPUT_SLOTS);
 
-            if (upgradeC == null)
-            {
-                upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS);
-                upgradeC.OnChanged += RecalculateUpgrades;
-            }
-            else if (upgradeC.Size != UPGRADE_SLOTS)
-            {
-                upgradeC.Resize(UPGRADE_SLOTS);
-            }
+            // 18.15.0-dev: shared module system. A tree farm grows on its own cycle rather
+            // than finishing recipe batches, so it takes speed and efficiency only.
+            upgradeC = MachineModules.Prepare(upgradeC, "Upgrades", UPGRADE_SLOTS,
+                MachineModuleSupport.Speed | MachineModuleSupport.Efficiency);
+            if (!_modulesHooked) { _modulesHooked = true; upgradeC.OnChanged += RecalculateUpgrades; }
         }
 
         public void EnsureTanks()
@@ -449,23 +446,9 @@ namespace VoxelEngine.Farming
 
         public void RecalculateUpgrades()
         {
-            float speed = 1f;
-            float eff = 1f;
-            if (upgradeC != null)
-            {
-                for (int i = 0; i < upgradeC.Size; i++)
-                {
-                    var st = upgradeC.GetSlot(i);
-                    if (st == null || st.IsEmpty || st.item == null) continue;
-                    if (st.item is FurnaceUpgradeItem upg)
-                    {
-                        if (upg.speedMultiplier > 0f) speed *= upg.speedMultiplier;
-                        if (upg.efficiencyMultiplier > 0f) eff *= upg.efficiencyMultiplier;
-                    }
-                }
-            }
-            SpeedMultiplier = Mathf.Clamp(speed, 0.25f, 5f);
-            EfficiencyMultiplier = Mathf.Clamp(eff, 0.2f, 3f);
+            var modules = MachineModules.Read(upgradeC);
+            SpeedMultiplier = modules.speedMultiplier;
+            EfficiencyMultiplier = modules.efficiencyMultiplier;
         }
 
         public void ResolveDefaultItems()

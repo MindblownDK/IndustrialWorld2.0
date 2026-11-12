@@ -101,18 +101,8 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
-                float speed = 1f;
-                if (upgradeC != null)
-                {
-                    for (int i = 0; i < upgradeC.Size; i++)
-                    {
-                        var st = upgradeC.GetSlot(i);
-                        if (st == null || st.IsEmpty || st.item == null) continue;
-                        if (st.item is FurnaceUpgradeItem upg && upg.speedMultiplier > 0f)
-                            speed *= upg.speedMultiplier;
-                    }
-                }
-                return Mathf.Clamp(speed, 0.25f, 5f);
+                var modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
+                return modules.speedMultiplier;
             }
         }
 
@@ -120,18 +110,8 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
-                float eff = 1f;
-                if (upgradeC != null)
-                {
-                    for (int i = 0; i < upgradeC.Size; i++)
-                    {
-                        var st = upgradeC.GetSlot(i);
-                        if (st == null || st.IsEmpty || st.item == null) continue;
-                        if (st.item is FurnaceUpgradeItem upg && upg.efficiencyMultiplier > 0f)
-                            eff *= upg.efficiencyMultiplier;
-                    }
-                }
-                return Mathf.Clamp(eff, 0.2f, 3f);
+                var modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
+                return modules.efficiencyMultiplier;
             }
         }
 
@@ -238,9 +218,11 @@ namespace VoxelEngine.GridSystem
             if (outputC == null) outputC = new ItemContainer("Tree Farm Output", OUTPUT_SLOTS);
             else if (outputC.Size != OUTPUT_SLOTS) outputC.Resize(OUTPUT_SLOTS);
 
-            if (upgradeC == null) upgradeC = new ItemContainer("Tree Farm Upgrades", UPGRADE_SLOTS);
-            else if (upgradeC.Size != UPGRADE_SLOTS) upgradeC.Resize(UPGRADE_SLOTS);
-            upgradeC.AcceptFilter = (item, count) => item is FurnaceUpgradeItem ? count : 0;
+            // 18.15.0-dev: the shared module system installs the role filter - the grid farm
+            // keeps its own container label and takes speed and efficiency only (it grows on a
+            // cycle rather than finishing recipe batches, so there is no batch to boost).
+            upgradeC = VoxelEngine.Simulation.MachineModules.Prepare(upgradeC, "Tree Farm Upgrades", UPGRADE_SLOTS,
+                VoxelEngine.Items.MachineModuleSupport.Speed | VoxelEngine.Items.MachineModuleSupport.Efficiency);
 
             ResolveFallbackItems();
         }

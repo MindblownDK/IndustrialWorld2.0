@@ -58,6 +58,9 @@ namespace VoxelEngine.Crafting
         public SmeltingRecipe Current    => _current;
         public float SpeedMultiplier     { get; private set; } = 1f;
         public float EfficiencyMultiplier{ get; private set; } = 1f;
+        /// <summary>18.15.0-dev: every socketed module, read once per container change.</summary>
+        public VoxelEngine.Simulation.MachineModuleProfile Modules { get; private set; }
+            = VoxelEngine.Simulation.MachineModuleProfile.Identity;
 
         public const int OUTPUT_SLOTS  = 4;
         public const int UPGRADE_SLOTS = 4;
@@ -86,7 +89,10 @@ namespace VoxelEngine.Crafting
         {
             if (inputC   == null) inputC   = new ItemContainer("Input",   1);             else inputC.Resize(1);
             if (outputC  == null) outputC  = new ItemContainer("Outputs", OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
-            if (upgradeC == null) upgradeC = new ItemContainer("Upgrades",UPGRADE_SLOTS); else upgradeC.Resize(UPGRADE_SLOTS);
+            // 18.15.0-dev: shared module system installs the role filter here, so a quarry
+            // upgrade or an engine module can no longer take a furnace slot for nothing.
+            upgradeC = VoxelEngine.Simulation.MachineModules.Prepare(
+                upgradeC, "Upgrades", UPGRADE_SLOTS, MachineModuleSupport.All);
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────
@@ -200,19 +206,9 @@ namespace VoxelEngine.Crafting
         // ============================================================
         private void RecalculateUpgrades()
         {
-            float speed = 1f, eff = 1f;
-            for (int i = 0; i < upgradeC.Size; i++)
-            {
-                var s = upgradeC.GetSlot(i);
-                if (s.IsEmpty) continue;
-                if (s.item is FurnaceUpgradeItem u)
-                {
-                    speed *= Mathf.Pow(u.speedMultiplier, s.count);
-                    eff   *= Mathf.Pow(u.efficiencyMultiplier, s.count);
-                }
-            }
-            SpeedMultiplier      = speed;
-            EfficiencyMultiplier = eff;
+            Modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
+            SpeedMultiplier      = Modules.speedMultiplier;
+            EfficiencyMultiplier = Modules.efficiencyMultiplier;
         }
 
         // ============================================================
@@ -348,6 +344,9 @@ namespace VoxelEngine.Crafting
             VoxelEngine.Simulation.ProductionStatsTracker.RecordConsumed(_current.input, _current.inputCount);
             outputC.Insert(new ItemStack(_current.output, _current.outputCount));
             VoxelEngine.Simulation.ProductionStatsTracker.RecordProduced(_current.output, _current.outputCount);
+            // 18.15.0-dev: a socketed Yield module can hand one extra smelted unit per batch.
+            VoxelEngine.Simulation.MachineModules.RollBonusUnit(
+                Modules, outputC, _current.output, _current.outputCount);
             _smeltProgress = 0f;
             _current = FindRecipeForInput();
         }

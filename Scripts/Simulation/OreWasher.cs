@@ -106,6 +106,10 @@ namespace VoxelEngine.Simulation
         public float WaterQuality01 => Mathf.Clamp01(1f - SourceContamination01);
         public float SpeedMultiplier => _speedMult;
         public float EfficiencyMultiplier => _effMult;
+        /// <summary>18.15.0-dev: every socketed module, read once per container change.</summary>
+        public MachineModuleProfile Modules => _modules;
+        private MachineModuleProfile _modules = MachineModuleProfile.Identity;
+        [System.NonSerialized] private bool _modulesHooked;
 
         public bool IsLowWater
         {
@@ -160,10 +164,10 @@ namespace VoxelEngine.Simulation
         {
             if (inputC   == null) inputC   = new ItemContainer("Inputs",   INPUT_SLOTS);   else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
-            if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS); else upgradeC.Resize(UPGRADE_SLOTS);
+            // 18.15.0-dev: shared module system sizes the slots and installs the role filter.
+            upgradeC = MachineModules.Prepare(upgradeC, "Upgrades", UPGRADE_SLOTS, MachineModuleSupport.All);
 
-            upgradeC.OnChanged -= RecalculateUpgrades;
-            upgradeC.OnChanged += RecalculateUpgrades;
+            if (!_modulesHooked) { _modulesHooked = true; upgradeC.OnChanged += RecalculateUpgrades; }
             RecalculateUpgrades();
         }
 
@@ -367,21 +371,9 @@ namespace VoxelEngine.Simulation
 
         private void RecalculateUpgrades()
         {
-            if (upgradeC == null) return;
-            float speed = 1f;
-            float eff = 1f;
-            for (int i = 0; i < upgradeC.Size; i++)
-            {
-                var stack = upgradeC.GetSlot(i);
-                if (stack == null || stack.IsEmpty || stack.item == null) continue;
-                if (stack.item is FurnaceUpgradeItem furnMod)
-                {
-                    speed *= Mathf.Pow(furnMod.speedMultiplier, stack.count);
-                    eff   *= Mathf.Pow(furnMod.efficiencyMultiplier, stack.count);
-                }
-            }
-            _speedMult = speed;
-            _effMult = eff;
+            _modules = MachineModules.Read(upgradeC);
+            _speedMult = _modules.speedMultiplier;
+            _effMult = _modules.efficiencyMultiplier;
         }
 
         public void SelectRecipe(MachineRecipe recipe)
@@ -623,6 +615,9 @@ namespace VoxelEngine.Simulation
             // Produce enriched primary output.
             outputC.Insert(new ItemStack(_current.outputItem, _current.outputCount));
             ProductionStatsTracker.RecordProduced(_current.outputItem, _current.outputCount);
+
+            // 18.15.0-dev: a socketed Yield module can hand one extra enriched unit per batch.
+            MachineModules.RollBonusUnit(_modules, outputC, _current.outputItem, _current.outputCount);
 
             // Handle byproduct (Mineral Tailings or secondary recovery).
             if (_current.byproductItem != null && _current.byproductCount > 0 && Random.value <= _current.byproductChance)

@@ -1110,10 +1110,12 @@ namespace VoxelEngine.UI
                     _openRadarBeacon = radarBeacon; break;
                 case VoxelEngine.Crafting.DistillationPlant plant:
                     _openDistillationPlant = plant; plant.EnsureContainers(); plant.EnsureTanks();
-                    WatchContainer(plant.inputC); WatchContainer(plant.outputC); break;
+                    // 18.15.0-dev: the plant gained universal module slots.
+                    WatchContainer(plant.inputC); WatchContainer(plant.outputC); WatchContainer(plant.upgradeC); break;
                 case VoxelEngine.Crafting.CatalyticCracker cracker:
                     _openCatalyticCracker = cracker; cracker.EnsureContainers();
-                    WatchContainer(cracker.inputC); WatchContainer(cracker.outputC); break;
+                    // 18.15.0-dev: the cracker gained universal module slots.
+                    WatchContainer(cracker.inputC); WatchContainer(cracker.outputC); WatchContainer(cracker.upgradeC); break;
                 case VoxelEngine.Crafting.Pumpjack jackPump:
                     // Tank-only machine (11.0.0-dev): no item containers to watch. The
                     // panel is rebuilt on the machine refresh cadence instead, which is
@@ -1122,7 +1124,8 @@ namespace VoxelEngine.UI
                     break;
                 case VoxelEngine.Industrial.StationaryChemicalPlant scp:
                     _openChemPlant = scp; scp.EnsureContainers();
-                    WatchContainer(scp.inputC); WatchContainer(scp.outputC); break;
+                    // 18.15.0-dev: the plant gained universal module slots.
+                    WatchContainer(scp.inputC); WatchContainer(scp.outputC); WatchContainer(scp.upgradeC); break;
                 case VoxelEngine.Environment.AtmosphericCarbonHarvester harvester:
                     _openCarbonHarvester = harvester; harvester.EnsureContainers();
                     WatchContainer(harvester.outputC); break;
@@ -5377,11 +5380,14 @@ namespace VoxelEngine.UI
             for (int i = 0; i < ef.upgradeC.Size; i++)
                 upRow.Add(BuildSlot(ef.upgradeC, i, ef.upgradeC.GetSlot(i), false));
             panel.Add(upRow);
+            // 18.15.0-dev: say what is actually fitted. The x-speed / x-eff readout above only
+            // covers two roles; a socketed Yield module would otherwise be invisible here.
+            panel.Add(UITheme.Muted("  " + ef.Modules.Summary()));
 
             // Footer hint.
             panel.Add(Spacer(14));
 
-            var hint = new Label("Tip: connect cables from a generator. Machine Speed Modules (x1.25 throughput) and Machine Efficiency Modules (x0.8 power draw) tune output vs power use.");
+            var hint = new Label("Tip: connect cables from a generator. Universal machine modules tune this furnace: Speed (x1.25 throughput), Efficiency (x0.8 power draw) and Yield (a chance at one extra unit per batch). Quarry upgrades and engine modules are refused by these slots.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));
             hint.style.fontSize = 10;
             hint.style.whiteSpace = WhiteSpace.Normal;
@@ -5981,6 +5987,39 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             return true;
         }
 
+        /// <summary>
+        /// 18.15.0-dev: the reason a MODULE was refused, so a role mismatch never reads as a
+        /// full container. Speaks once per cooldown and only when the module filter is really
+        /// what said no; a stack that would have fitted is left to the ordinary weight toast.
+        /// </summary>
+        private bool ExplainRefusedModule(ItemContainer box, ItemStack carried)
+        {
+            if (box == null || carried == null || carried.IsEmpty || carried.item == null) return false;
+            if (box.moduleSlotSupport == null || box.AcceptFilter == null) return false;
+            if (box.AcceptFilter(carried.item, 1) > 0) return false;   // the filter would have taken it
+            if (Time.unscaledTime < _nextWeightHint) return false;
+
+            _nextWeightHint = Time.unscaledTime + WeightHintCooldown;
+            var support = box.moduleSlotSupport.Value;
+            bool isModule = carried.item is VoxelEngine.Items.FurnaceUpgradeItem;
+            VoxelEngine.UI.BuildFeedbackHud.Show(
+                isModule ? "Module not accepted" : "Not a machine module",
+                isModule
+                    ? carried.item.displayName + " does not fit " + box.Name + ". "
+                      + VoxelEngine.Simulation.MachineModules.ShortHintFor(support)
+                    : box.Name + " take universal machine modules only. "
+                      + VoxelEngine.Simulation.MachineModules.ShortHintFor(support),
+                carried.item.icon, UITheme.AccentAmber);
+            return true;
+        }
+
+        /// <summary>Explain a refusal: the module rule first (it is the more specific answer), then weight.</summary>
+        private void ExplainRefusal(IItemContainer dest, ItemStack carried)
+        {
+            if (ExplainRefusedModule(dest as ItemContainer, carried)) return;
+            ExplainRefusedDrop(dest, carried);
+        }
+
         /// <summary>Drop what the player is carrying into (destC, destIdx).
         ///
         /// The carried stack is the single source of truth while a drag is active (see
@@ -6042,7 +6081,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 int move  = Mathf.Min(space, carried.count);
                 if (!sameContainer)
                     move = Mathf.Min(move, MaxDirectAdd(destC, carried.item, move));
-                if (move <= 0) { ExplainRefusedDrop(destC, carried); CancelDrag(); Refresh(); return; }
+                if (move <= 0) { ExplainRefusal(destC, carried); CancelDrag(); Refresh(); return; }
                 dstStack.count += move;
                 destC.SetSlot(destIdx, dstStack);
                 carried.count -= move;
@@ -6058,7 +6097,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 int move = sameContainer
                     ? carried.count
                     : Mathf.Min(carried.count, MaxDirectAdd(destC, carried.item, carried.count));
-                if (move <= 0) { ExplainRefusedDrop(destC, carried); CancelDrag(); Refresh(); return; }
+                if (move <= 0) { ExplainRefusal(destC, carried); CancelDrag(); Refresh(); return; }
                 var placed = carried.Clone();
                 placed.count = move;
                 destC.SetSlot(destIdx, placed);
@@ -6071,13 +6110,13 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             // Respect destination/source AcceptFilter and mass gates during direct swaps.
             if (!sameContainer && !CanDirectSet(destC, carried, dstStack))
             {
-                ExplainRefusedDrop(destC, carried);   // the destination is the side that refused
+                ExplainRefusal(destC, carried);   // the destination is the side that refused
                 CancelDrag();
                 return;
             }
             if (!sameContainer && !CanDirectSet(srcC, dstStack, carried))
             {
-                ExplainRefusedDrop(srcC, dstStack);   // the swap back is what does not fit
+                ExplainRefusal(srcC, dstStack);   // the swap back is what does not fit
                 CancelDrag();
                 return;
             }
@@ -7735,11 +7774,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 // 17.27.8-dev: a shift-click into a container on its weight cap used to
                 // look like a dead key. Same rule as a drag: say why, once, and only when
                 // weight is really the reason.
-                ExplainRefusedDrop(dest, srcStack);
+                ExplainRefusal(dest, srcStack);
                 return;
             }
             // A partial move means the remainder did not fit - the cap is the usual reason.
-            if (moved < srcStack.count) ExplainRefusedDrop(dest, leftover);
+            if (moved < srcStack.count) ExplainRefusal(dest, leftover);
             if (moved >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
             else                          { srcStack.count -= moved; sourceC.SetSlot(sourceIdx, srcStack); }
         }
@@ -7773,6 +7812,26 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 {
                     bool isUpgrade = item is FurnaceUpgradeItem;
                     return isUpgrade ? _openOilRefinery.upgradeC : _openOilRefinery.inputC;
+                }
+                // 18.15.0-dev: the Chemical Plant, Distillation Plant and Catalytic Cracker
+                // gained module slots, so a shift-clicked module belongs in them too.
+                if (_openChemPlant != null)
+                {
+                    _openChemPlant.EnsureContainers();
+                    bool isUpgrade = item is FurnaceUpgradeItem;
+                    return isUpgrade ? _openChemPlant.upgradeC : _openChemPlant.inputC;
+                }
+                if (_openDistillationPlant != null)
+                {
+                    _openDistillationPlant.EnsureContainers();
+                    bool isUpgrade = item is FurnaceUpgradeItem;
+                    return isUpgrade ? _openDistillationPlant.upgradeC : _openDistillationPlant.inputC;
+                }
+                if (_openCatalyticCracker != null)
+                {
+                    _openCatalyticCracker.EnsureContainers();
+                    bool isUpgrade = item is FurnaceUpgradeItem;
+                    return isUpgrade ? _openCatalyticCracker.upgradeC : _openCatalyticCracker.inputC;
                 }
                 if (_openCrusher != null)
                 {

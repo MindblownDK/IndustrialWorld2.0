@@ -808,7 +808,11 @@ namespace VoxelEngine.Transport
         public void EnsureOutputPublic()=>EnsureOutput();
 
         // ── Upgrades ────────────────────────────────────────────────────
-        public void EnsureUpgrades() { if(upgradeC==null){upgradeC=new ItemContainer("Upgrades",UPGRADE_SLOTS);upgradeC.OnChanged+=RU;} else upgradeC.Resize(UPGRADE_SLOTS); }
+        public void EnsureUpgrades() { if(upgradeC==null){upgradeC=new ItemContainer("Upgrades",UPGRADE_SLOTS);upgradeC.OnChanged+=RU;} else upgradeC.Resize(UPGRADE_SLOTS);
+            // 18.15.0-dev: the Quarry has its own upgrade family (Range / Speed / Efficiency
+            // tiers), so it now refuses anything else instead of swallowing a universal machine
+            // module into a slot that could never read it.
+            if (upgradeC.AcceptFilter == null) upgradeC.AcceptFilter = (candidate, count) => candidate is QuarryUpgradeItem ? count : 0; }
         void RegisterUpgradeListener() { EnsureUpgrades(); upgradeC.OnChanged-=RU; upgradeC.OnChanged+=RU; RU(); }
         void RU() { InstalledRangeLevel=InstalledSpeedLevel=InstalledEfficiencyLevel=0; if(upgradeC==null)return; for(int i=0;i<upgradeC.Size;i++){var st=upgradeC.GetSlot(i); if(st.IsEmpty||!(st.item is QuarryUpgradeItem u))continue; int a=u.level*st.count; switch(u.upgradeKind){case QuarryUpgradeKind.Range:InstalledRangeLevel=Mathf.Min(MaxRangeLevel,a);break;case QuarryUpgradeKind.Speed:InstalledSpeedLevel=Mathf.Min(MaxSpeedLevel,a);break;case QuarryUpgradeKind.Efficiency:InstalledEfficiencyLevel=Mathf.Min(MaxEfficiencyLevel,a);break;}} }
         // 17.19.0-dev: Insert returns NULL when everything fit - the old

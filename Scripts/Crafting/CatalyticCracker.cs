@@ -25,8 +25,10 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(ItemPortRouting))]
     public class CatalyticCracker : MonoBehaviour, IItemPortHost, IFluidStore, IMachineProcessState
     {
-        public const int INPUT_SLOTS  = 2;
-        public const int OUTPUT_SLOTS = 2;
+        public const int INPUT_SLOTS   = 2;
+        public const int OUTPUT_SLOTS  = 2;
+        /// <summary>18.15.0-dev: the cracker joins the universal module system.</summary>
+        public const int UPGRADE_SLOTS = 2;
 
         [Header("Recipes")]
         public List<ProcessingRecipe> knownRecipes = new();
@@ -34,6 +36,8 @@ namespace VoxelEngine.Crafting
         [Header("Containers (auto-created)")]
         public ItemContainer inputC;
         public ItemContainer outputC;
+        [Tooltip("Universal machine module slots (18.15.0-dev). Appended last in the saved container order, so an older save still restores its inputs and outputs at the same index.")]
+        public ItemContainer upgradeC;
 
         [Header("Fluid Tanks (Inputs & Outputs)")]
         public MachineFluidTank fluidInA  = new MachineFluidTank("Heavy Feed",      2000f, LiquidType.HeavyFuelOil, autoType: true);
@@ -113,6 +117,9 @@ namespace VoxelEngine.Crafting
 
         public IReadOnlyList<MachineFluidTank> FluidTanks => new[] { fluidInA, fluidInB, fluidOutA, fluidOutB };
         public float Progress01 => _current == null ? 0f : Mathf.Clamp01(_progress / Mathf.Max(0.1f, _current.secondsPerBatch));
+        /// <summary>18.15.0-dev: what the socketed modules add up to.</summary>
+        public VoxelEngine.Simulation.MachineModuleProfile Modules { get; private set; }
+            = VoxelEngine.Simulation.MachineModuleProfile.Identity;
         public ProcessingRecipe Current => _current;
         public bool  IsOnline   => _power != null && _power.IsPowered;
         public float CurrentWattage { get; private set; }
@@ -141,12 +148,27 @@ namespace VoxelEngine.Crafting
         {
             if (inputC  == null) inputC  = new ItemContainer("Inputs",  INPUT_SLOTS);  else inputC.Resize(INPUT_SLOTS);
             if (outputC == null) outputC = new ItemContainer("Outputs", OUTPUT_SLOTS); else outputC.Resize(OUTPUT_SLOTS);
+            // 18.15.0-dev: the cracker finishes batches, so it honours all three module roles.
+            upgradeC = VoxelEngine.Simulation.MachineModules.Prepare(
+                upgradeC, "Upgrades", UPGRADE_SLOTS, VoxelEngine.Items.MachineModuleSupport.All);
+            if (!_modulesHooked)
+            {
+                _modulesHooked = true;
+                upgradeC.OnChanged += RecalculateModules;
+            }
+            RecalculateModules();
             fluidInA  ??= new MachineFluidTank("Heavy Feed",      2000f, LiquidType.HeavyFuelOil, autoType: true);
             fluidInB  ??= new MachineFluidTank("Secondary Feed",  1000f, LiquidType.Water,        autoType: true);
             fluidOutA ??= new MachineFluidTank("Primary Product", 2000f, LiquidType.Diesel,      autoType: true);
             fluidOutB ??= new MachineFluidTank("Secondary Cut",   1000f, LiquidType.Gasoline,    autoType: true);
             _store ??= new MachineFluidStore(FluidTanks);
         }
+
+        [System.NonSerialized] private bool _modulesHooked;
+
+        /// <summary>Re-read the socketed modules (18.15.0-dev).</summary>
+        private void RecalculateModules()
+            => Modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
 
         public void AutoWireVisuals()
         {
@@ -248,10 +270,12 @@ namespace VoxelEngine.Crafting
                 return;
             }
 
-            CurrentWattage = baseWattsPerSecond * _current.powerDrawMultiplier;
+            // 18.15.0-dev: an Efficiency module cuts the running draw.
+            CurrentWattage = baseWattsPerSecond * _current.powerDrawMultiplier * Modules.efficiencyMultiplier;
             if (_power != null) _power.wattsPerSecond = CurrentWattage;
 
-            float speedMul = CrackingEfficiency01;
+            // 18.15.0-dev: a Speed module multiplies on top of the reactor kinetics.
+            float speedMul = CrackingEfficiency01 * Mathf.Max(0.01f, Modules.speedMultiplier);
             _progress += dt * speedMul;
 
             if (_progress >= _current.secondsPerBatch)
@@ -259,6 +283,9 @@ namespace VoxelEngine.Crafting
                 if (ProcessingExecutor.Run(_current, new[] { inputC }, new[] { outputC }, _store))
                 {
                     catalystBedPercent = Mathf.Max(5f, catalystBedPercent - catalystDecayPerBatch);
+                    // 18.15.0-dev: a socketed Yield module can hand one extra unit of the
+                    // batch's main product after a successful cracking run.
+                    VoxelEngine.Simulation.MachineModules.RollBonusUnit(Modules, outputC, _current.outputs);
                 }
                 _progress = 0f;
             }

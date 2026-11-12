@@ -105,9 +105,7 @@ namespace VoxelEngine.Crafting
             FluidRow(p, m.FluidTanks, 150f, 108f);
             ItemSlots(p, "Inputs", m.inputC, slot);
             ItemSlots(p, "Outputs", m.outputC, slot);
-            UpgradeSlots(p, "Upgrades", m.upgradeC, slot,
-                "Universal machine modules only — Machine Speed Module (x1.25 throughput) and Machine Efficiency Module (x0.8 power draw). "
-                + "The Quarry's Range / Speed / Efficiency Upgrades and the maritime engine modules are specific to those machines and do nothing here.");
+            ModuleSlots(p, m.upgradeC, slot, m.Modules);
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
                 scrollName: "RefineryRecipeBook");
@@ -125,6 +123,9 @@ namespace VoxelEngine.Crafting
             FluidRow(p, m.FluidTanks, 150f, 108f);
             ItemSlots(p, "Inputs", m.inputC, slot);
             ItemSlots(p, "Outputs", m.outputC, slot);
+            // 18.15.0-dev: the plant had no module slots at all while the refinery two blocks
+            // away had two, which is why it read as an unfinished machine.
+            ModuleSlots(p, m.upgradeC, slot, m.Modules);
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
                 scrollName: "ChemicalPlantRecipeBook");
@@ -176,6 +177,8 @@ namespace VoxelEngine.Crafting
             page.Add(T.Spacer(8));
             ItemSlots(page, "Item Slots", m.inputC, slot);
             ItemSlots(page, "Outputs", m.outputC, slot);
+            // 18.15.0-dev: universal module slots, appended to the page so the dials keep the top.
+            ModuleSlots(page, m.upgradeC, slot, m.Modules);
             RecipeBook(page, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); }, ownScroll: false);
             IndustrialTheme.Frame(p);
@@ -249,6 +252,9 @@ namespace VoxelEngine.Crafting
             page.Add(T.Spacer(6));
             ItemSlots(page, "Catalysts & Feed Additives", m.inputC, slot);
             ItemSlots(page, "Synthesised Products", m.outputC, slot);
+            // 18.15.0-dev: universal module slots. Speed multiplies the reactor kinetics
+            // rather than replacing them, so a cold bed still cracks slowly.
+            ModuleSlots(page, m.upgradeC, slot, m.Modules);
 
             page.Add(T.Spacer(6));
             RecipeBook(page, m.knownRecipes, m.Current, m.Current,
@@ -541,15 +547,22 @@ namespace VoxelEngine.Crafting
             p.Add(grid);
         }
 
-        private static void UpgradeSlots(VisualElement p, string label, ItemContainer c, MachineUIs.SlotBuilder slot,
-            string hint = null)
+        /// <summary>
+        /// Universal machine module slots plus two lines of truth: what is fitted right now,
+        /// and which modules this machine accepts (18.15.0-dev). The old version printed a
+        /// hard-coded "x1.25 / x0.8" hint that stopped being true the moment a module was
+        /// retuned, and said nothing at all about what was actually in the slots.
+        /// </summary>
+        private static void ModuleSlots(VisualElement p, ItemContainer c, MachineUIs.SlotBuilder slot,
+            VoxelEngine.Simulation.MachineModuleProfile profile)
         {
             if (c == null) return;
-            p.Add(GUI.SectionTitle(label));
+            p.Add(GUI.SectionTitle("Modules"));
             var grid = T.SlotGrid(c.Size);
             for (int i = 0; i < c.Size; i++) grid.Add(slot(c, i, c.GetSlot(i), false, true));
             p.Add(grid);
-            if (!string.IsNullOrEmpty(hint)) p.Add(T.Muted(hint));
+            p.Add(T.Muted(profile.Summary()));
+            p.Add(T.Muted(VoxelEngine.Simulation.MachineModules.HintFor(MachineModuleSupport.All)));
         }
 
         /// <summary>Recipe list inside a scrollable region — long recipe sets can

@@ -60,6 +60,15 @@ namespace VoxelEngine.Items
         public float RemainingWeightKg => Mathf.Max(0f, MaxWeightKg - CurrentWeightKg);
         public float WeightFill01 => MaxWeightKg <= 0f ? 0f : Mathf.Clamp01(CurrentWeightKg / MaxWeightKg);
 
+        /// <summary>
+        /// 18.15.0-dev: set only on a machine's universal MODULE slots, and to the roles that
+        /// machine can honour. Null on every other container. It exists so the UI can say
+        /// "this furnace does not take Yield modules" instead of a silent refusal, and it is
+        /// never consulted by the accept path — <see cref="AcceptFilter"/> stays the single
+        /// authority on what a slot takes.
+        /// </summary>
+        [NonSerialized] public MachineModuleSupport? moduleSlotSupport;
+
         /// <summary>Optional gate consulted before accepting items — return how many of
         /// <c>item</c> may currently be added (e.g. a cargo container caps by mass).
         /// Null means "no extra limit". Set by the owning block.</summary>

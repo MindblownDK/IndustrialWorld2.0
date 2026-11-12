@@ -77,6 +77,9 @@ namespace VoxelEngine.Crafting
         public float CurrentWattage       { get; private set; }
         public float SpeedMultiplier      { get; private set; } = 1f;
         public float EfficiencyMultiplier { get; private set; } = 1f;
+        /// <summary>18.15.0-dev: every socketed module, read once per container change.</summary>
+        public VoxelEngine.Simulation.MachineModuleProfile Modules { get; private set; }
+            = VoxelEngine.Simulation.MachineModuleProfile.Identity;
 
         private void Awake()
         {
@@ -98,7 +101,9 @@ namespace VoxelEngine.Crafting
         {
             if (inputC   == null) inputC   = new ItemContainer("Inputs",   INPUT_SLOTS);   else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
-            if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS); else upgradeC.Resize(UPGRADE_SLOTS);
+            // 18.15.0-dev: shared module system sizes the slots and installs the role filter.
+            upgradeC = VoxelEngine.Simulation.MachineModules.Prepare(
+                upgradeC, "Upgrades", UPGRADE_SLOTS, MachineModuleSupport.All);
         }
 
         // ── Machine process persistence (9.57.0-dev) ────────────────────────
@@ -187,19 +192,9 @@ namespace VoxelEngine.Crafting
         // ============================================================
         private void RecalculateUpgrades()
         {
-            float speed = 1f, eff = 1f;
-            for (int i = 0; i < upgradeC.Size; i++)
-            {
-                var s = upgradeC.GetSlot(i);
-                if (s.IsEmpty) continue;
-                if (s.item is FurnaceUpgradeItem u)
-                {
-                    speed *= Mathf.Pow(u.speedMultiplier, s.count);
-                    eff   *= Mathf.Pow(u.efficiencyMultiplier, s.count);
-                }
-            }
-            SpeedMultiplier      = speed;
-            EfficiencyMultiplier = eff;
+            Modules = VoxelEngine.Simulation.MachineModules.Read(upgradeC);
+            SpeedMultiplier      = Modules.speedMultiplier;
+            EfficiencyMultiplier = Modules.efficiencyMultiplier;
         }
 
         // ============================================================
@@ -236,6 +231,9 @@ namespace VoxelEngine.Crafting
                 _progress = EffectiveBatchTime(_current);
                 return;
             }
+            // 18.15.0-dev: a socketed Yield module can hand one extra unit of the batch's
+            // main product after a successful run.
+            VoxelEngine.Simulation.MachineModules.RollBonusUnit(Modules, outputC, _current.outputs);
             _progress = 0f;
             _current  = FindRecipe();
         }

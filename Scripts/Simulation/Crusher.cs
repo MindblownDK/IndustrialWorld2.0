@@ -51,6 +51,8 @@ namespace VoxelEngine.Simulation
         private bool _userEnabled = true;
         private float _speedMultiplier = 1f;
         private float _efficiencyMultiplier = 1f;
+        private MachineModuleProfile _modules = MachineModuleProfile.Identity;
+        [System.NonSerialized] private bool _modulesHooked;
 
         // ── IMachine ──────────────────────────────────────────────────
 
@@ -96,30 +98,22 @@ namespace VoxelEngine.Simulation
         {
             if (inputC   == null) inputC   = new ItemContainer("Input",    INPUT_SLOTS);    else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);   else outputC.Resize(OUTPUT_SLOTS);
-            if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS);  else upgradeC.Resize(UPGRADE_SLOTS);
+            // 18.15.0-dev: the upgrade slots are prepared by the shared module system,
+            // which sizes the container and installs the role filter. A Crusher finishes
+            // batches, so it honours all three roles - speed, efficiency and bonus yield.
+            upgradeC = MachineModules.Prepare(upgradeC, "Upgrades", UPGRADE_SLOTS, MachineModuleSupport.All);
 
-            upgradeC.OnChanged -= RecalculateUpgrades;
-            upgradeC.OnChanged += RecalculateUpgrades;
+            // Hook once: a per-tick EnsureContainers that re-added the listener every call
+            // allocated two delegates per tick for no gain (18.15.0-dev).
+            if (!_modulesHooked) { _modulesHooked = true; upgradeC.OnChanged += RecalculateUpgrades; }
             RecalculateUpgrades();
         }
 
         private void RecalculateUpgrades()
         {
-            if (upgradeC == null) return;
-            float speed = 1f;
-            float eff = 1f;
-            for (int i = 0; i < upgradeC.Size; i++)
-            {
-                var stack = upgradeC.GetSlot(i);
-                if (stack == null || stack.IsEmpty || stack.item == null) continue;
-                if (stack.item is FurnaceUpgradeItem mod)
-                {
-                    speed *= Mathf.Pow(mod.speedMultiplier, stack.count);
-                    eff   *= Mathf.Pow(mod.efficiencyMultiplier, stack.count);
-                }
-            }
-            _speedMultiplier = speed;
-            _efficiencyMultiplier = eff;
+            _modules = MachineModules.Read(upgradeC);
+            _speedMultiplier = _modules.speedMultiplier;
+            _efficiencyMultiplier = _modules.efficiencyMultiplier;
         }
 
         /// <summary>Restores additive machine state after its containers are loaded.</summary>
@@ -287,14 +281,24 @@ namespace VoxelEngine.Simulation
             outputC.Insert(new ItemStack(_current.outputItem, _current.outputCount));
             ProductionStatsTracker.RecordProduced(_current.outputItem, _current.outputCount);
 
+            // 18.15.0-dev: a socketed Yield module can hand one extra unit of the primary
+            // product on top of the batch. Rolled after the batch lands, so a full output
+            // simply drops the bonus instead of stalling the crusher.
+            MachineModules.RollBonusUnit(_modules, outputC, _current.outputItem, _current.outputCount);
+
             // Byproduct chance.
             if (_current.byproductItem != null && _current.byproductCount > 0)
             {
                 if (Random.value <= _current.byproductChance)
                 {
+                    // 18.15.0-dev: the produced-count record used to run whether or not the
+                    // byproduct actually fit, so a full output inflated the statistics. It is
+                    // now written only for a unit that really landed.
                     if (outputC.HasSpace(_current.byproductItem, _current.byproductCount))
+                    {
                         outputC.Insert(new ItemStack(_current.byproductItem, _current.byproductCount));
                         ProductionStatsTracker.RecordProduced(_current.byproductItem, _current.byproductCount);
+                    }
                 }
             }
 
