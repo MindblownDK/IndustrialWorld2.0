@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.14.0-dev`
-**Roadmap Version:** `18.14.0-dev`
+**Current Version:** `18.14.1-dev`
+**Roadmap Version:** `18.14.1-dev`
 **Date:** 02-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,9 +30,15 @@
 
 ## 0. Recently Done
 
+### 18.14.1-dev - 18.14.0-dev Lighting Acceptance Recorded
+- Open Scope: the 18.14.0-dev lighting rework acceptance line is now CONFIRMED by Thomas on 02-11-2026 ("good it works") - no pink grid floodlight, four beams, 2x2 stationary fixture with flood beam, block_light spot fixture, removed assets gone, two LED strips with drag-run
+- The 18.13.1-dev floodlight gate line is confirmed in the same pass: the floodlight step ran clean with no dependency dialog during the 18.14.0-dev verification
+- Docs only; no code, save-schema, or API change
+
 ### 18.14.0-dev - Lighting Content Rework (Grid Floodlight, Flood Beam, Drag-Run Strip)
 - `GItem_GridFloodlight` is a real Large grid block - a big standing floodlight with four spot beams in a 2x2 head - authored in the grid content step with persisted materials (no more pink) and recipe `Recipe_GGridFloodlight`
-- The stationary floodlight's lamp is now a wide flood beam (110 deg, 25 m); grid lights stay spots and the working grid lights are untouched
+- The stationary floodlight is a real 2x2-lamp fixture (base, pole, yoke, four lamp cans with emissive lenses) throwing the wide 110 deg flood beam; grid lights stay spots and the working grid lights are untouched
+- `block_light` (`Light_Basic`) is an actual spot lamp now - housing, lamp can, emissive lens and a power-gated Spot light - instead of a plain cube with no light
 - New save-compatible `BlockItem.defaultPlacementPattern` (-1 default): the stationary LED strip defaults to SPAN so a drag lays a run by itself like a grid drag; an explicit wheel pick still wins for the session
 - Removed per Thomas: the RGB mood light, the floodlight step's duplicate stationary LED strip, and the mis-authored stationary `Block_Floodlight_Grid`
 
@@ -50,11 +56,6 @@
 - `BuildingSync.HostAllowsPieceAction` is the shared host gate: piece ownership must allow the sender (unowned legacy pieces stay open to everyone) and the sender's avatar must be within interact reach of the piece
 - Door/hatch toggles, lock fit/remove and all three keypad intents (set/enter/toggle) pass that gate on the host; a denied keypad attempt still gets its addressed verdict so the guest keypad never hangs
 - Denied door toggles still re-announce the true state so a predicted door swings back; host/offline paths are unchanged
-
-### 18.11.0-dev - Host-Validated Machine Edits
-- `OnServerMachineState` validates every guest machine-runtime edit before applying or relaying it: block exists, `PlacedBlock.AllowsAccess` passes, and the sender's avatar is within interact reach of the block
-- Refusals are logged with a reason and answered with an addressed `MachineStateDeniedBroadcast` ("Machine locked" feedback on the offender's machine); unowned legacy blocks stay open to everyone
-- The host's own edits and offline play are unchanged
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -74,8 +75,8 @@
 - **Placement-wheel favourites and per-item pattern memory (17.44.0-dev):** the pattern and the lattice step are one player-wide choice today. Remembering a pattern per item family - belts run, walls stack, machines single - is a presentation-level preference and stays deferred. (18.14.0-dev ships the narrower per-item DEFAULT: `BlockItem.defaultPlacementPattern` applies only until the player touches the wheel - true per-family memory of the last choice is still deferred.)
 - ~~**Soft-clearance authoring pass (17.44.0-dev, picked up 18.12.1-dev):** `BlockItem.softClearance` defaults off so nothing existing changed.~~ *(18.13.0-dev - `SoftClearanceSetup.RunStep126`, Setup Wizard step 126, marks the six decorative lamp/signage BlockItems; soft-vs-soft allowed, soft-vs-hard still refused. Status: code + editor step authored, Unity run pending.)*
 - **Soft-clearance acceptance (18.13.0-dev):** step 126 run confirmed by Thomas on 02-11-2026 (report: 6 marked / 0 already soft / 0 missing, grid items skipped by design); still pending: rerun reads 0 marked, and in play a lamp beside a departure board places without refusal while a lamp against a machine is still refused.
-- **Floodlight setup gate acceptance (18.13.1-dev):** after base crafting + industrial content have run, the "Build stationary and grid floodlights" step no longer shows the dependency dialog and authors the stationary floodlight prefab, item and recipe under `Power/Floodlights` (the grid floodlight, LED strips and RGB light moved out of this step in 18.14.0-dev).
-- **Lighting rework acceptance (18.14.0-dev):** on a fresh project run the grid content step and the floodlight step; `GItem_GridFloodlight` renders with persisted materials after a domain reload (no pink) and its four head beams switch with grid power, the stationary floodlight throws a wide flood beam, `Block_Floodlight_Grid` / `Block_LEDStrip` / `Block_RGB_Light` and their prefabs and recipes are gone from `Power/Floodlights`, exactly two LED strip kinds exist (stationary `Block_LEDStripFactory`, grid `GItem_LEDStrip` / `GItem_LargeGridLEDStrip`), and holding the stationary strip and dragging places a whole run without opening the pattern wheel while using the wheel still overrides for the session.
+- **Floodlight setup gate acceptance (18.13.1-dev):** CONFIRMED by Thomas on 02-11-2026 - during the 18.14.0-dev verification the "Build stationary and grid floodlights" step ran with no dependency dialog and authored the stationary floodlight prefab, item and recipe under `Power/Floodlights` (grid floodlight, LED strips and RGB light live in their own steps since 18.14.0-dev).
+- **Lighting rework acceptance (18.14.0-dev):** CONFIRMED by Thomas on 02-11-2026 ("good it works") - fresh-project run of the grid content step and the floodlight step, all checks pass: `GItem_GridFloodlight` renders with persisted materials after a domain reload (no pink) and its four head beams switch with grid power, the stationary floodlight shows a 2x2 lamp head and throws a wide flood beam, `block_light` shows a lamp can + lens and throws a real spot only when powered, `Block_Floodlight_Grid` / `Block_LEDStrip` / `Block_RGB_Light` and their prefabs and recipes are gone from `Power/Floodlights`, exactly two LED strip kinds exist (stationary `Block_LEDStripFactory`, grid `GItem_LEDStrip` / `GItem_LargeGridLEDStrip`), and holding the stationary strip and dragging places a whole run without opening the pattern wheel while using the wheel still overrides for the session.
 - ~~**Grid farm blocks - stage 2 of the screen remaster (17.42.0-dev):** flat and vertical Farm Plots, Automatic Tree Farm, and Seed Planter as grid blocks, all gated on water plus enclosed breathable air, with `GridBiofarm` kept as the ordinary farm.~~ *(18.4.0-dev & 18.8.0-dev - `GridVerticalFarm`, `GridFarmBox`, `GridSeedPlanter`, and `GridAutoTreeFarm` all ship as grid blocks with piped water tanks, `FarmEnvironment.HasBreathableAir`, cargo auto-push, and 10 Hz live panels; `GridBiofarm` stays the oxygen garden.)*
 - **Grid farming parity and Stage 2 grid farm blocks acceptance (18.8.0-dev):** confirm in Unity that all 16 grid farm assets (4 prefabs, 4 items, 4 recipes, 4 icons) are verified on disk, that all four grid farm blocks start at 0 L and accept both piped grid water and hand canister watering, that `GridFarmBox` locks its other eight cells and grows a 3D tree when a sapling is planted, that `GridSeedPlanter` and `GridAutoTreeFarm` push harvests to connected grid cargo, and that ship screens on `FARMS` and `PLOT STATUS` list grid farm beds alongside world beds.
 - **Farm overhaul runtime acceptance (18.3.0-dev):** Unity compilation, a Setup Wizard run of `WorldFarmOverhaulSetup.RunStep124`, planting and harvesting in all three boxes, hand watering from a canister, a sprinkler filled by hand and by pipe, the sprinkler's spray stopping on power loss and on an empty tank, drought loss and clearing, trees refused by the Small and Big boxes, self re-seed on and off, belt pickup from a box chute and from the Auto Farm Plot port, and a save/load round trip of a mixed box (crop, tree, dead cell, tank level) remain pending.

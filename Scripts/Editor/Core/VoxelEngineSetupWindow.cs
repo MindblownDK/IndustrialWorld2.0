@@ -2653,7 +2653,75 @@ namespace VoxelEngine.EditorTools
                 // Device charger (6.77): only seed a default — never overwrite a tuned value.
                 if (b.itemChargeRateWatts <= 0f) b.itemChargeRateWatts = 500f;
             });
-            var lightPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerConsumer>("Light_Basic", new Color(1f, 0.95f, 0.6f), new Vector3(0.3f, 0.3f, 0.3f), c => { c.wattsPerSecond = 10f; c.connectRadius = 1.5f; });
+            // 18.14.0-dev: block_light is an actual spot lamp, not a plain cube - housing,
+            // lamp can, emissive lens and a real Spot light that only glows when powered.
+            var lightPrefab = GetOrCreatePrefab($"{prefabsFolder}/Light_Basic.prefab", "Light_Basic", root =>
+            {
+                var housingMat = MakeColoredMat(prefabsFolder, "Mat_Light_Basic", new Color(0.25f, 0.26f, 0.28f));
+                var lensMat = MakeColoredMat(prefabsFolder, "Mat_Light_BasicLens", new Color(1f, 0.95f, 0.6f));
+                if (lensMat != null)
+                {
+                    lensMat.EnableKeyword("_EMISSION");
+                    lensMat.SetColor("_EmissionColor", new Color(1f, 0.9f, 0.55f) * 2f);
+                    EditorUtility.SetDirty(lensMat);
+                }
+
+                var housing = root.transform.Find("Housing") ?? root.transform.Find("Cube");   // repair assets authored as a plain cube
+                if (housing == null)
+                {
+                    var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    cube.transform.SetParent(root.transform, false);
+                    housing = cube.transform;
+                }
+                housing.name = "Housing";
+                housing.localPosition = Vector3.zero;
+                housing.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+                if (housingMat != null) housing.GetComponent<Renderer>().sharedMaterial = housingMat;
+                if (housing.TryGetComponent<Collider>(out var hc)) Object.DestroyImmediate(hc);
+
+                if (root.transform.Find("LampCan") == null)
+                {
+                    var can = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    can.name = "LampCan";
+                    can.transform.SetParent(root.transform, false);
+                    can.transform.localPosition = new Vector3(0f, 0f, -0.16f);
+                    can.transform.localEulerAngles = new Vector3(90f, 0f, 0f);
+                    can.transform.localScale = new Vector3(0.22f, 0.10f, 0.22f);
+                    if (housingMat != null) can.GetComponent<Renderer>().sharedMaterial = housingMat;
+                    if (can.TryGetComponent<Collider>(out var cc)) Object.DestroyImmediate(cc);
+
+                    var lens = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    lens.name = "Lens";
+                    lens.transform.SetParent(root.transform, false);
+                    lens.transform.localPosition = new Vector3(0f, 0f, -0.215f);
+                    lens.transform.localEulerAngles = new Vector3(90f, 0f, 0f);
+                    lens.transform.localScale = new Vector3(0.18f, 0.03f, 0.18f);
+                    if (lensMat != null) lens.GetComponent<Renderer>().sharedMaterial = lensMat;
+                    if (lens.TryGetComponent<Collider>(out var lc)) Object.DestroyImmediate(lc);
+                }
+
+                var spotGo = root.transform.Find("Spot");
+                if (spotGo == null)
+                {
+                    spotGo = new GameObject("Spot").transform;
+                    spotGo.SetParent(root.transform, false);
+                    spotGo.localPosition = new Vector3(0f, 0f, -0.24f);
+                    var l = spotGo.gameObject.AddComponent<Light>();
+                    l.type = LightType.Spot;
+                    l.color = new Color(1f, 0.95f, 0.6f);
+                    l.intensity = 2.5f;
+                    l.range = 10f;
+                    l.spotAngle = 60f;
+                }
+                var ctrl = root.GetComponent<VoxelEngine.Power.Floodlight>();
+                if (ctrl == null) ctrl = root.AddComponent<VoxelEngine.Power.Floodlight>();
+                ctrl.lightComponent = spotGo.GetComponent<Light>();
+
+                var cons = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
+                cons.wattsPerSecond = 10f;
+                cons.connectRadius = 1.5f;
+                if (root.GetComponent<Collider>() == null) root.AddComponent<BoxCollider>();
+            });
 
             // ── Block Item Helper ──
             VoxelEngine.Items.BlockItem MakePowerBlockInternal(string assetName, string display, Color tint, GameObject prefab, string desc, int hp = 200)
@@ -8618,22 +8686,51 @@ namespace VoxelEngine.EditorTools
             // -- 1) Stationary Floodlight --
             string statPath = $"{prefabsFolder}/Floodlight_Stationary.prefab";
             var statRoot = new GameObject("Floodlight_Stationary");
-            // Base pole
-            var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            pole.transform.SetParent(statRoot.transform, false);
-            pole.transform.localScale = new Vector3(0.2f, 2f, 0.2f);
-            pole.transform.localPosition = new Vector3(0, 1f, 0);
-            pole.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_FloodPole", new Color(0.4f, 0.4f, 0.45f));
-            // Head
-            var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            head.transform.SetParent(statRoot.transform, false);
-            head.transform.localScale = new Vector3(0.5f, 0.2f, 0.5f);
-            head.transform.localPosition = new Vector3(0, 2f, 0);
-            head.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_FloodHead", new Color(0.6f, 0.6f, 0.65f));
-            // Light
+            // 18.14.0-dev: a real floodlight fixture, not a plain box - base plate, pole,
+            // yoke and a head carrying four lamp cans in a 2x2 array (bezels + emissive
+            // lenses), like the grid floodlight's head at stationary scale.
+            var poleMat = MakeColoredMat(prefabsFolder, "Mat_FloodPole", new Color(0.4f, 0.4f, 0.45f));
+            var headMat = MakeColoredMat(prefabsFolder, "Mat_FloodHead", new Color(0.6f, 0.6f, 0.65f));
+            var trimMat = MakeColoredMat(prefabsFolder, "Mat_FloodTrim", new Color(0.08f, 0.085f, 0.09f));
+            var lensMat = MakeColoredMat(prefabsFolder, "Mat_FloodLens", new Color(1f, 0.97f, 0.86f));
+            if (lensMat != null)
+            {
+                lensMat.EnableKeyword("_EMISSION");
+                lensMat.SetColor("_EmissionColor", new Color(1f, 0.95f, 0.8f) * 2.5f);
+                EditorUtility.SetDirty(lensMat);
+            }
+
+            GameObject Prim(PrimitiveType type, string name, Vector3 pos, Vector3 scale, Material mat, Vector3 euler)
+            {
+                var g = GameObject.CreatePrimitive(type);
+                g.name = name;
+                g.transform.SetParent(statRoot.transform, false);
+                g.transform.localPosition = pos;
+                g.transform.localScale = scale;
+                g.transform.localEulerAngles = euler;
+                if (mat != null) g.GetComponent<Renderer>().sharedMaterial = mat;
+                return g;   // keep the collider: child colliders are this prefab's placement collider
+            }
+
+            Prim(PrimitiveType.Cube, "BasePlate", new Vector3(0f, 0.07f, 0f), new Vector3(0.7f, 0.14f, 0.7f), trimMat, Vector3.zero);
+            Prim(PrimitiveType.Cylinder, "Pole", new Vector3(0f, 1f, 0f), new Vector3(0.2f, 2f, 0.2f), poleMat, Vector3.zero);
+            Prim(PrimitiveType.Cube, "YokeLeft", new Vector3(-0.32f, 2.05f, 0f), new Vector3(0.06f, 0.5f, 0.1f), trimMat, Vector3.zero);
+            Prim(PrimitiveType.Cube, "YokeRight", new Vector3(0.32f, 2.05f, 0f), new Vector3(0.06f, 0.5f, 0.1f), trimMat, Vector3.zero);
+            Prim(PrimitiveType.Cube, "Head", new Vector3(0f, 2.15f, -0.05f), new Vector3(0.85f, 0.5f, 0.4f), headMat, Vector3.zero);
+            Prim(PrimitiveType.Cube, "HeadTop", new Vector3(0f, 2.44f, -0.05f), new Vector3(0.7f, 0.08f, 0.35f), trimMat, Vector3.zero);
+            for (int i = 0; i < 4; i++)   // four lamps in a 2x2 grid on the head face
+            {
+                float x = (i % 2 == 0 ? -1f : 1f) * 0.26f;
+                float y = 2.15f + (i < 2 ? 1f : -1f) * 0.14f;
+                Prim(PrimitiveType.Cylinder, "LampCan_" + i, new Vector3(x, y, -0.28f), new Vector3(0.16f, 0.14f, 0.16f), headMat, new Vector3(90f, 0f, 0f));
+                Prim(PrimitiveType.Cylinder, "Bezel_" + i, new Vector3(x, y, -0.36f), new Vector3(0.19f, 0.03f, 0.19f), trimMat, new Vector3(90f, 0f, 0f));
+                Prim(PrimitiveType.Cylinder, "Lens_" + i, new Vector3(x, y, -0.38f), new Vector3(0.15f, 0.02f, 0.15f), lensMat, new Vector3(90f, 0f, 0f));
+            }
+
+            // Light - wide flood beam aimed forward from the head
             var lightGo = new GameObject("LightSource");
-            lightGo.transform.SetParent(head.transform, false);
-            lightGo.transform.localPosition = new Vector3(0, -0.11f, 0);
+            lightGo.transform.SetParent(statRoot.transform, false);
+            lightGo.transform.localPosition = new Vector3(0f, 2.05f, -0.42f);
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Spot;
             light.intensity = 30f;
@@ -8829,7 +8926,7 @@ namespace VoxelEngine.EditorTools
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine", "Lighting content updated (18.14.0-dev)!\n\n- Stationary floodlight now throws a wide flood beam\n- Removed: misplaced grid floodlight, duplicate LED strip, RGB light\n- Grid floodlight is authored in the grid content step (GItem_GridFloodlight)\n- 'Advanced Lighting' node keeps the stationary floodlight recipe", "OK");
+            EditorUtility.DisplayDialog("Voxel Engine", "Lighting content updated (18.14.0-dev)!\n\n- Stationary floodlight is a real 2x2-lamp fixture with a wide 110-degree flood beam\n- Removed: misplaced grid floodlight, duplicate LED strip, RGB light\n- Grid floodlight is authored in the grid content step (GItem_GridFloodlight)\n- 'Advanced Lighting' node keeps the stationary floodlight recipe", "OK");
         }
 
         // ============================================================

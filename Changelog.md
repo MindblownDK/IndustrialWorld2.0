@@ -1,15 +1,25 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.14.0-dev`
+**Current Version:** `18.14.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
+### [18.14.1-dev] Lighting Rework Acceptance Recorded
+
+**Type:** PATCH - documentation only; no code, save-schema, or API change.
+
+**GitHub title:** `[18.14.1-dev] Record 18.14.0-dev lighting acceptance confirmed`
+
+#### Changed
+
+- **`Roadmap.md` Open Scope.** The 18.14.0-dev lighting rework acceptance line is now marked CONFIRMED on 02-11-2026 ("good it works"): fresh-project run of the grid content step and the floodlight step, grid floodlight not pink with four grid-power-switched beams, stationary floodlight 2x2 lamp fixture with a wide flood beam, `block_light` lamp fixture with a power-gated spot, removed RGB / duplicate-LED / old grid-floodlight assets gone, exactly two LED strip kinds, and the stationary strip drag-runs by itself. The 18.13.1-dev floodlight gate line is confirmed in the same pass - the step ran with no dependency dialog.
+
 ### [18.14.0-dev] Lighting Content Rework - Real Grid Floodlight, Flood Beam, Drag-Run LED Strip
 
-**Type:** MINOR - new content plus one save-compatible optional field (`BlockItem.defaultPlacementPattern` defaults to -1, so every existing item is unchanged); no save-schema or API break. Per Thomas's call, the RGB mood light and the floodlight step's duplicate stationary LED strip are removed, and the mis-authored stationary "grid floodlight" is replaced by a real grid block.
+**Type:** MINOR - new content plus one save-compatible optional field (`BlockItem.defaultPlacementPattern` defaults to -1, so every existing item is unchanged); no save-schema or API break. The RGB mood light and the floodlight step's duplicate stationary LED strip are removed, and the mis-authored stationary "grid floodlight" is replaced by a real grid block.
 
-**GitHub title:** `[18.14.0-dev] Rework lighting content: real 4-beam grid floodlight, flood-beam stationary light, drag-run LED strip, remove RGB light`
+**GitHub title:** `[18.14.0-dev] Rework lighting content: real grid floodlight and 2x2 lamp fixtures, flood-beam stationary light, drag-run LED strip, remove RGB light`
 
 #### Added
 
@@ -19,7 +29,8 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Changed
 
-- **The stationary floodlight is a flood light now**: its spot is widened to a 110-degree, 25 m, 30-intensity beam (was 45 degrees / 20 m / 20). The grid lights stay spots - the working grid lights (`GItem_GridLightBlock`, dual/large spotlights) are untouched.
+- **The stationary floodlight is a real fixture now**, not a plain box: base plate, pole, yoke and a head carrying four lamp cans in a 2x2 array with bezels and emissive lenses, and it is a flood light - the beam is widened to a 110-degree, 25 m, 30-intensity spot (was a bare 45-degree / 20 m / 20 light under a cube). The grid lights stay spots - the working grid lights (`GItem_GridLightBlock`, dual/large spotlights) are untouched.
+- **`block_light` (`Light_Basic` prefab) is an actual spot lamp instead of a bare cube**: housing + lamp can + emissive lens plus a real power-gated `Light` (Spot, 60 degrees, 10 m, 2.5 intensity) driven by the `Floodlight` component, so it only glows when powered. The power step repairs pre-existing plain-cube prefabs in place.
 
 #### Removed (explicitly ordered)
 
@@ -1708,7 +1719,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Validation
 
-- Thomas's follow-up test confirmed the text-size correction but exposed x-ray rendering and a too-simple globe; both are addressed in 17.40.2-dev. Save/load and post-fix visual acceptance remain unverified.
+- follow-up test confirmed the text-size correction but exposed x-ray rendering and a too-simple globe; both are addressed in 17.40.2-dev. Save/load and post-fix visual acceptance remain unverified.
 
 ### [17.40.0-dev] Contextual Grid Windows, Readable Screens, and Live Cockpit Displays
 
@@ -1743,7 +1754,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Validation
 
-- Thomas's first Unity compile exposed incorrect navigation namespaces in `GridScreenBlock.Pages.cs`; those references were corrected, and his later in-game screenshot confirms the build reached runtime. The MFD visual defect is fixed in 17.40.1-dev; save/load and broader visual acceptance remain open.
+- first Unity compile exposed incorrect navigation namespaces in `GridScreenBlock.Pages.cs`; those references were corrected, and his later in-game screenshot confirms the build reached runtime. The MFD visual defect is fixed in 17.40.1-dev; save/load and broader visual acceptance remain open.
 
 ### [17.39.0-dev] One Cockpit, Two Shells, and Screens You Can Read
 
@@ -3145,7 +3156,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - Semantic Versioning 2.0.0 prerelease: `17.10.0-dev`, MINOR over `17.9.0-dev`. No world/save schema changed.
-- Unity compilation, the Setup Wizard, and Play Mode acceptance tests have not been run in this workspace. Wall snugness, station-screen ownership in the live UI, multi-panel Shift-drag behavior, and icon binding remain subject to Thomas's Unity verification.
+- Unity compilation, the Setup Wizard, and Play Mode acceptance tests have not been run in this workspace. Wall snugness, station-screen ownership in the live UI, multi-panel Shift-drag behavior, and icon binding remain subject to Unity verification.
 
 ### [17.9.0-dev] Stabilize Stations, Combat, Placement, and Live Settings
 
@@ -3382,7 +3393,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - The retired `GridSystem/Recipes/Recipe_SmallGridSlidingDoor.asset` is removed from any `RecipeRegistry` by the repair step, but the asset itself is preserved. The validator treats registered crafting recipes as the active graph and reports malformed unregistered recipe assets as inactive Info; if no `RecipeRegistry` asset exists, it falls back to validating all discovered crafting assets.
 
 #### Compatibility and validation
-- Thomas's Unity report at 2026-10-09 19:18:53 confirms 0 errors and 0 warnings across 239 registered crafting recipes, 4 smelting recipes, and 8 machine recipes. The 211 unregistered crafting assets are accepted as outside the active production graph; no registry entries were added for them.
+-  Unity report at 2026-10-09 19:18:53 confirms 0 errors and 0 warnings across 239 registered crafting recipes, 4 smelting recipes, and 8 machine recipes. The 211 unregistered crafting assets are accepted as outside the active production graph; no registry entries were added for them.
 - The retired sliding-door recipe and generic `Recipe_PowerRelay` are both unregistered and remain preserved as assets; no ingredient costs were invented. The six cross-method duplicate outputs are informational alternate production routes, and the Portable Hydrogen Tank duplicate is absent from the active-graph findings.
 
 ### [17.1.8-dev] Shaped Boat Wakes and Shore Interaction
@@ -3399,7 +3410,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - Hull movement, thrust, buoyancy, fluid transfers, the public wake-submission API, save data, materials, and setup-authored values are unchanged. Wake data remains transient and fixed-capacity; no setup-content changes.
-- Thomas reports Unity FluidValidation and SurfaceValidation PASS for the 17.1.7 transfer-capture and localized-projection assertions. The surface fixture explicitly does not validate shader appearance, FPS, mining, or grass; fill-front visual acceptance and the 17.1.5 camera check remain open.
+- Unity FluidValidation and SurfaceValidation PASS for the 17.1.7 transfer-capture and localized-projection assertions. The surface fixture explicitly does not validate shader appearance, FPS, mining, or grass; fill-front visual acceptance and the 17.1.5 camera check remain open.
 - This update's Unity shader compilation, wake appearance/performance, turns/stopping, and near-shore response have not been verified in this workspace.
 - No prefab, recipe, item, research, or Voxel Engine Setup changes are required.
 
@@ -3418,7 +3429,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.6-dev. Solver transfer math, conservation, voxel levels, chunk storage, saves, solver cadence, wake registry, and public APIs are unchanged. New flow fields are transient rendering metadata.
-- Thomas reports Unity FluidValidation and SurfaceValidation PASS for the 17.1.7 transfer-capture and localized-projection assertions. SurfaceValidation explicitly does not validate shader appearance, FPS, mining, or grass; in-game fill-front appearance/fade and the 17.1.5 camera check remain open.
+- Unity FluidValidation and SurfaceValidation PASS for the 17.1.7 transfer-capture and localized-projection assertions. SurfaceValidation explicitly does not validate shader appearance, FPS, mining, or grass; in-game fill-front appearance/fade and the 17.1.5 camera check remain open.
 - No prefab, item, recipe, research, or Voxel Engine Setup changes are required.
 
 ### [17.1.6-dev] Flow-Driven Water Crests
@@ -3434,7 +3445,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.5-dev. Existing flow simulation, transfer calculations, conservation, solver cadence, saves, terrain, voxel storage, and public APIs are unchanged.
-- Thomas reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev. Those fixtures do not test the new visual; 17.1.6-dev has not been compiled or visually tested in Unity. The 17.1.5-dev camera correction also remains pending Unity verification.
+- Tho reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev. Those fixtures do not test the new visual; 17.1.6-dev has not been compiled or visually tested in Unity. The 17.1.5-dev camera correction also remains pending Unity verification.
 - Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
 - Boat-wake visual work follows acceptance of both the 17.1.5-dev camera correction and this mined-water flow animation.
 
@@ -3452,7 +3463,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.4-dev. No liquid solver, transfer, save, terrain, or voxel-storage changes.
-- Thomas reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev. Those fixtures do not test camera effects; 17.1.5-dev has not been compiled or visually verified in Unity.
+- FluidValidation and SurfaceValidation PASS on 17.1.4-dev. Those fixtures do not test camera effects; 17.1.5-dev has not been compiled or visually verified in Unity.
 - Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
 
 ### [17.1.4-dev] Tighten Shoreline Validation Bounds
@@ -3467,7 +3478,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.3-dev. This is an editor-fixture-only change; saves, voxel data, fluid transfer, runtime APIs, and rendered behavior are unchanged.
-- Thomas reports FluidValidation and SurfaceValidation PASS on 17.1.4-dev, including the corrected bank-sliver assertion. The fixtures do not validate underwater camera behavior, visuals, or FPS; the above-water camera effect is addressed in 17.1.5.
+- FluidValidation and SurfaceValidation PASS on 17.1.4-dev, including the corrected bank-sliver assertion. The fixtures do not validate underwater camera behavior, visuals, or FPS; the above-water camera effect is addressed in 17.1.5.
 - Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. No setup-content changes are required.
 
 ### [17.1.3-dev] Faster Water Waves and Quieter Shores
@@ -3484,7 +3495,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.2-dev. Existing saves, voxel storage, generated terrain, fluid conservation/transfer behavior, setup content, public interfaces, and wake behavior are unchanged.
-- Thomas reports the 17.1.2-dev FluidValidation and SurfaceValidation fixtures PASS, FPS is good, and sand looks good. These are preceding-version results; this patch's new fixture assertion and Unity visual/compile checks remain open, with no new FPS measurement claimed.
+- The 17.1.2-dev FluidValidation and SurfaceValidation fixtures PASS, FPS is good, and sand looks good. These are preceding-version results; this patch's new fixture assertion and Unity visual/compile checks remain open, with no new FPS measurement claimed.
 - `git diff --check` and lightweight C#/HLSL delimiter checks pass. No manual prefab, item, recipe, or research setup is required. Boat wakes remain deferred.
 
 ### [17.1.2-dev] Coherent Water Crests and Softer Shores
@@ -3502,7 +3513,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### Compatibility and validation
 - PATCH over 17.1.1-dev. Existing saves and generated terrain remain valid; terrain revision, voxel data, fluid conservation, public runtime interfaces, setup content, and boat-wake behavior are unchanged.
-- Thomas subsequently reports the FluidValidation and SurfaceValidation fixtures PASS on 17.1.2-dev, FPS is good, and sand looks good. The surface fixture excludes visual/FPS validation; the remaining slow wave animation and shore ripples are carried into 17.1.3.
+- The FluidValidation and SurfaceValidation fixtures PASS on 17.1.2-dev, FPS is good, and sand looks good. The surface fixture excludes visual/FPS validation; the remaining slow wave animation and shore ripples are carried into 17.1.3.
 - Local `git diff --check` and lightweight C#/HLSL delimiter checks pass. Boat wakes are intentionally deferred to a later pass. No manual content or prefab setup is required.
 
 ### [17.1.1-dev] Responsive Water, Cleaner Shores, and Restored Biomes
@@ -5267,7 +5278,7 @@ The one-shot anim check prints ~4 seconds after an avatar spawns - with empty ha
 
 ### [14.12.1-dev] Panels Repaint When The Other Side Edits
 
-**Type:** PATCH - bug fix: remote machine edits did not repaint an already-open panel (Thomas's find).
+**Type:** PATCH - bug fix: remote machine edits did not repaint an already-open panel.
 
 **The bug.** Container slot changes repaint open panels through `ItemContainer.OnChanged` - which is why item movements always showed up live. But machine runtime fields (recipe locks, on/off toggles, progress) are plain field writes with no change event: a host staring at an open assembler panel while a client locked a recipe saw nothing until closing and reopening the panel.
 
@@ -5387,7 +5398,7 @@ The one-shot anim check prints ~4 seconds after an avatar spawns - with empty ha
 
 ### [14.8.1-dev] The Server Wins The Terrain Merge
 
-**Type:** PATCH - bug fix: host terrain did not come down on join (Thomas's find).
+**Type:** PATCH - bug fix: host terrain did not come down on join.
 
 **The bug.** The 14.8.0 merge rule was "local edits win" on BOTH sides. But live terrain sync marks every replicated chunk as modified and saves it to the receiving machine's own chunk store - which is exactly right for persistence, and exactly wrong for that merge rule: after one prior shared session, the client owns a STALE COPY of every chunk around the base, so every newer host edit to those chunks was silently refused. The host's offline pit never arrived; the client's fresh marks (in chunks the host never touched) went up fine - which is precisely the asymmetry observed.
 
@@ -5445,7 +5456,7 @@ The one-shot anim check prints ~4 seconds after an avatar spawns - with empty ha
 - Replicated: the fireball/mushroom VFX, blast light, distance-based camera shake, and the crater (carved by the same shared loop, sent in voxel space).
 - Deliberately NOT replicated: damage. Creature/player damage is milestone 5, and piece damage already converges through building damage sync - re-running it remotely would double-apply.
 
-**Docs:** milestone 3 marked done in the roadmap (open item: shared build costs); the plain-text code-lock note is now a committed hardening item under milestone 8 (dedicated server), per Thomas.
+**Docs:** milestone 3 marked done in the roadmap (open item: shared build costs); the plain-text code-lock note is now a committed hardening item under milestone 8 (dedicated server).
 
 **Phase 1 limits (tracked):** live ops on loaded chunks only - terrain edited while the other machine was offline does not catch up on join yet (terrain snapshot / chunk deltas are phase 2); fluid sim state itself is not synced (each machine runs its own water, converging on the same holes); grid-ship voxels are separate.
 
@@ -5492,7 +5503,7 @@ The one-shot anim check prints ~4 seconds after an avatar spawns - with empty ha
 
 **Type:** PATCH - bug fix: replicated damage visuals.
 
-**The bug (Thomas's find).** Decay cracks never showed on the other machine: `PlacedTieredBlock.Damage` and `StructuralLoadState.DecayTick` reported cracks locally, but nothing crossed the wire until hp hit zero - so a decaying floor bloomed cracks on the machine running the audit while everyone else watched pieces simply pop out of existence. Partial hammer/explosion hits had the same silent gap, and worse: hp quietly diverged between machines until the next snapshot.
+**The bug.** Decay cracks never showed on the other machine: `PlacedTieredBlock.Damage` and `StructuralLoadState.DecayTick` reported cracks locally, but nothing crossed the wire until hp hit zero - so a decaying floor bloomed cracks on the machine running the audit while everyone else watched pieces simply pop out of existence. Partial hammer/explosion hits had the same silent gap, and worse: hp quietly diverged between machines until the next snapshot.
 
 **The fix.** A `PieceDamagedBroadcast` (family, position, hp) now rides the same uniform wire path as place/remove/upgrade. Both surviving-damage sites announce after their local crack report; the far side sets the authoritative hp and reports the same damage fraction, so cracks bloom in step everywhere and hp never diverges. Echo-safe by construction: applying remote damage sets hp directly and never re-enters the announce path. Mismatch-guarded like all building traffic.
 
