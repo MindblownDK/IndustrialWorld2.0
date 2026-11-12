@@ -1554,6 +1554,7 @@ namespace VoxelEngine.UI
             HazardWarningHud.EnsureMounted(_hudLayer);
             BeaconMarkerHud.EnsureMounted(_hudLayer);
             PingMarkerHud.EnsureMounted(_hudLayer);   // 18.16.0 - team pings get their own marker layer
+            TeamLocatorHud.EnsureMounted(_hudLayer);   // 18.17.0 - where the team actually is
             DeepSurveyHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
             OrbitalMapScreen.EnsureMounted(_topLayer);

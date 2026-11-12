@@ -1,9 +1,28 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.16.0-dev`
+**Current Version:** `18.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.17.0-dev] Team Locator - Markers, Edge Arrows and Health for Your Team
+
+**Type:** MINOR - one new feature (a HUD layer plus one preference) that introduces no network channel, no save field and no schema change. It reads data the session already replicates, so an old save, an old world and an old team roster behave exactly as before, and a session where nobody teams up looks exactly as it did.
+
+**GitHub title:** `[18.17.0-dev] Add the team locator: teammate markers with distance and health, off-screen edge arrows, occlusion dimming`
+
+#### Added
+
+- **`Scripts/UI/TeamLocatorHud.cs` - the locator layer.** One marker per teammate carrying their name, live distance and a health bar, drawn from `PlayerAvatar.All` filtered through `TeamRegistry.SameTeam`. A teammate outside the frame is pinned to the screen edge as a chevron aimed at them; anyone behind terrain or a base wall keeps their marker but at 42% opacity, so a marker never claims a line of sight you do not have. Nearest eight draw, which is a full team.
+- **A health bar that only speaks when it has news.** It is hidden at full health and appears the moment a teammate takes damage, tinted from green to red, and a teammate at zero health reads DOWN in red instead of a distance. The in-world nameplate already covers the standing-next-to-you case, so the layer stays quiet about `HealthPercent == 100` rather than repeating it.
+- **`GameSettings.TeamLocatorEnabled`** - the feature's only switch, on by default, saved per profile and surfaced as **Settings - Interface - World HUD - Team Locator**. It deliberately does not fire `Notify()`: the locator polls the value every tick, and a notification here would re-run the quality applier (and rebuild the GPU grass) for a line of text. Off removes every marker the same frame instead of easing them out - they are disallowed, not expiring.
+- **"Elsewhere" instead of a meaningless number.** Past 20 km the marker stops printing a distance and says `elsewhere`, and skips the occlusion probe entirely. Two players on different worlds share a scene that measures their separation in nonsense, and a HUD should admit that rather than print six digits.
+
+#### Changed
+
+- **Three things now keep out of each other's way instead of overlapping.** The locator steps aside inside four metres, where the in-world nameplate is already on screen; it uses a green that neither the beacon strip (owner-chosen tint) nor the ping strip (cyan "You" / amber teammate) uses; and it sits behind them in the HUD layer order, so a shout or a waypoint is never hidden by a teammate dot.
+- **Occlusion is throttled, not per frame.** Each marker probes its line of sight six times a second through a shared 8-hit buffer, so an eight-player team costs roughly 48 rays a second rather than 240 - and the answer is allowed to be a little stale, because it is a hint, not a rule.
+- **Roadmap bookkeeping:** the 18.15.0-dev machine-module acceptance and the 18.16.0-dev ping acceptance are both recorded as CONFIRMED by Thomas on 12-11-2026 ("it works" / "it works perfectly"), and the locator's own acceptance line joins Open Scope.
 
 ### [18.16.0-dev] Team Pings - A Shout at the Crosshair, Heard by the Team Only
 

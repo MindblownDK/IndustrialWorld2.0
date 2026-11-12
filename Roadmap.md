@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.16.0-dev`
-**Roadmap Version:** `18.16.0-dev`
+**Current Version:** `18.17.0-dev`
+**Roadmap Version:** `18.17.0-dev`
 **Date:** 12-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,6 +30,11 @@
 
 ## 0. Recently Done
 
+### 18.17.0-dev - Team Locator
+- Every teammate now draws a marker with their name, live distance and a health bar (only while it is not full), read straight from the replicated avatar - the locator adds no network channel and no save field of its own
+- Anyone outside the frame is pinned to the screen edge with an arrow aimed at them; a marker behind terrain dims instead of lying, and a gap past 20 km reads "elsewhere" rather than a number you cannot act on
+- Team-only through `TeamRegistry.SameTeam` (no team, no markers), silent inside four metres where the in-world nameplate already owns the job, and switchable under Settings - Interface - World HUD as **Team Locator**
+
 ### 18.16.0-dev - Team Pings
 - The ping key (middle mouse, rebindable as **Ping Location**) plants a transient team marker on the point under the crosshair, or 60 m out when the crosshair meets nothing
 - A ping lasts 8 s, is rate-limited to one per 1.5 s per player, and is only ever drawn for the pinger and their teammates - `PingSync` enforces the team rule where the ping is SENT, and the pinger's own marker goes up locally before the wire is touched
@@ -52,13 +57,6 @@
 - The 18.13.1-dev floodlight gate line is confirmed in the same pass: the floodlight step ran clean with no dependency dialog during the 18.14.0-dev verification
 - Docs only; no code, save-schema, or API change
 
-### 18.14.0-dev - Lighting Content Rework (Grid Floodlight, Flood Beam, Drag-Run Strip)
-- `GItem_GridFloodlight` is a real Large grid block - a big standing floodlight with four spot beams in a 2x2 head - authored in the grid content step with persisted materials (no more pink) and recipe `Recipe_GGridFloodlight`
-- The stationary floodlight is a real 2x2-lamp fixture (base, pole, yoke, four lamp cans with emissive lenses) throwing the wide 110 deg flood beam; grid lights stay spots and the working grid lights are untouched
-- `block_light` (`Light_Basic`) is an actual spot lamp now - housing, lamp can, emissive lens and a power-gated Spot light - instead of a plain cube with no light
-- New save-compatible `BlockItem.defaultPlacementPattern` (-1 default): the stationary LED strip defaults to SPAN so a drag lays a run by itself like a grid drag; an explicit wheel pick still wins for the session
-- Removed per Thomas: the RGB mood light, the floodlight step's duplicate stationary LED strip, and the mis-authored stationary `Block_Floodlight_Grid`
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -71,8 +69,9 @@
 > **Repair note (12-11-2026):** this list was truncated in the repository history after milestone 3 - milestones 4-11 and the heading below were merged into that sentence, and have NOT been re-invented here. Their shipped evidence is still recorded per round in `Changelog.md`; section 9.6 keeps pointing at the live multiplayer plan.
 
 ### Open Scope (named with the version that deferred it)
-- **Team ping runtime acceptance (18.16.0-dev):** confirm in Unity that the ping key (middle mouse by default, rebindable as **Ping Location** in Settings - Keybinds) plants a marker on the point under the crosshair and 60 m out when the crosshair meets nothing, that the pinger's own marker reads cyan with a "You" tag while a teammate's reads amber with their name and live distance, that turning away from a ping turns it into a screen-edge arrow pointing at it, that a second press inside 1.5 s is ignored, that a marker fades out after 8 s, that a player in no team pings alone, that in a two-player session a non-teammate never sees the ping, that a ping claiming a position beyond 300 m of the sender's own avatar is refused in the host log, and that single-player pings apply instantly with no network traffic.
-- **Machine module runtime acceptance (18.15.0-dev):** confirm in Unity that setup step 127 reports the three modules and repairs the role field, that a Speed / Efficiency / Yield module fits the Crusher, Assembler, Electric Furnace, Foundry, Ore Washer, Refinery, Chemical Plant, Distillation Plant and Catalytic Cracker, that a Yield module is refused by the Automatic Tree Farm, Biomass Press and Drone Port with a named toast rather than a silent no-op, that a Quarry upgrade is refused by a machine slot and vice versa, that a fitted module survives a save and reload on the Chemical Plant, Distillation Plant and Catalytic Cracker (whose containers are appended last), that an older save of those three machines still restores its inputs and outputs, and that x-speed / x-power / bonus-yield readouts match the panel.
+- **Team locator runtime acceptance (18.17.0-dev):** confirm in Unity that in a two-player team each player sees the other's marker with their name and live distance, that the marker turns into a screen-edge arrow when the teammate leaves the frame, that it dims when they stand behind terrain or a base wall, that it disappears inside four metres and returns past it, that the health bar appears only once health drops below full and reads DOWN at zero, that a player in no team sees no markers at all, that a third player outside the team never sees one, and that Settings - Interface - World HUD - Team Locator switches the whole layer off and on without a reload.
+- **Team ping runtime acceptance (18.16.0-dev):** CONFIRMED by Thomas on 12-11-2026 ("it works perfectly") - verified in Unity: the ping key (middle mouse by default, rebindable as **Ping Location** in Settings - Keybinds) plants a marker on the point under the crosshair and 60 m out when the crosshair meets nothing, that the pinger's own marker reads cyan with a "You" tag while a teammate's reads amber with their name and live distance, that turning away from a ping turns it into a screen-edge arrow pointing at it, that a second press inside 1.5 s is ignored, that a marker fades out after 8 s, that a player in no team pings alone, that in a two-player session a non-teammate never sees the ping, that a ping claiming a position beyond 300 m of the sender's own avatar is refused in the host log, and that single-player pings apply instantly with no network traffic.
+- **Machine module runtime acceptance (18.15.0-dev):** CONFIRMED by Thomas on 12-11-2026 ("it works") - verified in Unity: setup step 127 reports the three modules and repairs the role field, that a Speed / Efficiency / Yield module fits the Crusher, Assembler, Electric Furnace, Foundry, Ore Washer, Refinery, Chemical Plant, Distillation Plant and Catalytic Cracker, that a Yield module is refused by the Automatic Tree Farm, Biomass Press and Drone Port with a named toast rather than a silent no-op, that a Quarry upgrade is refused by a machine slot and vice versa, that a fitted module survives a save and reload on the Chemical Plant, Distillation Plant and Catalytic Cracker (whose containers are appended last), that an older save of those three machines still restores its inputs and outputs, and that x-speed / x-power / bonus-yield readouts match the panel.
 - **Drop-claim runtime acceptance (18.10.0-dev):** in a two-player session, confirm one player can pick up a drop while the other's same-instant claim is denied, that a claim from beyond reach is refused in the host log, that the granted stack lands in the claimant's inventory exactly once, and that single-player and host pickups still apply instantly with no network traffic.
 - **Machine-edit validation runtime acceptance (18.11.0-dev):** in a two-player session, confirm a teammate can still edit a TEAM block's panel with the host log quiet, that a guest edit to a PRIVATE block is refused with a "Machine locked" toast and the host state untouched, that an edit sent from beyond reach is refused, and that host/offline machine play is unchanged.
 - **Tiered-piece gate runtime acceptance (18.12.0-dev):** in a two-player session, confirm a teammate can toggle a TEAM door and keypad a coded lock, that a guest toggle on a PRIVATE uncoded door is refused and the door swings back via the re-announce, that a keypad attempt on a far-away piece is denied with a verdict, and that host/offline door and lock play is unchanged.
@@ -331,6 +330,8 @@
 - **The pinger always sees their own ping**, added locally on the key press; everyone else hears it only through the host, which stamps the sender from its connection table and refuses a position further than 300 m from that sender's own avatar.
 - **Ping sharing uses the same send-side rule as beacon sharing**: the host forwards a ping only to connections standing on the pinger's team, never to the session at large, and a player in no team pings alone.
 - **A ping carries no authority.** It moves nothing, unlocks nothing and edits nothing, so a modified client can at worst point its own team at the wrong piece of sky.
+- **Teammate positions are readable, not broadcast.** The locator (18.17.0-dev) draws from the avatars every machine already replicates, so it needs no channel, no host sweep and no permission check of its own - the only rule it applies is `SameTeam`, and a player in no team sees no markers. It is a HUD preference, not a world rule: turning it off changes nothing for anyone else.
+
 
 
 ### Era Transition Feel

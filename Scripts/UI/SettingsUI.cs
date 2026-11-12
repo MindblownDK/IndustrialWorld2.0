@@ -487,6 +487,14 @@ namespace VoxelEngine.UI
             BuildUiScaleSection(p);
             p.Add(T.Divider());
 
+            // ── World HUD (18.17.0-dev) ───────────────────────────────
+            p.Add(SectionLabel("World HUD"));
+            p.Add(ToggleRow("Team Locator",
+                "Mark every teammate on screen with their name, distance and health, and pin anyone off screen to the screen edge with an arrow. Team only - your own marker layer, not a map, and hidden entirely when you are in no team.",
+                GameSettings.TeamLocatorEnabled,
+                on => GameSettings.TeamLocatorEnabled = on));
+            p.Add(T.Divider());
+
             p.Add(SectionLabel("Global UI Theme"));
             var themes = (BuiltInUITheme[])Enum.GetValues(typeof(BuiltInUITheme));
             var labels = new List<string>();

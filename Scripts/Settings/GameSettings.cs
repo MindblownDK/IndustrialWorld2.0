@@ -84,6 +84,7 @@ namespace VoxelEngine.Settings
         private const string K_WIND_LINES   = "ve.windLines";
         private const string K_RESEARCH_QUEUE = "ve.researchQueue";
         private const string K_TEAM_SHARED_RESEARCH = "ve.teamSharedResearch";
+        private const string K_TEAM_LOCATOR = "ve.teamLocator";
         private const string K_VERSION      = "ve.settingsVersion";
 
         // Bump this when default keybinds change to force a one-time migration
@@ -249,6 +250,18 @@ namespace VoxelEngine.Settings
                 VoxelEngine.Research.ResearchManager.Instance?.OnResearchSettingsChanged();
             }
         }
+        /// <summary>18.17.0-dev: draw a marker on every teammate (name, distance,
+        /// health) and pin the off-screen ones to the screen edge. A pure HUD
+        /// preference - the data is already replicated, so this is the only switch
+        /// the feature has - and it deliberately does not fire Notify: the locator
+        /// polls it every tick, and a Notify here would re-run the quality applier
+        /// for a line of text.</summary>
+        public static bool TeamLocatorEnabled
+        {
+            get => PlayerPrefs.GetInt(K_TEAM_LOCATOR, 1) != 0;
+            set { PlayerPrefs.SetInt(K_TEAM_LOCATOR, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
         /// <summary>Developer-only damage bypass. Release players cannot read or set it.</summary>
         public static bool InfiniteHealth
         {
