@@ -263,7 +263,6 @@ namespace VoxelEngine.UI
                 AppendModuleNote(content, washer.upgradeC, MachineModuleSupport.All);
             }
             content.Add(slotRow);
-            if (upgrades != null && upgrades.Size > 0) AppendModuleNote(content, upgrades, moduleSupport);
             IndustrialTheme.Frame(p);
             return p;
         }
@@ -1051,6 +1050,7 @@ namespace VoxelEngine.UI
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(upgrades, slot)));
             }
             content.Add(slotRow);
+            if (upgrades != null && upgrades.Size > 0) AppendModuleNote(content, upgrades, moduleSupport);
             IndustrialTheme.Frame(p);
             return p;
         }

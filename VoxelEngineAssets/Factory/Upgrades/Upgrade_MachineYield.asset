@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 543fbf26ff253e944971472d812c70d9, type: 3}
+  m_Name: Upgrade_MachineYield
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.FurnaceUpgradeItem
+  itemId: upgrade_machine_yield
+  displayName: Machine Yield Module
+  description: A universal machine module. Fits any machine whose upgrade slots finish
+    recipe batches - the Crusher, Assembler, Electric Furnace, Metallurgical Foundry,
+    Ore Washer, Oil Refinery, Chemical Plant, Distillation Plant and Catalytic Cracker.
+    Every finished batch has a 12% chance per module of yielding one extra unit of
+    the recipe's main product. Machines that grow or press on their own cycle (the
+    Automatic Tree Farm and the Biomass Press) accept speed and efficiency modules
+    only, and refuse this one at the slot.
+  icon: {fileID: 21300000, guid: 9ebf9e2ce5f848840b6d1f9a9dd044cd, type: 3}
+  iconTint: {r: 0.36, g: 0.8, b: 0.44, a: 1}
+  maxStack: 1
+  massPerUnit: 2
+  category: Upgrades
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  autoSizeViewmodel: 1
+  viewmodelMaxDimension: 0.75
+  speedMultiplier: 1
+  efficiencyMultiplier: 1
+  moduleKind: 2
+  yieldBonusChance: 0.12

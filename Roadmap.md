@@ -1,8 +1,8 @@
 # 🏭 IndustrialCrusaders — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `18.15.0-dev`
-**Roadmap Version:** `18.15.0-dev`
+**Current Version:** `18.15.1-dev`
+**Roadmap Version:** `18.15.1-dev`
 **Date:** 12-11-2026
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -30,6 +30,11 @@
 
 ## 0. Recently Done
 
+### 18.15.1-dev - Machine Module Note Compile Fix
+- The module summary line under a machine's upgrade slots was inserted into `OreWasherPanel`, which has neither an `upgrades` parameter nor a `moduleSupport` argument (CS0103 x4) - it now sits in `ProcessingMachinePanel` where both are in scope
+- The washer, foundry, press and tree-farm panels keep their own `AppendModuleNote` call inside the block that draws their slot card; no behaviour changed
+- Compile-only fix; no save, API or gameplay change
+
 ### 18.15.0-dev - Universal Machine Modules (Speed, Efficiency, Yield)
 - One shared resolver (`Simulation/MachineModules.cs`) replaces nine per-machine `RecalculateUpgrades` loops, so speed, power draw and bonus yield are read the same way on every machine and are bounded (speed x0.25-5, power x0.2-3, yield +0-50%)
 - Machines now declare which roles they honour and their module slots refuse everything else, with a named toast instead of a silent no-op; the Quarry's own upgrade family is refused by machine slots and machine modules are refused by the Quarry
@@ -53,11 +58,6 @@
 - `BuildFloodlightContent`'s dependency gate now finds copper wire at `Industrial/Items/Item_CopperWire.asset` first, then the legacy `Items/` paths, instead of only the nonexistent `Items/Item_CopperWire.asset`
 - The "run base crafting and industrial content first" dialog now appears only when no copper wire asset exists at all
 - Editor-only fix; no save, API, or gameplay change
-
-### 18.13.0-dev - Soft-Clearance Authoring Pass for Decorative Families
-- `SoftClearanceSetup.RunStep126` (Setup Wizard, non-destructive) sets `BlockItem.softClearance = true` on the six decorative BlockItems: `block_light`, `block_ledstripfactory`, `railsignal`, `hangingdepartureboard`, `nixiereadout`, `displaycabinet`
-- It never unsets the flag or touches other fields, reports marked / already-soft / missing per item id, and a second run reports 0 marked
-- Grid-mounted lights (grid light, spotlights, camera, radar beacon) are `GridBlockItem` - no `softClearance` field, cell-based placement - logged as skipped by design
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

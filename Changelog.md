@@ -1,9 +1,19 @@
 # IndustrialCrusaders — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `18.15.0-dev`
+**Current Version:** `18.15.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [18.15.1-dev] Machine Module Note Compile Fix
+
+**Type:** PATCH - one misplaced line in the editor-facing UI assembly; no save-schema, API or gameplay change.
+
+**GitHub title:** `[18.15.1-dev] Fix module note compile error in MachineUIs`
+
+#### Fixed
+
+- **`MachineUIs.cs` (CS0103: `upgrades` / `moduleSupport` did not exist in the current context).** The line that prints the module summary under a machine's upgrade slots was inserted after the first `content.Add(slotRow);` in the file, which belongs to `OreWasherPanel` - a panel that has no `upgrades` parameter (it holds its own `washer.upgradeC`) and no `moduleSupport` argument. The line is removed from there and placed in the shared `ProcessingMachinePanel` (Crusher and Assembler), where both identifiers are in scope, exactly as the 18.15.0-dev notes described.
 
 ### [18.15.0-dev] Universal Machine Modules - One Resolver, Role-Aware Slots, Machine Yield Module
 
